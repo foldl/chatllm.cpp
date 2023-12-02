@@ -1,0 +1,17 @@
+# ide
+.vscode/
+
+# macOS
+.DS_Store
+
+# python
+__pycache__/
+*.egg-info/
+dist/
+*.so
+
+# cpp
+build/
+
+# model
+*.bin
