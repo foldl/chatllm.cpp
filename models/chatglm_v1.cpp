@@ -198,7 +198,7 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     : BaseModelForConditionalGeneration(MODEL_TYPE_CHATGLM, config, MEM_SIZE, SCRATCH_SIZE), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-    const size_t num_tensors = 3 + config.num_hidden_layers * 14;
+    const size_t num_tensors = 3 + config.num_hidden_layers * 15;
     const size_t ctx_size = num_tensors * tensor_ovhd;
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;

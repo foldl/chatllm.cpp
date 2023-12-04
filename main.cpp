@@ -161,7 +161,7 @@ void chat(const Args &args)
         pipeline.set_system_prompt(args.system);
 
     int prompt_len = model_name.length();
-    prompt_len = std::max(prompt_len, 6);
+    if (prompt_len < 6) prompt_len = 6;
 
     chatllm::TextStreamer streamer(pipeline.tokenizer.get());
 
@@ -176,7 +176,6 @@ void chat(const Args &args)
     {
         pipeline.chat({args.prompt}, gen_config, &streamer);
         return;
-
     }
 
     std::cout << R"(    ________          __  __    __    __  ___                 )" << '\n'
@@ -185,6 +184,7 @@ void chat(const Args &args)
                 << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
                 << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n'
                 << R"(                                              /_/   /_/       )" << '\n';
+    std::cout << "You are served by " << model_name << std::endl << std::endl;
 
     std::vector<std::string> history;
     while (1)

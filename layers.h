@@ -122,10 +122,12 @@ namespace chatllm
                                          num_attention_heads)),
               v_cache(ggml_new_tensor_3d(ctx->gctx.get(), GGML_TYPE_F16, max_length, hidden_size / num_attention_heads,
                                          num_attention_heads)),
+              pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
               n_ctx(0)
         {
             k_cache->data = new char[ggml_nbytes(k_cache)];
             v_cache->data = new char[ggml_nbytes(v_cache)];
+            pos->data = new char[ggml_nbytes(pos)]();
         }
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) const override;
@@ -138,6 +140,7 @@ namespace chatllm
         int num_attention_heads;
         ggml_tensor *k_cache; // [n_head, maxlen, head_size]
         ggml_tensor *v_cache; // [n_head, head_size, maxlen]
+        ggml_tensor *pos;
         int n_ctx;
     };
 
@@ -176,10 +179,12 @@ namespace chatllm
               k_cache(ggml_new_tensor_3d(ctx->gctx.get(), GGML_TYPE_F32, hidden_size / num_attention_heads, max_length,
                                          num_kv_heads)),
               v_cache(ggml_new_tensor_3d(ctx->gctx.get(), GGML_TYPE_F32, max_length, hidden_size / num_attention_heads,
-                                         num_kv_heads))
+                                         num_kv_heads)),
+              pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length))
         {
             k_cache->data = new char[ggml_nbytes(k_cache)]();
             v_cache->data = new char[ggml_nbytes(v_cache)]();
+            pos->data = new char[ggml_nbytes(pos)]();
         }
 
         using Block::forward;
@@ -192,6 +197,7 @@ namespace chatllm
         Linear dense;
         ggml_tensor *k_cache; // [mqa_n_head, maxlen, head_size]
         ggml_tensor *v_cache; // [mqa_n_head, head_size, maxlen]
+        ggml_tensor *pos;
     };
 
     class GLM2MLP : public Block
@@ -232,14 +238,14 @@ namespace chatllm
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) const override
         {
             ggml_tensor *residual = ggml_dup(ctx->gctx.get(), hidden_states);
-            ggml_build_forward_expand(&ctx->gf, residual);
+            ggml_build_forward_expand(ctx->gf, residual);
 
             hidden_states = input_layernorm.forward(ctx, hidden_states);
             hidden_states = attention.forward(ctx, hidden_states, n_past);
             hidden_states = ggml_add_inplace(ctx->gctx.get(), hidden_states, residual);
 
             residual = ggml_dup(ctx->gctx.get(), hidden_states);
-            ggml_build_forward_expand(&ctx->gf, residual);
+            ggml_build_forward_expand(ctx->gf, residual);
 
             hidden_states = post_attention_layernorm.forward(ctx, hidden_states);
             hidden_states = mlp.forward(ctx, hidden_states);
@@ -282,12 +288,14 @@ namespace chatllm
               o_proj(ctx, hidden_size, hidden_size, o_bias),
               k_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size * max_length)),
               v_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size * max_length)),
+              pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
               max_length(max_length)
         {
             k_cache->data = new char[ggml_nbytes(k_cache)]();
             v_cache->data = new char[ggml_nbytes(v_cache)]();
             ggml_set_name(k_cache, "k_cache");
             ggml_set_name(v_cache, "v_cache");
+            pos->data = new char[ggml_nbytes(pos)]();
         }
 
         using Block::forward;
@@ -295,11 +303,11 @@ namespace chatllm
 
     protected:
         // input & output: [qlen, heads, head_size]
-        virtual ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, int n_past) const;
-        virtual ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, int n_past) const;
+        virtual ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const;
+        virtual ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const;
 
         //
-        virtual ggml_tensor *apply_pos_embedding_kq(ForwardContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, int n_past) const { return kq; }
+        virtual ggml_tensor *apply_pos_embedding_kq(ForwardContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const { return kq; }
 
     public:
         int num_attention_heads;
@@ -308,6 +316,7 @@ namespace chatllm
         Linear o_proj;
         ggml_tensor *k_cache;
         ggml_tensor *v_cache;
+        ggml_tensor *pos;
         int max_length;
     };
 

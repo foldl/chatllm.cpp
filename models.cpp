@@ -119,17 +119,17 @@ namespace chatllm
         {
             ForwardContext ctx;
             ctx.gctx = GGMLContext({.mem_size = mem_size_, .mem_buffer = mem_buffer_.get(), .no_alloc = false});
-            ctx.gf = {};
-            ctx.gf.n_threads = input_ids.size() >= 32 && ggml_cpu_has_blas() && !ggml_cpu_has_gpublas() ? 1 : gen_config.num_threads;
             ctx.scratch = {.offs = 0, .size = scratch_size_, .data = scratch_buffer_.get()};
+            int n_threads = input_ids.size() >= 32 && ggml_cpu_has_blas() && !ggml_cpu_has_gpublas() ? 1 : gen_config.num_threads;
+            ctx.gf = ggml_new_graph(ctx.gctx.get());
 
             ggml_tensor *input_ids_tensor = ggml_new_tensor_1d(ctx.gctx.get(), GGML_TYPE_I32, input_ids.size());
             memcpy(input_ids_tensor->data, input_ids.data(), ggml_nbytes(input_ids_tensor));
 
             ggml_tensor *lm_logits = transformer.forward(&ctx, input_ids_tensor, n_past);
 
-            ggml_build_forward_expand(&ctx.gf, lm_logits);
-            ggml_graph_compute(ctx.gctx.get(), &ctx.gf);
+            ggml_build_forward_expand(ctx.gf, lm_logits);
+            ggml_graph_compute_with_ctx(ctx.gctx.get(), ctx.gf, n_threads);
 
     #ifdef GGML_PERF
             ggml_graph_print(&ctx.gf);

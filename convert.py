@@ -4,7 +4,6 @@ Convert Hugging Face ChatLLM/ChatLLM2 models to GGML format
 import argparse
 from ast import Dict, Tuple
 import json
-import platform
 import struct
 import sys
 import io
@@ -16,17 +15,12 @@ import torch
 from tabulate import tabulate
 from tqdm import tqdm
 
-import numpy as np
 from sentencepiece import SentencePieceProcessor  # type: ignore
 
 GGML_QK8_0 = 32
 GGML_QK4_0 = 32
 
 GGML_MEM_ALIGN = 16
-
-if platform.system() == "Darwin":
-    # cpm_kernels doesn't support macOS but transformers will check missing packages, so mock it
-    sys.modules["cpm_kernels"] = object()
 
 
 class GGMLType(Enum):
@@ -493,10 +487,10 @@ class AttributeDict(dict):
 
 def main():
     parser = argparse.ArgumentParser("chatllm-convert")
-    parser.add_argument("-i", "--model_name_or_path", type=str, default="chatllm-6b")
+    parser.add_argument("-i", "--model_name_or_path", type=str)
     # TODO: LoRA
     #parser.add_argument("-l", "--lora_model_name_or_path", type=str, default=None)
-    parser.add_argument("-o", "--save_path", type=Path, default="ggml.bin")
+    parser.add_argument("-o", "--save_path", type=Path)
     parser.add_argument("-t", "--type", type=str, default="q8_0", choices=["f32", "f16", "q8_0", "q4_0"])
     args = parser.parse_args()
 

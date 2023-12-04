@@ -116,7 +116,7 @@ namespace chatllm
     struct ForwardContext
     {
         GGMLContext gctx;
-        ggml_cgraph gf;
+        ggml_cgraph *gf;
         ggml_scratch scratch;
     };
 

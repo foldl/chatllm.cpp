@@ -22,6 +22,13 @@ Why another `.cpp` implementation?
 * [ ] LoRA.
 * [ ] Python binding, web demo, and more possibilities.
 
+### Differences between `chatllm.cpp` & `llama.cpp`
+
+* OOP
+*
+
+### Differences between `chatllm.cpp` & `chatglm.cpp`
+
 ## Getting Started
 
 **Preparation**
