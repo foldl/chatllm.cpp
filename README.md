@@ -16,7 +16,10 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 * [x] Accelerated memory-efficient CPU inference with int4/int8 quantization, optimized KV cache and parallel computing;
 * [x] Use OOP to address the similarities between different _Transformer_ based models;
 * [x] Streaming generation with typewriter effect;
-* [x] Continuous chatting (content length is virtually unlimited);
+* [x] Continuous chatting (content length is virtually unlimited)
+
+    Two methods are available: _Restart_ and _Shift_. See `--extending` options.
+
 * [ ] LoRA;
 * [ ] Python binding, web demo, and more possibilities.
 

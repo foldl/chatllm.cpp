@@ -15,17 +15,29 @@ namespace chatllm
     {
     public:
         Block() {}
-        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) const
+        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input)
         {
             CHATLLM_THROW << "forward(ForwardContext *ctx, ggml_tensor *input): not implemented";
             return NULL;
         }
-        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input, int n_past) const
+        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input, int n_past)
         {
             CHATLLM_THROW << "forward(ForwardContext *ctx, ggml_tensor *input, int n_past): not implemented";
             return NULL;
         }
-        virtual void set_ctx(int n_ctx) const { };
+        virtual void set_ctx(int n_ctx) const { }
+        virtual void shift_cache(int shift, int total) { }
+    };
+
+    class ShiftPending
+    {
+    public:
+        ShiftPending() : ShiftPending(0, 0) {}
+        ShiftPending(int shift, int total) : shift(shift), total(total) {}
+        void clear(void) { shift = 0; }
+    public:
+        int shift;
+        int total;
     };
 
     class Embedding : public Block
@@ -36,7 +48,7 @@ namespace chatllm
             : weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, embedding_dim, num_embeddings)) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) const override;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
 
     public:
         ggml_tensor *weight;
@@ -58,7 +70,7 @@ namespace chatllm
         int out_features() const { return weight->ne[1]; }
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) const override;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
 
     public:
         ggml_tensor *weight; // [out_features, in_features]
@@ -75,7 +87,7 @@ namespace chatllm
               eps(1e-5f) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) const;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
 
     public:
         ggml_tensor *weight; // [normalized_shape]
@@ -92,7 +104,7 @@ namespace chatllm
               eps(1e-5f) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) const override;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
 
     public:
         ggml_tensor *weight;
@@ -107,7 +119,7 @@ namespace chatllm
             : dense_h_to_4h(ctx, hidden_size, 4 * hidden_size), dense_4h_to_h(ctx, 4 * hidden_size, hidden_size) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) const override;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
 
     public:
         Linear dense_h_to_4h;
@@ -127,16 +139,21 @@ namespace chatllm
               v_cache(ggml_new_tensor_3d(ctx->gctx.get(), GGML_TYPE_F16, max_length, hidden_size / num_attention_heads,
                                          num_attention_heads)),
               pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
-              n_ctx(0)
+              n_ctx(0),
+              shift_pending()
         {
             k_cache->data = new char[ggml_nbytes(k_cache)];
             v_cache->data = new char[ggml_nbytes(v_cache)];
             pos->data = new char[ggml_nbytes(pos)]();
         }
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) const override;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
 
         void set_ctx(int n_ctx) const override { n_ctx = n_ctx; };
+        void shift_cache(int shift, int total) override
+        {
+            shift_pending = ShiftPending(shift, total);
+        }
 
     public:
         Linear query_key_value;
@@ -146,6 +163,8 @@ namespace chatllm
         ggml_tensor *v_cache; // [n_head, head_size, maxlen]
         ggml_tensor *pos;
         int n_ctx;
+    private:
+        ShiftPending shift_pending;
     };
 
     class GLMBlock : public Block
@@ -160,7 +179,7 @@ namespace chatllm
               num_hidden_layers(num_hidden_layers) {}
 
         using Block::forward;
-        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) const override;
+        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
 
         void set_ctx(int n_ctx) const override { attention.set_ctx(n_ctx); };
 
@@ -184,7 +203,8 @@ namespace chatllm
                                          num_kv_heads)),
               v_cache(ggml_new_tensor_3d(ctx->gctx.get(), GGML_TYPE_F32, max_length, hidden_size / num_attention_heads,
                                          num_kv_heads)),
-              pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length))
+              pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
+              shift_pending()
         {
             k_cache->data = new char[ggml_nbytes(k_cache)]();
             v_cache->data = new char[ggml_nbytes(v_cache)]();
@@ -192,7 +212,12 @@ namespace chatllm
         }
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) const override;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
+
+        void shift_cache(int shift, int total) override
+        {
+            shift_pending = ShiftPending(shift, total);
+        }
 
     public:
         int num_attention_heads;
@@ -202,6 +227,8 @@ namespace chatllm
         ggml_tensor *k_cache; // [mqa_n_head, maxlen, head_size]
         ggml_tensor *v_cache; // [mqa_n_head, head_size, maxlen]
         ggml_tensor *pos;
+    private:
+        ShiftPending shift_pending;
     };
 
     class GLM2MLP : public Block
@@ -212,7 +239,7 @@ namespace chatllm
               dense_4h_to_h(ctx, intermediate_size, hidden_size, false) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) const override;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
 
     public:
         Linear dense_h_to_4h;
@@ -239,7 +266,7 @@ namespace chatllm
               mlp(ctx, hidden_size, intermediate_size) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) const override
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
         {
             ggml_tensor *residual = ggml_dup(ctx->gctx.get(), hidden_states);
             ggml_build_forward_expand(ctx->gf, residual);
@@ -256,6 +283,11 @@ namespace chatllm
             hidden_states = ggml_add_inplace(ctx->gctx.get(), hidden_states, residual);
 
             return hidden_states;
+        }
+
+        void shift_cache(int shift, int total) override
+        {
+            attention.shift_cache(shift, total);
         }
 
     public:
@@ -293,7 +325,8 @@ namespace chatllm
               k_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size * max_length)),
               v_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size * max_length)),
               pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
-              max_length(max_length)
+              max_length(max_length),
+              shift_pending()
         {
             k_cache->data = new char[ggml_nbytes(k_cache)]();
             v_cache->data = new char[ggml_nbytes(v_cache)]();
@@ -303,7 +336,12 @@ namespace chatllm
         }
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) const override;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
+
+        void shift_cache(int shift, int total) override
+        {
+            shift_pending = ShiftPending(shift, total);
+        }
 
     protected:
         // input & output: [qlen, heads, head_size]
@@ -322,8 +360,9 @@ namespace chatllm
         ggml_tensor *v_cache;
         ggml_tensor *pos;
         int max_length;
+    private:
+        ShiftPending shift_pending;
     };
-
 
     class InternLMSelfAttention : public BaseSelfAttention
     {
@@ -342,7 +381,7 @@ namespace chatllm
                 up_proj(ctx, hidden_size, intermediate_size, false) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) const override;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
 
     public:
         Linear gate_proj;

@@ -58,7 +58,6 @@ namespace chatllm
             : BaseModel(model_type, to_string(model_type)), config_(config), mem_size_(mem_size), mem_buffer_(new char[mem_size]),
               scratch_size_(scratch_size), scratch_buffer_(new char[scratch_size])
         {
-            n_past = 0;
         }
 
         virtual ~BaseModelForConditionalGeneration() = default;
@@ -66,6 +65,14 @@ namespace chatllm
         int get_max_length(void) override
         {
             return config_.max_length;
+        }
+
+        void shift_memory(int keep) override
+        {
+            if (keep >= n_past) return;
+
+            transformer.shift_cache(n_past - keep, n_past);
+            BaseModel::shift_memory(keep);
         }
 
         std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
@@ -92,7 +99,7 @@ namespace chatllm
 
             while (n_past < gen_config.max_length)
             {
-                int next_token_id = generate_next_token(curr_input_ids, gen_config, n_past);
+                int next_token_id = generate_next_token(curr_input_ids, gen_config);
 
                 if (next_token_id == terminate_token_id)
                 {
@@ -120,7 +127,7 @@ namespace chatllm
             return output_ids;
         }
 
-        int generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, int n_past)
+        int generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config)
         {
             ForwardContext ctx;
             ctx.gctx = GGMLContext({.mem_size = mem_size_, .mem_buffer = mem_buffer_.get(), .no_alloc = false});
@@ -131,7 +138,7 @@ namespace chatllm
             ggml_tensor *input_ids_tensor = ggml_new_tensor_1d(ctx.gctx.get(), GGML_TYPE_I32, input_ids.size());
             memcpy(input_ids_tensor->data, input_ids.data(), ggml_nbytes(input_ids_tensor));
 
-            ggml_tensor *lm_logits = transformer.forward(&ctx, input_ids_tensor, n_past);
+            ggml_tensor *lm_logits = transformer.forward(&ctx, input_ids_tensor, n_past + n_past_offset);
 
             ggml_build_forward_expand(ctx.gf, lm_logits);
             ggml_graph_compute_with_ctx(ctx.gctx.get(), ctx.gf, n_threads);
@@ -234,7 +241,6 @@ namespace chatllm
     protected:
         LM transformer;
     private:
-        int n_past;
         BaseConfig config_;
         size_t mem_size_;
         std::unique_ptr<char[]> mem_buffer_; // BLAS buffer
@@ -275,10 +281,10 @@ namespace chatllm
             }
         }
 
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) const override
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
         {
             ggml_tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
-            for (const auto &layer : layers)
+            for (auto &layer : layers)
             {
                 ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
                 hidden_states = layer.forward(ctx, hidden_states, n_past);
@@ -293,8 +299,14 @@ namespace chatllm
                 layer.set_ctx(n_ctx);
         };
 
+        void shift_cache(int shift, int total) override
+        {
+            for (auto &layer : layers)
+                layer.shift_cache(shift, total);
+        }
+
     protected:
-        ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states) const
+        ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
             ggml_set_scratch(ctx->gctx.get(), {.offs = 0, .size = 0, .data = nullptr});
             ggml_tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
@@ -358,16 +370,6 @@ namespace chatllm
         result.tokenizer = std::make_unique<Tokenizer>();
         size_t proto_size = result.tokenizer->load(loader.data + loader.tell(), config.vocab_size);
         loader.seek(proto_size, SEEK_CUR);
-
-        if (0)
-        {
-            std::vector<int> ids = result.tokenizer->encode("你好呀？");
-            for (auto x : ids)
-                printf("%d ", x);
-            printf("\n%s\n", result.tokenizer->decode(ids).c_str());
-
-            exit(-1);
-        }
 
         // load model
         result.model = std::make_unique<ConditionalGeneration>(config);

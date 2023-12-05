@@ -20,42 +20,40 @@
 namespace chatllm
 {
 
-    ggml_tensor *Embedding::forward(ForwardContext *ctx, ggml_tensor *input) const
+    ggml_tensor *Embedding::forward(ForwardContext *ctx, ggml_tensor *input)
     {
         ggml_tensor *output = ggml_get_rows(ctx->gctx.get(), weight, input);
         return output;
     }
 
-    ggml_tensor *Linear::forward(ForwardContext *ctx, ggml_tensor *input) const
+    ggml_tensor *Linear::forward(ForwardContext *ctx, ggml_tensor *input)
     {
         // input: [seqlen, in_features]
         ggml_tensor *output = ggml_mul_mat(ctx->gctx.get(), weight, input); // [seqlen, out_features]
         if (bias)
         {
-            ggml_tensor *bcast_bias = ggml_view_2d(ctx->gctx.get(), bias, output->ne[0], output->ne[1], 0, 0);
-            output = ggml_add_inplace(ctx->gctx.get(), output, bcast_bias);
+            output = ggml_add_inplace(ctx->gctx.get(), output, bias);
         }
         return output;
     }
 
-    ggml_tensor *LayerNorm::forward(ForwardContext *ctx, ggml_tensor *input) const
+    ggml_tensor *LayerNorm::forward(ForwardContext *ctx, ggml_tensor *input)
     {
         // input: [seqlen, normalized_shape]
         ggml_tensor *output = ggml_norm_inplace(ctx->gctx.get(), input, eps);
         output = ggml_mul_inplace(ctx->gctx.get(), output, weight);
-        ggml_tensor *bcast_bias = ggml_view_2d(ctx->gctx.get(), bias, output->ne[0], output->ne[1], 0, 0);
-        output = ggml_add_inplace(ctx->gctx.get(), output, bcast_bias);
+        output = ggml_add_inplace(ctx->gctx.get(), output, bias);
         return output;
     }
 
-    ggml_tensor *RMSNorm::forward(ForwardContext *ctx, ggml_tensor *input) const
+    ggml_tensor *RMSNorm::forward(ForwardContext *ctx, ggml_tensor *input)
     {
         ggml_tensor *output = ggml_rms_norm_inplace(ctx->gctx.get(), input, eps);
         output = ggml_mul_inplace(ctx->gctx.get(), output, weight);
         return output;
     }
 
-    ggml_tensor *GLMMLP::forward(ForwardContext *ctx, ggml_tensor *hidden_states) const
+    ggml_tensor *GLMMLP::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
     {
         ggml_tensor *output = dense_h_to_4h.forward(ctx, hidden_states);
         output = ggml_gelu_inplace(ctx->gctx.get(), output);
@@ -71,7 +69,7 @@ namespace chatllm
         pos->ne[0] = qlen;
     }
 
-    ggml_tensor *GLMSelfAttention::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) const
+    ggml_tensor *GLMSelfAttention::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
     {
         int hidden_size = hidden_states->ne[0];
         int qlen = hidden_states->ne[1];
@@ -137,7 +135,7 @@ namespace chatllm
         return attn_output;
     }
 
-    ggml_tensor *GLMBlock::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) const
+    ggml_tensor *GLMBlock::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
     {
         ggml_tensor *alpha = ggml_new_f32(ctx->gctx.get(), std::sqrt(2.f * num_hidden_layers));
 
@@ -155,7 +153,7 @@ namespace chatllm
         return output;
     }
 
-    ggml_tensor *GLM2SelfAttention::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) const
+    ggml_tensor *GLM2SelfAttention::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
     {
         const int hidden_size = hidden_states->ne[0];
         const int qlen = hidden_states->ne[1];
@@ -215,7 +213,7 @@ namespace chatllm
         return attn_output;
     }
 
-    ggml_tensor *GLM2MLP::forward(ForwardContext *ctx, ggml_tensor *hidden_states) const
+    ggml_tensor *GLM2MLP::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
     {
         ggml_tensor *output = dense_h_to_4h.forward(ctx, hidden_states);
 
@@ -229,7 +227,7 @@ namespace chatllm
         return output;
     }
 
-    ggml_tensor *BaseMLP::forward(ForwardContext *ctx, ggml_tensor *hidden_states) const
+    ggml_tensor *BaseMLP::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
     {
         ggml_tensor *act = ggml_silu_inplace(ctx->gctx.get(), gate_proj.forward(ctx, hidden_states));
         ggml_tensor *proj = up_proj.forward(ctx, hidden_states);
@@ -239,12 +237,39 @@ namespace chatllm
         return output;
     }
 
-    ggml_tensor *BaseSelfAttention::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) const
+    static bool flag = false;
+
+    ggml_tensor *BaseSelfAttention::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
     {
         const int hidden_size = hidden_states->ne[0];
         const int qlen = hidden_states->ne[1];
         const int head_size = hidden_size / num_attention_heads;
         fill_pos_vector(pos, n_past, qlen);
+        // if (flag) printf("npast= %d\n", n_past);
+        // shift cache
+        if (shift_pending.shift > 0)
+        {
+            int remain = shift_pending.total - shift_pending.shift;
+            if (remain > 0)
+            {
+                struct ggml_tensor * k_cache_remain = ggml_view_1d(ctx->gctx.get(), k_cache, remain * hidden_size,
+                                            ggml_element_size(k_cache) * hidden_size * shift_pending.shift);
+                struct ggml_tensor * k_cache_1d = ggml_view_1d(ctx->gctx.get(), k_cache, remain * hidden_size,
+                                            0);
+
+                struct ggml_tensor * v_cache_remain = ggml_view_2d(ctx->gctx.get(), v_cache, remain, hidden_size,
+                                            max_length * ggml_element_size(v_cache),
+                                            shift_pending.shift * ggml_element_size(v_cache));
+                struct ggml_tensor * v_cache_2d =     ggml_view_2d(ctx->gctx.get(), v_cache, remain, hidden_size,
+                                            max_length * ggml_element_size(v_cache),
+                                            0);
+
+                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_cache_remain, k_cache_1d));
+                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), v_cache_remain, v_cache_2d));
+            }
+            shift_pending.clear();
+            flag = true;
+        }
 
         ggml_tensor *tmpq = q_proj.forward(ctx, hidden_states);
         ggml_tensor *tmpk = k_proj.forward(ctx, hidden_states);

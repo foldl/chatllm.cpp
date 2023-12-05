@@ -19,6 +19,7 @@ struct Args
     std::string model_path = "chatllm-ggml.bin";
     std::string system = "";
     std::string prompt = "你好";
+    std::string extending = "restart";
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -37,11 +38,12 @@ void usage(const char *prog)
               << "  -h, --help              show this help message and exit\n"
               << "  -m, --model PATH        model path (default: chatllm-ggml.bin)\n"
               << "  -p, --prompt PROMPT     prompt to start generation with (default: 你好)\n"
-              << "  -s, --system SYSTEM     system prompt (instruction) (default: model specific)"
+              << "  -s, --system SYSTEM     system prompt (instruction) (default: model specific)\n"
               << "  -i, --interactive       run in interactive mode\n"
               << "  -l, --max_length N      max total length including prompt and output (default: model specific)\n"
               << "  -c, --max_context_length N\n"
               << "                          max context length (default: 512)\n"
+              << "  --extending             context extending method (restart | shift) (default: restart)\n"
               << "  --top_k N               top-k sampling (default: 0)\n"
               << "  --top_p N               top-p sampling (default: 0.7)\n"
               << "  --temp N                temperature (default: 0.95)\n"
@@ -89,6 +91,7 @@ static Args parse_args(int argc, const char **argv)
         handle_param("--system",                "-s", system,               std::string)
         handle_param("--max_length",            "-l", max_length,           std::stoi)
         handle_param("--max_context_length",    "-c", max_context_length,   std::stoi)
+        handle_para0("--extending",                   extending,            std::string)
         handle_param("--top_k",                 "-k", top_k,                std::stoi)
         handle_param("--top_p",                 "-q", top_p,                std::stof)
         handle_param("--temp",                  "-t", temp,                 std::stof)
@@ -178,6 +181,11 @@ void chat(Args &args)
         args.max_length = pipeline.model->get_max_length();
     if (args.max_length > pipeline.model->get_max_length())
         args.max_length = pipeline.model->get_max_length();
+
+    if (args.extending == "shift")
+        pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Shift);
+    else
+        pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Restart);
 
     int prompt_len = model_name.length();
     if (prompt_len < 6) prompt_len = 6;

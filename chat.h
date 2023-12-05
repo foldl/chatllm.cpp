@@ -203,7 +203,8 @@ namespace chatllm
     class BaseModel
     {
     public:
-        BaseModel(int type, std::string name) : type_(type), name_(name), gen(0x123), terminate_token_id(-1000) {}
+        BaseModel(int type, std::string name) : type_(type), name_(name), gen(0x123), n_past(0),
+            n_past_offset(0), terminate_token_id(-1000) {}
 
         virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,
@@ -219,10 +220,20 @@ namespace chatllm
 
         virtual int get_max_length(void) = 0;
 
+        virtual void shift_memory(int keep)
+        {
+            CHATLLM_CHECK(n_past >= keep) << "length of kept should not exceeds history";
+
+            n_past_offset += n_past - keep;
+            n_past = keep;
+        }
+
     protected:
         int type_;
         std::string name_;
         std::mt19937 gen;
+        int n_past;
+        int n_past_offset;
     public:
         int terminate_token_id; // when LLM uses another token as end indicator
     };
@@ -242,17 +253,31 @@ namespace chatllm
     class Pipeline
     {
     public:
+        enum ExtendingMethod
+        {
+            Shift,
+            Restart,
+        };
+
         Pipeline(const std::string &path);
 
         std::string chat(const std::vector<std::string> &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);
         void set_system_prompt(const std::string &prompt);
+        void set_extending_method(ExtendingMethod method);
+
     public:
         std::unique_ptr<BaseTokenizer> tokenizer;
         std::unique_ptr<BaseModel> model;
         std::unique_ptr<MappedFile> mapped_file;
     private:
         bool initializing;
+        ExtendingMethod extending;
+
+        std::string chat_with_restart(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+                         BaseStreamer *streamer);
+        std::string chat_with_shift(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+                         BaseStreamer *streamer);
     };
 
 } // namespace chatllm

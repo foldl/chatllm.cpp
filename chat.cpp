@@ -287,7 +287,7 @@ namespace chatllm
 
     // ===== pipeline =====
 
-    Pipeline::Pipeline(const std::string &path)
+    Pipeline::Pipeline(const std::string &path) : extending(ExtendingMethod::Restart)
     {
         mapped_file = std::make_unique<MappedFile>(path);
         ModelLoader loader(std::string_view((char *)mapped_file->data, mapped_file->size));
@@ -309,7 +309,7 @@ namespace chatllm
         initializing = true;
     }
 
-    std::string Pipeline::chat(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+    std::string Pipeline::chat_with_restart(const std::vector<std::string> &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer)
     {
         bool continuous = true;
@@ -325,11 +325,16 @@ namespace chatllm
         input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous);
 
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, streamer);
-        if (!completed && continuous)
+        if (!completed)
         {
-            std::cout << std::endl << "RUN OUT OF CONTEXT. Let me forget something and try again..." << std::endl << std::endl;
-            input_ids = tokenizer->encode_history(history, gen_config.max_context_length);
-            output_ids = model->generate(input_ids, gen_config, false, completed, streamer);
+            if (continuous)
+            {
+                std::cout << std::endl << "RUN OUT OF CONTEXT. Let me forget something and try again ..." << std::endl << std::endl;
+                input_ids = tokenizer->encode_history(history, gen_config.max_context_length);
+                output_ids = model->generate(input_ids, gen_config, false, completed, streamer);
+            }
+            else
+                std::cout << std::endl << "RUN OUT OF CONTEXT. I have to stop now." << std::endl << std::endl;
         }
 
         std::vector<int> new_output_ids(output_ids.begin() + input_ids.size(), output_ids.end());
@@ -337,9 +342,59 @@ namespace chatllm
         return output;
     }
 
+    std::string Pipeline::chat_with_shift(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+                               BaseStreamer *streamer)
+    {
+        bool continuous = true;
+        bool completed = false;
+        if (initializing)
+        {
+            continuous = false;
+            initializing = false;
+        }
+        else;
+
+        std::vector<int> input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous);
+        std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, streamer);
+
+        while (!completed)
+        {
+            std::cout << std::endl << "RUN OUT OF CONTEXT. Try to forget something and continue ..." << std::endl << std::endl;
+            model->shift_memory(gen_config.max_context_length);
+            if (output_ids.size() > 0)
+                input_ids = {output_ids[output_ids.size() - 1]};
+            else
+                input_ids.clear();
+
+            auto ids = model->generate(input_ids, gen_config, true, completed, streamer);
+            output_ids.insert(output_ids.end(), ids.begin(), ids.end());
+        }
+
+        std::vector<int> new_output_ids(output_ids.begin() + input_ids.size(), output_ids.end());
+        std::string output = tokenizer->decode(new_output_ids);
+        return output;
+    }
+
+    std::string Pipeline::chat(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+                               BaseStreamer *streamer)
+    {
+        switch (extending)
+        {
+        case ExtendingMethod::Shift:
+            return chat_with_shift(history, gen_config, streamer);
+        default:
+            return chat_with_restart(history, gen_config, streamer);
+        }
+    }
+
     void Pipeline::set_system_prompt(const std::string &prompt)
     {
         tokenizer->set_system_prompt(prompt);
+    }
+
+    void Pipeline::set_extending_method(ExtendingMethod method)
+    {
+        extending = method;
     }
 
 } // namespace chatllm
