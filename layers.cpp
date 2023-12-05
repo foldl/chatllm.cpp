@@ -77,6 +77,28 @@ namespace chatllm
         int rope_dim = head_size / 2;
         fill_pos_vector(pos, n_past, qlen);
 
+        if (shift_pending.shift > 0)
+        {
+            int remain = shift_pending.total - shift_pending.shift;
+            if (remain > 0)
+            {
+                struct ggml_tensor * k_cache_remain = ggml_view_3d(ctx->gctx.get(), k_cache, head_size, remain, num_attention_heads, k_cache->nb[1], k_cache->nb[2],
+                         shift_pending.shift * head_size * ggml_element_size(k_cache)); // [heads, remain, head_size]
+                struct ggml_tensor * k_cache_dst    = ggml_view_3d(ctx->gctx.get(), k_cache, head_size, remain, num_attention_heads, k_cache->nb[1], k_cache->nb[2],
+                         0); // [heads, remain, head_size]
+
+                struct ggml_tensor * v_cache_remain = ggml_view_3d(ctx->gctx.get(), v_cache, remain, head_size, num_attention_heads, v_cache->nb[1], v_cache->nb[2],
+                         shift_pending.shift * ggml_element_size(v_cache)); // [heads, head_size, remain]
+                struct ggml_tensor * v_cache_dst    = ggml_view_3d(ctx->gctx.get(), v_cache, remain, head_size, num_attention_heads, v_cache->nb[1], v_cache->nb[2],
+                         0); // [heads, head_size, remain]
+
+                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_cache_remain, k_cache_dst));
+                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), v_cache_remain, v_cache_dst));
+            }
+
+            shift_pending.clear();
+        }
+
         ggml_tensor *qkv = query_key_value.forward(ctx, hidden_states); // [qlen, 3 * hidden]
 
         ggml_tensor *query_layer = ggml_view_3d(ctx->gctx.get(), qkv, head_size, num_attention_heads, qlen,
@@ -162,6 +184,28 @@ namespace chatllm
         const int mqa_scale = num_attention_heads / num_kv_heads;
         fill_pos_vector(pos, n_past, qlen);
 
+        if (shift_pending.shift > 0)
+        {
+            int remain = shift_pending.total - shift_pending.shift;
+            if (remain > 0)
+            {
+                struct ggml_tensor * k_cache_remain = ggml_view_3d(ctx->gctx.get(), k_cache, head_size, remain, num_kv_heads, k_cache->nb[1], k_cache->nb[2],
+                         shift_pending.shift * head_size * ggml_element_size(k_cache)); // [kv_heads, remain, head_size]
+                struct ggml_tensor * k_cache_dst    = ggml_view_3d(ctx->gctx.get(), k_cache, head_size, remain, num_kv_heads, k_cache->nb[1], k_cache->nb[2],
+                         0); // [kv_heads, remain, head_size]
+
+                struct ggml_tensor * v_cache_remain = ggml_view_3d(ctx->gctx.get(), v_cache, remain, head_size, num_kv_heads, v_cache->nb[1], v_cache->nb[2],
+                         shift_pending.shift * ggml_element_size(v_cache)); // [kv_heads, head_size, qlen];
+                struct ggml_tensor * v_cache_dst    = ggml_view_3d(ctx->gctx.get(), v_cache, remain, head_size, num_kv_heads, v_cache->nb[1], v_cache->nb[2],
+                         0); // [kv_heads, head_size, qlen]
+
+                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_cache_remain, k_cache_dst));
+                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), v_cache_remain, v_cache_dst));
+            }
+
+            shift_pending.clear();
+        }
+
         ggml_tensor *qkv = query_key_value.forward(ctx, hidden_states); // [qlen, hidden + 2 * kv_hidden]
 
         ggml_tensor *query_layer =
@@ -237,15 +281,13 @@ namespace chatllm
         return output;
     }
 
-    static bool flag = false;
-
     ggml_tensor *BaseSelfAttention::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
     {
         const int hidden_size = hidden_states->ne[0];
         const int qlen = hidden_states->ne[1];
         const int head_size = hidden_size / num_attention_heads;
         fill_pos_vector(pos, n_past, qlen);
-        // if (flag) printf("npast= %d\n", n_past);
+
         // shift cache
         if (shift_pending.shift > 0)
         {
@@ -268,7 +310,6 @@ namespace chatllm
                 ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), v_cache_remain, v_cache_2d));
             }
             shift_pending.clear();
-            flag = true;
         }
 
         ggml_tensor *tmpq = q_proj.forward(ctx, hidden_states);
