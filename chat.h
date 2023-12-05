@@ -5,6 +5,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+#include <random>
 
 #include "sentence_processor.h"
 
@@ -202,7 +203,7 @@ namespace chatllm
     class BaseModel
     {
     public:
-        BaseModel(int type, std::string name) : type_(type), name_(name), terminate_token_id(-1000) {}
+        BaseModel(int type, std::string name) : type_(type), name_(name), gen(0x123), terminate_token_id(-1000) {}
 
         virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,
@@ -214,9 +215,14 @@ namespace chatllm
 
         virtual void set_ctx(int n_ctx) {}
 
+        void seed(int x) { gen.seed((unsigned int)x); }
+
+        virtual int get_max_length(void) = 0;
+
     protected:
         int type_;
         std::string name_;
+        std::mt19937 gen;
     public:
         int terminate_token_id; // when LLM uses another token as end indicator
     };

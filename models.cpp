@@ -63,6 +63,11 @@ namespace chatllm
 
         virtual ~BaseModelForConditionalGeneration() = default;
 
+        int get_max_length(void) override
+        {
+            return config_.max_length;
+        }
+
         std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                   const bool continuous,
                                   bool &completed,
@@ -85,7 +90,7 @@ namespace chatllm
 
             transformer.set_ctx(input_ids.size());
 
-            while ((int)output_ids.size() < gen_config.max_length)
+            while (n_past < gen_config.max_length)
             {
                 int next_token_id = generate_next_token(curr_input_ids, gen_config, n_past);
 
@@ -115,7 +120,7 @@ namespace chatllm
             return output_ids;
         }
 
-        int generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, int n_past) const
+        int generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, int n_past)
         {
             ForwardContext ctx;
             ctx.gctx = GGMLContext({.mem_size = mem_size_, .mem_buffer = mem_buffer_.get(), .no_alloc = false});
@@ -186,9 +191,6 @@ namespace chatllm
                 {
                     next_token_logits[i] = token_scores[i].score;
                 }
-
-                thread_local std::random_device rd;
-                thread_local std::mt19937 gen(rd());
 
                 std::discrete_distribution<> dist(next_token_logits, next_token_logits + token_scores.size());
                 next_token_id = token_scores[dist(gen)].id;

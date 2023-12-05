@@ -71,7 +71,8 @@ namespace chatllm
         LayerNorm() : weight(nullptr), bias(nullptr) {}
         LayerNorm(InitContext *ctx, int normalized_shape)
             : weight(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape)),
-              bias(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape)) {}
+              bias(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape)),
+              eps(1e-5f) {}
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) const;
@@ -79,6 +80,7 @@ namespace chatllm
     public:
         ggml_tensor *weight; // [normalized_shape]
         ggml_tensor *bias;   // [normalized_shape]
+        float eps;
     };
 
     class RMSNorm : public Block
@@ -86,13 +88,15 @@ namespace chatllm
     public:
         RMSNorm() : weight(nullptr) {}
         RMSNorm(InitContext *ctx, int normalized_shape)
-            : weight(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape)) {}
+            : weight(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape)),
+              eps(1e-5f) {}
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) const override;
 
     public:
         ggml_tensor *weight;
+        float eps;
     };
 
     class GLMMLP : public Block

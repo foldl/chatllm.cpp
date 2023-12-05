@@ -41,7 +41,7 @@ namespace chatllm
     ggml_tensor *LayerNorm::forward(ForwardContext *ctx, ggml_tensor *input) const
     {
         // input: [seqlen, normalized_shape]
-        ggml_tensor *output = ggml_norm_inplace(ctx->gctx.get(), input, 1e-5f);
+        ggml_tensor *output = ggml_norm_inplace(ctx->gctx.get(), input, eps);
         output = ggml_mul_inplace(ctx->gctx.get(), output, weight);
         ggml_tensor *bcast_bias = ggml_view_2d(ctx->gctx.get(), bias, output->ne[0], output->ne[1], 0, 0);
         output = ggml_add_inplace(ctx->gctx.get(), output, bcast_bias);
@@ -50,7 +50,7 @@ namespace chatllm
 
     ggml_tensor *RMSNorm::forward(ForwardContext *ctx, ggml_tensor *input) const
     {
-        ggml_tensor *output = ggml_rms_norm_inplace(ctx->gctx.get(), input, 1e-5f);
+        ggml_tensor *output = ggml_rms_norm_inplace(ctx->gctx.get(), input, eps);
         output = ggml_mul_inplace(ctx->gctx.get(), output, weight);
         return output;
     }

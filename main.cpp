@@ -6,6 +6,7 @@
 #include <numeric>
 #include <functional>
 #include <cstring>
+#include <random>
 
 #if defined(_WIN32)
 #include <fcntl.h>
@@ -18,13 +19,14 @@ struct Args
     std::string model_path = "chatllm-ggml.bin";
     std::string system = "";
     std::string prompt = "你好";
-    int max_length = 2048;
+    int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
     int top_k = 0;
     float top_p = 0.7;
     float temp = 0.7;
     int num_threads = 0;
+    int seed;
 };
 
 void usage(const char *prog)
@@ -37,18 +39,29 @@ void usage(const char *prog)
               << "  -p, --prompt PROMPT     prompt to start generation with (default: 你好)\n"
               << "  -s, --system SYSTEM     system prompt (instruction) (default: model specific)"
               << "  -i, --interactive       run in interactive mode\n"
-              << "  -l, --max_length N      max total length including prompt and output (default: 2048)\n"
+              << "  -l, --max_length N      max total length including prompt and output (default: model specific)\n"
               << "  -c, --max_context_length N\n"
               << "                          max context length (default: 512)\n"
               << "  --top_k N               top-k sampling (default: 0)\n"
               << "  --top_p N               top-p sampling (default: 0.7)\n"
               << "  --temp N                temperature (default: 0.95)\n"
-              << "  -t, --threads N         number of threads for inference\n";
+              << "  -t, --threads N         number of threads for inference (default: number of cores)\n"
+              << "  --seed N                seed for random generator (default: random)\n";
 }
 
 static Args parse_args(int argc, const char **argv)
 {
     Args args;
+    std::random_device rd;
+    args.seed = rd();
+
+    #define handle_para0(fmt1, field, f)    \
+        else if ((strcmp(arg, fmt1) == 0))      \
+        {                                                                   \
+            c++;                                                            \
+            if (c < argc)                                                   \
+                args.field = f(argv[c]);                                    \
+        }
 
     #define handle_param(fmt1, fmt2, field, f)    \
         else if ((strcmp(arg, fmt1) == 0) || (strcmp(arg, fmt2) == 0))      \
@@ -80,6 +93,7 @@ static Args parse_args(int argc, const char **argv)
         handle_param("--top_p",                 "-q", top_p,                std::stof)
         handle_param("--temp",                  "-t", temp,                 std::stof)
         handle_param("--threads",               "-n", num_threads,          std::stoi)
+        handle_para0("--seed",                        seed,                 std::stoi)
         else
             break;
 
@@ -153,12 +167,17 @@ static inline int get_num_physical_cores()
     return n_threads > 0 ? (n_threads <= 4 ? n_threads : n_threads / 2) : 4;
 }
 
-void chat(const Args &args)
+void chat(Args &args)
 {
     chatllm::Pipeline pipeline(args.model_path);
     std::string model_name = pipeline.model->type_name();
     if (args.system.size() > 0)
         pipeline.set_system_prompt(args.system);
+    pipeline.model->seed(args.seed);
+    if (args.max_length < 0)
+        args.max_length = pipeline.model->get_max_length();
+    if (args.max_length > pipeline.model->get_max_length())
+        args.max_length = pipeline.model->get_max_length();
 
     int prompt_len = model_name.length();
     if (prompt_len < 6) prompt_len = 6;

@@ -327,7 +327,7 @@ namespace chatllm
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, streamer);
         if (!completed && continuous)
         {
-            std::cout << std::endl << "RUN OUT OF CONTEXT. Let me try again..." << std::endl;
+            std::cout << std::endl << "RUN OUT OF CONTEXT. Let me forget something and try again..." << std::endl << std::endl;
             input_ids = tokenizer->encode_history(history, gen_config.max_context_length);
             output_ids = model->generate(input_ids, gen_config, false, completed, streamer);
         }
