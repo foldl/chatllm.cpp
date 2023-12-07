@@ -25,7 +25,7 @@ if (GGML_PERF)
     add_compile_definitions(GGML_PERF)
 endif ()
 
-add_library(chatllm STATIC chat.cpp layers.cpp sentence_processor.cpp models.cpp)
+add_library(chatllm STATIC chat.cpp layers.cpp tokenizer.cpp models.cpp)
 target_link_libraries(chatllm PRIVATE ggml)
 
 add_executable(main main.cpp)

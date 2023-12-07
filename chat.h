@@ -7,7 +7,7 @@
 #include <vector>
 #include <random>
 
-#include "sentence_processor.h"
+#include "tokenizer.h"
 
 namespace chatllm
 {

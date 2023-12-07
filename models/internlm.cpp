@@ -5,7 +5,7 @@ struct Config : public BaseConfig
 class Tokenizer : public BaseTokenizer
 {
 public:
-    Tokenizer() : add_bos_token(true), add_eos_token(false) {};
+    Tokenizer(const Config &config) : add_bos_token(true), add_eos_token(false) {};
 
     size_t load(const char *buffer, int n_vocab) override;
 
@@ -27,7 +27,7 @@ private:
     bool is_special_id(int id) const;
 
 public:
-    sentencepiece::SentencePieceProcessor sp;
+    tokenizer::SentencePieceProcessor sp;
     int bos_token_id;
     int eos_token_id;
     int pad_token_id;

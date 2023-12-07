@@ -8,6 +8,8 @@ struct Config : public BaseConfig
 class Tokenizer : public BaseTokenizer
 {
 public:
+    Tokenizer(const Config &config) {}
+
     size_t load(const char *buffer, int n_vocab) override;
 
     std::vector<int> encode(const std::string &text) const override;
@@ -21,7 +23,7 @@ public:
     bool is_special_id(int id) const;
 
 public:
-    sentencepiece::SentencePieceProcessor sp;
+    tokenizer::SentencePieceProcessor sp;
     int mask_token_id;
     int gmask_token_id;
     int smask_token_id;

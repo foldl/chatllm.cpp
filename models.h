@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "sentence_processor.h"
+#include "tokenizer.h"
 #include "chat.h"
 
 namespace chatllm

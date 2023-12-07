@@ -17,7 +17,7 @@ struct _vocab {
     std::vector<token_score> id_to_token;
 };
 
-namespace sentencepiece
+namespace tokenizer
 {
 
 // simplified SentencePieceProcessor

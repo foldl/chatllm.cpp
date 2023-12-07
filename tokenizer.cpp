@@ -1,4 +1,4 @@
-#include "sentence_processor.h"
+#include "tokenizer.h"
 
 #include <queue>
 #include <memory>
@@ -201,7 +201,7 @@ private:
     size_t offset;
 };
 
-using namespace sentencepiece;
+using namespace tokenizer;
 
 size_t SentencePieceProcessor::Load(const char *buffer, int n_vocab)
 {

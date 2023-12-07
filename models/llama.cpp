@@ -5,12 +5,15 @@ struct Config : public BaseConfig
 class Tokenizer : public BaseTokenizer
 {
 public:
-    Tokenizer()
+    Tokenizer(const Config &config)
         : add_bos_token(false)
     {
         sys_prompt = R"""(You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
 
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information.)""";
+
+        bos_token_id = config.bos_token_id;
+        eos_token_id = config.eos_token_id;
     }
 
     size_t load(const char *buffer, int n_vocab) override;
@@ -35,7 +38,7 @@ private:
     std::vector<int> encode(const std::string &text, bool add_bos, bool add_eos) const;
 
 public:
-    sentencepiece::SentencePieceProcessor sp;
+    tokenizer::SentencePieceProcessor sp;
     int bos_token_id;
     int eos_token_id;
     int pad_token_id;
@@ -48,7 +51,7 @@ class ConditionalGeneration : public BaseModelForConditionalGeneration<
 {
 public:
     ConditionalGeneration() = default;
-    ConditionalGeneration(const Config &config);
+    ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_LLAMA2);
 
     void load(ModelLoader &loader) override;
 
@@ -67,8 +70,6 @@ size_t Tokenizer::load(const char *buffer, int n_vocab)
 {
     size_t size = sp.Load(buffer, n_vocab);
 
-    bos_token_id = 1;
-    eos_token_id = 2;
     pad_token_id = sp.PieceToId("<pad>");
     return size;
 }
@@ -123,7 +124,8 @@ std::vector<int> Tokenizer::encode_history(const std::vector<std::string> &histo
 
     if (incremental)
     {
-        return encode("[INST] " + history[history.size() - 1] + "[/INST]", true, false);
+        std::string user = trim(history[history.size() - 1]);
+        return encode("[INST] " + user + "[/INST]", true, false);
     }
 
     int64_t start = (int64_t)history.size() - 2;
@@ -172,8 +174,8 @@ bool Tokenizer::is_special_id(int id) const
     return id == pad_token_id;
 }
 
-ConditionalGeneration::ConditionalGeneration(const Config &config)
-    : BaseModelForConditionalGeneration(MODEL_TYPE_LLAMA2, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type)
+    : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
     const size_t num_tensors = 3 + config.num_hidden_layers * 12;
