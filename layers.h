@@ -326,6 +326,12 @@ namespace chatllm
               v_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size * max_length)),
               pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
               max_length(max_length),
+              freq_base(10000.0f),
+              freq_scale(1.0f),
+              ext_factor(0.0f),
+              attn_factor(1.0f),
+              beta_fast(0.0f),
+              beta_slow(0.0f),
               shift_pending()
         {
             k_cache->data = new char[ggml_nbytes(k_cache)]();
@@ -360,6 +366,15 @@ namespace chatllm
         ggml_tensor *v_cache;
         ggml_tensor *pos;
         int max_length;
+
+        // rope param
+        float freq_base;
+        float freq_scale;
+        float ext_factor;
+        float attn_factor;
+        float beta_fast;
+        float beta_slow;
+
     private:
         ShiftPending shift_pending;
     };

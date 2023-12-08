@@ -7,33 +7,25 @@ struct Config : public BaseConfig
 class Tokenizer : public BaseTokenizer
 {
 public:
-    Tokenizer(const Config &config) {}
+    Tokenizer(const Config &config) : BaseTokenizer::BaseTokenizer(config) {}
 
     size_t load(const char *buffer, int n_vocab) override;
 
-    std::vector<int> encode(const std::string &text) const override;
+    void encode(const std::string &text, std::vector<int> &ids) const override;
 
-    std::string decode(const std::vector<int> &ids) const override;
+protected:
+    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
 
-    std::vector<int> encode_history(const std::vector<std::string> &history, int max_length, const bool incremental = false) const override;
-
-    static std::string build_prompt(const std::vector<std::string> &history);
-
-private:
-    static std::string preprocess(const std::string &text);
-
-    static std::string postprocess(const std::string &text);
+    std::string preprocess(const std::string &text) const override;
+    std::string postprocess(const std::string &text) const override;
 
 public:
-    tokenizer::SentencePieceProcessor sp;
-    int bos_token_id;
-    int eos_token_id;
     int mask_token_id;
     int gmask_token_id;
-    int pad_token_id;
 };
 
-    class ConditionalGeneration : public BaseModelForConditionalGeneration<
+class ConditionalGeneration : public BaseModelForConditionalGeneration<
     Model<Config, LayerNorm, GLMBlock, int, int, int, int>>
 {
 public:
@@ -54,72 +46,42 @@ private:
 
 size_t Tokenizer::load(const char *buffer, int n_vocab)
 {
-    size_t size = sp.Load(buffer, n_vocab);
+    tp = new tokenizer::SentencePieceProcessor();
+    size_t size = tp->Load(buffer, n_vocab);
 
-    bos_token_id = sp.PieceToId("<sop>");
-    eos_token_id = sp.PieceToId("<eop>");
-    mask_token_id = sp.PieceToId("[MASK]");
-    gmask_token_id = sp.PieceToId("[gMASK]");
-    pad_token_id = sp.PieceToId("<pad>");
+    bos_token_id = tp->PieceToId("<sop>");
+    eos_token_id = tp->PieceToId("<eop>");
+    mask_token_id = tp->PieceToId("[MASK]");
+    gmask_token_id = tp->PieceToId("[gMASK]");
+    pad_token_id = tp->PieceToId("<pad>");
     return size;
 }
 
-std::vector<int> Tokenizer::encode(const std::string &text) const
+void Tokenizer::encode(const std::string &text, std::vector<int> &ids) const
 {
-    std::string input = preprocess(text);
-    std::vector<int> ids;
-    sp.Encode(input, &ids);
     ids.insert(ids.end(), {gmask_token_id, bos_token_id});
-    return ids;
+    BaseTokenizer::encode(text, ids);
 }
 
-std::vector<int> Tokenizer::encode_history(const std::vector<std::string> &history, int max_length, const bool incremental) const
+void Tokenizer::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
-    std::string prompt;
-    if (incremental)
-    {
-        std::ostringstream oss_prompt;
-        oss_prompt << "[Round " << history.size() / 2 << "]\n问：" << history[history.size() - 1] << "\n";
-        prompt = oss_prompt.str();
-    }
-    else
-        prompt = build_prompt(history);
-
-    std::vector<int> input_ids = encode(prompt);
-    if ((int)input_ids.size() > max_length)
-    {
-        // sliding window: always take the last max_length tokens
-        input_ids.erase(input_ids.begin(), input_ids.end() - max_length);
-    }
-    return input_ids;
-}
-
-std::string Tokenizer::build_prompt(const std::vector<std::string> &history)
-{
-    CHATLLM_CHECK(history.size() % 2 == 1) << "invalid history size " << history.size();
-
     std::ostringstream oss_prompt;
 
-    for (size_t i = 0; i < history.size(); i += 2)
-    {
-        oss_prompt << "[Round " << i / 2 << "]\n问：" << history[i] << "\n答：";
-        if (i < history.size() - 1)
-        {
-            oss_prompt << history[i + 1] << "\n";
-        }
-    }
-    return oss_prompt.str();
+    oss_prompt << "[Round " << round_idx + 1 << "]\n问：" << user << "\n答：" << ai << "\n";
+    auto text = oss_prompt.str();
+    encode(text, ids);
 }
 
-std::string Tokenizer::decode(const std::vector<int> &ids) const
+void Tokenizer::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
-    std::string text;
-    sp.Decode(ids, &text);
-    text = postprocess(text);
-    return text;
+    std::ostringstream oss_prompt;
+
+    oss_prompt << "[Round " << round_idx + 1 << "]\n问：" << user << "\n答：";
+    auto text = oss_prompt.str();
+    encode(text, ids);
 }
 
-std::string Tokenizer::preprocess(const std::string &text)
+std::string Tokenizer::preprocess(const std::string &text) const
 {
     std::string output;
 
@@ -147,7 +109,7 @@ std::string Tokenizer::preprocess(const std::string &text)
     return output;
 }
 
-std::string Tokenizer::postprocess(const std::string &text)
+std::string Tokenizer::postprocess(const std::string &text) const
 {
     std::string output;
 

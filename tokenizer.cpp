@@ -4,7 +4,10 @@
 #include <memory>
 #include <cstring>
 
+#include "unicode.h"
 #include "chat.h"
+
+using namespace tokenizer;
 
 // copied from `llama.cpp`
 struct llama_sp_symbol
@@ -39,9 +42,9 @@ static size_t utf8_len(char src) {
     return lookup[highbits];
 }
 
-struct llama_tokenizer
+struct llama_sp_tokenizer
 {
-    llama_tokenizer(const _vocab &vocab) : vocab_(vocab) {}
+    llama_sp_tokenizer(const _vocab &vocab) : vocab_(vocab) {}
 
     void tokenize(const std::string &text, std::vector<_vocab::id> &output)
     {
@@ -201,17 +204,38 @@ private:
     size_t offset;
 };
 
-using namespace tokenizer;
-
-size_t SentencePieceProcessor::Load(const char *buffer, int n_vocab)
+int Processor::Encode(const std::string &input, std::vector<std::string> *pieces) const
 {
-    Reader reader(buffer);
+    std::vector<int> ids;
+    Encode(input, &ids);
+    for (auto id : ids)
+        pieces->emplace_back(IdToPiece(id));
+    return 0;
+}
 
-    vocab_.token_to_id.clear();
-    vocab_.id_to_token.resize((size_t)n_vocab + 100);
+int Processor::PieceToId(std::string_view piece) const
+{
+    auto r = vocab_.token_to_id.find(std::string(piece));
+    return r != vocab_.token_to_id.end() ? r->second : id_unk_token;
+}
 
-    piece_size = 0;
+const std::string Processor::IdToPiece(int id) const
+{
+    if (id < 0) return token_unk_id;
+    return id < (int)vocab_.id_to_token.size() ? vocab_.id_to_token[id].tok : token_unk_id;
+}
 
+int Processor::Decode(const std::vector<int> &ids, std::string *detokenized) const
+{
+    std::string_view view;
+    for (auto id : ids)
+        detokenized->append(IdToPiece(id));
+    return 0;
+}
+
+static int load_vocab_list(_vocab &vocab, Reader &reader, bool has_score, bool has_type, int start_piece_id)
+{
+    int count = 0;
     while (true)
     {
         int len = reader.read_i32();
@@ -221,60 +245,504 @@ size_t SentencePieceProcessor::Load(const char *buffer, int n_vocab)
             break;
         }
 
-        CHATLLM_CHECK((size_t)piece_size < vocab_.id_to_token.size()) << "too many extra tokens";
+        int id = start_piece_id + count;
+        CHATLLM_CHECK((size_t)(id) < vocab.id_to_token.size()) << "too many extra tokens";
 
         std::string word = reader.read_string(len);
 
         float score = 0.0f;
-        reader.read_raw(&score, sizeof(score));
+        uint8_t type = token_type::NORMAL;
+        if (has_score)
+            reader.read_raw(&score, sizeof(score));
+        if (has_type)
+            reader.read_raw(&type, sizeof(type));
 
-        vocab_.token_to_id[word] = piece_size;
+        vocab.token_to_id[word] = id;
 
-        auto &tok_score = vocab_.id_to_token[piece_size];
+        auto &tok_score = vocab.id_to_token[id];
         tok_score.tok = std::move(word);
         tok_score.score = score;
+        tok_score.type = (token_type)type;
 
-        piece_size++;
+        count++;
     }
+
+    return count;
+}
+
+static int load_vocab_merges(_vocab &vocab, Reader &reader)
+{
+    int count = 0;
+
+    while (true)
+    {
+        int len = reader.read_i32();
+
+        if (len < 0)
+            break;
+
+        std::string word = reader.read_string(len);
+
+        std::string first;
+        std::string second;
+
+        const size_t pos = word.find(' ', 1);
+
+        if (pos != std::string::npos) {
+            first  = word.substr(0, pos);
+            second = word.substr(pos + 1);
+        }
+
+        vocab.bpe_ranks.emplace(std::make_pair(first, second), count);
+
+        count++;
+    }
+
+    return count;
+}
+
+static void build_special_token_cache(_vocab &vocab)
+{
+    for (const auto & t : vocab.token_to_id)
+    {
+        const auto & token = t.first;
+        const auto & id    = t.second;
+
+        // Count all non-normal tokens in the vocab while iterating
+        if (vocab.id_to_token[id].type != token_type::NORMAL)
+        {
+            vocab.special_tokens_cache[id] = token;
+        }
+    }
+}
+
+size_t SentencePieceProcessor::Load(const char *buffer, int n_vocab)
+{
+    Reader reader(buffer);
+
+    vocab_.token_to_id.clear();
+    vocab_.id_to_token.resize((size_t)n_vocab + 100);
+
+    piece_size = load_vocab_list(vocab_, reader, true, false, 0);
+
     vocab_.id_to_token.resize(piece_size);
     return reader.get_total_size();
-}
-
-int SentencePieceProcessor::PieceToId(std::string_view piece) const
-{
-    auto r = vocab_.token_to_id.find(std::string(piece));
-    return r != vocab_.token_to_id.end() ? r->second : id_unk_token;
-}
-
-const std::string &SentencePieceProcessor::IdToPiece(int id) const
-{
-    if (id < 0) return token_unk_id;
-    return id < (int)vocab_.id_to_token.size() ? vocab_.id_to_token[id].tok : token_unk_id;
-}
-
-int SentencePieceProcessor::Encode(const std::string &input,
-                                   std::vector<std::string> *pieces) const
-{
-    std::vector<int> ids;
-    Encode(input, &ids);
-    for (auto id : ids)
-        pieces->emplace_back(IdToPiece(id));
-    return 0;
 }
 
 int SentencePieceProcessor::Encode(const std::string &input,
                                    std::vector<int> *ids) const
 {
-    llama_tokenizer tokenizer(vocab_);
+    llama_sp_tokenizer tokenizer(vocab_);
     tokenizer.tokenize(input, *ids);
     return 0;
 }
 
-int SentencePieceProcessor::Decode(const std::vector<int> &ids,
-                                           std::string *detokenized) const
+size_t BPEProcessor::Load(const char *buffer, int n_vocab)
 {
-    std::string_view view;
-    for (auto id : ids)
-        detokenized->append(IdToPiece(id));
+    Reader reader(buffer);
+
+    vocab_.token_to_id.clear();
+
+    vocab_.id_to_token.resize((size_t)n_vocab + 100);
+
+    piece_size = load_vocab_list(vocab_, reader, false, true, 0);
+
+    vocab_.id_to_token.resize(piece_size);
+
+    load_vocab_merges(vocab_, reader);
+
+    build_special_token_cache(vocab_);
+
+    return reader.get_total_size();
+}
+
+struct llm_symbol {
+    using index = int;
+    index prev;
+    index next;
+    const char * text;
+    size_t n;
+};
+
+struct llm_bigram_bpe {
+    struct comparator {
+        bool operator()(const llm_bigram_bpe & l, const llm_bigram_bpe & r) const {
+            return l.rank > r.rank || (l.rank == r.rank && l.left > r.left);
+        }
+    };
+
+    using queue_storage = std::vector<llm_bigram_bpe>;
+    using queue = std::priority_queue<llm_bigram_bpe, queue_storage, comparator>;
+    llm_symbol::index left;
+    llm_symbol::index right;
+    std::string text;
+    int rank;
+    size_t size;
+};
+
+struct llm_bpe_tokenizer {
+    llm_bpe_tokenizer(const _vocab & vocab): vocab(vocab) {}
+
+    void tokenize(const std::string & text, std::vector<_vocab::id> & output) {
+        int final_prev_index = -1;
+        auto word_collection = bpe_gpt2_preprocess(text);
+
+        symbols_final.clear();
+
+        for (auto & word : word_collection) {
+            work_queue = llm_bigram_bpe::queue();
+            symbols.clear();
+
+            int index = 0;
+            size_t offset = 0;
+
+            while (offset < word.size()) {
+                llm_symbol sym;
+                size_t char_len = std::min(word.size() - offset, (size_t) ::utf8_len(word[offset]));
+                sym.text = word.c_str() + offset;
+                sym.n = char_len;
+                offset += sym.n;
+                sym.prev = index - 1;
+                sym.next = offset == word.size() ? -1 : index + 1;
+                index++;
+                symbols.emplace_back(sym);
+            }
+            for (size_t i = 1; i < symbols.size(); ++i) {
+                add_new_bigram(i - 1, i);
+            }
+
+            // build token(s)
+            while (!work_queue.empty()) {
+                auto bigram = work_queue.top();
+                work_queue.pop();
+
+                auto & left_symbol = symbols[bigram.left];
+                auto & right_symbol = symbols[bigram.right];
+
+                if (left_symbol.n == 0 || right_symbol.n == 0) {
+                    continue;
+                }
+                std::string left_token = std::string(left_symbol.text, left_symbol.n);
+                std::string right_token = std::string(right_symbol.text, right_symbol.n);
+                if (left_token + right_token != bigram.text) {
+                    continue;  // Skip this bigram if it's outdated
+                }
+
+                // merge the right sym into the left one
+                left_symbol.n += right_symbol.n;
+                right_symbol.n = 0;
+
+                // remove the right sym from the chain
+                left_symbol.next = right_symbol.next;
+                if (right_symbol.next >= 0) {
+                    symbols[right_symbol.next].prev = bigram.left;
+                }
+
+                add_new_bigram(left_symbol.prev, bigram.left);  // left side of current symbol
+                add_new_bigram(bigram.left, left_symbol.next);  // right side of current symbol
+            }
+
+            // add the fnished tokens to the final list keeping correct order for next and prev
+            for (auto & sym : symbols) {
+                if (sym.n > 0) {
+                    sym.prev = final_prev_index;
+                    sym.next = -1;
+                    if (final_prev_index != -1) {
+                        symbols_final[final_prev_index].next = symbols_final.size();
+                    }
+                    symbols_final.emplace_back(sym);
+                    final_prev_index = symbols_final.size() - 1;
+                }
+            }
+        }
+
+        symbols = symbols_final;
+
+        if (!symbols.empty()) {
+            for (int i = 0; i != -1; i = symbols[i].next) {
+                auto & symbol = symbols[i];
+                if (symbol.n == 0) {
+                    continue;
+                }
+
+                const std::string str = std::string(symbol.text, symbol.n);
+                const auto token = vocab.token_to_id.find(str);
+
+                if (token == vocab.token_to_id.end()) {
+                    for (auto j = str.begin(); j != str.end(); ++j) {
+                        std::string byte_str(1, *j);
+                        auto token_multibyte = vocab.token_to_id.find(byte_str);
+                        if (token_multibyte == vocab.token_to_id.end()) {
+                            throw std::runtime_error("ERROR: byte not found in vocab");
+                        }
+                        output.push_back((*token_multibyte).second);
+                    }
+                } else {
+                    output.push_back((*token).second);
+                }
+            }
+        }
+    }
+
+private:
+    void add_new_bigram(int left, int right) {
+        if (left == -1 || right == -1) {
+            return;
+        }
+
+        std::string left_token  = std::string(symbols[left].text,  symbols[left].n);
+        std::string right_token = std::string(symbols[right].text, symbols[right].n);
+
+        int rank_found = -1;
+
+        rank_found = vocab.find_bpe_rank(left_token, right_token);
+
+        if (rank_found < 0) {
+            return;
+        }
+
+        llm_bigram_bpe bigram;
+
+        bigram.left  = left;
+        bigram.right = right;
+        bigram.text  = left_token + right_token;
+        bigram.size  = left_token.size() + right_token.size();
+        bigram.rank  = rank_found;
+
+        work_queue.push(bigram);
+    }
+
+    std::vector<std::string> bpe_gpt2_preprocess(const std::string & text) {
+        std::vector<std::string> bpe_words;
+        std::vector<std::string> bpe_encoded_words;
+
+        std::string token = "";
+        // GPT2 system regex:  's|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+
+        bool collecting_numeric = false;
+        bool collecting_letter = false;
+        bool collecting_special = false;
+        bool collecting_whitespace_lookahead = false;
+        bool collecting = false;
+
+        std::vector<std::string> text_utf;
+        text_utf.reserve(text.size());
+        bpe_words.reserve(text.size());
+        bpe_encoded_words.reserve(text.size());
+
+        auto cps = codepoints_from_utf8(text);
+        for (size_t i = 0; i < cps.size(); ++i)
+            text_utf.emplace_back(codepoint_to_utf8(cps[i]));
+
+        for (int i = 0; i < (int)text_utf.size(); i++) {
+            const std::string & utf_char = text_utf[i];
+            bool split_condition = false;
+            int bytes_remain = text_utf.size() - i;
+            // forward backward lookups
+            const std::string & utf_char_next = (i + 1 < (int)text_utf.size()) ? text_utf[i + 1] : "";
+            const std::string & utf_char_next_next = (i + 2 < (int)text_utf.size()) ? text_utf[i + 2] : "";
+
+            // handling contractions
+            if (!split_condition && bytes_remain >= 2) {
+                // 's|'t|'m|'d
+                if (utf_char == "\'" && (utf_char_next == "s" || utf_char_next == "t" || utf_char_next == "m" || utf_char_next == "d")) {
+                    split_condition = true;
+                }
+                if (split_condition) {
+                    if (token.size()) {
+                        bpe_words.emplace_back(token); // push previous content as token
+                    }
+                    token = utf_char + utf_char_next;
+                    bpe_words.emplace_back(token);
+                    token = "";
+                    i++;
+                    continue;
+                }
+            }
+            if (!split_condition && bytes_remain >= 3) {
+                // 're|'ve|'ll
+                if (utf_char == "\'" && (
+                    (utf_char_next == "r" && utf_char_next_next == "e") ||
+                    (utf_char_next == "v" && utf_char_next_next == "e") ||
+                    (utf_char_next == "l" && utf_char_next_next == "l"))
+                    ) {
+                    split_condition = true;
+                }
+                if (split_condition) {
+                    // current token + next token can be defined
+                    if (token.size()) {
+                        bpe_words.emplace_back(token); // push previous content as token
+                    }
+                    token = utf_char + utf_char_next + utf_char_next_next;
+                    bpe_words.emplace_back(token); // the contraction
+                    token = "";
+                    i += 2;
+                    continue;
+                }
+            }
+
+            if (!split_condition && !collecting) {
+                if (codepoint_type(utf_char) == CODEPOINT_TYPE_LETTER || (!token.size() && utf_char == " " && codepoint_type(utf_char_next) == CODEPOINT_TYPE_LETTER)) {
+                    collecting_letter = true;
+                    collecting = true;
+                }
+                else if (codepoint_type(utf_char) == CODEPOINT_TYPE_DIGIT || (!token.size() && utf_char == " " && codepoint_type(utf_char_next) == CODEPOINT_TYPE_DIGIT)) {
+                    collecting_numeric = true;
+                    collecting = true;
+                }
+                else if (
+                    ((codepoint_type(utf_char) != CODEPOINT_TYPE_LETTER && codepoint_type(utf_char) != CODEPOINT_TYPE_DIGIT) && (codepoint_type(utf_char) != CODEPOINT_TYPE_WHITESPACE)) ||
+                    (!token.size() && utf_char == " " && codepoint_type(utf_char_next) != CODEPOINT_TYPE_LETTER && codepoint_type(utf_char_next) != CODEPOINT_TYPE_DIGIT && codepoint_type(utf_char_next) != CODEPOINT_TYPE_WHITESPACE)
+                    ) {
+                    collecting_special = true;
+                    collecting = true;
+                }
+                else if (codepoint_type(utf_char) == CODEPOINT_TYPE_WHITESPACE && codepoint_type(utf_char_next) == CODEPOINT_TYPE_WHITESPACE) {
+                    collecting_whitespace_lookahead = true;
+                    collecting = true;
+                }
+                else if (codepoint_type(utf_char) == CODEPOINT_TYPE_WHITESPACE) {
+                    split_condition = true;
+                }
+            }
+            else if (!split_condition && collecting) {
+                if (collecting_letter && codepoint_type(utf_char) != CODEPOINT_TYPE_LETTER) {
+                    split_condition = true;
+                }
+                else if (collecting_numeric && codepoint_type(utf_char) != CODEPOINT_TYPE_DIGIT) {
+                    split_condition = true;
+                }
+                else if (collecting_special && (codepoint_type(utf_char) == CODEPOINT_TYPE_LETTER || codepoint_type(utf_char) == CODEPOINT_TYPE_DIGIT || codepoint_type(utf_char) == CODEPOINT_TYPE_WHITESPACE)) {
+                    split_condition = true;
+                }
+                else if (collecting_whitespace_lookahead && (codepoint_type(utf_char_next) == CODEPOINT_TYPE_LETTER || codepoint_type(utf_char_next) == CODEPOINT_TYPE_DIGIT)) {
+                    split_condition = true;
+                }
+            }
+
+            if (utf_char_next == "") {
+                split_condition = true; // final
+                token += utf_char;
+            }
+
+            if (split_condition) {
+                if (token.size()) {
+                    bpe_words.emplace_back(token);
+                }
+                token = utf_char;
+                collecting = false;
+                collecting_letter = false;
+                collecting_numeric = false;
+                collecting_special = false;
+                collecting_whitespace_lookahead = false;
+            }
+            else {
+                token += utf_char;
+            }
+        }
+
+        for (std::string & word : bpe_words) {
+            std::string encoded_token = "";
+            for (char & c : word) {
+                encoded_token += bytes_to_unicode_bpe(c);
+            }
+            bpe_encoded_words.emplace_back(encoded_token);
+        }
+
+        return bpe_encoded_words;
+    }
+
+    const _vocab & vocab;
+
+    std::vector<llm_symbol> symbols;
+    std::vector<llm_symbol> symbols_final;
+
+    llm_bigram_bpe::queue work_queue;
+};
+
+int BPEProcessor::DoEncode(const std::string &input,
+        std::vector<int> *ids) const
+{
+    if (input.size() < 1) return 0;
+
+    llm_bpe_tokenizer tokenizer(vocab_);
+    tokenizer.tokenize(input, *ids);
     return 0;
+}
+
+static std::string search_first_special_token(std::string &input, const _vocab &vocab, int &sp_tok_id)
+{
+    sp_tok_id = -1;
+    auto nearest_match = std::string::npos;
+    for (auto & st: vocab.special_tokens_cache)
+    {
+        const auto & special_id     = st.first;
+        const auto & special_token  = st.second;
+
+        auto match = input.find(special_token, 0);
+
+        if (match < nearest_match)
+        {
+            nearest_match = match;
+            sp_tok_id = special_id;
+        }
+    }
+
+    if (sp_tok_id >= 0)
+    {
+        const auto & special_token  = vocab.special_tokens_cache.at(sp_tok_id);
+        std::string r = input.substr(0, nearest_match);
+        input = input.substr(nearest_match + special_token.size());
+        return r;
+    }
+    else
+    {
+        std::string r(input);
+        input = "";
+        return r;
+    }
+}
+
+int BPEProcessor::Encode(const std::string &input,
+        std::vector<int> *ids) const
+{
+    std::string text(input);
+    int sp_tok_id = -1;
+    while (text.size() > 0)
+    {
+        auto leading = search_first_special_token(text, vocab_, sp_tok_id);
+        DoEncode(leading, ids);
+        if (sp_tok_id < 0) break;
+        ids->push_back(sp_tok_id);
+    }
+
+    return 0;
+}
+
+static std::string _decode_text(const std::string & text) {
+    std::string decoded_text;
+    auto unicode_sequences = codepoints_from_utf8(text);
+    for (auto& unicode_sequence : unicode_sequences) {
+        decoded_text += unicode_to_bytes_bpe(codepoint_to_utf8(unicode_sequence));
+    }
+
+    return decoded_text;
+}
+
+const std::string BPEProcessor::IdToPiece(int id) const
+{
+    if (vocab_.is_normal_token(id))
+    {
+        std::string result = vocab_.id_to_token[id].tok;
+        return _decode_text(result);
+    }
+    else if (vocab_.is_control_token(id))
+    {
+        return "";
+    }
+    else
+    {
+        // TODO: how to process these special tokens?
+        return "";
+    }
+
 }

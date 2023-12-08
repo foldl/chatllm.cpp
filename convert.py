@@ -3,6 +3,7 @@ Convert Hugging Face ChatLLM/ChatLLM2 models to GGML format
 """
 import argparse
 from ast import Dict, Tuple
+from collections import OrderedDict
 import json
 import struct
 import sys
@@ -36,7 +37,19 @@ class ModelType(Enum):
     InternLM = 0x100
     LlaMA2 = 0x150
     BaiChuan = 0x200
+    DeepSeek = 0x300
+    DeepSeekCoder = 0x301
 
+class TokenType(Enum):
+    UNDEFINED    = 0
+    NORMAL       = 1
+    UNKNOWN      = 2
+    CONTROL      = 3
+    USER_DEFINED = 4
+    UNUSED       = 5
+    BYTE         = 6
+
+g_special_tokens: Dict = {}
 
 def quantize_q8_0(tensor: torch.Tensor) -> torch.CharTensor:
     # equivalent to ggml_quantize_q8_0 in ggml.c
@@ -204,6 +217,78 @@ class SentencePieceVocab:
     def __repr__(self) -> str:
         return f"<SentencePieceVocab with {self.vocab_size_base} base tokens and {len(self.added_tokens_list)} added tokens>"
 
+def s_to_bytes(s):
+    print([ord(c) for c in s])
+    return bytes([ord(c) for c in s])
+
+class FastTokenizerVocab:
+    def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
+
+        global g_special_tokens
+
+        model = json.load(open(fname_tokenizer / "tokenizer.json", encoding='utf-8'))
+        if model['model']['type'] != 'BPE':
+            raise Exception(f"BPE expected, but {model['model']['type']} encountered.")
+
+        all_tokens: Dict[str, int] = {}
+
+        if fname_added_tokens is not None:
+            all_tokens = json.load(open(fname_added_tokens))
+
+        for tok, tokidx in sorted([(t['content'], t['id']) for t in model['added_tokens']], key=lambda x: x[1]):
+            all_tokens[tok] = tokidx
+            g_special_tokens[tok] = tokidx
+
+        for tok in model['model']['vocab'].keys():
+            tokidx = model['model']['vocab'][tok]
+            all_tokens[tok] = tokidx
+
+        all_ids = sorted(list(all_tokens.values()))
+
+        vocab_size: int = all_ids[-1] + 1
+        if vocab_size != len(all_ids):
+            raise Exception(f'vacab size is {vocab_size}, but {len(all_ids)} tokens are loaded.')
+
+        items: OrderedDict[str, int] = OrderedDict()
+        items = sorted(all_tokens.items(), key=lambda text_idx: text_idx[1])
+
+        self.vocab_size: int = vocab_size
+        self.vocal_tokens = items
+        self.merges = model['model']['merges']
+
+        print("vocab_size ", self.vocab_size)
+
+    def tokenizer_tokens(self) -> Iterable[Tuple[bytes, float]]:
+        for tok, idx in self.vocal_tokens:
+            text: bytes = tok.encode('utf-8')
+            t = TokenType.NORMAL.value
+            if tok in g_special_tokens:
+                t = TokenType.USER_DEFINED.value
+
+            yield text, t
+
+    def all_tokens(self) -> Iterable[Tuple[bytes, float]]:
+        yield from self.tokenizer_tokens()
+
+    def write_vocab(self, fout: io.BufferedWriter) -> None:
+        for text, tt in self.all_tokens():
+            fout.write(struct.pack("i", len(text)))
+            fout.write(text)
+            fout.write(struct.pack("B", tt))
+
+        # marks the end of vocab
+        fout.write(struct.pack("i", -1))
+
+        for s in self.merges:
+            text = s.encode('utf-8')
+            fout.write(struct.pack("i", len(text)))
+            fout.write(text)
+
+        fout.write(struct.pack("i", -1))
+
+    def __repr__(self) -> str:
+        return f"<FastTokenizerVocab with {self.vocab_size_base} base tokens and {len(self.added_tokens_list)} added tokens>"
+
 class BaseConverter:
 
     @classmethod
@@ -211,7 +296,7 @@ class BaseConverter:
         return tensor
 
     @classmethod
-    def convert(cls, config, model_files, vocab: SentencePieceVocab, ggml_type, save_path):
+    def convert(cls, config, model_files, vocab: Any, ggml_type, save_path):
 
         # convert all weights to fp16
         with open(save_path, "wb") as f:
@@ -221,7 +306,6 @@ class BaseConverter:
             vocab.write_vocab(f)
 
             weight_names = cls.get_weight_names(config)
-
             dump_state_dict(f, weight_names, model_files, ggml_type, config, cls.pp)
 
         print(f"{cls.MODEL_TYPE.name} GGML model saved to {save_path}")
@@ -307,7 +391,6 @@ class LlamaConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         weight_names = ["model.embed_tokens.weight"]
-        transpose_names = []
         for i in range(config.num_hidden_layers):
             weight_names += [
                 f"model.layers.{i}.input_layernorm.weight",
@@ -321,19 +404,56 @@ class LlamaConverter(BaseConverter):
                 f"model.layers.{i}.self_attn.v_proj.weight",
             ]
 
-            transpose_names += [
-                f"model.layers.{i}.self_attn.k_proj.weight",
-                f"model.layers.{i}.self_attn.o_proj.weight",
-                f"model.layers.{i}.self_attn.q_proj.weight",
-                f"model.layers.{i}.self_attn.v_proj.weight",
-            ]
-
         weight_names += [
             "model.norm.weight",
             "lm_head.weight"
         ]
 
         return weight_names
+
+class DeepSeekCoderConverter(BaseConverter):
+    MODEL_TYPE = ModelType.DeepSeekCoder
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return LlamaConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else g_special_tokens['<pad>'],
+            config.sep_token_id if config.sep_token_id is not None else -1,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
+
+class DeepSeekConverter(BaseConverter):
+    MODEL_TYPE = ModelType.DeepSeek
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return LlamaConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        LlamaConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
 
 class ChatGLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.CHATGLM
@@ -441,7 +561,7 @@ class ChatGLM2Converter(BaseConverter):
 
         return weight_names
 
-def load_vocab(path: Path) -> SentencePieceVocab:
+def load_vocab(path: Path) -> Any:
     # Be extra-friendly and accept either a file or a directory.  Also, if it's
     # a directory, it might be the model directory, and tokenizer.model might
     # be in the parent of that.
@@ -449,10 +569,15 @@ def load_vocab(path: Path) -> SentencePieceVocab:
         path2 = path / "tokenizer.model"
         # Use `.parent` instead of /.. to handle the symlink case better.
         path3 = path.parent / "tokenizer.model"
+        path4 = path / "tokenizer.json"
         if path2.exists():
             path = path2
         elif path3.exists():
             path = path3
+        elif path4.exists():
+            added_tokens_path = path.parent / "added_tokens.json"
+            print(f"Loading vocab file {path}")
+            return FastTokenizerVocab(path, added_tokens_path if added_tokens_path.exists() else None)
         else:
             raise FileNotFoundError(
                 f"Could not find tokenizer.model in {path} or its parent; "
@@ -488,16 +613,17 @@ class AttributeDict(dict):
 def main():
     parser = argparse.ArgumentParser("chatllm-convert")
     parser.add_argument("-i", "--model_name_or_path", type=str)
+    parser.add_argument("-a", "--arch", type=str, default='')
     # TODO: LoRA
     #parser.add_argument("-l", "--lora_model_name_or_path", type=str, default=None)
     parser.add_argument("-o", "--save_path", type=Path)
     parser.add_argument("-t", "--type", type=str, default="q8_0", choices=["f32", "f16", "q8_0", "q4_0"])
+    parser.add_argument("--vocab_dir", type=str, default='')
     args = parser.parse_args()
 
     ggml_type = GGMLType[args.type.upper()]
 
-    vocab = load_vocab(Path(args.model_name_or_path))
-
+    vocab = load_vocab(Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir))
     model_files = load_some_model(Path(args.model_name_or_path))
 
     #if args.lora_model_name_or_path is not None:
@@ -511,7 +637,9 @@ def main():
     if len(config.architectures) != 1:
         raise Exception(f'unknown architectures: {config.architectures}')
 
-    arch = config.architectures[0]
+    arch = args.arch.lower()
+    if arch == '':
+        arch = config.architectures[0]
 
     if arch == 'ChatGLMModel':
         if hasattr(config, "multi_query_attention"):
@@ -522,6 +650,10 @@ def main():
         InternLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'LlamaForCausalLM':
         LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'deepseek':
+        DeepSeekConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'deepseekcoder':
+        DeepSeekCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {config.model_type}')
 

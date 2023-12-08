@@ -378,13 +378,15 @@ namespace chatllm
     ggml_tensor *BaseSelfAttention::apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor *past) const
     {
         const int rope_dim = hidden_size / num_attention_heads;
-        return ggml_rope_inplace(ctx->gctx.get(), k, past, rope_dim, 0, 0);    // [qlen, heads, head_size]
+        return ggml_rope_custom_inplace(ctx->gctx.get(), k, past, rope_dim, 0, 0, 0,
+                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size]
     }
 
     ggml_tensor *BaseSelfAttention::apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor *past) const
     {
         const int rope_dim = hidden_size / num_attention_heads;
-        return ggml_rope_inplace(ctx->gctx.get(), q, past, rope_dim, 0, 0);    // [qlen, heads, head_size];
+        return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, 0, 0, 0,
+                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
     }
 
 }

@@ -3,16 +3,19 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Pure C++ implementation of several models for real-time chatting on your computer (CPU),
-based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml):
+based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml) & [llama.cpp](https://github.com/ggerganov/llama.cpp):
 
 * [x] [ChatLLM-6B](https://github.com/THUDM/ChatLLM-6B)
 * [x] [ChatLLM2-6B](https://github.com/THUDM/ChatLLM2-6B)
 * [ ] [InternLM]
 * [x] LlaMA-like: [Llama-2-Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat), etc
+* [x] [DeepSeek-LLM-Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat)
+* [ ] DeepSeek Coder
+
 
 ## Features
 
-* [x] Pure C++ implementation based on [ggml](https://github.com/ggerganov/ggml), working in the same way as [llama.cpp](https://github.com/ggerganov/llama.cpp);
+* [x] Pure C++ implementation based on [ggml](https://github.com/ggerganov/ggml);
 * [x] Accelerated memory-efficient CPU inference with int4/int8 quantization, optimized KV cache and parallel computing;
 * [x] Use OOP to address the similarities between different _Transformer_ based models;
 * [x] Streaming generation with typewriter effect;
@@ -42,13 +45,18 @@ git submodule update --init --recursive
 Use `convert.py` to transform models into quantized GGML format. For example, to convert the _fp16_ base model to q8_0 (quantized int8) GGML model, run:
 
 ```sh
-# For ChatLLM-6B
-python3 convert.py -i THUDM/chatllm-6b -t q8_0 -o chatllm-ggml.bin
-# For ChatLLM2-6B
-python3 convert.py -i THUDM/chatllm2-6b -t q8_0 -o chatllm2-ggml.bin
+# ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA-like models:
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
+
+# DeepSeek LLM Chat models
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DeepSeek
+
+# DeepSeek Coder models
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DeepSeekCoder
+
 ```
 
-Note: Only HF format is supported; GGML format is different from the one used by `llama.cpp`.
+Note: Only HF format is supported; Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.
 
 **Build & Run**
 

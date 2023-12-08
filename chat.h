@@ -48,22 +48,45 @@ namespace chatllm
         int sep_token_id;
     };
 
+    std::string trim(std::string str, const char *spaces = " \t");
+
     class BaseTokenizer
     {
     public:
+        BaseTokenizer(const BaseConfig &config);
+
         virtual ~BaseTokenizer() = default;
 
         virtual size_t load(const char *buffer, int n_vocab) = 0;
 
-        virtual std::vector<int> encode(const std::string &text) const = 0;
-        virtual std::string decode(const std::vector<int> &ids) const = 0;
-        virtual std::vector<int> encode_history(const std::vector<std::string> &history, int max_length, const bool incremental = false) const = 0;
-        virtual int get_terminate_token_id(void) { return -1000; }
+        virtual void encode(const std::string &text, std::vector<int> &ids) const;
+        virtual std::vector<int> encode(const std::string &text) const;
+
+        virtual std::string decode(const std::vector<int> &ids) const;
+
+        virtual std::vector<int> encode_history(const std::vector<std::string> &history, int max_length, const bool incremental = false);
 
         void set_system_prompt(const std::string &prompt) { sys_prompt = prompt; }
 
+        virtual int get_terminate_token_id(void) { return -1000; }
+        virtual bool is_special_id(int id) const { return false; }
+
     protected:
+        virtual int get_history_start(const std::vector<std::string> &history, int max_length) const;
+        virtual void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const = 0;
+        virtual void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const = 0;
+
+        virtual std::string preprocess(const std::string &text) const;
+        virtual std::string postprocess(const std::string &text) const;
+
+    protected:
+        tokenizer::Processor *tp;
         std::string sys_prompt;
+        int bos_token_id;
+        int eos_token_id;
+        int pad_token_id;
+        int sep_token_id;
+        int history_offset;
     };
 
     class GGMLContext

@@ -45,6 +45,103 @@
 namespace chatllm
 {
 
+    std::string trim(std::string str, const char *spaces)
+    {
+        str.erase(str.find_last_not_of(spaces) + 1);
+        str.erase(0,str.find_first_not_of(spaces));
+        return str;
+    }
+
+    BaseTokenizer::BaseTokenizer(const BaseConfig &config) :
+        tp(nullptr),
+        sys_prompt(""),
+        bos_token_id(config.bos_token_id),
+        eos_token_id(config.eos_token_id),
+        pad_token_id(config.pad_token_id),
+        sep_token_id(config.sep_token_id),
+        history_offset(0)
+    {
+    }
+
+    std::string BaseTokenizer::preprocess(const std::string &text) const
+    {
+        return text;
+    }
+
+    std::string BaseTokenizer::postprocess(const std::string &text) const
+    {
+        return text;
+    }
+
+    void BaseTokenizer::encode(const std::string &text, std::vector<int> &ids) const
+    {
+        std::string input = preprocess(text);
+        tp->Encode(input, &ids);
+    }
+
+    std::vector<int> BaseTokenizer::encode(const std::string &text) const
+    {
+        std::vector<int> ids;
+        encode(text, ids);
+        return ids;
+    }
+
+    std::string BaseTokenizer::decode(const std::vector<int> &ids) const
+    {
+        // filter out special tokens
+        std::vector<int> normal_ids(ids);
+        normal_ids.erase(std::remove_if(normal_ids.begin(), normal_ids.end(),
+                                        [this](int id)
+                                        { return is_special_id(id); }),
+                        normal_ids.end());
+        std::string text;
+        tp->Decode(normal_ids, &text);
+        text = postprocess(text);
+        return text;
+    }
+
+    int BaseTokenizer::get_history_start(const std::vector<std::string> &history, int max_length) const
+    {
+        int start = (int)history.size() - 1;
+        size_t total_id_num = encode(history[start]).size();
+        start--;
+        while (start >= 1)
+        {
+            total_id_num += encode(history[start]).size();
+            total_id_num += encode(history[start - 1]).size();
+            if ((int)total_id_num >= max_length)
+                break;
+            start -= 2;
+        }
+        return start + 1;
+    }
+
+    std::vector<int> BaseTokenizer::encode_history(const std::vector<std::string> &history, int max_length, const bool incremental)
+    {
+        CHATLLM_CHECK(history.size() % 2 == 1) << "invalid history size " << history.size();
+
+        std::vector<int> input_ids;
+
+        if (!incremental)
+        {
+            int start = get_history_start(history, max_length / 2);
+            history_offset = start;
+
+            for (; start <= (int)history.size() - 3; start += 2)
+            {
+                std::string user = trim(history[start]);
+                std::string ai = trim(history[start + 1]);
+
+                append_pair((start - history_offset) / 2, user, ai, input_ids);
+            }
+        }
+
+        std::string user = trim(history[history.size() - 1]);
+        append_user((int)((history.size() - history_offset - 1) / 2), trim(user), input_ids);
+
+        return input_ids;
+    }
+
     static std::string shape_to_string(ggml_tensor *tensor)
     {
         std::ostringstream oss;

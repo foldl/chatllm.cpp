@@ -29,8 +29,13 @@ namespace chatllm
         MODEL_TYPE_CHATGLM  = 1,
         MODEL_TYPE_CHATGLM2 = 2,
         MODEL_TYPE_INTERNLM = 0x100,
+
         MODEL_TYPE_LLAMA2   = 0x150,
+
         MODEL_TYPE_BAICHUAN = 0x200,
+
+        MODEL_TYPE_DEEPSEEK = 0x300,
+        MODEL_TYPE_DEEPSEEK_CODER   = MODEL_TYPE_DEEPSEEK + 1,
     };
 
     std::string to_string(ModelType model_type)
@@ -45,6 +50,10 @@ namespace chatllm
             return "InternLM";
         case MODEL_TYPE_LLAMA2:
             return "LlaMa2";
+        case MODEL_TYPE_DEEPSEEK:
+            return "DeepSeek-LLM";
+        case MODEL_TYPE_DEEPSEEK_CODER:
+            return "DeepSeek-Coder";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -100,7 +109,7 @@ namespace chatllm
             while (n_past < gen_config.max_length)
             {
                 int next_token_id = generate_next_token(curr_input_ids, gen_config);
-
+//printf("\nnext = %d\n", next_token_id);
                 if (next_token_id == terminate_token_id)
                 {
                     completed = true;
@@ -151,62 +160,63 @@ namespace chatllm
             float *next_token_logits = (float *)lm_logits->data;
 
             int next_token_id;
-            if (gen_config.do_sample)
-            {
-                // temperature sampling
-                float inv_temp = 1.f / gen_config.temperature;
-                for (int i = 0; i < vocab_size; i++)
-                {
-                    next_token_logits[i] *= inv_temp;
-                }
 
-                std::vector<TokenIdScore> token_scores(vocab_size);
-                for (int i = 0; i < vocab_size; i++)
-                {
-                    token_scores[i] = {.id = i, .score = next_token_logits[i]};
-                }
-
-                // top_k sampling
-                if (0 < gen_config.top_k && gen_config.top_k < (int)token_scores.size())
-                {
-                    std::nth_element(token_scores.begin(), token_scores.begin() + gen_config.top_k, token_scores.end(),
-                                    std::greater<TokenIdScore>());
-                    token_scores.resize(gen_config.top_k);
-                }
-
-                // top_p sampling
-                if (0.f < gen_config.top_p && gen_config.top_p < 1.f)
-                {
-                    std::sort(token_scores.begin(), token_scores.end(), std::greater<TokenIdScore>()); // hot code!
-                    sampling_softmax_inplace(token_scores.data(), token_scores.data() + token_scores.size());
-
-                    float cumsum = 0.f;
-                    for (size_t i = 0; i < token_scores.size(); i++)
-                    {
-                        cumsum += token_scores[i].score;
-                        if (cumsum >= gen_config.top_p)
-                        {
-                            token_scores.resize(i + 1);
-                            break;
-                        }
-                    }
-                }
-
-                // sample next token
-                sampling_softmax_inplace(token_scores.data(), token_scores.data() + token_scores.size());
-                for (size_t i = 0; i < token_scores.size(); i++)
-                {
-                    next_token_logits[i] = token_scores[i].score;
-                }
-
-                std::discrete_distribution<> dist(next_token_logits, next_token_logits + token_scores.size());
-                next_token_id = token_scores[dist(gen)].id;
-            }
-            else
+            if (!gen_config.do_sample)
             {
                 // greedy search
-                next_token_id = std::max_element(next_token_logits, next_token_logits + vocab_size) - next_token_logits;
+                return std::max_element(next_token_logits, next_token_logits + vocab_size) - next_token_logits;
             }
+
+            // temperature sampling
+            float inv_temp = 1.f / gen_config.temperature;
+            for (int i = 0; i < vocab_size; i++)
+            {
+                //if (i < 200)
+                //    printf("%d: %.3f\n", i, next_token_logits[i]);
+                next_token_logits[i] *= inv_temp;
+            }
+
+            std::vector<TokenIdScore> token_scores(vocab_size);
+            for (int i = 0; i < vocab_size; i++)
+            {
+                token_scores[i] = {.id = i, .score = next_token_logits[i]};
+            }
+
+            // top_k sampling
+            if (0 < gen_config.top_k && gen_config.top_k < (int)token_scores.size())
+            {
+                std::nth_element(token_scores.begin(), token_scores.begin() + gen_config.top_k, token_scores.end(),
+                                std::greater<TokenIdScore>());
+                token_scores.resize(gen_config.top_k);
+            }
+
+            // top_p sampling
+            if (0.f < gen_config.top_p && gen_config.top_p < 1.f)
+            {
+                std::sort(token_scores.begin(), token_scores.end(), std::greater<TokenIdScore>()); // hot code!
+                sampling_softmax_inplace(token_scores.data(), token_scores.data() + token_scores.size());
+
+                float cumsum = 0.f;
+                for (size_t i = 0; i < token_scores.size(); i++)
+                {
+                    cumsum += token_scores[i].score;
+                    if (cumsum >= gen_config.top_p)
+                    {
+                        token_scores.resize(i + 1);
+                        break;
+                    }
+                }
+            }
+
+            // sample next token
+            sampling_softmax_inplace(token_scores.data(), token_scores.data() + token_scores.size());
+            for (size_t i = 0; i < token_scores.size(); i++)
+            {
+                next_token_logits[i] = token_scores[i].score;
+            }
+
+            std::discrete_distribution<> dist(next_token_logits, next_token_logits + token_scores.size());
+            next_token_id = token_scores[dist(gen)].id;
 
             return next_token_id;
         }
@@ -336,7 +346,6 @@ namespace chatllm
 
     namespace glm
     {
-
         namespace v1
         {
             #include "models/chatglm_v1.cpp"
@@ -344,10 +353,8 @@ namespace chatllm
 
         namespace v2
         {
-
             #include "models/chatglm_v2.cpp"
         }
-
     }
 
     namespace internlm
@@ -360,6 +367,16 @@ namespace chatllm
         #include "models/llama.cpp"
     }
 
+    namespace deepseek
+    {
+        #include "models/deepseek.cpp"
+    }
+
+    namespace deepseek_coder
+    {
+        #include "models/deepseek_coder.cpp"
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -367,8 +384,9 @@ namespace chatllm
         Config config = loader.read_basic<Config>();
 
         // load tokenizer
-        result.tokenizer = std::make_unique<Tokenizer>();
+        result.tokenizer = std::make_unique<Tokenizer>(config);
         size_t proto_size = result.tokenizer->load(loader.data + loader.tell(), config.vocab_size);
+
         loader.seek(proto_size, SEEK_CUR);
 
         // load model
@@ -377,7 +395,6 @@ namespace chatllm
 
         return true;
     }
-
 
     bool ModelFactory::load(int model_type, int version, ModelLoader &loader, Result &result)
     {
@@ -414,6 +431,22 @@ namespace chatllm
             return load_model<llama::Config,
                               llama::Tokenizer,
                               llama::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_DEEPSEEK:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<deepseek::Config,
+                              deepseek::Tokenizer,
+                              deepseek::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_DEEPSEEK_CODER:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<deepseek_coder::Config,
+                              deepseek_coder::Tokenizer,
+                              deepseek_coder::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

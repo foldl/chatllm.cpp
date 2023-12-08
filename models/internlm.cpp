@@ -5,32 +5,21 @@ struct Config : public BaseConfig
 class Tokenizer : public BaseTokenizer
 {
 public:
-    Tokenizer(const Config &config) : add_bos_token(true), add_eos_token(false) {};
+    Tokenizer(const Config &config) : BaseTokenizer::BaseTokenizer(config), add_bos_token(true), add_eos_token(false) {};
 
     size_t load(const char *buffer, int n_vocab) override;
 
-    std::vector<int> encode(const std::string &text) const override;
-
-    std::string decode(const std::vector<int> &ids) const override;
-
-    std::vector<int> encode_history(const std::vector<std::string> &history, int max_length, const bool incremental) const override;
-
-    static std::string build_prompt(const std::vector<std::string> &history);
+    void encode(const std::string &text, std::vector<int> &ids) const override;
 
     int get_terminate_token_id(void) override { return eoa_token_id; }
 
-private:
-    static std::string preprocess(const std::string &text);
+    bool is_special_id(int id) const override;
 
-    static std::string postprocess(const std::string &text);
-
-    bool is_special_id(int id) const;
+protected:
+    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
 
 public:
-    tokenizer::SentencePieceProcessor sp;
-    int bos_token_id;
-    int eos_token_id;
-    int pad_token_id;
     int unk_token_id;
     int eoa_token_id;
     bool add_bos_token;
@@ -59,73 +48,43 @@ private:
 
 size_t Tokenizer::load(const char *buffer, int n_vocab)
 {
-    size_t size = sp.Load(buffer, n_vocab);
+    tp = new tokenizer::SentencePieceProcessor();
+    size_t size = tp->Load(buffer, n_vocab);
 
-    unk_token_id = sp.PieceToId("<unk>");
-    bos_token_id = sp.PieceToId("<s>");
-    eos_token_id = sp.PieceToId("</s>");
-    pad_token_id = sp.PieceToId("</s>");
-    eoa_token_id = sp.PieceToId("<eoa>");
+    unk_token_id = tp->PieceToId("<unk>");
+    bos_token_id = tp->PieceToId("<s>");
+    eos_token_id = tp->PieceToId("</s>");
+    pad_token_id = tp->PieceToId("</s>");
+    eoa_token_id = tp->PieceToId("<eoa>");
 
     return size;
 }
 
-std::vector<int> Tokenizer::encode(const std::string &text) const
+void Tokenizer::encode(const std::string &text, std::vector<int> &ids) const
 {
-    std::vector<int> ids;
-    sp.Encode(text, &ids);
     if (add_bos_token)
-        ids.insert(ids.begin(), {bos_token_id});
+        ids.push_back(bos_token_id);
+    BaseTokenizer::encode(text, ids);
     if (add_eos_token)
         ids.push_back(eos_token_id);
-    return ids;
 }
 
-std::string Tokenizer::decode(const std::vector<int> &ids) const
+void Tokenizer::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
-    // filter out special tokens
-    std::vector<int> normal_ids(ids);
-    normal_ids.erase(std::remove_if(normal_ids.begin(), normal_ids.end(),
-                                    [this](int id)
-                                    { return is_special_id(id); }),
-                     normal_ids.end());
-
-    std::string text;
-    sp.Decode(normal_ids, &text);
-    return text;
-}
-
-std::vector<int> Tokenizer::encode_history(const std::vector<std::string> &history, int max_length, const bool incremental) const
-{
-    std::string prompt;
-    if (incremental)
-    {
-        std::ostringstream oss_prompt;
-        oss_prompt << "<s><|User|>:" << history[history.size() - 1] << "<eoh>\n<|Bot|>:";
-        prompt = oss_prompt.str();
-    }
-    else
-        prompt = build_prompt(history);
-    std::vector<int> input_ids = encode(prompt);
-    int offset = add_bos_token ? 1 : 0;
-    if ((int)input_ids.size() > max_length)
-    {
-        int num_drop = (int)input_ids.size() - max_length;
-        input_ids.erase(input_ids.begin() + offset, input_ids.begin() + offset + num_drop);
-    }
-    return input_ids;
-}
-
-std::string Tokenizer::build_prompt(const std::vector<std::string> &history)
-{
-    CHATLLM_CHECK(history.size() % 2 == 1) << "invalid history size " << history.size();
-
     std::ostringstream oss_prompt;
-    for (size_t i = 0; i + 1 < history.size(); i += 2)
-        oss_prompt << "<s><|User|>:" << history[i] << "<eoh>\n<|Bot|>:" << history[i + 1] << "<eoa>\n";
 
-    oss_prompt << "<s><|User|>:" << history[history.size() - 1] << "<eoh>\n<|Bot|>:";
-    return oss_prompt.str();
+    oss_prompt << "<|User|>:" << user << "<eoh>\n<|Bot|>:" << ai << "<eoa>\n";
+    auto text = oss_prompt.str();
+    encode(text, ids);
+}
+
+void Tokenizer::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+{
+    std::ostringstream oss_prompt;
+
+    oss_prompt << "<|User|>:" << user << "<eoh>\n<|Bot|>:";
+    auto text = oss_prompt.str();
+    encode(text, ids);
 }
 
 bool Tokenizer::is_special_id(int id) const
