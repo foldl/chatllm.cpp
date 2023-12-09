@@ -1,5 +1,7 @@
 struct Config : public llama::Config
 {
+    float rope_scaling;
+    float rope_theta;
 };
 
 class Tokenizer : public llama::Tokenizer
@@ -33,11 +35,14 @@ class ConditionalGeneration : public llama::ConditionalGeneration
 public:
     ConditionalGeneration() = default;
     ConditionalGeneration(const Config &config)
-        : llama::ConditionalGeneration(config, MODEL_TYPE_DEEPSEEK_CODER)
+        : llama::ConditionalGeneration(config, MODEL_TYPE_DEEPSEEK_CODER),
+        config(config)
     {
     }
 
     void load(ModelLoader &loader) override;
+private:
+    Config config;
 };
 
 size_t Tokenizer::load(const char *buffer, int n_vocab)
@@ -84,7 +89,7 @@ void Tokenizer::append_user(int round_idx, const std::string &user, std::vector<
                << "\n### Response:\n";
 
     auto text = oss_prompt.str();
-    encode(text, ids, false, false);
+    encode(text, ids, true, false);
 }
 
 bool Tokenizer::is_special_id(int id) const
@@ -99,7 +104,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
         auto &attention = transformer.layers[i].attention;
-        attention.freq_base = 100000.f;
-        attention.freq_scale = 4.0f;
+        attention.freq_base = config.rope_theta;
+        attention.freq_scale = 1 / config.rope_scaling;
     }
 }

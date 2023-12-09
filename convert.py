@@ -421,6 +421,8 @@ class DeepSeekCoderConverter(BaseConverter):
     @staticmethod
     def dump_config(f, config, ggml_type):
         assert config.hidden_act == 'silu', "hidden_act must be silu"
+        assert config.rope_scaling['type'] == "linear", "rope_scaling.type must be linear"
+        assert config.rope_theta > 0, "rope_theta must be positive"
         config_values = [
             ggml_type.value,
             config.vocab_size,
@@ -435,6 +437,8 @@ class DeepSeekCoderConverter(BaseConverter):
             config.sep_token_id if config.sep_token_id is not None else -1,
         ]
         f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_scaling['factor']))
+        f.write(struct.pack("<f", config.rope_theta))
 
     @staticmethod
     def get_weight_names(config):

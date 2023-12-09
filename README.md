@@ -5,13 +5,15 @@
 Pure C++ implementation of several models for real-time chatting on your computer (CPU),
 based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml) & [llama.cpp](https://github.com/ggerganov/llama.cpp):
 
-* [x] [ChatLLM-6B](https://github.com/THUDM/ChatLLM-6B)
-* [x] [ChatLLM2-6B](https://github.com/THUDM/ChatLLM2-6B)
+* LlaMA-like:
+    * [x] LlaMA-1
+    * [x] [LlaMA-2 Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
+    * [x] [DeepSeek Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat)
+    * [x] [DeepSeek Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
+* ChatLLM
+    * [x] [ChatLLM-6B](https://github.com/THUDM/ChatLLM-6B)
+    * [x] [ChatLLM2-6B](https://github.com/THUDM/ChatLLM2-6B)
 * [ ] [InternLM]
-* [x] LlaMA-like: [Llama-2-Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat), etc
-* [x] [DeepSeek-LLM-Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat)
-* [ ] DeepSeek Coder
-
 
 ## Features
 

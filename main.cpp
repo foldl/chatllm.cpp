@@ -187,9 +187,9 @@ void chat(Args &args)
     else
         pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Restart);
 
-    std::string ai_prompt = "AI";
-    int prompt_len = ai_prompt.length();
-    if (prompt_len < 3) prompt_len = 3;
+    const std::string ai_prompt   = "A.I.";
+    const std::string user_prompt = "You";
+    const int prompt_len = 4;
 
     chatllm::TextStreamer streamer(pipeline.tokenizer.get());
 
@@ -206,32 +206,31 @@ void chat(Args &args)
         return;
     }
 
+    #define MODEL_INFO()     "You are served by " << std::left << std::setw(28) << pipeline.model->type_name() + "."
+
     std::cout   << R"(    ________          __  __    __    __  ___                 )" << '\n'
                 << R"(   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____  )" << '\n'
                 << R"(  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
                 << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
                 << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
-    std::cout   <<  "You are served by " << std::left << std::setw(28) << pipeline.model->type_name() + "." << R"(/_/   /_/       )" << '\n';
+    std::cout   << MODEL_INFO()                               << R"(/_/   /_/       )" << '\n';
 
     std::cout << std::endl;
 
     std::vector<std::string> history;
     while (1)
     {
-        std::cout << std::setw(prompt_len) << std::left << "You"
-                    << " > " << std::flush;
+        std::cout << std::setw(prompt_len) << std::left << user_prompt << " > " << std::flush;
         std::string input;
         if (!get_utf8_line(input))
         {
             std::cout << "FAILED to read line." << std::endl;
             break;
         }
-        if (input.empty())
-        {
-            continue;
-        }
+        if (input.empty()) continue;
+
         history.emplace_back(std::move(input));
-        std::cout << std::setw(prompt_len) << ai_prompt << " > ";
+        std::cout << std::setw(prompt_len) << std::left << ai_prompt << " > " << std::flush;
         std::string output = pipeline.chat(history, gen_config, &streamer);
         history.emplace_back(std::move(output));
     }
