@@ -50,6 +50,8 @@ namespace chatllm
             return "InternLM";
         case MODEL_TYPE_LLAMA2:
             return "LlaMa2";
+        case MODEL_TYPE_BAICHUAN:
+            return "BaiChuan";
         case MODEL_TYPE_DEEPSEEK:
             return "DeepSeek-LLM";
         case MODEL_TYPE_DEEPSEEK_CODER:
@@ -377,6 +379,11 @@ namespace chatllm
         #include "models/deepseek_coder.cpp"
     }
 
+    namespace baichuan
+    {
+        #include "models/baichuan.cpp"
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -389,6 +396,12 @@ namespace chatllm
 
         loader.seek(proto_size, SEEK_CUR);
 
+#if (0)
+        // test tokenizer
+        std::vector<int> ids = {0,1,2,195,196};
+        std::cout << result.tokenizer->decode(ids) << std::endl;
+        exit(-1);
+#endif
         // load model
         result.model = std::make_unique<ConditionalGeneration>(config);
         result.model->load(loader);
@@ -447,6 +460,14 @@ namespace chatllm
             return load_model<deepseek_coder::Config,
                               deepseek_coder::Tokenizer,
                               deepseek_coder::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_BAICHUAN:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<baichuan::Config,
+                              baichuan::Tokenizer,
+                              baichuan::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

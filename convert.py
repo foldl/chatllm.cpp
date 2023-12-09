@@ -8,11 +8,13 @@ import json
 import struct
 import sys
 import io
+from pathlib import Path
 from enum import Enum
 from pathlib import Path
 from typing import IO, Any, Iterable, List, Optional, Tuple
 
 import torch
+from torch import nn
 from tabulate import tabulate
 from tqdm import tqdm
 
@@ -130,14 +132,13 @@ def load_all_model_files(model_files) -> Dict:
             r[k] = v
     return r
 
-def dump_state_dict(f, weight_names, model_files, ggml_type, config, tensor_pp):
+def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_pp):
     tensor_info = []
     converted_names = []
     state_dict = load_all_model_files(model_files)
+    state_dict = state_dict_pp(config, state_dict)
     for name in tqdm(weight_names, desc="Dumping model state"):
         tensor: torch.Tensor = state_dict[name]
-
-        tensor = tensor_pp(config, name, tensor)
 
         if tensor.ndim == 2:
             # 2d weight: should quantize it if needed
@@ -296,6 +297,14 @@ class BaseConverter:
         return tensor
 
     @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            tensor = cls.pp(config, name, tensor)
+            state_dict[name] = tensor
+        return state_dict
+
+    @classmethod
     def convert(cls, config, model_files, vocab: Any, ggml_type, save_path):
 
         # convert all weights to fp16
@@ -306,7 +315,7 @@ class BaseConverter:
             vocab.write_vocab(f)
 
             weight_names = cls.get_weight_names(config)
-            dump_state_dict(f, weight_names, model_files, ggml_type, config, cls.pp)
+            dump_state_dict(f, weight_names, model_files, ggml_type, config, cls.state_dict_pp)
 
         print(f"{cls.MODEL_TYPE.name} GGML model saved to {save_path}")
 
@@ -385,6 +394,75 @@ class LlamaConverter(BaseConverter):
             config.eos_token_id if config.eos_token_id is not None else -1,
             config.pad_token_id if config.pad_token_id is not None else -1,
             config.sep_token_id if config.sep_token_id is not None else -1,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
+def part(weights: torch.Tensor, n_part: int) -> torch.Tensor:
+    r = weights.shape[0] // 3
+    return weights[r * n_part : r * n_part + r, ...]
+
+class BaiChuanConverter(BaseConverter):
+    MODEL_TYPE = ModelType.BaiChuan
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        added = {}
+        removed = []
+        for name in state_dict:
+            if name == 'lm_head.weight':
+                tensor: torch.Tensor = state_dict[name]
+                state_dict[name] = nn.functional.normalize(tensor)
+                continue
+
+            if not name.endswith('W_pack.weight'):
+                continue
+
+            tensor: torch.Tensor = state_dict[name]
+            removed.append(name)
+
+            wq = permute(part(tensor, 0), config.num_attention_heads)
+            wk = permute(part(tensor, 1), config.num_attention_heads)
+            wv = part(tensor, 2)
+
+            added[name.replace('W_pack', 'q_proj')] = wq
+            added[name.replace('W_pack', 'k_proj')] = wk
+            added[name.replace('W_pack', 'v_proj')] = wv
+
+        for s in removed:
+            del state_dict[s]
+        for name in added:
+            state_dict[name] = added[name]
+        return state_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        LlamaConverter.dump_config(f, config, ggml_type)
+        config_values = [
+            config.user_token_id,
+            config.assistant_token_id,
         ]
         f.write(struct.pack("i" * len(config_values), *config_values))
 
@@ -592,7 +670,13 @@ def load_vocab(path: Path) -> Any:
 
 def load_config(path: Path) -> Any:
     with open(path / 'config.json', 'r') as fp:
-        return json.load(fp)
+        r = json.load(fp)
+    if (path / 'generation_config.json').is_file():
+        with open(path / 'generation_config.json', 'r') as fp:
+            rr = json.load(fp)
+            for k in rr:
+                r[k] = rr[k]
+    return r
 
 def load_some_model(path: Path) -> List[Path]:
     '''Load a model of any supported format.'''
@@ -658,8 +742,10 @@ def main():
         DeepSeekConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseekcoder':
         DeepSeekCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'BaichuanForCausalLM':
+        BaiChuanConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
-        raise Exception(f'unknown model_type: {config.model_type}')
+        raise Exception(f'unknown model_type: {arch}')
 
 if __name__ == "__main__":
     main()

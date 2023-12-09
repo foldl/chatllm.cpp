@@ -2,14 +2,18 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
+![](./images/dscoder.png)
+
 Pure C++ implementation of several models for real-time chatting on your computer (CPU),
 based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml) & [llama.cpp](https://github.com/ggerganov/llama.cpp):
 
 * LlaMA-like:
-    * [x] LlaMA-1
+    * [x] All LlaMA-1 models
     * [x] [LlaMA-2 Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
     * [x] [DeepSeek Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat)
     * [x] [DeepSeek Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
+    * [x] [Baichuan-2 Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
+          (1st gen of Baichuan is not supported)
 * ChatLLM
     * [x] [ChatLLM-6B](https://github.com/THUDM/ChatLLM-6B)
     * [x] [ChatLLM2-6B](https://github.com/THUDM/ChatLLM2-6B)
@@ -47,15 +51,14 @@ git submodule update --init --recursive
 Use `convert.py` to transform models into quantized GGML format. For example, to convert the _fp16_ base model to q8_0 (quantized int8) GGML model, run:
 
 ```sh
-# ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA-like models:
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
-
 # DeepSeek LLM Chat models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DeepSeek
 
 # DeepSeek Coder models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DeepSeekCoder
 
+# For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
 ```
 
 Note: Only HF format is supported; Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.
@@ -69,13 +72,13 @@ cmake -B build
 cmake --build build -j
 ```
 
-Now you may chat with the quantized ChatLLM-6B model by running:
+Now you may chat with a quantized model by running:
 
 ```sh
-./build/bin/main -m chatllm-ggml.bin                            # ChatLLM-6B
-# 你好👋！我是人工智能助手 ChatLLM-6B，很高兴见到你，欢迎问我任何问题。
-./build/bin/main -m chatllm2-ggml.bin --top_p 0.8 --temp 0.8    # ChatLLM2-6B
-# 你好👋！我是人工智能助手 ChatLLM2-6B，很高兴见到你，欢迎问我任何问题。
+./build/bin/main -m chatglm-ggml.bin                            # ChatLLM-6B
+# 你好👋！我是人工智能助手 ChatGLM-6B，很高兴见到你，欢迎问我任何问题。
+./build/bin/main -m chatglm2-ggml.bin --top_p 0.8 --temp 0.8    # ChatLLM2-6B
+# 你好👋！我是人工智能助手 ChatGLM2-6B，很高兴见到你，欢迎问我任何问题。
 ./build/bin/main -m llama2.bin  --seed 100                      # Llama-2-Chat-7B
 # Hello! I'm here to help you with any questions or concerns ....
 ```
@@ -83,7 +86,7 @@ Now you may chat with the quantized ChatLLM-6B model by running:
 To run the model in interactive mode, add the `-i` flag. For example:
 
 ```sh
-./build/bin/main -m chatllm-ggml.bin -i
+./build/bin/main -m model.bin -i
 ```
 
 In interactive mode, your chat history will serve as the context for the next-round conversation.
