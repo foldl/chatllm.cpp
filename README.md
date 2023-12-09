@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-![](./images/dscoder.png)
+![](./images/demo.gif)
 
 Pure C++ implementation of several models for real-time chatting on your computer (CPU),
 based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml) & [llama.cpp](https://github.com/ggerganov/llama.cpp):
