@@ -15,8 +15,11 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] [Baichuan-2 Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
           (1st gen of Baichuan is not supported)
 * [x] [ChatGLM-6B](https://huggingface.co/THUDM/chatglm-6b)
+
 * GLM-2 family:
     * [x] [ChatGLM2-6B](https://huggingface.co/THUDM/chatglm2-6b)
+    * [x] [CodeGeeX2-6b](https://huggingface.co/THUDM/codegeex2-6b)
+          (code completion only, no context.)
     * [x] [ChatGLM3-6B](https://huggingface.co/THUDM/chatglm3-6b)
 * [ ] [InternLM]
 

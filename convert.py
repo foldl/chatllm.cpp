@@ -37,6 +37,7 @@ class ModelType(Enum):
     CHATGLM = 1
     CHATGLM2 = 2
     CHATGLM3 = 3
+    CODEGEEX2 = 4
     InternLM = 0x100
     LlaMA2 = 0x150
     BaiChuan = 0x200
@@ -655,6 +656,16 @@ class ChatGLM3Converter(BaseConverter):
     def get_weight_names(config):
         return ChatGLM2Converter.get_weight_names(config)
 
+class CodeGeeX2Converter(BaseConverter):
+    MODEL_TYPE = ModelType.CODEGEEX2
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        ChatGLM2Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return ChatGLM2Converter.get_weight_names(config)
 
 def load_vocab(path: Path) -> Any:
     # Be extra-friendly and accept either a file or a directory.  Also, if it's
@@ -746,7 +757,11 @@ def main():
         if hasattr(config, "multi_query_attention"):
             auto_map = config.auto_map
             if 'AutoModelForCausalLM' in auto_map:
-                ChatGLM3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+                name: str = config._name_or_path
+                if name.find('codegeex') > 0:
+                    CodeGeeX2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+                else:
+                    ChatGLM3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
             else:
                 ChatGLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:

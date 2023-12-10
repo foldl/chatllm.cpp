@@ -29,6 +29,7 @@ namespace chatllm
         MODEL_TYPE_CHATGLM  = 1,
         MODEL_TYPE_CHATGLM2 = 2,
         MODEL_TYPE_CHATGLM3 = 3,
+        MODEL_TYPE_CODEGEEX2 = 4,
 
         MODEL_TYPE_INTERNLM = 0x100,
 
@@ -50,6 +51,8 @@ namespace chatllm
             return "ChatGLM2";
         case MODEL_TYPE_CHATGLM3:
             return "ChatGLM3";
+        case MODEL_TYPE_CODEGEEX2:
+            return "CodeGeeX2";
         case MODEL_TYPE_INTERNLM:
             return "InternLM";
         case MODEL_TYPE_LLAMA2:
@@ -381,6 +384,14 @@ namespace chatllm
         }
     }
 
+    namespace codegeex
+    {
+        namespace v2
+        {
+            #include "models/codegeex_v2.cpp"
+        }
+    }
+
     namespace internlm
     {
         #include "models/internlm.cpp"
@@ -458,6 +469,14 @@ namespace chatllm
             return load_model<glm::v3::Config,
                               glm::v3::Tokenizer,
                               glm::v3::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_CODEGEEX2:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<codegeex::v2::Config,
+                              codegeex::v2::Tokenizer,
+                              codegeex::v2::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_INTERNLM:
         {
