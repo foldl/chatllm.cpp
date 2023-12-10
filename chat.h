@@ -226,14 +226,18 @@ namespace chatllm
     class BaseModel
     {
     public:
-        BaseModel(int type, std::string name) : type_(type), name_(name), gen(0x123), n_past(0),
+        BaseModel(int type, std::string name, std::string native_name) :
+            type_(type), name_(name), native_name_(native_name), gen(0x123), n_past(0),
             n_past_offset(0), terminate_token_id(-1000) {}
 
         virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,
                                             bool &completed,
                                             BaseStreamer *streamer = nullptr) = 0;
+
         std::string type_name() const { return name_; }
+        std::string native_name() const { return native_name_; }
+
 
         virtual void load(ModelLoader &loader) = 0;
 
@@ -254,6 +258,7 @@ namespace chatllm
     protected:
         int type_;
         std::string name_;
+        std::string native_name_;
         std::mt19937 gen;
         int n_past;
         int n_past_offset;

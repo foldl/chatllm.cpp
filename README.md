@@ -14,9 +14,10 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] [DeepSeek Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
     * [x] [Baichuan-2 Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
           (1st gen of Baichuan is not supported)
-* ChatLLM
-    * [x] [ChatLLM-6B](https://github.com/THUDM/ChatLLM-6B)
-    * [x] [ChatLLM2-6B](https://github.com/THUDM/ChatLLM2-6B)
+* [x] [ChatGLM-6B](https://huggingface.co/THUDM/chatglm-6b)
+* GLM-2 family:
+    * [x] [ChatGLM2-6B](https://huggingface.co/THUDM/chatglm2-6b)
+    * [x] [ChatGLM3-6B](https://huggingface.co/THUDM/chatglm3-6b)
 * [ ] [InternLM]
 
 ## Features

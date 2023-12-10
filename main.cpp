@@ -207,8 +207,9 @@ void chat(Args &args)
     }
 
     #define MODEL_INFO()     "You are served by " << std::left << std::setw(28) << pipeline.model->type_name() + "."
+    #define SHOW_NATIVE()    if (pipeline.model->native_name().size() > 0) { std::cout << "(" << pipeline.model->native_name() << ")"; }
 
-    std::cout   << R"(    ________          __  __    __    __  ___                 )" << '\n'
+    std::cout   << R"(    ________          __  __    __    __  ___ )"; SHOW_NATIVE(); std::cout << '\n'
                 << R"(   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____  )" << '\n'
                 << R"(  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
                 << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'

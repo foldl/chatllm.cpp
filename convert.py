@@ -36,6 +36,7 @@ class GGMLType(Enum):
 class ModelType(Enum):
     CHATGLM = 1
     CHATGLM2 = 2
+    CHATGLM3 = 3
     InternLM = 0x100
     LlaMA2 = 0x150
     BaiChuan = 0x200
@@ -643,6 +644,18 @@ class ChatGLM2Converter(BaseConverter):
 
         return weight_names
 
+class ChatGLM3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.CHATGLM3
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        ChatGLM2Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return ChatGLM2Converter.get_weight_names(config)
+
+
 def load_vocab(path: Path) -> Any:
     # Be extra-friendly and accept either a file or a directory.  Also, if it's
     # a directory, it might be the model directory, and tokenizer.model might
@@ -731,7 +744,11 @@ def main():
 
     if arch == 'ChatGLMModel':
         if hasattr(config, "multi_query_attention"):
-            ChatGLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            auto_map = config.auto_map
+            if 'AutoModelForCausalLM' in auto_map:
+                ChatGLM3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            else:
+                ChatGLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             ChatGLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InternLMForCausalLM':

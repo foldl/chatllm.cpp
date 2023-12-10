@@ -33,7 +33,7 @@ class ConditionalGeneration : public BaseModelForConditionalGeneration<
 {
 public:
     ConditionalGeneration() = default;
-    ConditionalGeneration(const Config &config);
+    ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_CHATGLM2);
 
     void load(ModelLoader &loader) override;
 
@@ -93,8 +93,8 @@ bool Tokenizer::is_special_id(int id) const
             id == eop_token_id;
 }
 
-ConditionalGeneration::ConditionalGeneration(const Config &config)
-    : BaseModelForConditionalGeneration(MODEL_TYPE_CHATGLM2, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type)
+    : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
     const size_t num_tensors = 3 + config.num_hidden_layers * 10;

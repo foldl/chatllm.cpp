@@ -28,6 +28,8 @@ namespace chatllm
     {
         MODEL_TYPE_CHATGLM  = 1,
         MODEL_TYPE_CHATGLM2 = 2,
+        MODEL_TYPE_CHATGLM3 = 3,
+
         MODEL_TYPE_INTERNLM = 0x100,
 
         MODEL_TYPE_LLAMA2   = 0x150,
@@ -46,12 +48,14 @@ namespace chatllm
             return "ChatGLM";
         case MODEL_TYPE_CHATGLM2:
             return "ChatGLM2";
+        case MODEL_TYPE_CHATGLM3:
+            return "ChatGLM3";
         case MODEL_TYPE_INTERNLM:
             return "InternLM";
         case MODEL_TYPE_LLAMA2:
             return "LlaMa2";
         case MODEL_TYPE_BAICHUAN:
-            return "BaiChuan";
+            return "Baichuan";
         case MODEL_TYPE_DEEPSEEK:
             return "DeepSeek-LLM";
         case MODEL_TYPE_DEEPSEEK_CODER:
@@ -62,11 +66,24 @@ namespace chatllm
         }
     }
 
+    std::string to_native_string(ModelType model_type)
+    {
+        switch (model_type)
+        {
+        case MODEL_TYPE_INTERNLM:
+            return "书生";
+        case MODEL_TYPE_BAICHUAN:
+            return "百川";
+        default:
+            return "";
+        }
+    }
+
     template<class LM> class BaseModelForConditionalGeneration : public BaseModel
     {
     public:
         BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, size_t mem_size, size_t scratch_size)
-            : BaseModel(model_type, to_string(model_type)), config_(config), mem_size_(mem_size), mem_buffer_(new char[mem_size]),
+            : BaseModel(model_type, to_string(model_type), to_native_string(model_type)), config_(config), mem_size_(mem_size), mem_buffer_(new char[mem_size]),
               scratch_size_(scratch_size), scratch_buffer_(new char[scratch_size])
         {
         }
@@ -357,6 +374,11 @@ namespace chatllm
         {
             #include "models/chatglm_v2.cpp"
         }
+
+        namespace v3
+        {
+            #include "models/chatglm_v3.cpp"
+        }
     }
 
     namespace internlm
@@ -428,6 +450,14 @@ namespace chatllm
             return load_model<glm::v2::Config,
                               glm::v2::Tokenizer,
                               glm::v2::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_CHATGLM3:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<glm::v3::Config,
+                              glm::v3::Tokenizer,
+                              glm::v3::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_INTERNLM:
         {
