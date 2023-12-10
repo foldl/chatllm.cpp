@@ -5,7 +5,7 @@
 ![](./images/demo.gif)
 
 Pure C++ implementation of several models for real-time chatting on your computer (CPU),
-based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml) & [llama.cpp](https://github.com/ggerganov/llama.cpp):
+based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml):
 
 * LlaMA-like:
     * [x] All LlaMA-1 models
@@ -101,8 +101,4 @@ Run `./build/bin/main -h` to explore more options!
 
 * This project is started as refactoring of [ChatGLM.cpp](https://github.com/li-plus/chatglm.cpp), without which, this project could not be possible.
 
-* Thank those who have released their the model sources and checkpoints:
-
-    - [@THUDM](https://github.com/THUDM) for the amazing [ChatLLM-6B](https://github.com/THUDM/ChatLLM-6B) and [ChatLLM2-6B](https://github.com/THUDM/ChatLLM2-6B);
-    - InternLM
-    - LLaMA
+* Thank those who have released their the model sources and checkpoints.
