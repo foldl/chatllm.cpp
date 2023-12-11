@@ -252,7 +252,7 @@ namespace chatllm
     public:
         LMBlock1() = default;
         LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
-                  int max_length, bool packed, bool qkv_bias = true, bool o_bias = true)
+                  int max_length, bool qkv_bias = true, bool o_bias = true)
             : input_layernorm(ctx, hidden_size),
               attention(ctx, hidden_size, num_attention_heads, max_length),
               post_attention_layernorm(ctx, hidden_size),
@@ -309,18 +309,11 @@ namespace chatllm
     {
     public:
         BaseSelfAttention() : num_attention_heads(0) {}
-        BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool packed = false, bool qkv_bias = false, bool o_bias = false)
+        BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool qkv_bias = false, bool o_bias = false)
             : num_attention_heads(num_attention_heads),
-              packed_weights(packed ? ggml_new_tensor_1d(ctx->gctx.get(), ctx->dtype, hidden_size * hidden_size * 3) : nullptr),
-              q_proj(ctx, hidden_size, hidden_size,
-                    packed ? ggml_view_2d(ctx->gctx.get(), packed_weights, hidden_size, hidden_size, hidden_size * 3, 0 * hidden_size * ggml_element_size(packed_weights)) : nullptr,
-                    qkv_bias),
-              k_proj(ctx, hidden_size, hidden_size,
-                    packed ? ggml_view_2d(ctx->gctx.get(), packed_weights, hidden_size, hidden_size, hidden_size * 3, 1 * hidden_size * ggml_element_size(packed_weights)) : nullptr,
-                    qkv_bias),
-              v_proj(ctx, hidden_size, hidden_size,
-                    packed ? ggml_view_2d(ctx->gctx.get(), packed_weights, hidden_size, hidden_size, hidden_size * 3, 2 * hidden_size * ggml_element_size(packed_weights)) : nullptr,
-                    qkv_bias),
+              q_proj(ctx, hidden_size, hidden_size, nullptr, qkv_bias),
+              k_proj(ctx, hidden_size, hidden_size, nullptr, qkv_bias),
+              v_proj(ctx, hidden_size, hidden_size, nullptr, qkv_bias),
               o_proj(ctx, hidden_size, hidden_size, o_bias),
               k_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size * max_length)),
               v_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size * max_length)),
@@ -359,7 +352,6 @@ namespace chatllm
 
     public:
         int num_attention_heads;
-        ggml_tensor *packed_weights;
         Linear q_proj, k_proj, v_proj;
         Linear o_proj;
         ggml_tensor *k_cache;
@@ -383,7 +375,7 @@ namespace chatllm
     {
     public:
         InternLMSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
-            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, false, true, true) {}
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, true, true) {}
     };
 
     class BaseMLP : public Block
@@ -418,7 +410,7 @@ namespace chatllm
     {
     public:
         LlamaSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
-            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, false, false, false) {}
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, false, false) {}
     };
 
     class LlamaBlock : public LMBlock1<LlamaSelfAttention, BaseMLP>
