@@ -13,15 +13,17 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] [DeepSeek Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat)
     * [x] [DeepSeek Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
     * [x] [Baichuan-2 Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
-          (1st gen of Baichuan is not supported)
+
 * [x] [ChatGLM-6B](https://huggingface.co/THUDM/chatglm-6b)
 
 * GLM-2 family:
     * [x] [ChatGLM2-6B](https://huggingface.co/THUDM/chatglm2-6b)
     * [x] [CodeGeeX2-6b](https://huggingface.co/THUDM/codegeex2-6b)
-          (code completion only, no context.)
+
+        Note: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
+
     * [x] [ChatGLM3-6B](https://huggingface.co/THUDM/chatglm3-6b)
-* [ ] [InternLM]
+* [x] [InternLM Chat-7B](https://huggingface.co/internlm/internlm-chat-7b) (rev: <= 1a6328795c6e207904e1eb58177e03ad24ae06f3)
 
 ## Features
 

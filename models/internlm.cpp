@@ -5,11 +5,9 @@ struct Config : public BaseConfig
 class Tokenizer : public BaseTokenizer
 {
 public:
-    Tokenizer(const Config &config) : BaseTokenizer::BaseTokenizer(config), add_bos_token(true), add_eos_token(false) {};
+    Tokenizer(const Config &config) : BaseTokenizer::BaseTokenizer(config) {};
 
     size_t load(const char *buffer, int n_vocab) override;
-
-    void encode(const std::string &text, std::vector<int> &ids) const override;
 
     int get_terminate_token_id(void) override { return eoa_token_id; }
 
@@ -20,10 +18,7 @@ protected:
     void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
 
 public:
-    int unk_token_id;
     int eoa_token_id;
-    bool add_bos_token;
-    bool add_eos_token;
 };
 
 class ConditionalGeneration : public BaseModelForConditionalGeneration<
@@ -51,29 +46,16 @@ size_t Tokenizer::load(const char *buffer, int n_vocab)
     tp = new tokenizer::SentencePieceProcessor();
     size_t size = tp->Load(buffer, n_vocab);
 
-    unk_token_id = tp->PieceToId("<unk>");
-    bos_token_id = tp->PieceToId("<s>");
-    eos_token_id = tp->PieceToId("</s>");
-    pad_token_id = tp->PieceToId("</s>");
     eoa_token_id = tp->PieceToId("<eoa>");
 
     return size;
-}
-
-void Tokenizer::encode(const std::string &text, std::vector<int> &ids) const
-{
-    if (add_bos_token)
-        ids.push_back(bos_token_id);
-    BaseTokenizer::encode(text, ids);
-    if (add_eos_token)
-        ids.push_back(eos_token_id);
 }
 
 void Tokenizer::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
     std::ostringstream oss_prompt;
 
-    oss_prompt << "<|User|>:" << user << "<eoh>\n<|Bot|>:" << ai << "<eoa>\n";
+    oss_prompt << "<s><|User|>:" << user << "<eoh>\n<|Bot|>:" << ai << "<eoa>\n";
     auto text = oss_prompt.str();
     encode(text, ids);
 }
@@ -82,21 +64,21 @@ void Tokenizer::append_user(int round_idx, const std::string &user, std::vector<
 {
     std::ostringstream oss_prompt;
 
-    oss_prompt << "<|User|>:" << user << "<eoh>\n<|Bot|>:";
+    oss_prompt << "<s><|User|>:" << user << "<eoh>\n<|Bot|>:";
     auto text = oss_prompt.str();
     encode(text, ids);
 }
 
 bool Tokenizer::is_special_id(int id) const
 {
-    return id == eoa_token_id;
+    return (id == eoa_token_id) || (id == bos_token_id) || (id == eos_token_id);
 }
 
 ConditionalGeneration::ConditionalGeneration(const Config &config)
     : BaseModelForConditionalGeneration(MODEL_TYPE_INTERNLM, config, MEM_SIZE, SCRATCH_SIZE), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-    const size_t num_tensors = 3 + config.num_hidden_layers * 15;
+    const size_t num_tensors = 3 + config.num_hidden_layers * 16;
     const size_t ctx_size = num_tensors * tensor_ovhd;
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;
@@ -113,22 +95,20 @@ void ConditionalGeneration::load(ModelLoader &loader)
     {
         std::string layer_prefix = "model.layers." + std::to_string(i) + '.';
         loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer.layers[i].attention.q_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.q_proj.bias", transformer.layers[i].attention.q_proj.bias);
+        loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   transformer.layers[i].attention.q_proj.bias);
         loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer.layers[i].attention.k_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.k_proj.bias", transformer.layers[i].attention.k_proj.bias);
+        loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   transformer.layers[i].attention.k_proj.bias);
         loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer.layers[i].attention.v_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.v_proj.bias", transformer.layers[i].attention.v_proj.bias);
+        loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer.layers[i].attention.v_proj.bias);
         loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer.layers[i].attention.o_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.o_proj.bias", transformer.layers[i].attention.o_proj.bias);
+        loader.read_tensor(layer_prefix + "self_attn.o_proj.bias",   transformer.layers[i].attention.o_proj.bias);
 
         loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer.layers[i].mlp.gate_proj.weight);
         loader.read_tensor(layer_prefix + "mlp.down_proj.weight", transformer.layers[i].mlp.down_proj.weight);
-        loader.read_tensor(layer_prefix + "mlp.up_proj.weight", transformer.layers[i].mlp.up_proj.weight);
+        loader.read_tensor(layer_prefix + "mlp.up_proj.weight",   transformer.layers[i].mlp.up_proj.weight);
 
-        loader.read_tensor(layer_prefix + "input_layernorm.weight",
-                           transformer.layers[i].input_layernorm.weight);
-        loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",
-                           transformer.layers[i].post_attention_layernorm.weight);
+        loader.read_tensor(layer_prefix + "input_layernorm.weight",          transformer.layers[i].input_layernorm.weight);
+        loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer.layers[i].post_attention_layernorm.weight);
     }
     loader.read_tensor("model.norm.weight", transformer.final_layernorm.weight);
     loader.read_tensor("lm_head.weight", transformer.lm_head.weight);

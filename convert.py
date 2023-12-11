@@ -321,8 +321,19 @@ class BaseConverter:
 
         print(f"{cls.MODEL_TYPE.name} GGML model saved to {save_path}")
 
+def permute(weights: torch.Tensor, n_head: int) -> torch.Tensor:
+    return (weights.reshape(n_head, 2, weights.shape[0] // n_head // 2, *weights.shape[1:])
+                   .swapaxes(1, 2)
+                   .reshape(weights.shape))
+
 class InternLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.InternLM
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name.endswith('k_proj.weight') or name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        return tensor
 
     @staticmethod
     def dump_config(f, config, ggml_type):
@@ -366,11 +377,6 @@ class InternLMConverter(BaseConverter):
             "lm_head.weight"
         ]
         return weight_names
-
-def permute(weights: torch.Tensor, n_head: int) -> torch.Tensor:
-    return (weights.reshape(n_head, 2, weights.shape[0] // n_head // 2, *weights.shape[1:])
-                   .swapaxes(1, 2)
-                   .reshape(weights.shape))
 
 class LlamaConverter(BaseConverter):
     MODEL_TYPE = ModelType.LlaMA2
