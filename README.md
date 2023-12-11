@@ -13,6 +13,7 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] [DeepSeek Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat)
     * [x] [DeepSeek Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
     * [x] [Baichuan-2 Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
+    * [ ] [Yi Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat)
 
 * [x] [ChatGLM-6B](https://huggingface.co/THUDM/chatglm-6b)
 
@@ -23,7 +24,10 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
         Note: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
 
     * [x] [ChatGLM3-6B](https://huggingface.co/THUDM/chatglm3-6b)
-* [x] [InternLM Chat-7B](https://huggingface.co/internlm/internlm-chat-7b) (rev: <= 1a6328795c6e207904e1eb58177e03ad24ae06f3)
+
+* InternLM
+    * [x] [InternLM Chat-7B](https://huggingface.co/internlm/internlm-chat-7b)
+    * [x] [InternLM Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1)
 
 ## Features
 

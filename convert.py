@@ -338,6 +338,10 @@ class InternLMConverter(BaseConverter):
     @staticmethod
     def dump_config(f, config, ggml_type):
         assert config.hidden_act == 'silu', "hidden_act must be silu"
+        if config.rotary is not None:
+            assert config.rotary['type'] == 'dynamic', "rotary['type'] must be dynamic"
+            assert config.rotary['base'] == 10000, "rotary['base'] must be 10000"
+            # TODO: where is scaling?
         config_values = [
             ggml_type.value,
             config.vocab_size,
