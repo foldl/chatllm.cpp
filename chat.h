@@ -68,7 +68,7 @@ namespace chatllm
 
         void set_system_prompt(const std::string &prompt) { sys_prompt = prompt; }
 
-        virtual int get_terminate_token_id(void) { return -1000; }
+        virtual int get_terminate_token_id(void) const { return -1000; }
         virtual bool is_special_id(int id) const { return false; }
 
     protected:

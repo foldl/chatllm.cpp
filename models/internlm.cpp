@@ -9,7 +9,7 @@ public:
 
     size_t load(const char *buffer, int n_vocab) override;
 
-    int get_terminate_token_id(void) override { return eoa_token_id; }
+    int get_terminate_token_id(void) const override { return eoa_token_id; }
 
     bool is_special_id(int id) const override;
 
