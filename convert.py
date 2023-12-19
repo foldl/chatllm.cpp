@@ -39,7 +39,10 @@ class ModelType(Enum):
     CHATGLM3 = 3
     CODEGEEX2 = 4
     InternLM = 0x100
+
     LlaMA2 = 0x150
+    CodeLlaMA = 0x151
+
     BaiChuan = 0x200
     DeepSeek = 0x300
     DeepSeekCoder = 0x301
@@ -432,6 +435,24 @@ class LlamaConverter(BaseConverter):
 
         return weight_names
 
+class CodeLlamaConverter(BaseConverter):
+    MODEL_TYPE = ModelType.CodeLlaMA
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return LlamaConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.rope_theta > 0, "rope_theta must be positive"
+        assert config.rope_scaling is None, "rope_scaling must be `null`"
+        LlamaConverter.dump_config(f, config, ggml_type)
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
+
 def part(weights: torch.Tensor, n_part: int) -> torch.Tensor:
     r = weights.shape[0] // 3
     return weights[r * n_part : r * n_part + r, ...]
@@ -780,6 +801,8 @@ def main():
         InternLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'LlamaForCausalLM':
         LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'codellama':
+        CodeLlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek':
         DeepSeekConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseekcoder':

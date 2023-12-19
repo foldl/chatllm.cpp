@@ -34,6 +34,7 @@ namespace chatllm
         MODEL_TYPE_INTERNLM = 0x100,
 
         MODEL_TYPE_LLAMA2   = 0x150,
+        MODEL_TYPE_CODELLAMA= 0x151,
 
         MODEL_TYPE_BAICHUAN = 0x200,
 
@@ -57,6 +58,8 @@ namespace chatllm
             return "InternLM";
         case MODEL_TYPE_LLAMA2:
             return "LlaMa2";
+        case MODEL_TYPE_CODELLAMA:
+            return "CodeLlaMa";
         case MODEL_TYPE_BAICHUAN:
             return "Baichuan";
         case MODEL_TYPE_DEEPSEEK:
@@ -402,6 +405,11 @@ namespace chatllm
         #include "models/llama.cpp"
     }
 
+    namespace codellama
+    {
+        #include "models/codellama.cpp"
+    }
+
     namespace deepseek
     {
         #include "models/deepseek.cpp"
@@ -493,6 +501,14 @@ namespace chatllm
             return load_model<llama::Config,
                               llama::Tokenizer,
                               llama::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_CODELLAMA:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<codellama::Config,
+                              codellama::Tokenizer,
+                              codellama::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_DEEPSEEK:
         {

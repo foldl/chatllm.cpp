@@ -10,6 +10,7 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 * LlaMA-like:
     * [x] All LlaMA-1 models
     * [x] [LlaMA-2 Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
+    * [x] [CodeLlaMA Instruct-7B](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf)
     * [x] [DeepSeek Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat)
     * [x] [DeepSeek Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
     * [x] [Baichuan-2 Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
@@ -66,6 +67,9 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DeepSeek
 
 # DeepSeek Coder models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DeepSeekCoder
+
+# CodeLlaMA models
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA
 
 # For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
