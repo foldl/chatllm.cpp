@@ -27,8 +27,12 @@ struct Args
     float top_p = 0.7;
     float temp = 0.7;
     int num_threads = 0;
+    bool multi_line = false;
     int seed;
 };
+
+#define MULTI_LINE_END_MARKER_W  L"\\."
+#define MULTI_LINE_END_MARKER     "\\."
 
 void usage(const char *prog)
 {
@@ -48,7 +52,9 @@ void usage(const char *prog)
               << "  --top_p N               top-p sampling (default: 0.7)\n"
               << "  --temp N                temperature (default: 0.95)\n"
               << "  -t, --threads N         number of threads for inference (default: number of cores)\n"
-              << "  --seed N                seed for random generator (default: random)\n";
+              << "  --seed N                seed for random generator (default: random)\n"
+              << "  --multi                 enabled multiple lines of input\n"
+              << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n";
 }
 
 static Args parse_args(int argc, const char **argv)
@@ -85,6 +91,10 @@ static Args parse_args(int argc, const char **argv)
         else if ((strcmp(arg, "--interactive") == 0) || (strcmp(arg, "-i") == 0))
         {
             args.interactive = true;
+        }
+        else if (strcmp(arg, "--multi") == 0)
+        {
+            args.multi_line = true;
         }
         handle_param("--model",                 "-m", model_path,           std::string)
         handle_param("--prompt",                "-p", prompt,               std::string)
@@ -149,18 +159,49 @@ static void append_utf8(char32_t ch, std::string &out)
     }
 }
 
-static bool get_utf8_line(std::string &line)
+static bool get_utf8_line(std::string &line, bool multi_line)
 {
-    std::wstring prompt;
-    std::wcin >> prompt;
-    for (auto wc : prompt)
-        append_utf8(wc, line);
+    std::wstring marker(MULTI_LINE_END_MARKER_W);
+
+    do
+    {
+        std::wstring prompt;
+        std::wcin >> prompt;
+
+        if (multi_line)
+        {
+            if (prompt == marker)
+                return true;
+            if (line.size() > 0)
+                append_utf8('\n', line);
+        }
+
+        for (auto wc : prompt)
+            append_utf8(wc, line);
+    } while (multi_line);
+
     return true;
 }
 #else
-static bool get_utf8_line(std::string &line)
+static bool get_utf8_line(std::string &line, bool multi_line)
 {
-    return !!std::getline(std::cin, line);
+    do
+    {
+        std::string prompt;
+        std::getline(std::cin, prompt);
+
+        if (multi_line)
+        {
+            if (prompt == MULTI_LINE_END_MARKER)
+                return true;
+            if (line.size() > 0)
+                line.push_back('\n');
+        }
+
+        line.append(prompt.begin(), prompt.end());
+    } while (multi_line);
+
+    return true;
 }
 #endif
 
@@ -223,7 +264,7 @@ void chat(Args &args)
     {
         std::cout << std::setw(prompt_len) << std::left << user_prompt << " > " << std::flush;
         std::string input;
-        if (!get_utf8_line(input))
+        if (!get_utf8_line(input, args.multi_line))
         {
             std::cout << "FAILED to read line." << std::endl;
             break;
