@@ -14,7 +14,7 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] [DeepSeek Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat)
     * [x] [DeepSeek Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
     * [x] [Baichuan-2 Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
-    * [ ] [Yi Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat)
+    * [x] [Yi Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat)
 
 * [x] [ChatGLM-6B](https://huggingface.co/THUDM/chatglm-6b)
 

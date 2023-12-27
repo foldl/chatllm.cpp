@@ -23,6 +23,48 @@
 
 namespace chatllm
 {
+    ForwardContext *dbg_ctx = nullptr;
+
+    void print_tensor(ggml_tensor *tensor, int offset = 0)
+    {
+        printf("\n%s: [%ld, %ld, %ld] [%ld, %ld, %ld]\n", tensor->name, tensor->ne[0], tensor->ne[1], tensor->ne[2],
+                                                                        tensor->nb[0], tensor->nb[1], tensor->nb[2]);
+        switch (tensor->type)
+        {
+        case GGML_TYPE_F32:
+            {
+                float * p = (float *)tensor->data;
+                for (size_t i = 0; i < ggml_nbytes(tensor) / sizeof(float); i++)
+                {
+                    printf("[%3d] = %e\n", (int)i, p[i]);
+                }
+            }
+            break;
+
+        default:
+            {
+                char * p = (char *)tensor->data;
+                p += offset;
+                for (size_t i = 0; i < ggml_nbytes(tensor); i++)
+                {
+                    if ((i & 0xf) == 0) printf("\n%05d: ", (int)i);
+                    printf("%5d", p[i]);
+                }
+            }
+            break;
+        }
+
+        printf("\n");
+    }
+
+    void inspect_tensor(ggml_tensor *tensor, const char *msg)
+    {
+        ggml_build_forward_expand(dbg_ctx->gf, tensor);
+        ggml_graph_compute_with_ctx(dbg_ctx->gctx.get(), dbg_ctx->gf, 4);
+        printf("%s:\n", msg);
+        print_tensor(tensor);
+        exit(-3);
+    }
 
     enum ModelType
     {
@@ -40,6 +82,8 @@ namespace chatllm
 
         MODEL_TYPE_DEEPSEEK = 0x300,
         MODEL_TYPE_DEEPSEEK_CODER   = MODEL_TYPE_DEEPSEEK + 1,
+
+        MODEL_TYPE_YI       = 0x400,
     };
 
     std::string to_string(ModelType model_type)
@@ -66,6 +110,8 @@ namespace chatllm
             return "DeepSeek-LLM";
         case MODEL_TYPE_DEEPSEEK_CODER:
             return "DeepSeek-Coder";
+        case MODEL_TYPE_YI:
+            return "Yi";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -140,9 +186,13 @@ namespace chatllm
                     completed = true;
                     break;
                 }
-
+//#define DISABLE_CACHE
+#ifndef DISABLE_CACHE
                 n_past += curr_input_ids.size();
                 curr_input_ids = {next_token_id};
+#else
+                curr_input_ids.push_back(next_token_id);
+#endif
                 output_ids.emplace_back(next_token_id);
 
                 if (streamer)
@@ -168,6 +218,8 @@ namespace chatllm
             ctx.scratch = {.offs = 0, .size = scratch_size_, .data = scratch_buffer_.get()};
             int n_threads = input_ids.size() >= 32 && ggml_cpu_has_blas() && !ggml_cpu_has_gpublas() ? 1 : gen_config.num_threads;
             ctx.gf = ggml_new_graph(ctx.gctx.get());
+
+            dbg_ctx = &ctx;
 
             ggml_tensor *input_ids_tensor = ggml_new_tensor_1d(ctx.gctx.get(), GGML_TYPE_I32, input_ids.size());
             memcpy(input_ids_tensor->data, input_ids.data(), ggml_nbytes(input_ids_tensor));
@@ -425,6 +477,11 @@ namespace chatllm
         #include "models/baichuan.cpp"
     }
 
+    namespace yi
+    {
+        #include "models/yi.cpp"
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -533,6 +590,14 @@ namespace chatllm
             return load_model<baichuan::Config,
                               baichuan::Tokenizer,
                               baichuan::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_YI:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<yi::Config,
+                              yi::Tokenizer,
+                              yi::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

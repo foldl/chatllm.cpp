@@ -19,7 +19,6 @@
 
 namespace chatllm
 {
-
     ggml_tensor *Embedding::forward(ForwardContext *ctx, ggml_tensor *input)
     {
         ggml_tensor *output = ggml_get_rows(ctx->gctx.get(), weight, input);
@@ -286,6 +285,9 @@ namespace chatllm
         const int hidden_size = hidden_states->ne[0];
         const int qlen = hidden_states->ne[1];
         const int head_size = hidden_size / num_attention_heads;
+        const int repeat = num_attention_heads / num_kv_heads;
+        const int kv_hidden_size = hidden_size / repeat;
+
         fill_pos_vector(pos, n_past, qlen);
 
         // shift cache
@@ -294,15 +296,15 @@ namespace chatllm
             int remain = shift_pending.total - shift_pending.shift;
             if (remain > 0)
             {
-                struct ggml_tensor * k_cache_remain = ggml_view_1d(ctx->gctx.get(), k_cache, remain * hidden_size,
-                                            ggml_element_size(k_cache) * hidden_size * shift_pending.shift);
-                struct ggml_tensor * k_cache_1d = ggml_view_1d(ctx->gctx.get(), k_cache, remain * hidden_size,
+                struct ggml_tensor * k_cache_remain = ggml_view_1d(ctx->gctx.get(), k_cache, remain * kv_hidden_size,
+                                            ggml_element_size(k_cache) * kv_hidden_size * shift_pending.shift);
+                struct ggml_tensor * k_cache_1d = ggml_view_1d(ctx->gctx.get(), k_cache, remain * kv_hidden_size,
                                             0);
 
-                struct ggml_tensor * v_cache_remain = ggml_view_2d(ctx->gctx.get(), v_cache, remain, hidden_size,
+                struct ggml_tensor * v_cache_remain = ggml_view_2d(ctx->gctx.get(), v_cache, remain, kv_hidden_size,
                                             max_length * ggml_element_size(v_cache),
                                             shift_pending.shift * ggml_element_size(v_cache));
-                struct ggml_tensor * v_cache_2d =     ggml_view_2d(ctx->gctx.get(), v_cache, remain, hidden_size,
+                struct ggml_tensor * v_cache_2d =     ggml_view_2d(ctx->gctx.get(), v_cache, remain, kv_hidden_size,
                                             max_length * ggml_element_size(v_cache),
                                             0);
 
@@ -317,7 +319,7 @@ namespace chatllm
         ggml_tensor *tmpv = v_proj.forward(ctx, hidden_states);
 
         // [qlen, heads, head_size]
-        ggml_tensor * key_layer = ggml_reshape_3d(ctx->gctx.get(), tmpk, head_size, num_attention_heads, qlen);
+        ggml_tensor * key_layer = ggml_reshape_3d(ctx->gctx.get(), tmpk, head_size, num_kv_heads, qlen);
         key_layer = apply_pos_embedding_k(ctx, key_layer, hidden_size, qlen, pos);
 
         // [qlen, heads, head_size]
@@ -327,15 +329,15 @@ namespace chatllm
         // store key and value to memory
         {
             // compute the transposed [N, n_embd] V matrix
-            struct ggml_tensor * Vcur = ggml_transpose(ctx->gctx.get(), tmpv); // ggml_reshape_2d(ctx->gctx.get(), tmpv, hidden_size, qlen));
+            struct ggml_tensor * Vcur = ggml_transpose(ctx->gctx.get(), tmpv); // ggml_reshape_2d(ctx->gctx.get(), tmpv, kv_hidden_size, qlen));
 
-            struct ggml_tensor * k_cache_view = ggml_view_1d(ctx->gctx.get(), k_cache, qlen * hidden_size,
-                                        ggml_element_size(k_cache) * hidden_size * n_past);
+            struct ggml_tensor * k_cache_view = ggml_view_1d(ctx->gctx.get(), k_cache, qlen * kv_hidden_size,
+                                        ggml_element_size(k_cache) * kv_hidden_size * n_past);
 
-            struct ggml_tensor * v_cache_view = ggml_view_2d(ctx->gctx.get(), v_cache, qlen, hidden_size,
+            struct ggml_tensor * v_cache_view = ggml_view_2d(ctx->gctx.get(), v_cache, qlen, kv_hidden_size,
                     max_length * ggml_element_size(v_cache), n_past * ggml_element_size(v_cache));
 
-            struct ggml_tensor * k_view = ggml_view_1d(ctx->gctx.get(), key_layer, qlen * hidden_size, 0);
+            struct ggml_tensor * k_view = ggml_view_1d(ctx->gctx.get(), key_layer, qlen * kv_hidden_size, 0);
 
             // important: storing RoPE-ed version of K in the KV cache!
             ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_view, k_cache_view));
@@ -344,11 +346,13 @@ namespace chatllm
 
         query_layer = ggml_permute(ctx->gctx.get(), query_layer, 0, 2, 1, 3);                     // [heads, qlen, head_size]
 
-        key_layer = ggml_view_1d(ctx->gctx.get(), k_cache, (n_past + qlen) * hidden_size, 0);
-        key_layer = ggml_reshape_3d(ctx->gctx.get(), key_layer, head_size, num_attention_heads, n_past + qlen);  // [qlen, heads, head_size]
-        key_layer = ggml_permute(ctx->gctx.get(), key_layer, 0, 2, 1, 3);                                        // [heads, qlen, head_size]
+        key_layer = ggml_view_1d(ctx->gctx.get(), k_cache, (n_past + qlen) * kv_hidden_size, 0);
+        key_layer = ggml_reshape_3d(ctx->gctx.get(), key_layer, head_size, num_kv_heads, n_past + qlen);  // [qlen, heads, head_size]
+        key_layer = ggml_permute(ctx->gctx.get(), key_layer, 0, 2, 1, 3);                                 // [heads, qlen, head_size]
 
+        // note auto-broadcasting in ggml_mul_mat for `repeat > 1`
         ggml_tensor *attn_scores = ggml_mul_mat(ctx->gctx.get(), key_layer, query_layer); // [heads, qlen, klen]
+
         attn_scores = apply_pos_embedding_kq(ctx, attn_scores, hidden_size, qlen, pos);
         attn_scores = ggml_scale_inplace(ctx->gctx.get(), attn_scores, ggml_new_f32(ctx->gctx.get(), 1.f / std::sqrt(head_size)));
 
@@ -360,7 +364,7 @@ namespace chatllm
 
         ggml_tensor * value_layer = ggml_view_3d(ctx->gctx.get(),
                         v_cache,
-                        n_past + qlen, head_size, num_attention_heads,
+                        n_past + qlen, head_size, num_kv_heads,
                         max_length * ggml_element_size(v_cache),
                         max_length * ggml_element_size(v_cache) * head_size,
                         0); // [heads, head_size, klen]

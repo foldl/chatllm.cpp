@@ -10,6 +10,7 @@
 
 namespace chatllm
 {
+    void inspect_tensor(ggml_tensor *tensor, const char *msg);
 
     class Block
     {
@@ -258,7 +259,7 @@ namespace chatllm
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}
 
-        LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int intermediate_size,
+        LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
                   int max_length)
             : input_layernorm(ctx, hidden_size),
               attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length),
@@ -309,14 +310,20 @@ namespace chatllm
     {
     public:
         BaseSelfAttention() : num_attention_heads(0) {}
-        BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool qkv_bias = false, bool o_bias = false)
+        BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool qkv_bias, bool o_bias)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, qkv_bias, o_bias)
+        {
+        }
+
+        BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
             : num_attention_heads(num_attention_heads),
+              num_kv_heads(num_kv_heads),
               q_proj(ctx, hidden_size, hidden_size, nullptr, qkv_bias),
-              k_proj(ctx, hidden_size, hidden_size, nullptr, qkv_bias),
-              v_proj(ctx, hidden_size, hidden_size, nullptr, qkv_bias),
+              k_proj(ctx, hidden_size, hidden_size / (num_attention_heads / num_kv_heads), nullptr, qkv_bias),
+              v_proj(ctx, hidden_size, hidden_size / (num_attention_heads / num_kv_heads), nullptr, qkv_bias),
               o_proj(ctx, hidden_size, hidden_size, o_bias),
-              k_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size * max_length)),
-              v_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size * max_length)),
+              k_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size / (num_attention_heads / num_kv_heads) * max_length)),
+              v_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size / (num_attention_heads / num_kv_heads) * max_length)),
               pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
               max_length(max_length),
               freq_base(10000.0f),
@@ -352,6 +359,7 @@ namespace chatllm
 
     public:
         int num_attention_heads;
+        int num_kv_heads;
         Linear q_proj, k_proj, v_proj;
         Linear o_proj;
         ggml_tensor *k_cache;
@@ -411,6 +419,9 @@ namespace chatllm
     public:
         LlamaSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
             : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, false, false) {}
+
+        LlamaSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
     };
 
     class LlamaBlock : public LMBlock1<LlamaSelfAttention, BaseMLP>
@@ -418,6 +429,10 @@ namespace chatllm
     public:
         LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
             : LMBlock1<LlamaSelfAttention, BaseMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, max_length, false),
+              max_length(max_length) {}
+
+        LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1<LlamaSelfAttention, BaseMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length),
               max_length(max_length) {}
     private:
         int max_length;

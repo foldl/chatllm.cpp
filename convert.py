@@ -12,6 +12,7 @@ from pathlib import Path
 from enum import Enum
 from pathlib import Path
 from typing import IO, Any, Iterable, List, Optional, Tuple
+import numpy as np
 
 import torch
 from torch import nn
@@ -46,6 +47,8 @@ class ModelType(Enum):
     BaiChuan = 0x200
     DeepSeek = 0x300
     DeepSeekCoder = 0x301
+    Yi = 0x400
+
 
 class TokenType(Enum):
     UNDEFINED    = 0
@@ -120,10 +123,10 @@ def load_model_file(path: Path) -> Dict:
         return torch.load(fp, map_location=torch.device('cpu')).items()
     elif struct.unpack('<Q', first8)[0] < 16 * 1024 * 1024:
         from safetensors import safe_open
-        tensors = {}
+        tensors = []
         with safe_open(path, framework="pt", device="cpu") as f:
             for key in f.keys():
-                tensors[key] = f.get_tensor(key)
+                tensors.append((key, f.get_tensor(key)))
         return tensors
     else:
         raise ValueError(f"unknown format: {path}")
@@ -131,7 +134,8 @@ def load_model_file(path: Path) -> Dict:
 def load_all_model_files(model_files) -> Dict:
     r = {}
     for f in model_files:
-        for k, v in load_model_file(f):
+        data = load_model_file(f)
+        for k, v in data:
             if k in r:
                 raise Exception(f"tensor {k} already loaded. maybe it is stored cross files?")
             r[k] = v
@@ -522,6 +526,35 @@ class BaiChuanConverter(BaseConverter):
 
         return weight_names
 
+class YiConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Yi
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        elif name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.rope_theta > 0, "rope_theta must be positive"
+        scaling = config.rope_scaling if config.rope_scaling is not None else 1.0
+
+        LlamaConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", scaling))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
+
 class DeepSeekCoderConverter(BaseConverter):
     MODEL_TYPE = ModelType.DeepSeekCoder
 
@@ -809,8 +842,72 @@ def main():
         DeepSeekCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'BaichuanForCausalLM':
         BaiChuanConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'yi':
+        YiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 
+class DumpModule(nn.Module):
+
+    def __init__(self, dumped_module, dump_path="./dump/"):
+        super().__init__()
+        self.dumped_module = dumped_module
+        self.dump_reg_hooks = []
+        self.dump_path = dump_path
+
+    def forward(self, inputs):
+        return self.dumped_module(inputs)
+
+    def save_tensor_to_text(self, tensor, file_name):
+        if 'device' not in set(dir(tensor)):
+            print(tensor)
+            return
+        if tensor.device != torch.device("cpu"):
+            tensor = tensor.to("cpu")
+        tensor_shape_str = '-'.join([str(i) for i in tensor.shape])
+        save_name = file_name + "_" + tensor_shape_str + ".npz"
+
+        tensor = tensor.detach().numpy()
+        np.savetxt(file_name, tensor.reshape(-1))
+        np.savez(save_name, input=tensor)
+        print("dump ", save_name, " success")
+
+    def dump_layer_output(self, module, inputs, outputs):
+            filename = self.dump_path + module.module_name
+            self.save_tensor_to_text(outputs, filename)
+
+    def reg_dump_hook(self, module_name, module):
+        if isinstance(module, nn.Module):
+            tmp_name = module_name + '_' + module._get_name()
+            module.__setattr__("module_name", tmp_name)
+
+            tmp_hook = module.register_forward_hook(self.dump_layer_output)
+            self.dump_reg_hooks.append(tmp_hook)
+
+            for name, mm in module.named_children():
+                tmp2_name = tmp_name + "_" + name
+                self.reg_dump_hook(tmp2_name, mm)
+
+    def init_dump(self):
+        for name, mm in self.dumped_module.named_children():
+            tmp_name = self.dumped_module._get_name() + "_" + name
+            self.reg_dump_hook(tmp_name, mm)
+
+def test(model_path):
+    from transformers import AutoTokenizer, LlamaForCausalLM
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+    prompt = "hi"
+    inputs = tokenizer(prompt, return_tensors="pt")
+    print(inputs.input_ids)
+
+    model = LlamaForCausalLM.from_pretrained(model_path)
+    dumpModule = DumpModule(dumped_module=model)
+    dumpModule.init_dump()
+
+    generate_ids = model.generate(inputs.input_ids, max_length=2, do_sample=False)
+    print(tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
+
 if __name__ == "__main__":
+    #test(r'')
     main()
