@@ -5,20 +5,27 @@ struct Config : public BaseConfig
     int num_kv_heads;
 };
 
+class ChatHistoryEncoder : public BaseHistoryEncoder
+{
+public:
+    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+};
+
+static ChatHistoryEncoder _chat_encoder;
+
 class Tokenizer : public BaseTokenizer
 {
 public:
-    Tokenizer(const Config &config) : BaseTokenizer::BaseTokenizer(config) {}
+    Tokenizer(const Config &config) : BaseTokenizer::BaseTokenizer(config, &_chat_encoder) {}
+
+    Tokenizer(const Config &config, BaseHistoryEncoder *encoder) : BaseTokenizer::BaseTokenizer(config, encoder) {}
 
     size_t load(const char *buffer, int n_vocab) override;
 
     void encode(const std::string &text, std::vector<int> &ids) const override;
 
     bool is_special_id(int id) const override;
-
-protected:
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
 
 public:
     int mask_token_id;
@@ -69,22 +76,22 @@ void Tokenizer::encode(const std::string &text, std::vector<int> &ids) const
     BaseTokenizer::encode(text, ids);
 }
 
-void Tokenizer::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
     std::ostringstream oss_prompt;
 
     oss_prompt << "[Round " << round_idx + 1 << "]\n\n问：" << user << "\n\n答：" << ai << "\n\n";
     auto text = oss_prompt.str();
-    encode(text, ids);
+    tokenizer->encode(text, ids);
 }
 
-void Tokenizer::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
     std::ostringstream oss_prompt;
 
     oss_prompt << "[Round " << round_idx + 1 << "]\n\n问：" << user << "\n\n";
     auto text = oss_prompt.str();
-    encode(text, ids);
+    tokenizer->encode(text, ids);
 }
 
 bool Tokenizer::is_special_id(int id) const

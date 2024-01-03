@@ -4,11 +4,20 @@ struct Config : public llama::Config
     float rope_theta;
 };
 
+class ChatHistoryEncoder : public BaseHistoryEncoder
+{
+public:
+    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+};
+
+static ChatHistoryEncoder _chat_encoder;
+
 class Tokenizer : public llama::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
-        : llama::Tokenizer::Tokenizer(config)
+        : llama::Tokenizer::Tokenizer(config, &_chat_encoder)
     {
         sys_prompt = "You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.";
     }
@@ -16,10 +25,6 @@ public:
     size_t load(const char *buffer, int n_vocab) override;
 
     bool is_special_id(int id) const override;
-
-protected:
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
 
 public:
     int fim_hole_token_id;
@@ -64,32 +69,34 @@ size_t Tokenizer::load(const char *buffer, int n_vocab)
     return size;
 }
 
-void Tokenizer::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     std::ostringstream oss_prompt;
 
     if (round_idx == 0)
-        oss_prompt << sys_prompt;
+        oss_prompt << tok->get_system_prompt();
 
     oss_prompt << "\n### Instruction:\n" << user
                << "\n### Response:\n" << ai << "\n<|EOT|>";
 
     auto text = oss_prompt.str();
-    encode(text, ids, true, false);
+    tok->encode(text, ids, true, false);
 }
 
-void Tokenizer::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     std::ostringstream oss_prompt;
 
     if (round_idx == 0)
-        oss_prompt << sys_prompt;
+        oss_prompt << tok->get_system_prompt();
 
     oss_prompt << "\n### Instruction:\n" << user
                << "\n### Response:\n";
 
     auto text = oss_prompt.str();
-    encode(text, ids, true, false);
+    tok->encode(text, ids, true, false);
 }
 
 bool Tokenizer::is_special_id(int id) const

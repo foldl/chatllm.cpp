@@ -45,6 +45,16 @@
 namespace chatllm
 {
 
+    int get_dims(ggml_tensor *tensor)
+    {
+        for (int i = GGML_MAX_DIMS - 1; i >= 0; i--)
+        {
+            if (tensor->ne[i] > 1)
+                return i + 1;
+        }
+        return 0;
+    }
+
     std::string trim(std::string str, const char *spaces)
     {
         str.erase(str.find_last_not_of(spaces) + 1);
@@ -52,15 +62,25 @@ namespace chatllm
         return str;
     }
 
-    BaseTokenizer::BaseTokenizer(const BaseConfig &config) :
-        tp(nullptr),
-        sys_prompt(""),
+    BaseTokenizer::BaseTokenizer(const BaseConfig &config,
+                        BaseHistoryEncoder *chat_encoder,
+                        BaseHistoryEncoder *qa_encoder,
+                        BaseHistoryEncoder *completion_encoder) :
         bos_token_id(config.bos_token_id),
         eos_token_id(config.eos_token_id),
         pad_token_id(config.pad_token_id),
         sep_token_id(config.sep_token_id),
-        history_offset(0)
+        tp(nullptr),
+        sys_prompt(""),
+        history_offset(0),
+        format(ChatFormat::CHAT),
+        chat_encoder(chat_encoder),
+        completion_encoder(completion_encoder),
+        qa_encoder(qa_encoder)
     {
+        chat_encoder->set_tokenizer(this);
+        if (completion_encoder) completion_encoder->set_tokenizer(this);
+        if (qa_encoder) qa_encoder->set_tokenizer(this);
     }
 
     std::string BaseTokenizer::preprocess(const std::string &text) const
@@ -116,10 +136,9 @@ namespace chatllm
         return start + 1;
     }
 
-    std::vector<int> BaseTokenizer::encode_history(const std::vector<std::string> &history, int max_length, const bool incremental)
+    std::vector<int> BaseTokenizer::encode_history(BaseHistoryEncoder *encoder, const std::vector<std::string> &history, int max_length, const bool incremental)
     {
         CHATLLM_CHECK(history.size() % 2 == 1) << "invalid history size " << history.size();
-
         std::vector<int> input_ids;
 
         if (!incremental)
@@ -131,22 +150,41 @@ namespace chatllm
             {
                 std::string user = trim(history[start]);
                 std::string ai = trim(history[start + 1]);
-
-                append_pair((start - history_offset) / 2, user, ai, input_ids);
+                encoder->append_pair((start - history_offset) / 2, user, ai, input_ids);
             }
         }
 
         std::string user = trim(history[history.size() - 1]);
-        append_user((int)((history.size() - history_offset - 1) / 2), trim(user), input_ids);
+        encoder->append_user((int)((history.size() - history_offset - 1) / 2), trim(user), input_ids);
 
         return input_ids;
     }
 
+    std::vector<int> BaseTokenizer::encode_history(const std::vector<std::string> &history, int max_length, const bool incremental)
+    {
+        switch (format)
+        {
+        case ChatFormat::COMPLETION:
+            if (completion_encoder)
+                return encode_history(completion_encoder, history, max_length, incremental);
+            else
+                return encode(history[history.size() - 1]);
+        case ChatFormat::QA:
+            if (qa_encoder)
+                return encode_history(qa_encoder, history, max_length, incremental);
+            else
+                return encode_history(chat_encoder, history, max_length, incremental);
+        default:
+            return encode_history(chat_encoder, history, max_length, incremental);
+        }
+    }
+
     static std::string shape_to_string(ggml_tensor *tensor)
     {
+        int n_dims = get_dims(tensor);
         std::ostringstream oss;
         oss << '[';
-        for (int i = tensor->n_dims - 1; i >= 0; i--)
+        for (int i = n_dims - 1; i >= 0; i--)
         {
             oss << tensor->ne[i] << (i > 0 ? ", " : "");
         }
@@ -156,9 +194,10 @@ namespace chatllm
 
     static std::string strides_to_string(ggml_tensor *tensor)
     {
+        int n_dims = get_dims(tensor);
         std::ostringstream oss;
         oss << '[';
-        for (int i = tensor->n_dims - 1; i >= 0; i--)
+        for (int i = n_dims - 1; i >= 0; i--)
         {
             oss << tensor->nb[i] << (i > 0 ? ", " : "");
         }
@@ -169,19 +208,20 @@ namespace chatllm
     std::string to_string(ggml_tensor *tensor, bool with_data)
     {
         std::ostringstream oss;
+        int n_dims = get_dims(tensor);
         oss << "ggml_tensor(";
 
         if (with_data)
         {
-            if (tensor->n_dims > 3)
+            if (n_dims > 3)
                 oss << "[";
             for (int i3 = 0; i3 < tensor->ne[3]; i3++)
             {
-                if (tensor->n_dims > 2)
+                if (n_dims > 2)
                     oss << (i3 > 0 ? ",\n\n[" : "[");
                 for (int i2 = 0; i2 < tensor->ne[2]; i2++)
                 {
-                    if (tensor->n_dims > 1)
+                    if (n_dims > 1)
                         oss << (i2 > 0 ? ",\n\n[" : "[");
                     for (int i1 = 0; i1 < tensor->ne[1]; i1++)
                     {
@@ -207,13 +247,13 @@ namespace chatllm
                         }
                         oss << "]";
                     }
-                    if (tensor->n_dims > 1)
+                    if (n_dims > 1)
                         oss << "]";
                 }
-                if (tensor->n_dims > 2)
+                if (n_dims > 2)
                     oss << "]";
             }
-            if (tensor->n_dims > 3)
+            if (n_dims > 3)
                 oss << "]";
         }
 
@@ -356,8 +396,9 @@ namespace chatllm
         // read and check tensor shape
         {
             int ndim = read_basic<int>();
-            CHATLLM_CHECK(ndim == tensor->n_dims)
-                << "tensor " << name << " ndim mismatch: expect " << tensor->n_dims << " but got " << ndim;
+            int n_dims = get_dims(tensor);
+            CHATLLM_CHECK(ndim == n_dims)
+                << "tensor " << name << " ndim mismatch: expect " << n_dims << " but got " << ndim;
             for (int i = ndim - 1; i >= 0; i--)
             {
                 int dim_size = read_basic<int>();
@@ -402,6 +443,7 @@ namespace chatllm
         tokenizer = std::move(result.tokenizer);
         model = std::move(result.model);
         model->terminate_token_id = tokenizer->get_terminate_token_id();
+        model->set_tokenizer(tokenizer.get());
 
         initializing = true;
     }

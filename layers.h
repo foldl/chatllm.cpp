@@ -10,12 +10,19 @@
 
 namespace chatllm
 {
-    void inspect_tensor(ggml_tensor *tensor, const char *msg);
+    void inspect_tensor(ggml_tensor *tensor, const char *msg,
+        ggml_tensor *temp1 = nullptr, ggml_tensor *temp2 = nullptr, ggml_tensor *temp3 = nullptr, ggml_tensor *temp4 = nullptr, ggml_tensor *temp5 = nullptr);
+
+    enum ActFunc
+    {
+        GELU,   // equivelent to `gelu_new`
+        SILU,
+    };
 
     class Block
     {
     public:
-        Block() {}
+        Block(): prec(ggml_prec::GGML_PREC_DEFAULT), id(0) {}
         virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input)
         {
             CHATLLM_THROW << "forward(ForwardContext *ctx, ggml_tensor *input): not implemented";
@@ -28,6 +35,31 @@ namespace chatllm
         }
         virtual void set_ctx(int n_ctx) const { }
         virtual void shift_cache(int shift, int total) { }
+
+        virtual void set_prec(ggml_prec prec)
+        {
+            this->prec = prec;
+        }
+
+        virtual void set_id(int id)
+        {
+            this->id = id;
+        }
+    protected:
+        ggml_prec prec;
+        int id;
+    };
+
+    class Identity : public Block
+    {
+    public:
+        Identity() {}
+        Identity(InitContext *ctx, int a) {}
+
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override
+        {
+            return input;
+        }
     };
 
     class ShiftPending
@@ -247,8 +279,10 @@ namespace chatllm
         Linear dense_4h_to_h;
     };
 
-    // ChatGLM2 and InternLM share the same architecture within each layer
-    template <class AttentionBlock, class MLPBlock> class LMBlock1 : public Block
+    template <class InputNormBlock,
+              class AttentionBlock,
+              class PostNormBlock,
+              class MLPBlock> class LMBlock1 : public Block
     {
     public:
         LMBlock1() = default;
@@ -292,30 +326,26 @@ namespace chatllm
         }
 
     public:
-        RMSNorm input_layernorm;
+        InputNormBlock input_layernorm;
         AttentionBlock attention;
-        RMSNorm post_attention_layernorm;
+        PostNormBlock post_attention_layernorm;
         MLPBlock mlp;
     };
 
-    class GLM2Block : public LMBlock1<GLM2SelfAttention, GLM2MLP>
+    class GLM2Block : public LMBlock1<RMSNorm, GLM2SelfAttention, RMSNorm, GLM2MLP>
     {
     public:
         GLM2Block(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int intermediate_size,
                   int max_length)
-            : LMBlock1<GLM2SelfAttention, GLM2MLP>(ctx, hidden_size, num_attention_heads, num_kv_heads, intermediate_size, max_length) {}
+            : LMBlock1(ctx, hidden_size, num_attention_heads, num_kv_heads, intermediate_size, max_length) {}
     };
 
-    class BaseSelfAttention : public Block
+    class BaseAttention : public Block
     {
     public:
-        BaseSelfAttention() : num_attention_heads(0) {}
-        BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool qkv_bias, bool o_bias)
-            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, qkv_bias, o_bias)
-        {
-        }
+        BaseAttention() : num_attention_heads(0) {}
 
-        BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
+        BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
             : num_attention_heads(num_attention_heads),
               num_kv_heads(num_kv_heads),
               q_proj(ctx, hidden_size, hidden_size, nullptr, qkv_bias),
@@ -332,7 +362,8 @@ namespace chatllm
               attn_factor(1.0f),
               beta_fast(0.0f),
               beta_slow(0.0f),
-              shift_pending()
+              shift_pending(),
+              attn_scaling(true)
         {
             k_cache->data = new char[ggml_nbytes(k_cache)]();
             v_cache->data = new char[ggml_nbytes(v_cache)]();
@@ -341,9 +372,6 @@ namespace chatllm
             pos->data = new char[ggml_nbytes(pos)]();
         }
 
-        using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
-
         void shift_cache(int shift, int total) override
         {
             shift_pending = ShiftPending(shift, total);
@@ -351,11 +379,18 @@ namespace chatllm
 
     protected:
         // input & output: [qlen, heads, head_size]
-        virtual ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const;
-        virtual ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const;
+        virtual ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const { return k; };
+        virtual ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const { return q; };
 
         //
         virtual ggml_tensor *apply_pos_embedding_kq(ForwardContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const { return kq; }
+
+        virtual void before_forward(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen);
+
+        virtual void save_to_cache(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen, ggml_tensor *k, ggml_tensor *v);
+
+        virtual ggml_tensor *cross_attention(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
+                                             ggml_tensor *q, ggml_tensor *k, ggml_tensor *v);
 
     public:
         int num_attention_heads;
@@ -375,8 +410,32 @@ namespace chatllm
         float beta_fast;
         float beta_slow;
 
-    private:
+    protected:
         ShiftPending shift_pending;
+        bool attn_scaling;
+    };
+
+    class BaseSelfAttention : public BaseAttention
+    {
+    public:
+        BaseSelfAttention() : BaseAttention() {}
+        BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool qkv_bias, bool o_bias)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, qkv_bias, o_bias)
+        {
+        }
+
+        BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias)
+        {
+        }
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
+
+    protected:
+        // input & output: [qlen, heads, head_size]
+        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
+        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
     };
 
     class InternLMSelfAttention : public BaseSelfAttention
@@ -384,6 +443,28 @@ namespace chatllm
     public:
         InternLMSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
             : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, true, true) {}
+    };
+
+    // This is **the** feed forward network (Multi-Layer Perceptron) in _Attention Is All You Need_.
+    class TheMLP : public Block
+    {
+    public:
+        TheMLP() = default;
+        TheMLP(InitContext *ctx, int hidden_size, int intermediate_size, ActFunc act, bool bias)
+            : fc0(ctx, hidden_size, intermediate_size, bias),
+              fc1(ctx, intermediate_size, hidden_size, bias),
+              act(act)
+        {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+
+        void set_prec(ggml_prec prec) override;
+
+    public:
+        Linear fc0;
+        Linear fc1;
+        ActFunc act;
     };
 
     class BaseMLP : public Block
@@ -404,11 +485,11 @@ namespace chatllm
         Linear up_proj;
     };
 
-    class InternLMBlock : public LMBlock1<InternLMSelfAttention, BaseMLP>
+    class InternLMBlock : public LMBlock1<RMSNorm, InternLMSelfAttention, RMSNorm, BaseMLP>
     {
     public:
         InternLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
-            : LMBlock1<InternLMSelfAttention, BaseMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, max_length, false),
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length, false),
               max_length(max_length) {}
     private:
         int max_length;
@@ -424,15 +505,105 @@ namespace chatllm
             : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
     };
 
-    class LlamaBlock : public LMBlock1<LlamaSelfAttention, BaseMLP>
+    class LlamaBlock : public LMBlock1<RMSNorm, LlamaSelfAttention, RMSNorm, BaseMLP>
     {
     public:
         LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
-            : LMBlock1<LlamaSelfAttention, BaseMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, max_length, false),
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length, false),
               max_length(max_length) {}
 
         LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock1<LlamaSelfAttention, BaseMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length),
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length),
+              max_length(max_length) {}
+    private:
+        int max_length;
+    };
+
+    class Phi2MLP : public TheMLP
+    {
+    public:
+        Phi2MLP(InitContext *ctx, int hidden_size, int intermediate_size)
+            : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true)
+        {
+            // set_prec(ggml_prec::GGML_PREC_F32);
+        }
+    };
+
+    template <class InputNormBlock,
+              class AttentionBlock,
+              class MLPBlock> class LMBlock2 : public Block
+    {
+    public:
+        LMBlock2() = default;
+
+        LMBlock2(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int max_length, bool qkv_bias = true, bool o_bias = true)
+            : input_layernorm(ctx, hidden_size),
+              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
+              mlp(ctx, hidden_size, intermediate_size) {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
+        {
+            ggml_tensor *residual = ggml_dup(ctx->gctx.get(), hidden_states);
+            ggml_build_forward_expand(ctx->gf, residual);
+
+            hidden_states = input_layernorm.forward(ctx, hidden_states);
+
+            // TODO: why `hidden_state` is overwritten somewhere?
+            ggml_tensor *dup_hidden = ggml_dup(ctx->gctx.get(), hidden_states);
+            ggml_build_forward_expand(ctx->gf, dup_hidden);
+
+            ggml_tensor *attn_outputs = attention.forward(ctx, dup_hidden, n_past);
+            ggml_tensor *feed_forward_hidden_states = mlp.forward(ctx, dup_hidden);
+
+            // CAUTION: MEMORY REUSED BETWEEN LAYERS
+            ggml_tensor *r = ggml_add_inplace(ctx->gctx.get(), feed_forward_hidden_states, residual);
+            r = ggml_add_inplace(ctx->gctx.get(), r, attn_outputs);
+
+            return r;
+        }
+
+        void shift_cache(int shift, int total) override
+        {
+            attention.shift_cache(shift, total);
+        }
+
+    public:
+        InputNormBlock input_layernorm;
+        AttentionBlock attention;
+        MLPBlock mlp;
+    };
+
+    // Let's name it CrossAttention as in [`modeling_phi.py`](). Take it easy.
+    class Phi2CrossAttention : public BaseSelfAttention
+    {
+    public:
+        Phi2CrossAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool qkv_bias, bool o_bias)
+            : Phi2CrossAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, qkv_bias, o_bias)
+        {
+        }
+
+        Phi2CrossAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
+              rope_dim(32)
+        {
+            attn_scaling = false;
+        }
+
+    protected:
+        // input & output: [qlen, heads, head_size]
+        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
+        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
+
+        const int rope_dim;
+    };
+
+    class Phi2Block : public LMBlock2<LayerNorm, Phi2CrossAttention, Phi2MLP>
+    {
+    public:
+        Phi2Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock2(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length, true, true),
               max_length(max_length) {}
     private:
         int max_length;

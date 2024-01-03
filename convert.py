@@ -45,9 +45,13 @@ class ModelType(Enum):
     CodeLlaMA = 0x151
 
     BaiChuan = 0x200
+
     DeepSeek = 0x300
     DeepSeekCoder = 0x301
+
     Yi = 0x400
+
+    Phi2 = 0x500
 
 
 class TokenType(Enum):
@@ -731,6 +735,89 @@ class CodeGeeX2Converter(BaseConverter):
     def get_weight_names(config):
         return ChatGLM2Converter.get_weight_names(config)
 
+class Phi2Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Phi2
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        added = {}
+        removed = []
+        for name in state_dict:
+
+            if name.find('.Wqkv.') < 0:
+                continue
+
+            tensor: torch.Tensor = state_dict[name]
+            removed.append(name)
+
+            wq = part(tensor, 0)
+            wk = part(tensor, 1)
+            wv = part(tensor, 2)
+
+            if False: #name.endswith('weight'):
+                wq =  permute(wq, config.n_head)
+                wk =  permute(wk, config.n_head)
+
+            added[name.replace('Wqkv', 'q_proj')] = wq
+            added[name.replace('Wqkv', 'k_proj')] = wk
+            added[name.replace('Wqkv', 'v_proj')] = wv
+
+        for s in removed:
+            del state_dict[s]
+        for name in added:
+            state_dict[name] = added[name]
+        return state_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.activation_function == 'gelu_new', "activation_function must be gelu_new"
+        assert config.n_head_kv is None, "n_head_kv must be null"
+        assert config.rotary_dim == config.n_head, "rotary_dim must == n_head"
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.n_embd,
+            config.n_head,
+            config.n_layer,
+            config.n_inner if config.n_inner is not None else 4 * config.n_embd,
+            config.n_positions,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["transformer.embd.wte.weight"]
+        for i in range(config.n_layer):
+            weight_names += [
+                f"transformer.h.{i}.ln.bias",
+                f"transformer.h.{i}.ln.weight",
+                f"transformer.h.{i}.mixer.q_proj.bias",
+                f"transformer.h.{i}.mixer.q_proj.weight",
+                f"transformer.h.{i}.mixer.k_proj.bias",
+                f"transformer.h.{i}.mixer.k_proj.weight",
+                f"transformer.h.{i}.mixer.v_proj.bias",
+                f"transformer.h.{i}.mixer.v_proj.weight",
+                f"transformer.h.{i}.mixer.out_proj.bias",
+                f"transformer.h.{i}.mixer.out_proj.weight",
+                f"transformer.h.{i}.mlp.fc1.bias",
+                f"transformer.h.{i}.mlp.fc1.weight",
+                f"transformer.h.{i}.mlp.fc2.bias",
+                f"transformer.h.{i}.mlp.fc2.weight",
+            ]
+
+        weight_names += [
+            "lm_head.ln.bias",
+            "lm_head.ln.weight",
+            "lm_head.linear.bias",
+            "lm_head.linear.weight",
+        ]
+
+        return weight_names
+
 def load_vocab(path: Path) -> Any:
     # Be extra-friendly and accept either a file or a directory.  Also, if it's
     # a directory, it might be the model directory, and tokenizer.model might
@@ -844,8 +931,15 @@ def main():
         BaiChuanConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'yi':
         YiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'PhiForCausalLM':
+        Phi2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
+
+def detect_layer_index(tensor_name: str) -> int:
+    import re
+    r = re.findall('PhiForCausalLM_transformer_PhiModel_h_ModuleList_([0-9]*)_', tensor_name)
+    return int(r[0]) if len(r) == 1 else -1
 
 class DumpModule(nn.Module):
 
@@ -859,9 +953,8 @@ class DumpModule(nn.Module):
         return self.dumped_module(inputs)
 
     def save_tensor_to_text(self, tensor, file_name):
-        if 'device' not in set(dir(tensor)):
-            print(tensor)
-            return
+        if isinstance(tensor, tuple):
+            tensor = tensor[0]
         if tensor.device != torch.device("cpu"):
             tensor = tensor.to("cpu")
         tensor_shape_str = '-'.join([str(i) for i in tensor.shape])
@@ -870,7 +963,7 @@ class DumpModule(nn.Module):
         tensor = tensor.detach().numpy()
         np.savetxt(file_name, tensor.reshape(-1))
         np.savez(save_name, input=tensor)
-        print("dump ", save_name, " success")
+        # print("dump ", save_name, " success")
 
     def dump_layer_output(self, module, inputs, outputs):
             filename = self.dump_path + module.module_name
@@ -879,6 +972,11 @@ class DumpModule(nn.Module):
     def reg_dump_hook(self, module_name, module):
         if isinstance(module, nn.Module):
             tmp_name = module_name + '_' + module._get_name()
+
+            layer_index = detect_layer_index(tmp_name)
+            if (layer_index >= 0) and (layer_index != 0):
+                return
+
             module.__setattr__("module_name", tmp_name)
 
             tmp_hook = module.register_forward_hook(self.dump_layer_output)
@@ -894,14 +992,14 @@ class DumpModule(nn.Module):
             self.reg_dump_hook(tmp_name, mm)
 
 def test(model_path):
-    from transformers import AutoTokenizer, LlamaForCausalLM
+    from transformers import AutoTokenizer, AutoModelForCausalLM
     tokenizer = AutoTokenizer.from_pretrained(model_path)
 
     prompt = "hi"
     inputs = tokenizer(prompt, return_tensors="pt")
     print(inputs.input_ids)
 
-    model = LlamaForCausalLM.from_pretrained(model_path)
+    model = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True)
     dumpModule = DumpModule(dumped_module=model)
     dumpModule.init_dump()
 
@@ -909,5 +1007,5 @@ def test(model_path):
     print(tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
 
 if __name__ == "__main__":
-    #test(r'')
+    # test(r'C:\projects\Phi-2')
     main()

@@ -2,13 +2,26 @@ struct Config : public BaseConfig
 {
 };
 
+class ChatHistoryEncoder : public BaseHistoryEncoder
+{
+public:
+    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+};
+
+static ChatHistoryEncoder _chat_encoder;
+
 class Tokenizer : public BaseTokenizer
 {
 public:
     Tokenizer(const Config &config)
-        : BaseTokenizer::BaseTokenizer(config)
+        : Tokenizer(config, &_chat_encoder)
+    {}
+
+    Tokenizer(const Config &config, BaseHistoryEncoder *encoder)
+        : BaseTokenizer::BaseTokenizer(config, encoder)
     {
-        sys_prompt = R"""(You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
+    sys_prompt = R"""(You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
 
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information.)""";
     }
@@ -19,10 +32,7 @@ If a question does not make any sense, or is not factually coherent, explain why
 
     bool is_special_id(int id) const override;
 
-protected:
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
-
+public:
     void encode(const std::string &text, std::vector<int> &ids, bool add_bos, bool add_eos) const;
 };
 
@@ -69,30 +79,32 @@ void Tokenizer::encode(const std::string &text, std::vector<int> &ids) const
     encode(text, ids, false, false);
 }
 
-void Tokenizer::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     std::ostringstream oss_prompt;
 
     if (round_idx == 0)
-        oss_prompt << "<<SYS>>\n" << sys_prompt << "\n<</SYS>>\n\n";
+        oss_prompt << "<<SYS>>\n" << tok->get_system_prompt() << "\n<</SYS>>\n\n";
 
     oss_prompt << "[INST] " + user << "[/INST] " << ai;
 
     auto text = oss_prompt.str();
-    encode(text, ids, true, true);
+    tok->encode(text, ids, true, true);
 }
 
-void Tokenizer::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     std::ostringstream oss_prompt;
 
     if (round_idx == 0)
-        oss_prompt << "<<SYS>>\n" << sys_prompt << "\n<</SYS>>\n\n";
+        oss_prompt << "<<SYS>>\n" << tok->get_system_prompt() << "\n<</SYS>>\n\n";
 
     oss_prompt << "[INST] " + user << "[/INST] ";
 
     auto text = oss_prompt.str();
-    encode(text, ids, true, false);
+    tok->encode(text, ids, true, false);
 }
 
 bool Tokenizer::is_special_id(int id) const

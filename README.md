@@ -30,6 +30,9 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] [InternLM Chat-7B](https://huggingface.co/internlm/internlm-chat-7b)
     * [x] [InternLM Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1)
 
+* Phi
+    * [x] [Phi-2](https://huggingface.co/microsoft/phi-2)
+
 ## Features
 
 * [x] Pure C++ implementation based on [ggml](https://github.com/ggerganov/ggml);

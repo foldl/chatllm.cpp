@@ -29,6 +29,8 @@ struct Args
     int num_threads = 0;
     bool multi_line = false;
     int seed;
+    chatllm::ChatFormat format = chatllm::ChatFormat::CHAT;
+    bool tokenize = false;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -45,16 +47,19 @@ void usage(const char *prog)
               << "  -s, --system SYSTEM     system prompt (instruction) (default: model specific)\n"
               << "  -i, --interactive       run in interactive mode\n"
               << "  -l, --max_length N      max total length including prompt and output (default: model specific)\n"
+              << "  -t, --threads N         number of threads for inference (default: number of cores)\n"
               << "  -c, --max_context_length N\n"
               << "                          max context length (default: 512)\n"
-              << "  --extending             context extending method (restart | shift) (default: restart)\n"
+              << "  --extending EXT         context extending method (EXT = restart | shift) (default: restart)\n"
               << "  --top_k N               top-k sampling (default: 0)\n"
               << "  --top_p N               top-p sampling (default: 0.7)\n"
               << "  --temp N                temperature (default: 0.95)\n"
-              << "  -t, --threads N         number of threads for inference (default: number of cores)\n"
               << "  --seed N                seed for random generator (default: random)\n"
               << "  --multi                 enabled multiple lines of input\n"
-              << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n";
+              << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n"
+              << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
+              << "  --tokenize              (debug)tokenize `prompt` and exit"
+              ;
 }
 
 static Args parse_args(int argc, const char **argv)
@@ -95,6 +100,23 @@ static Args parse_args(int argc, const char **argv)
         else if (strcmp(arg, "--multi") == 0)
         {
             args.multi_line = true;
+        }
+        else if (strcmp(arg, "--tokenize") == 0)
+        {
+            args.tokenize = true;
+        }
+        else if (strcmp(arg, "--format") == 0)
+        {
+            c++;
+            if (c < argc)
+            {
+                if (strcmp(argv[c], "completion") == 0)
+                    args.format = chatllm::ChatFormat::COMPLETION;
+                else if (strcmp(argv[c], "qa") == 0)
+                    args.format = chatllm::ChatFormat::QA;
+                else
+                    args.format = chatllm::ChatFormat::CHAT;
+            }
         }
         handle_param("--model",                 "-m", model_path,           std::string)
         handle_param("--prompt",                "-p", prompt,               std::string)
@@ -228,6 +250,8 @@ void chat(Args &args)
     else
         pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Restart);
 
+    pipeline.tokenizer->set_chat_format(args.format);
+
     const std::string ai_prompt   = "A.I.";
     const std::string user_prompt = "You";
     const int prompt_len = 4;
@@ -240,6 +264,16 @@ void chat(Args &args)
 #if defined(_WIN32)
     _setmode(_fileno(stdin), _O_WTEXT);
 #endif
+
+    if (args.tokenize)
+    {
+        auto ids = pipeline.tokenizer->encode(args.prompt);
+        std::cout << "ID: ";
+        for (auto x : ids)
+            std::cout << x << ", ";
+        std::cout << std::endl;
+        return;
+    }
 
     if (!args.interactive)
     {

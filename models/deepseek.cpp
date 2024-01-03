@@ -2,21 +2,26 @@ struct Config : public llama::Config
 {
 };
 
+class ChatHistoryEncoder : public BaseHistoryEncoder
+{
+public:
+    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+};
+
+static ChatHistoryEncoder _chat_encoder;
+
 class Tokenizer : public llama::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
-        : llama::Tokenizer::Tokenizer(config)
+        : llama::Tokenizer::Tokenizer(config, &_chat_encoder)
     {
     }
 
     size_t load(const char *buffer, int n_vocab) override;
 
     bool is_special_id(int id) const override;
-
-protected:
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
 };
 
 class ConditionalGeneration : public llama::ConditionalGeneration
@@ -36,32 +41,34 @@ size_t Tokenizer::load(const char *buffer, int n_vocab)
     return size;
 }
 
-void Tokenizer::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     std::ostringstream oss_prompt;
 
-    if ((round_idx == 0) && (sys_prompt.size() > 0))
-        oss_prompt << sys_prompt << "\n\n";
+    if ((round_idx == 0) && (tok->get_system_prompt().size() > 0))
+        oss_prompt << tok->get_system_prompt() << "\n\n";
 
     oss_prompt << "User: " << user << "\n\n"
                << "Assistant: " << ai;
 
     auto text = oss_prompt.str();
-    encode(text, ids, true, true);
+    tok->encode(text, ids, true, true);
 }
 
-void Tokenizer::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     std::ostringstream oss_prompt;
 
-    if ((round_idx == 0) && (sys_prompt.size() > 0))
-        oss_prompt << sys_prompt << "\n\n";
+    if ((round_idx == 0) && (tok->get_system_prompt().size() > 0))
+        oss_prompt << tok->get_system_prompt() << "\n\n";
 
     oss_prompt << "User: " << user << "\n\n"
                << "Assistant: ";
 
     auto text = oss_prompt.str();
-    encode(text, ids, true, false);
+    tok->encode(text, ids, true, false);
 }
 
 bool Tokenizer::is_special_id(int id) const

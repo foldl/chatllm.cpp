@@ -4,18 +4,23 @@ struct Config : public glm::v2::Config
 {
 };
 
+class ChatHistoryEncoder : public BaseHistoryEncoder
+{
+public:
+    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+};
+
+static ChatHistoryEncoder _chat_encoder;
+
 class Tokenizer : public glm::v2::Tokenizer
 {
 public:
-    Tokenizer(const Config &config) : glm::v2::Tokenizer::Tokenizer(config) {}
+    Tokenizer(const Config &config) : glm::v2::Tokenizer::Tokenizer(config, &_chat_encoder) {}
 
     size_t load(const char *buffer, int n_vocab) override;
 
     bool is_special_id(int id) const override;
-
-protected:
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
 
 public:
     int system_token_id;
@@ -46,31 +51,33 @@ size_t Tokenizer::load(const char *buffer, int n_vocab)
     return size;
 }
 
-void Tokenizer::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
-    if ((round_idx == 0) && (sys_prompt.size() > 0))
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+    if ((round_idx == 0) && (tok->get_system_prompt().size() > 0))
     {
-        ids.push_back(system_token_id);
-        encode(sys_prompt, ids);
+        ids.push_back(tok->system_token_id);
+        tok->encode(tok->get_system_prompt(), ids);
     }
 
-    ids.push_back(user_token_id);
-    encode(user, ids);
-    ids.push_back(assistant_token_id);
-    encode(ai, ids);
+    ids.push_back(tok->user_token_id);
+    tok->encode(user, ids);
+    ids.push_back(tok->assistant_token_id);
+    tok->encode(ai, ids);
 }
 
-void Tokenizer::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
-    if ((round_idx == 0) && (sys_prompt.size() > 0))
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+    if ((round_idx == 0) && (tok->get_system_prompt().size() > 0))
     {
-        ids.push_back(system_token_id);
-        encode(sys_prompt, ids);
+        ids.push_back(tok->system_token_id);
+        tok->encode(tok->get_system_prompt(), ids);
     }
 
-    ids.push_back(user_token_id);
-    encode(user, ids);
-    ids.push_back(assistant_token_id);
+    ids.push_back(tok->user_token_id);
+    tok->encode(user, ids);
+    ids.push_back(tok->assistant_token_id);
 }
 
 bool Tokenizer::is_special_id(int id) const

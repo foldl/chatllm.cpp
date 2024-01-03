@@ -36,7 +36,7 @@ namespace chatllm
                 float * p = (float *)tensor->data;
                 for (size_t i = 0; i < ggml_nbytes(tensor) / sizeof(float); i++)
                 {
-                    printf("[%3d] = %e\n", (int)i, p[i]);
+                    printf("[%3d] = %.15e\n", (int)i, p[i]);
                 }
             }
             break;
@@ -57,12 +57,22 @@ namespace chatllm
         printf("\n");
     }
 
-    void inspect_tensor(ggml_tensor *tensor, const char *msg)
+    void inspect_tensor(ggml_tensor *tensor, const char *msg, ggml_tensor *temp1, ggml_tensor *temp2, ggml_tensor *temp3, ggml_tensor *temp4, ggml_tensor *temp5)
     {
-        ggml_build_forward_expand(dbg_ctx->gf, tensor);
+        ggml_tensor *dup = ggml_dup(dbg_ctx->gctx.get(), tensor);
+        ggml_build_forward_expand(dbg_ctx->gf, dup);
         ggml_graph_compute_with_ctx(dbg_ctx->gctx.get(), dbg_ctx->gf, 4);
         printf("%s:\n", msg);
-        print_tensor(tensor);
+        print_tensor(dup);
+
+        #define CHECK_AND_PRINT(tt, msg) do { if (tt) { printf("\n--------------- %s ----------------------\n", msg); print_tensor(tt); } } while (0)
+
+        CHECK_AND_PRINT(temp1, "1");
+        CHECK_AND_PRINT(temp2, "2");
+        CHECK_AND_PRINT(temp3, "3");
+        CHECK_AND_PRINT(temp4, "4");
+        CHECK_AND_PRINT(temp5, "5");
+
         exit(-3);
     }
 
@@ -84,6 +94,8 @@ namespace chatllm
         MODEL_TYPE_DEEPSEEK_CODER   = MODEL_TYPE_DEEPSEEK + 1,
 
         MODEL_TYPE_YI       = 0x400,
+
+        MODEL_TYPE_PHI2     = 0x500,
     };
 
     std::string to_string(ModelType model_type)
@@ -112,6 +124,8 @@ namespace chatllm
             return "DeepSeek-Coder";
         case MODEL_TYPE_YI:
             return "Yi";
+        case MODEL_TYPE_PHI2:
+            return "Phi-2";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -126,6 +140,8 @@ namespace chatllm
             return "书生";
         case MODEL_TYPE_BAICHUAN:
             return "百川";
+        case MODEL_TYPE_PHI2:
+            return "Φ";
         default:
             return "";
         }
@@ -181,7 +197,9 @@ namespace chatllm
             {
                 int next_token_id = generate_next_token(curr_input_ids, gen_config);
 //printf("\nnext = %d\n", next_token_id);
-                if (next_token_id == terminate_token_id)
+
+                int pop_output = 0;
+                if (is_output_terminated(next_token_id, output_ids, pop_output))
                 {
                     completed = true;
                     break;
@@ -198,7 +216,7 @@ namespace chatllm
                 if (streamer)
                     streamer->put({next_token_id});
 
-                if (next_token_id == config_.eos_token_id)
+                if (next_token_id == tokenizer->eos_token_id)
                 {
                     completed = true;
                     break;
@@ -307,6 +325,31 @@ namespace chatllm
             bool operator>(const TokenIdScore &other) const { return score > other.score; }
         };
 
+    protected:
+        virtual bool is_output_terminated(int next_token_id, const std::vector<int> &output_ids, int &pop_output)
+        {
+            bool r = next_token_id == terminate_token_id;
+            if (r)
+                pop_output = 0;
+            return r;
+        }
+
+        bool match_output_sequence(int next_token_id, const std::vector<int> &output_ids, const std::vector<int> &pattern)
+        {
+            if (output_ids.size() + 1 < pattern.size())
+                return false;
+
+            auto x0 = output_ids.begin() + output_ids.size() - pattern.size() + 1;
+            auto x1 = pattern.begin();
+
+            for (size_t i = 1; i < pattern.size(); i++, x0++, x1++)
+            {
+                if (*x0 != *x1)
+                    return false;
+            }
+            return pattern[pattern.size() - 1] == next_token_id;
+        }
+
     private:
         static void sampling_softmax_inplace(TokenIdScore *first, TokenIdScore *last)
         {
@@ -353,19 +396,25 @@ namespace chatllm
     {
     public:
         Model() = default;
-        Model(InitContext *ctx, const Config &config, bool shared_head, _Types... layer_args)
+        Model(InitContext *ctx, const Config &config, bool shared_head, bool lm_head_bias, _Types... layer_args)
         : config(config),
           word_embeddings(ctx, config.vocab_size, config.hidden_size),
           final_layernorm(ctx, config.hidden_size),
           shared_head(shared_head)
         {
-            lm_head = shared_head ? Linear() : Linear(ctx, config.hidden_size, config.vocab_size, false),
+            lm_head = shared_head ? Linear() : Linear(ctx, config.hidden_size, config.vocab_size, lm_head_bias),
 
             layers.reserve(config.num_hidden_layers);
             for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
             {
                 layers.emplace_back(ctx, std::forward<_Types>(layer_args)...);
             }
+        }
+
+        Model(InitContext *ctx, const Config &config, bool shared_head, _Types... layer_args)
+        : Model(ctx, config, shared_head, false, std::forward<_Types>(layer_args)...)
+        {
+
         }
 
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
@@ -396,6 +445,7 @@ namespace chatllm
         ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
             ggml_set_scratch(ctx->gctx.get(), {.offs = 0, .size = 0, .data = nullptr});
+
             ggml_tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
             // NOTE: only compute next_token_logits for the last token
             if (input_ids->ne[0] > 1)
@@ -420,7 +470,6 @@ namespace chatllm
     private:
         bool shared_head;
     };
-
     namespace glm
     {
         namespace v1
@@ -481,6 +530,10 @@ namespace chatllm
     {
         #include "models/yi.cpp"
     }
+    namespace phi2
+    {
+        #include "models/phi2.cpp"
+    }
 
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
@@ -496,7 +549,11 @@ namespace chatllm
 
 #if (0)
         // test tokenizer
-        std::vector<int> ids = {0,1,2,195,196};
+        std::vector<int> ids = result.tokenizer->encode("\nAlice:");
+        for (auto x : ids) std::cout << x << ", ";
+        std::cout << std::endl;
+
+        //ids = {0,1,2,195,196};
         std::cout << result.tokenizer->decode(ids) << std::endl;
         exit(-1);
 #endif
@@ -598,6 +655,14 @@ namespace chatllm
             return load_model<yi::Config,
                               yi::Tokenizer,
                               yi::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_PHI2:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<phi2::Config,
+                              phi2::Tokenizer,
+                              phi2::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

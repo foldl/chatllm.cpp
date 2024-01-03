@@ -19,6 +19,18 @@
 
 namespace chatllm
 {
+    ggml_tensor *inplace_act(ggml_context *ctx, ActFunc act, ggml_tensor *input)
+    {
+        switch (act)
+        {
+        case ActFunc::GELU:
+            return ggml_gelu_inplace(ctx, input);
+
+        default:
+            return ggml_silu_inplace(ctx, input);
+        }
+    }
+
     ggml_tensor *Embedding::forward(ForwardContext *ctx, ggml_tensor *input)
     {
         ggml_tensor *output = ggml_get_rows(ctx->gctx.get(), weight, input);
@@ -29,6 +41,7 @@ namespace chatllm
     {
         // input: [seqlen, in_features]
         ggml_tensor *output = ggml_mul_mat(ctx->gctx.get(), weight, input); // [seqlen, out_features]
+        ggml_mul_mat_set_prec(output, prec);
         if (bias)
         {
             output = ggml_add_inplace(ctx->gctx.get(), output, bias);
@@ -144,7 +157,7 @@ namespace chatllm
             ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), inf, masked_attn_scores));
         }
         attn_scores =
-            ggml_scale_inplace(ctx->gctx.get(), attn_scores, ggml_new_f32(ctx->gctx.get(), 1.f / std::sqrt(head_size)));
+            ggml_scale_inplace(ctx->gctx.get(), attn_scores, 1.f / std::sqrt(head_size));
         ggml_tensor *attn_probs = ggml_soft_max_inplace(ctx->gctx.get(), attn_scores); // [heads, qlen, klen]
 
         ggml_tensor *context_layer = ggml_mul_mat(ctx->gctx.get(), value_layer, attn_probs); // [heads, qlen, head_size]
@@ -158,7 +171,7 @@ namespace chatllm
 
     ggml_tensor *GLMBlock::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
     {
-        ggml_tensor *alpha = ggml_new_f32(ctx->gctx.get(), std::sqrt(2.f * num_hidden_layers));
+        float alpha = std::sqrt(2.f * num_hidden_layers);
 
         ggml_tensor *attn_input = input_layernorm.forward(ctx, hidden_states);
         ggml_tensor *attn_output = attention.forward(ctx, attn_input, n_past);
@@ -270,6 +283,21 @@ namespace chatllm
         return output;
     }
 
+    ggml_tensor *TheMLP::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
+    {
+        ggml_tensor *intermediate = fc0.forward(ctx, hidden_states);
+        intermediate = inplace_act(ctx->gctx.get(), act, intermediate);
+        ggml_tensor *output = fc1.forward(ctx, intermediate);
+        return output;
+    }
+
+    void TheMLP::set_prec(ggml_prec prec)
+    {
+        Block::set_prec(prec);
+        fc0.set_prec(prec);
+        fc1.set_prec(prec);
+    }
+
     ggml_tensor *BaseMLP::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
     {
         ggml_tensor *act = ggml_silu_inplace(ctx->gctx.get(), gate_proj.forward(ctx, hidden_states));
@@ -280,14 +308,8 @@ namespace chatllm
         return output;
     }
 
-    ggml_tensor *BaseSelfAttention::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
+    void BaseAttention::before_forward(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen)
     {
-        const int hidden_size = hidden_states->ne[0];
-        const int qlen = hidden_states->ne[1];
-        const int head_size = hidden_size / num_attention_heads;
-        const int repeat = num_attention_heads / num_kv_heads;
-        const int kv_hidden_size = hidden_size / repeat;
-
         fill_pos_vector(pos, n_past, qlen);
 
         // shift cache
@@ -313,36 +335,47 @@ namespace chatllm
             }
             shift_pending.clear();
         }
+    }
 
-        ggml_tensor *tmpq = q_proj.forward(ctx, hidden_states);
-        ggml_tensor *tmpk = k_proj.forward(ctx, hidden_states);
-        ggml_tensor *tmpv = v_proj.forward(ctx, hidden_states);
+    void BaseAttention::save_to_cache(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen,
+        ggml_tensor *k, ggml_tensor *v)
+    {
+        // compute the transposed [N, n_embd] V matrix
+        struct ggml_tensor * Vcur = ggml_transpose(ctx->gctx.get(), v); // ggml_reshape_2d(ctx->gctx.get(), tmpv, kv_hidden_size, qlen));
+
+        struct ggml_tensor * k_cache_view = ggml_view_1d(ctx->gctx.get(), k_cache, qlen * kv_hidden_size,
+                                    ggml_element_size(k_cache) * kv_hidden_size * n_past);
+
+        struct ggml_tensor * v_cache_view = ggml_view_2d(ctx->gctx.get(), v_cache, qlen, kv_hidden_size,
+                max_length * ggml_element_size(v_cache), n_past * ggml_element_size(v_cache));
+
+        struct ggml_tensor * k_view = ggml_view_1d(ctx->gctx.get(), k, qlen * kv_hidden_size, 0);
+
+        // important: storing RoPE-ed version of K in the KV cache!
+        ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_view, k_cache_view));
+        ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), Vcur, v_cache_view));
+    }
+
+    ggml_tensor *BaseAttention::cross_attention(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
+                                             ggml_tensor *q, ggml_tensor *k, ggml_tensor *v)
+    {
+        const int head_size = hidden_size / num_attention_heads;
+        const int repeat = num_attention_heads / num_kv_heads;
+        const int kv_hidden_size = hidden_size / repeat;
 
         // [qlen, heads, head_size]
-        ggml_tensor * key_layer = ggml_reshape_3d(ctx->gctx.get(), tmpk, head_size, num_kv_heads, qlen);
+        ggml_tensor * key_layer = ggml_reshape_3d(ctx->gctx.get(), k, head_size, num_kv_heads, qlen);
         key_layer = apply_pos_embedding_k(ctx, key_layer, hidden_size, qlen, pos);
 
         // [qlen, heads, head_size]
-        ggml_tensor * query_layer = ggml_reshape_3d(ctx->gctx.get(), tmpq, head_size, num_attention_heads, qlen);
+        ggml_tensor * query_layer = ggml_reshape_3d(ctx->gctx.get(), q, head_size, num_attention_heads, qlen);
         query_layer = apply_pos_embedding_q(ctx, query_layer, hidden_size, qlen, pos);
 
+        if (!attn_scaling)
+            query_layer = ggml_scale(ctx->gctx.get(), query_layer, 1.f / std::sqrt(head_size));
+
         // store key and value to memory
-        {
-            // compute the transposed [N, n_embd] V matrix
-            struct ggml_tensor * Vcur = ggml_transpose(ctx->gctx.get(), tmpv); // ggml_reshape_2d(ctx->gctx.get(), tmpv, kv_hidden_size, qlen));
-
-            struct ggml_tensor * k_cache_view = ggml_view_1d(ctx->gctx.get(), k_cache, qlen * kv_hidden_size,
-                                        ggml_element_size(k_cache) * kv_hidden_size * n_past);
-
-            struct ggml_tensor * v_cache_view = ggml_view_2d(ctx->gctx.get(), v_cache, qlen, kv_hidden_size,
-                    max_length * ggml_element_size(v_cache), n_past * ggml_element_size(v_cache));
-
-            struct ggml_tensor * k_view = ggml_view_1d(ctx->gctx.get(), key_layer, qlen * kv_hidden_size, 0);
-
-            // important: storing RoPE-ed version of K in the KV cache!
-            ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_view, k_cache_view));
-            ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), Vcur, v_cache_view));
-        }
+        save_to_cache(ctx, kv_hidden_size, n_past, qlen, key_layer, v);
 
         query_layer = ggml_permute(ctx->gctx.get(), query_layer, 0, 2, 1, 3);                     // [heads, qlen, head_size]
 
@@ -353,8 +386,11 @@ namespace chatllm
         // note auto-broadcasting in ggml_mul_mat for `repeat > 1`
         ggml_tensor *attn_scores = ggml_mul_mat(ctx->gctx.get(), key_layer, query_layer); // [heads, qlen, klen]
 
+        ggml_mul_mat_set_prec(attn_scores, prec);
+
         attn_scores = apply_pos_embedding_kq(ctx, attn_scores, hidden_size, qlen, pos);
-        attn_scores = ggml_scale_inplace(ctx->gctx.get(), attn_scores, ggml_new_f32(ctx->gctx.get(), 1.f / std::sqrt(head_size)));
+        if (attn_scaling)
+            attn_scores = ggml_scale_inplace(ctx->gctx.get(), attn_scores, 1.f / std::sqrt(head_size));
 
         // attn_masked = mask_past(attn_scores)
         struct ggml_tensor * attn_masked = ggml_diag_mask_inf_inplace(ctx->gctx.get(), attn_scores, n_past);
@@ -375,7 +411,30 @@ namespace chatllm
             ggml_cont(ctx->gctx.get(), ggml_permute(ctx->gctx.get(), context_layer, 0, 2, 1, 3)),
             hidden_size, qlen);
 
-        ggml_tensor *attn_output = o_proj.forward(ctx, context_layer);
+        return context_layer;
+    }
+
+    ggml_tensor *BaseSelfAttention::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
+    {
+        const int hidden_size = hidden_states->ne[0];
+        const int qlen = hidden_states->ne[1];
+        const int repeat = num_attention_heads / num_kv_heads;
+        const int kv_hidden_size = hidden_size / repeat;
+
+        before_forward(ctx, kv_hidden_size, n_past, qlen);
+
+        ggml_tensor *tmpq = q_proj.forward(ctx, hidden_states);
+        ggml_tensor *tmpk = k_proj.forward(ctx, hidden_states);
+        ggml_tensor *tmpv = v_proj.forward(ctx, hidden_states);
+
+        ggml_mul_mat_set_prec(tmpk, prec);
+        ggml_mul_mat_set_prec(tmpq, prec);
+        ggml_mul_mat_set_prec(tmpv, prec);
+
+        ggml_tensor *attn = cross_attention(ctx, hidden_size, n_past, qlen, tmpq, tmpk, tmpv);
+
+        ggml_tensor *attn_output = o_proj.forward(ctx, attn);
+
         return attn_output;
     }
 
@@ -390,6 +449,18 @@ namespace chatllm
     {
         const int rope_dim = hidden_size / num_attention_heads;
         return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, 0, 0, 0,
+                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
+    }
+
+    ggml_tensor *Phi2CrossAttention::apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor *past) const
+    {
+        return ggml_rope_custom_inplace(ctx->gctx.get(), k, past, rope_dim, 2, 0, 0,
+                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size]
+    }
+
+    ggml_tensor *Phi2CrossAttention::apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor *past) const
+    {
+        return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, 2, 0, 0,
                         freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
     }
 

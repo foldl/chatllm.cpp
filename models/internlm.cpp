@@ -2,20 +2,25 @@ struct Config : public BaseConfig
 {
 };
 
+class ChatHistoryEncoder : public BaseHistoryEncoder
+{
+public:
+    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+};
+
+static ChatHistoryEncoder _chat_encoder;
+
 class Tokenizer : public BaseTokenizer
 {
 public:
-    Tokenizer(const Config &config) : BaseTokenizer::BaseTokenizer(config) {};
+    Tokenizer(const Config &config) : BaseTokenizer::BaseTokenizer(config, &_chat_encoder) {};
 
     size_t load(const char *buffer, int n_vocab) override;
 
     int get_terminate_token_id(void) const override { return eoa_token_id; }
 
     bool is_special_id(int id) const override;
-
-protected:
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
 
 public:
     int eoa_token_id;
@@ -51,22 +56,22 @@ size_t Tokenizer::load(const char *buffer, int n_vocab)
     return size;
 }
 
-void Tokenizer::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
     std::ostringstream oss_prompt;
 
     oss_prompt << "<s><|User|>:" << user << "<eoh>\n<|Bot|>:" << ai << "<eoa>\n";
     auto text = oss_prompt.str();
-    encode(text, ids);
+    tokenizer->encode(text, ids);
 }
 
-void Tokenizer::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
     std::ostringstream oss_prompt;
 
     oss_prompt << "<s><|User|>:" << user << "<eoh>\n<|Bot|>:";
     auto text = oss_prompt.str();
-    encode(text, ids);
+    tokenizer->encode(text, ids);
 }
 
 bool Tokenizer::is_special_id(int id) const

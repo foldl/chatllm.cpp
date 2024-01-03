@@ -5,11 +5,20 @@ struct Config : public llama::Config
     float rope_theta;
 };
 
+class ChatHistoryEncoder : public BaseHistoryEncoder
+{
+public:
+    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+};
+
+static ChatHistoryEncoder _chat_encoder;
+
 class Tokenizer : public llama::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
-        : llama::Tokenizer::Tokenizer(config)
+        : llama::Tokenizer::Tokenizer(config, &_chat_encoder)
     {
         sys_prompt = "";
     }
@@ -18,11 +27,7 @@ public:
 
     bool is_special_id(int id) const override;
 
-protected:
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
-
-private:
+public:
     int im_start_token_id;
     int im_end_token_id;
     int im_sep_token_id;
@@ -60,32 +65,34 @@ size_t Tokenizer::load(const char *buffer, int n_vocab)
     return size;
 }
 
-void Tokenizer::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     append_user(round_idx, user, ids);
 
-    encode(ai, ids);
-    ids.push_back(im_end_token_id);
-    encode("\n", ids);
+    tok->encode(ai, ids);
+    ids.push_back(tok->im_end_token_id);
+    tok->encode("\n", ids);
 }
 
-void Tokenizer::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
-    if ((round_idx == 0) && (sys_prompt.size() > 0))
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+    if ((round_idx == 0) && (tok->get_system_prompt().size() > 0))
     {
-        ids.push_back(im_start_token_id);
-        encode("system" + sys_prompt, ids);
-        ids.push_back(im_end_token_id);
-        encode("\n", ids);
+        ids.push_back(tok->im_start_token_id);
+        tok->encode("system" + tok->get_system_prompt(), ids);
+        ids.push_back(tok->im_end_token_id);
+        tok->encode("\n", ids);
     }
 
-    ids.push_back(im_start_token_id);
-    encode("user\n" + user, ids);
-    ids.push_back(im_end_token_id);
-    encode("\n", ids);
+    ids.push_back(tok->im_start_token_id);
+    tok->encode("user\n" + user, ids);
+    ids.push_back(tok->im_end_token_id);
+    tok->encode("\n", ids);
 
-    ids.push_back(im_start_token_id);
-    encode("assistant\n", ids);
+    ids.push_back(tok->im_start_token_id);
+    tok->encode("assistant\n", ids);
 }
 
 bool Tokenizer::is_special_id(int id) const
