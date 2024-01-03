@@ -337,7 +337,7 @@ namespace chatllm
     public:
         GLM2Block(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int intermediate_size,
                   int max_length)
-            : LMBlock1(ctx, hidden_size, num_attention_heads, num_kv_heads, intermediate_size, max_length) {}
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length) {}
     };
 
     class BaseAttention : public Block
