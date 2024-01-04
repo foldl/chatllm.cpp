@@ -45,6 +45,11 @@ namespace chatllm
         {
             this->id = id;
         }
+
+        virtual int64_t get_param_num(void) const
+        {
+            return 0;
+        }
     protected:
         ggml_prec prec;
         int id;
@@ -83,6 +88,11 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
 
+        int64_t get_param_num(void) const override
+        {
+            return ggml_nelements(weight);
+        }
+
     public:
         ggml_tensor *weight;
     };
@@ -105,6 +115,13 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
 
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = ggml_nelements(weight);
+            if (bias) r += ggml_nelements(bias);
+            return r;
+        }
+
     public:
         ggml_tensor *weight; // [out_features, in_features]
         ggml_tensor *bias;   // [out_features]
@@ -121,6 +138,13 @@ namespace chatllm
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
+
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = ggml_nelements(weight);
+            if (bias) r += ggml_nelements(bias);
+            return r;
+        }
 
     public:
         ggml_tensor *weight; // [normalized_shape]
@@ -139,6 +163,11 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
 
+        int64_t get_param_num(void) const override
+        {
+            return ggml_nelements(weight);
+        }
+
     public:
         ggml_tensor *weight;
         float eps;
@@ -153,6 +182,14 @@ namespace chatllm
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += dense_h_to_4h.get_param_num();
+            r += dense_4h_to_h.get_param_num();
+            return r;
+        }
 
     public:
         Linear dense_h_to_4h;
@@ -188,6 +225,14 @@ namespace chatllm
             shift_pending = ShiftPending(shift, total);
         }
 
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += query_key_value.get_param_num();
+            r += dense.get_param_num();
+            return r;
+        }
+
     public:
         Linear query_key_value;
         Linear dense;
@@ -215,6 +260,16 @@ namespace chatllm
         virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
 
         void set_ctx(int n_ctx) const override { attention.set_ctx(n_ctx); };
+
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += input_layernorm.get_param_num();
+            r += attention.get_param_num();
+            r += post_attention_layernorm.get_param_num();
+            r += mlp.get_param_num();
+            return r;
+        }
 
     public:
         LayerNorm input_layernorm;
@@ -252,6 +307,14 @@ namespace chatllm
             shift_pending = ShiftPending(shift, total);
         }
 
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += query_key_value.get_param_num();
+            r += dense.get_param_num();
+            return r;
+        }
+
     public:
         int num_attention_heads;
         int num_kv_heads;
@@ -273,6 +336,14 @@ namespace chatllm
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += dense_h_to_4h.get_param_num();
+            r += dense_4h_to_h.get_param_num();
+            return r;
+        }
 
     public:
         Linear dense_h_to_4h;
@@ -325,6 +396,16 @@ namespace chatllm
             attention.shift_cache(shift, total);
         }
 
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += input_layernorm.get_param_num();
+            r += attention.get_param_num();
+            r += post_attention_layernorm.get_param_num();
+            r += mlp.get_param_num();
+            return r;
+        }
+
     public:
         InputNormBlock input_layernorm;
         AttentionBlock attention;
@@ -375,6 +456,16 @@ namespace chatllm
         void shift_cache(int shift, int total) override
         {
             shift_pending = ShiftPending(shift, total);
+        }
+
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += q_proj.get_param_num();
+            r += k_proj.get_param_num();
+            r += v_proj.get_param_num();
+            r += o_proj.get_param_num();
+            return r;
         }
 
     protected:
@@ -461,6 +552,14 @@ namespace chatllm
 
         void set_prec(ggml_prec prec) override;
 
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += fc0.get_param_num();
+            r += fc1.get_param_num();
+            return r;
+        }
+
     public:
         Linear fc0;
         Linear fc1;
@@ -478,6 +577,15 @@ namespace chatllm
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += gate_proj.get_param_num();
+            r += down_proj.get_param_num();
+            r += up_proj.get_param_num();
+            return r;
+        }
 
     public:
         Linear gate_proj;
@@ -567,6 +675,15 @@ namespace chatllm
         void shift_cache(int shift, int total) override
         {
             attention.shift_cache(shift, total);
+        }
+
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += input_layernorm.get_param_num();
+            r += attention.get_param_num();
+            r += mlp.get_param_num();
+            return r;
         }
 
     public:

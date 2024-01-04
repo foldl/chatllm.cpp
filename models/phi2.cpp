@@ -62,11 +62,10 @@ private:
 
 void QAHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
+    append_user(round_idx, user, ids);
+
     std::ostringstream oss_prompt;
-
-    oss_prompt << "Instruction: " << user << "\n"
-               << "Output: " << ai << "\n";
-
+    oss_prompt << ai << "\n";
     auto text = oss_prompt.str();
     tokenizer->encode(text, ids);
 }
@@ -75,8 +74,8 @@ void QAHistoryEncoder::append_user(int round_idx, const std::string &user, std::
 {
     std::ostringstream oss_prompt;
 
-    oss_prompt << "Instruction: " << user << "\n"
-               << "Output:\n";
+    oss_prompt << "Instruct: " << user << "\n"
+               << "Output: ";
 
     auto text = oss_prompt.str();
     tokenizer->encode(text, ids);
@@ -84,11 +83,10 @@ void QAHistoryEncoder::append_user(int round_idx, const std::string &user, std::
 
 void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
+    append_user(round_idx, user, ids);
+
     std::ostringstream oss_prompt;
-
-    oss_prompt << "Alice: " << user << "\n"
-               << "Bob: " << ai << "\n";
-
+    oss_prompt << ai << "\n";
     auto text = oss_prompt.str();
     tokenizer->encode(text, ids);
 }

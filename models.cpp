@@ -177,6 +177,11 @@ namespace chatllm
             BaseModel::shift_memory(keep);
         }
 
+        int64_t get_param_num(void) const override
+        {
+            return transformer.get_param_num();
+        }
+
         std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                   const bool continuous,
                                   bool &completed,
@@ -445,6 +450,17 @@ namespace chatllm
         {
             for (auto &layer : layers)
                 layer.shift_cache(shift, total);
+        }
+
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += word_embeddings.get_param_num();
+            if (layers.size() > 0)
+                r += layers[0].get_param_num() * layers.size();
+            r += final_layernorm.get_param_num();
+            r += lm_head.get_param_num();
+            return r;
         }
 
     protected:

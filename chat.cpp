@@ -45,16 +45,6 @@
 namespace chatllm
 {
 
-    int get_dims(ggml_tensor *tensor)
-    {
-        for (int i = GGML_MAX_DIMS - 1; i >= 0; i--)
-        {
-            if (tensor->ne[i] > 1)
-                return i + 1;
-        }
-        return 0;
-    }
-
     std::string trim(std::string str, const char *spaces)
     {
         str.erase(str.find_last_not_of(spaces) + 1);
@@ -181,7 +171,7 @@ namespace chatllm
 
     static std::string shape_to_string(ggml_tensor *tensor)
     {
-        int n_dims = get_dims(tensor);
+        int n_dims = ggml_n_dims(tensor);
         std::ostringstream oss;
         oss << '[';
         for (int i = n_dims - 1; i >= 0; i--)
@@ -194,7 +184,7 @@ namespace chatllm
 
     static std::string strides_to_string(ggml_tensor *tensor)
     {
-        int n_dims = get_dims(tensor);
+        int n_dims = ggml_n_dims(tensor);
         std::ostringstream oss;
         oss << '[';
         for (int i = n_dims - 1; i >= 0; i--)
@@ -208,7 +198,7 @@ namespace chatllm
     std::string to_string(ggml_tensor *tensor, bool with_data)
     {
         std::ostringstream oss;
-        int n_dims = get_dims(tensor);
+        int n_dims = ggml_n_dims(tensor);
         oss << "ggml_tensor(";
 
         if (with_data)
@@ -396,7 +386,7 @@ namespace chatllm
         // read and check tensor shape
         {
             int ndim = read_basic<int>();
-            int n_dims = get_dims(tensor);
+            int n_dims = ggml_n_dims(tensor);
             CHATLLM_CHECK(ndim == n_dims)
                 << "tensor " << name << " ndim mismatch: expect " << n_dims << " but got " << ndim;
             for (int i = ndim - 1; i >= 0; i--)

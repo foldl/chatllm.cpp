@@ -33,6 +33,8 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 * Phi
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2)
 
+        Note: `--temp 0` is recommended. Don't forget to try `--format qa`.
+
 ## Features
 
 * [x] Pure C++ implementation based on [ggml](https://github.com/ggerganov/ggml);
@@ -79,6 +81,9 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a Yi
 
 # WizardCoder models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardCoder
+
+# WizardLM models
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardLM
 
 # For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin

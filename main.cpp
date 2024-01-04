@@ -58,8 +58,8 @@ void usage(const char *prog)
               << "  --multi                 enabled multiple lines of input\n"
               << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n"
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
-              << "  --tokenize              (debug)tokenize `prompt` and exit"
-              ;
+              << "  --tokenize              (debug)tokenize `prompt` and exit\n"
+              << std::endl;
 }
 
 static Args parse_args(int argc, const char **argv)
@@ -281,7 +281,7 @@ void chat(Args &args)
         return;
     }
 
-    #define MODEL_INFO()     "You are served by " << std::left << std::setw(28) << pipeline.model->type_name() + "."
+    #define MODEL_INFO()     "You are served by " << std::left << std::setw(28) << pipeline.model->type_name() + ","
     #define SHOW_NATIVE()    if (pipeline.model->native_name().size() > 0) { std::cout << "(" << pipeline.model->native_name() << ")"; }
 
     std::cout   << R"(    ________          __  __    __    __  ___ )"; SHOW_NATIVE(); std::cout << '\n'
@@ -290,6 +290,7 @@ void chat(Args &args)
                 << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
                 << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
     std::cout   << MODEL_INFO()                               << R"(/_/   /_/       )" << '\n';
+    std::cout   << "with " << pipeline.model->get_param_num() << " parameters." << '\n';
 
     std::cout << std::endl;
 

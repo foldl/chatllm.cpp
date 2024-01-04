@@ -297,6 +297,11 @@ namespace chatllm
             n_past = keep;
         }
 
+        virtual int64_t get_param_num(void) const
+        {
+            return 0;
+        }
+
     protected:
         int type_;
         std::string name_;
