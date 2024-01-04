@@ -100,7 +100,10 @@ Compile the project using CMake:
 
 ```sh
 cmake -B build
+# On Linux, WSL:
 cmake --build build -j
+# On Windows with MSVC:
+cmake --build build -j --config Release
 ```
 
 Now you may chat with a quantized model by running:

@@ -263,6 +263,10 @@ void chat(Args &args)
 
 #if defined(_WIN32)
     _setmode(_fileno(stdin), _O_WTEXT);
+    // Set console code page to UTF-8 so console known how to interpret string data
+    SetConsoleOutputCP(CP_UTF8);
+    // Enable buffering to prevent VS from chopping up UTF-8 byte sequences
+    setvbuf(stdout, nullptr, _IOFBF, 1000);
 #endif
 
     if (args.tokenize)
