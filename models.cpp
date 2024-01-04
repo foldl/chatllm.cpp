@@ -98,6 +98,8 @@ namespace chatllm
         MODEL_TYPE_YI       = 0x400,
 
         MODEL_TYPE_PHI2     = 0x500,
+
+        MODEL_TYPE_MISTRAL  = 0x600,
     };
 
     std::string to_string(ModelType model_type)
@@ -132,6 +134,8 @@ namespace chatllm
             return "WizardCoder";
         case MODEL_TYPE_WIZARDLM:
             return "WizardLM";
+        case MODEL_TYPE_MISTRAL:
+            return "Mistral";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -567,6 +571,11 @@ namespace chatllm
         #include "models/wizardlm.cpp"
     }
 
+    namespace mistral
+    {
+        #include "models/mistral.cpp"
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -711,6 +720,14 @@ namespace chatllm
             return load_model<wizardlm::Config,
                               wizardlm::Tokenizer,
                               wizardlm::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_MISTRAL:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<mistral::Config,
+                              mistral::Tokenizer,
+                              mistral::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

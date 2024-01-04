@@ -37,11 +37,16 @@ public:
 };
 
 class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                  Model<Config, RMSNorm, LlamaBlock, int, int, int, int>>
+                                  Model<Config, RMSNorm, LlamaBlock, int, int, int, int, int>>
 {
 public:
     ConditionalGeneration() = default;
-    ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_LLAMA2);
+    ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_LLAMA2)
+        : ConditionalGeneration(config, type, config.num_attention_heads, config.max_length)
+    {};
+
+    ConditionalGeneration(const Config &config, ModelType type,
+                          int num_key_value_heads, int max_length);
 
     void load(ModelLoader &loader) override;
 
@@ -112,7 +117,7 @@ bool Tokenizer::is_special_id(int id) const
     return id == pad_token_id;
 }
 
-ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type)
+ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type, int num_key_value_heads, int max_length)
     : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -121,9 +126,9 @@ ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType typ
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;
 
-    transformer = Model<Config, RMSNorm, LlamaBlock, int, int, int, int>(&w_ctx_, config, false,
+    transformer = Model<Config, RMSNorm, LlamaBlock, int, int, int, int, int>(&w_ctx_, config, false,
                                                                             config.hidden_size, config.num_attention_heads,
-                                                                            config.intermediate_size, config.max_length);
+                                                                            config.intermediate_size, num_key_value_heads, max_length);
 }
 
 void ConditionalGeneration::load(ModelLoader &loader)

@@ -17,6 +17,9 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] Yi: [Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat)
     * [x] WizardCoder: [Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0)
     * [x] WizardLM: [7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0), [13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2)
+    * [x] Mistral: [7B](https://huggingface.co/mistralai/Mistral-7B-v0.1)
+
+        Note: Sliding-window attention is not implemented yet.
 
 * GLM family:
     * [x] ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)

@@ -55,6 +55,8 @@ class ModelType(Enum):
 
     Phi2 = 0x500
 
+    Mistral = 0x600
+
 
 class TokenType(Enum):
     UNDEFINED    = 0
@@ -488,6 +490,32 @@ class WizardLMConverter(BaseConverter):
     @staticmethod
     def dump_config(f, config, ggml_type):
         LlamaConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
+
+class MistralConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Mistral
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        elif name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        LlamaConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.sliding_window if config.sliding_window is not None else -1,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
 
     @staticmethod
     def get_weight_names(config):
@@ -969,6 +997,8 @@ def main():
         WizardCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'wizardlm':
         WizardLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'MistralForCausalLM':
+        MistralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 
