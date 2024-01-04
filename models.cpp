@@ -87,6 +87,8 @@ namespace chatllm
 
         MODEL_TYPE_LLAMA2   = 0x150,
         MODEL_TYPE_CODELLAMA= 0x151,
+        MODEL_TYPE_WIZARDCODER      = 0x152,
+        MODEL_TYPE_WIZARDLM         = 0x153,
 
         MODEL_TYPE_BAICHUAN = 0x200,
 
@@ -126,6 +128,10 @@ namespace chatllm
             return "Yi";
         case MODEL_TYPE_PHI2:
             return "Phi-2";
+        case MODEL_TYPE_WIZARDCODER:
+            return "WizardCoder";
+        case MODEL_TYPE_WIZARDLM:
+            return "WizardLM";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -535,6 +541,11 @@ namespace chatllm
         #include "models/phi2.cpp"
     }
 
+    namespace wizardcoder
+    {
+        #include "models/wizardcoder.cpp"
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -663,6 +674,14 @@ namespace chatllm
             return load_model<phi2::Config,
                               phi2::Tokenizer,
                               phi2::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_WIZARDCODER:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<wizardcoder::Config,
+                              wizardcoder::Tokenizer,
+                              wizardcoder::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

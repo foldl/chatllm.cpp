@@ -17,8 +17,14 @@ class ConditionalGeneration : public llama::ConditionalGeneration
 {
 public:
     ConditionalGeneration() = default;
+
     ConditionalGeneration(const Config &config)
-        : llama::ConditionalGeneration(config, MODEL_TYPE_CODELLAMA)
+        : ConditionalGeneration(config, MODEL_TYPE_CODELLAMA)
+    {
+    }
+
+    ConditionalGeneration(const Config &config, ModelType type)
+        : llama::ConditionalGeneration(config, type)
     {
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

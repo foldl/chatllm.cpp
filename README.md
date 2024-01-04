@@ -15,6 +15,7 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] [DeepSeek Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
     * [x] [Baichuan-2 Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
     * [x] [Yi Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat)
+    * [x] [WizardCoder-Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0)
 
 * [x] [ChatGLM-6B](https://huggingface.co/THUDM/chatglm-6b)
 
@@ -73,6 +74,12 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DeepSeekCoder
 
 # CodeLlaMA models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA
+
+# Yi models
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a Yi
+
+# WizardCoder models
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardCoder
 
 # For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin

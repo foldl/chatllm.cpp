@@ -43,6 +43,7 @@ class ModelType(Enum):
 
     LlaMA2 = 0x150
     CodeLlaMA = 0x151
+    WizardCoder = 0x152
 
     BaiChuan = 0x200
 
@@ -460,6 +461,21 @@ class CodeLlamaConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
+
+class WizardCoderConverter(BaseConverter):
+    MODEL_TYPE = ModelType.WizardCoder
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return CodeLlamaConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        CodeLlamaConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return CodeLlamaConverter.get_weight_names(config)
 
 def part(weights: torch.Tensor, n_part: int) -> torch.Tensor:
     r = weights.shape[0] // 3
@@ -933,6 +949,8 @@ def main():
         YiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'PhiForCausalLM':
         Phi2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'wizardcoder':
+        WizardCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 
@@ -1007,5 +1025,5 @@ def test(model_path):
     print(tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
 
 if __name__ == "__main__":
-    # test(r'C:\projects\Phi-2')
+    # test(r'')
     main()
