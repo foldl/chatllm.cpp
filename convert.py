@@ -44,6 +44,7 @@ class ModelType(Enum):
     LlaMA2 = 0x150
     CodeLlaMA = 0x151
     WizardCoder = 0x152
+    WizardLM = 0x153
 
     BaiChuan = 0x200
 
@@ -476,6 +477,21 @@ class WizardCoderConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return CodeLlamaConverter.get_weight_names(config)
+
+class WizardLMConverter(BaseConverter):
+    MODEL_TYPE = ModelType.WizardLM
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return LlamaConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        LlamaConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
 
 def part(weights: torch.Tensor, n_part: int) -> torch.Tensor:
     r = weights.shape[0] // 3
@@ -951,6 +967,8 @@ def main():
         Phi2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'wizardcoder':
         WizardCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'wizardlm':
+        WizardLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

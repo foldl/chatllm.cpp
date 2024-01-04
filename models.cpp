@@ -546,6 +546,11 @@ namespace chatllm
         #include "models/wizardcoder.cpp"
     }
 
+    namespace wizardlm
+    {
+        #include "models/wizardlm.cpp"
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -682,6 +687,14 @@ namespace chatllm
             return load_model<wizardcoder::Config,
                               wizardcoder::Tokenizer,
                               wizardcoder::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_WIZARDLM:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<wizardlm::Config,
+                              wizardlm::Tokenizer,
+                              wizardlm::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

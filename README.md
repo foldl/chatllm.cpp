@@ -9,27 +9,26 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 
 * LlaMA-like:
     * [x] All LlaMA-1 models
-    * [x] [LlaMA-2 Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
-    * [x] [CodeLlaMA Instruct-7B](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf)
-    * [x] [DeepSeek Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat)
-    * [x] [DeepSeek Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
-    * [x] [Baichuan-2 Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
-    * [x] [Yi Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat)
-    * [x] [WizardCoder-Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0)
+    * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
+    * [x] CodeLlaMA: [Instruct-7B](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf)
+    * [x] DeepSeek: [Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat)
+    * [x] DeepSeek: [Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
+    * [x] Baichuan-2: [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
+    * [x] Yi: [Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat)
+    * [x] WizardCoder: [Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0)
+    * [x] WizardLM: [7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0), [13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2)
 
-* [x] [ChatGLM-6B](https://huggingface.co/THUDM/chatglm-6b)
-
-* GLM-2 family:
-    * [x] [ChatGLM2-6B](https://huggingface.co/THUDM/chatglm2-6b)
-    * [x] [CodeGeeX2-6b](https://huggingface.co/THUDM/codegeex2-6b)
+* GLM family:
+    * [x] ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)
+    * [x] ChatGLM2: [6B](https://huggingface.co/THUDM/chatglm2-6b)
+    * [x] CodeGeeX2: [6B](https://huggingface.co/THUDM/codegeex2-6b)
 
         Note: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
 
-    * [x] [ChatGLM3-6B](https://huggingface.co/THUDM/chatglm3-6b)
+    * [x] ChatGLM3: [6B](https://huggingface.co/THUDM/chatglm3-6b)
 
 * InternLM
-    * [x] [InternLM Chat-7B](https://huggingface.co/internlm/internlm-chat-7b)
-    * [x] [InternLM Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1)
+    * [x] InternLM : [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1)
 
 * Phi
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2)
