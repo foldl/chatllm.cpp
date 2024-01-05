@@ -11,23 +11,19 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] All LlaMA-1 models
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
     * [x] CodeLlaMA: [Instruct-7B](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf)
-    * [x] DeepSeek: [Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat)
-    * [x] DeepSeek: [Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
-    * [x] Baichuan-2: [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
+    * [x] DeepSeek: [Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat), [Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
+    * [x] Baichuan-2: [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat), [Chat-13B](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat)
     * [x] Yi: [Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat)
     * [x] WizardLM: [LM 7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0), [LM 13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2), [Coder Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0), [Math 7B](https://huggingface.co/WizardLM/WizardMath-7B-V1.1)
     * [x] Mistral: [Instruct-7B](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), [7B](https://huggingface.co/mistralai/Mistral-7B-v0.1)
 
         Note: Sliding-window attention is not implemented yet.
 
-* GLM family:
+* ChatGLM:
     * [x] ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)
-    * [x] ChatGLM2: [6B](https://huggingface.co/THUDM/chatglm2-6b)
-    * [x] CodeGeeX2: [6B](https://huggingface.co/THUDM/codegeex2-6b)
+    * [x] ChatGLM2 family: [ChatGLM2 6B](https://huggingface.co/THUDM/chatglm2-6b), [CodeGeeX2 6B](https://huggingface.co/THUDM/codegeex2-6b), [ChatGLM3 6B](https://huggingface.co/THUDM/chatglm3-6b)
 
-        Note: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
-
-    * [x] ChatGLM3: [6B](https://huggingface.co/THUDM/chatglm3-6b)
+        Note on CodeGeeX2: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
 
 * InternLM
     * [x] [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1)
