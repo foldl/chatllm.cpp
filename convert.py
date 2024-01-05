@@ -45,6 +45,7 @@ class ModelType(Enum):
     CodeLlaMA = 0x151
     WizardCoder = 0x152
     WizardLM = 0x153
+    WizardMath = 0x154
 
     BaiChuan = 0x200
 
@@ -187,7 +188,10 @@ class SentencePieceVocab:
         expected_ids = list(range(vocab_size, vocab_size + len(added_tokens)))
         actual_ids = sorted(added_tokens.values())
         if expected_ids != actual_ids:
-            raise Exception(f"Expected added token IDs to be sequential and start at {len(added_tokens)}; got {actual_ids}")
+            if actual_ids == list(range(len(added_tokens))):
+                raise Exception(f"added token IDs ({actual_ids}) are starting from 0. `added_token.json` seems WRONG. \n\nDelete it and try again.")
+            else:
+                raise Exception(f"Expected added token IDs to be sequential and start at {len(added_tokens)}; got {actual_ids}")
         items = sorted(added_tokens.items(), key=lambda text_idx: text_idx[1])
         self.added_tokens_list = [text for (text, idx) in items]
         self.vocab_size_base: int = vocab_size
@@ -520,6 +524,21 @@ class MistralConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
+
+class WizardMathConverter(BaseConverter):
+    MODEL_TYPE = ModelType.WizardMath
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return MistralConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MistralConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return MistralConverter.get_weight_names(config)
 
 def part(weights: torch.Tensor, n_part: int) -> torch.Tensor:
     r = weights.shape[0] // 3
@@ -997,6 +1016,8 @@ def main():
         WizardCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'wizardlm':
         WizardLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'wizardmath':
+        WizardMathConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MistralForCausalLM':
         MistralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:

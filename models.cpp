@@ -89,6 +89,7 @@ namespace chatllm
         MODEL_TYPE_CODELLAMA= 0x151,
         MODEL_TYPE_WIZARDCODER      = 0x152,
         MODEL_TYPE_WIZARDLM         = 0x153,
+        MODEL_TYPE_WIZARDMATH       = 0x154,
 
         MODEL_TYPE_BAICHUAN = 0x200,
 
@@ -134,6 +135,8 @@ namespace chatllm
             return "WizardCoder";
         case MODEL_TYPE_WIZARDLM:
             return "WizardLM";
+        case MODEL_TYPE_WIZARDMATH:
+            return "WizardMath";
         case MODEL_TYPE_MISTRAL:
             return "Mistral";
         default:
@@ -561,19 +564,14 @@ namespace chatllm
         #include "models/phi2.cpp"
     }
 
-    namespace wizardcoder
-    {
-        #include "models/wizardcoder.cpp"
-    }
-
-    namespace wizardlm
-    {
-        #include "models/wizardlm.cpp"
-    }
-
     namespace mistral
     {
         #include "models/mistral.cpp"
+    }
+
+    namespace wizard
+    {
+        #include "models/wizard.cpp"
     }
 
     template <class Config, class Tokenizer, class ConditionalGeneration>
@@ -709,17 +707,25 @@ namespace chatllm
         {
             CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
 
-            return load_model<wizardcoder::Config,
-                              wizardcoder::Tokenizer,
-                              wizardcoder::ConditionalGeneration>(loader, result);
+            return load_model<wizard::coder::Config,
+                              wizard::coder::Tokenizer,
+                              wizard::coder::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_WIZARDLM:
         {
             CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
 
-            return load_model<wizardlm::Config,
-                              wizardlm::Tokenizer,
-                              wizardlm::ConditionalGeneration>(loader, result);
+            return load_model<wizard::lm::Config,
+                              wizard::lm::Tokenizer,
+                              wizard::lm::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_WIZARDMATH:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<wizard::math::Config,
+                              wizard::math::Tokenizer,
+                              wizard::math::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_MISTRAL:
         {

@@ -15,9 +15,8 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] DeepSeek: [Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
     * [x] Baichuan-2: [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
     * [x] Yi: [Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat)
-    * [x] WizardCoder: [Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0)
-    * [x] WizardLM: [7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0), [13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2)
-    * [x] Mistral: [7B](https://huggingface.co/mistralai/Mistral-7B-v0.1)
+    * [x] WizardLM: [LM 7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0), [LM 13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2), [Coder Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0), [Math 7B](https://huggingface.co/WizardLM/WizardMath-7B-V1.1)
+    * [x] Mistral: [Instruct-7B](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), [7B](https://huggingface.co/mistralai/Mistral-7B-v0.1)
 
         Note: Sliding-window attention is not implemented yet.
 
@@ -31,7 +30,7 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] ChatGLM3: [6B](https://huggingface.co/THUDM/chatglm3-6b)
 
 * InternLM
-    * [x] InternLM : [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1)
+    * [x] [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1)
 
 * Phi
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2)
@@ -87,6 +86,9 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardCoder
 
 # WizardLM models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardLM
+
+# WizardMath models
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardMath
 
 # For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin

@@ -29,7 +29,11 @@ class ConditionalGeneration : public llama::ConditionalGeneration
 public:
     ConditionalGeneration() = default;
 
-    ConditionalGeneration(const Config &config);
+    ConditionalGeneration(const Config &config, ModelType type);
+
+    ConditionalGeneration(const Config &config)
+        : ConditionalGeneration(config, MODEL_TYPE_MISTRAL)
+    {}
 };
 
 void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
@@ -51,8 +55,8 @@ void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std
     tok->encode(oss_prompt.str(), ids, true, false);
 }
 
-ConditionalGeneration::ConditionalGeneration(const Config &config)
-    : llama::ConditionalGeneration(config, MODEL_TYPE_MISTRAL,
+ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type)
+    : llama::ConditionalGeneration(config, type,
             config.num_key_value_heads,
             config.sliding_window > 0 ? config.sliding_window : config.max_length)
 {
