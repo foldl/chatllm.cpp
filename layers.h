@@ -358,7 +358,7 @@ namespace chatllm
     public:
         LMBlock1() = default;
         LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
-                  int max_length, bool qkv_bias = true, bool o_bias = true)
+                  int max_length)
             : input_layernorm(ctx, hidden_size),
               attention(ctx, hidden_size, num_attention_heads, max_length),
               post_attention_layernorm(ctx, hidden_size),
@@ -597,7 +597,7 @@ namespace chatllm
     {
     public:
         InternLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
-            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length, false),
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length),
               max_length(max_length) {}
     private:
         int max_length;
@@ -617,7 +617,7 @@ namespace chatllm
     {
     public:
         LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
-            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length, false),
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length),
               max_length(max_length) {}
 
         LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
