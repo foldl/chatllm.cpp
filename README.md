@@ -4,10 +4,10 @@
 
 ![](./images/demo.gif)
 
-Pure C++ implementation of several models for real-time chatting on your computer (CPU),
+Pure C++ implementation of a bunch of models for real-time chatting on your computer (CPU),
 based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml):
 
-* LlaMA-like:
+* LlaMA-like (`LlamaForCausalLM`, `BaichuanForCausalLM`, `MistralForCausalLM`):
     * [x] All LlaMA-1 models
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
     * [x] CodeLlaMA: [Instruct-7B](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf)
@@ -17,18 +17,22 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] WizardLM: [LM 7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0), [LM 13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2), [Coder Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0), [Math 7B](https://huggingface.co/WizardLM/WizardMath-7B-V1.1)
     * [x] Mistral: [Instruct-7B](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), [7B](https://huggingface.co/mistralai/Mistral-7B-v0.1)
 
-        Note: Sliding-window attention is not implemented yet.
+        Note: Sliding-window attention of `MistralForCausalLM` is not implemented yet.
 
-* ChatGLM:
+    * [x] OpenChat: [3.5](https://huggingface.co/openchat/openchat-3.5-1210/)
+
+        Use system prompt to select modes: `-s GPT4` (default mode), `-s Math` (mathematical reasoning mode).
+
+* ChatGLM (`ChatGLMModel`):
     * [x] ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)
     * [x] ChatGLM2 family: [ChatGLM2 6B](https://huggingface.co/THUDM/chatglm2-6b), [CodeGeeX2 6B](https://huggingface.co/THUDM/codegeex2-6b), [ChatGLM3 6B](https://huggingface.co/THUDM/chatglm3-6b)
 
         Note on CodeGeeX2: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
 
-* InternLM
+* InternLM (`InternLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1)
 
-* Phi
+* Phi (`PhiForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2)
 
         Note: `--temp 0` is recommended. Don't forget to try `--format qa`.
@@ -85,6 +89,9 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardLM
 
 # WizardMath models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardMath
+
+# OpenChat models
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a OpenChat
 
 # For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin

@@ -101,6 +101,8 @@ namespace chatllm
         MODEL_TYPE_PHI2     = 0x500,
 
         MODEL_TYPE_MISTRAL  = 0x600,
+        MODEL_TYPE_MIXTRAL  = 0x601,
+        MODEL_TYPE_OPENCHAT = 0x602,
     };
 
     std::string to_string(ModelType model_type)
@@ -139,6 +141,10 @@ namespace chatllm
             return "WizardMath";
         case MODEL_TYPE_MISTRAL:
             return "Mistral";
+        case MODEL_TYPE_MIXTRAL:
+            return "Mixtral MoE";
+        case MODEL_TYPE_OPENCHAT:
+            return "OpenChat";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -574,6 +580,11 @@ namespace chatllm
         #include "models/wizard.cpp"
     }
 
+    namespace openchat
+    {
+        #include "models/openchat.cpp"
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -734,6 +745,14 @@ namespace chatllm
             return load_model<mistral::Config,
                               mistral::Tokenizer,
                               mistral::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_OPENCHAT:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<openchat::Config,
+                              openchat::Tokenizer,
+                              openchat::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

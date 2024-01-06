@@ -18,7 +18,11 @@ class Tokenizer : public llama::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
-        : llama::Tokenizer::Tokenizer(config, &_chat_encoder)
+        : Tokenizer(config, &_chat_encoder)
+    {}
+
+    Tokenizer(const Config &config, BaseHistoryEncoder *encoder)
+        : llama::Tokenizer::Tokenizer(config, encoder)
     {
         sys_prompt = "";
     }

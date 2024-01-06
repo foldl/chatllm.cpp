@@ -57,6 +57,8 @@ class ModelType(Enum):
     Phi2 = 0x500
 
     Mistral = 0x600
+    Mixtral = 0x601
+    OpenChat = 0x602
 
 
 class TokenType(Enum):
@@ -141,39 +143,64 @@ def load_model_file(path: Path) -> Dict:
         raise ValueError(f"unknown format: {path}")
 
 def load_all_model_files(model_files) -> Dict:
-    r = {}
     for f in model_files:
+        r = {}
         data = load_model_file(f)
         for k, v in data:
             if k in r:
                 raise Exception(f"tensor {k} already loaded. maybe it is stored cross files?")
             r[k] = v
-    return r
+        yield r
 
 def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_pp):
     tensor_info = []
     converted_names = []
-    state_dict = load_all_model_files(model_files)
-    state_dict = state_dict_pp(config, state_dict)
-    for name in tqdm(weight_names, desc="Dumping model state"):
-        tensor: torch.Tensor = state_dict[name]
 
-        if tensor.ndim == 2:
-            # 2d weight: should quantize it if needed
-            tensor = tensor.float()
+    # Note: incremental loading and converting
 
-            # step 2: quantize it into ggml format
-            tensor_ggml_type = ggml_type
-        else:
-            # 1d weight: convert it to float32
-            assert tensor.ndim == 1
-            tensor = tensor.float()
-            tensor_ggml_type = GGMLType.F32
+    state_dict_cache = {}
+    remaining: List = weight_names.copy()
 
-        dump_tensor(f, name, tensor, tensor_ggml_type)
-        tensor_info.append((name, tensor.shape, tensor_ggml_type.name))
+    for state_dict in load_all_model_files(model_files):
+        this_round = {}
+        for x in remaining:
+            if x in state_dict:
+                this_round[x] = state_dict[x]
+                del state_dict[x]
+            elif x in state_dict_cache:
+                this_round[x] = state_dict_cache[x]
+                del state_dict_cache[x]
+            else:
+                break
+
+        remaining = remaining[len(this_round):]
+
+        for x in state_dict:
+            state_dict_cache[x] = state_dict[x]
+
+        this_round = state_dict_pp(config, this_round)
+
+        for name in tqdm(this_round.keys(), desc="Dumping ..."):
+            tensor: torch.Tensor = this_round[name]
+
+            if tensor.ndim == 2:
+                # 2d weight: should quantize it if needed
+                tensor = tensor.float()
+
+                # step 2: quantize it into ggml format
+                tensor_ggml_type = ggml_type
+            else:
+                # 1d weight: convert it to float32
+                assert tensor.ndim == 1
+                tensor = tensor.float()
+                tensor_ggml_type = GGMLType.F32
+
+            dump_tensor(f, name, tensor, tensor_ggml_type)
+            tensor_info.append((name, tensor.shape, tensor_ggml_type.name))
 
     print(tabulate(tensor_info, headers=["name", "shape", "dtype"], tablefmt="psql"))
+
+    assert len(tensor_info) == len(weight_names), 'not all tensors are converted'
 
 class SentencePieceVocab:
     def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
@@ -524,6 +551,72 @@ class MistralConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
+
+class OpenChatConverter(BaseConverter):
+    MODEL_TYPE = ModelType.OpenChat
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return MistralConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MistralConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return MistralConverter.get_weight_names(config)
+
+class MixtralConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Mixtral
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        elif name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.output_router_logits == False, "output_router_logits must be False"
+
+        MistralConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_experts_per_tok,
+            config.num_local_experts,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            for j in range(config.num_local_experts):
+                weight_names += [
+                    f"model.layers.{i}.block_sparse_moe.experts.{j}.w1.weight",
+                    f"model.layers.{i}.block_sparse_moe.experts.{j}.w2.weight",
+                    f"model.layers.{i}.block_sparse_moe.experts.{j}.w3.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.block_sparse_moe.gate.weight",
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
 
 class WizardMathConverter(BaseConverter):
     MODEL_TYPE = ModelType.WizardMath
@@ -1020,6 +1113,10 @@ def main():
         WizardMathConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MistralForCausalLM':
         MistralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'MixtralForCausalLM':
+        MixtralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'openchat':
+        OpenChatConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 
