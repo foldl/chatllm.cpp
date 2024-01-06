@@ -35,7 +35,7 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 
     * [x] WizardLM: [Math 7B](https://huggingface.co/WizardLM/WizardMath-7B-V1.1)
 
-    * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2)
+    * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1)
 
         Note: Sliding-window attention is *not implemented* yet, `max_position_embeddings` is overwritten by ``sliding_window`.
 
