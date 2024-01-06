@@ -406,6 +406,16 @@ namespace chatllm
             return r;
         }
 
+        void set_id(int id) override
+        {
+            Block::set_id(id);
+
+            input_layernorm.set_id(id);
+            attention.set_id(id);
+            post_attention_layernorm.set_id(id);
+            mlp.set_id(id);
+        }
+
     public:
         InputNormBlock input_layernorm;
         AttentionBlock attention;
@@ -593,14 +603,113 @@ namespace chatllm
         Linear up_proj;
     };
 
+    // TODO: this looks more OOP or generic, but due to difficulties in building computation graph,
+    //       MLP (BaseMLP) has to be embedded into SparseMoE (calculation is done here too).
+    // template<class Expert> class SparseMoE : public Block
+
+    template<int num_local_experts, int num_experts_per_tok> class SparseMoE : public Block
+    {
+    public:
+        typedef BaseMLP Expert;
+        SparseMoE() = default;
+        SparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
+            : gate(ctx, hidden_size, num_local_experts, false)
+        {
+            for (int i = 0; i < num_local_experts; i++)
+            {
+                experts.emplace_back(Expert(ctx, hidden_size, intermediate_size));
+                expert_gates.push_back(experts[i].gate_proj.weight);
+                expert_downs.push_back(experts[i].down_proj.weight);
+                expert_ups.push_back(experts[i].up_proj.weight);
+            }
+        }
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override
+        {
+            const int n_tokens = hidden_states->ne[1];
+            const int n_expert = num_local_experts;
+
+            ggml_context * ggctx = ctx->gctx.get();
+
+            ggml_tensor * logits = gate.forward(ctx, hidden_states); // [n_tokens, num_experts]
+
+            ggml_tensor * probs = ggml_soft_max(ggctx, logits); // [n_tokens, num_experts]
+
+            // select experts
+            ggml_tensor * selected_experts = ggml_top_k(ggctx, probs, num_experts_per_tok); // [n_tokens, num_experts_per_tok]
+
+            ggml_tensor * weights = ggml_get_rows(ggctx,
+                    ggml_reshape_3d(ggctx, probs, 1, n_expert, n_tokens), selected_experts);
+
+            weights = ggml_reshape_2d(ggctx, weights, num_experts_per_tok, n_tokens); // [n_tokens, num_experts_per_tok]
+
+            ggml_tensor * weights_sum = ggml_sum_rows(ggctx, weights);
+
+            weights = ggml_div(ggctx, weights, weights_sum); // [n_tokens, num_experts_per_tok]
+
+            // compute expert outputs
+            ggml_tensor * moe_out = nullptr;
+
+            for (int i = 0; i < num_experts_per_tok; i++)
+            {
+                ggml_tensor * cur_expert;
+
+                ggml_tensor * cur_up = ggml_mul_mat_id(ggctx, expert_ups.data(), n_expert, selected_experts, i, hidden_states);
+
+                ggml_tensor * cur_gate = ggml_mul_mat_id(ggctx, expert_gates.data(), n_expert, selected_experts, i, hidden_states);
+
+                cur_gate = ggml_silu(ggctx, cur_gate);
+
+                cur_expert = ggml_mul(ggctx, cur_up, cur_gate); // [n_tokens, n_embd]
+
+                cur_expert = ggml_mul_mat_id(ggctx, expert_downs.data(), n_expert, selected_experts, i, cur_expert); // [n_tokens, n_embd]
+
+                cur_expert = ggml_mul(ggctx, cur_expert,
+                        ggml_view_2d(ggctx, weights, 1, n_tokens, weights->nb[1], i * weights->nb[0]));
+
+                if (i == 0) {
+                    moe_out = cur_expert;
+                } else {
+                    moe_out = ggml_add(ggctx, moe_out, cur_expert);
+                }
+            }
+
+            return moe_out;
+        }
+
+        void set_prec(ggml_prec prec) override
+        {
+            gate.set_prec(prec);
+            for (auto &expert : experts)
+            {
+                // TODO: At present, `Expert.forward` is implemented in `forward`.
+                expert.set_prec(prec);
+            }
+        }
+
+        int64_t get_param_num(void) const override
+        {
+            int64_t r = 0;
+            r += gate.get_param_num();
+            r += experts.size() * experts[0].get_param_num();
+            return r;
+        }
+
+    public:
+        Linear gate;
+        std::vector<Expert> experts;
+        std::vector<ggml_tensor *> expert_gates;
+        std::vector<ggml_tensor *> expert_ups;
+        std::vector<ggml_tensor *> expert_downs;
+    };
+
     class InternLMBlock : public LMBlock1<RMSNorm, InternLMSelfAttention, RMSNorm, BaseMLP>
     {
     public:
         InternLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
-            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length),
-              max_length(max_length) {}
-    private:
-        int max_length;
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
+        {}
     };
 
     class LlamaSelfAttention : public BaseSelfAttention
@@ -617,14 +726,12 @@ namespace chatllm
     {
     public:
         LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
-            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length),
-              max_length(max_length) {}
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
+        {}
 
         LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length),
-              max_length(max_length) {}
-    private:
-        int max_length;
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
     };
 
     class Phi2MLP : public TheMLP
@@ -720,9 +827,17 @@ namespace chatllm
     {
     public:
         Phi2Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock2(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length, true, true),
-              max_length(max_length) {}
-    private:
-        int max_length;
+            : LMBlock2(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length, true, true)
+        {}
+    };
+
+    template<int num_local_experts, int num_experts_per_tok> class MixtralBlock : public LMBlock1<RMSNorm, LlamaSelfAttention, RMSNorm,
+                        SparseMoE<num_local_experts, num_experts_per_tok>>
+    {
+    public:
+        MixtralBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1<RMSNorm, LlamaSelfAttention, RMSNorm,
+                       SparseMoE<num_local_experts, num_experts_per_tok>>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
     };
 } // namespace chatllm

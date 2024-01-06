@@ -575,7 +575,7 @@ class MixtralConverter(BaseConverter):
         if name.endswith('k_proj.weight'):
             return permute(tensor, config.num_key_value_heads)
         elif name.endswith('q_proj.weight'):
-            return permute(tensor, config.num_key_value_heads)
+            return permute(tensor, config.num_attention_heads)
         return tensor
 
     @staticmethod

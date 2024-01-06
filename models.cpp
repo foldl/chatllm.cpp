@@ -432,6 +432,7 @@ namespace chatllm
             for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
             {
                 layers.emplace_back(ctx, std::forward<_Types>(layer_args)...);
+                layers[layer_id].set_id(layer_id);
             }
         }
 
@@ -583,6 +584,11 @@ namespace chatllm
     namespace openchat
     {
         #include "models/openchat.cpp"
+    }
+
+    namespace mixtral
+    {
+        #include "models/mixtral.cpp"
     }
 
     template <class Config, class Tokenizer, class ConditionalGeneration>
@@ -753,6 +759,14 @@ namespace chatllm
             return load_model<openchat::Config,
                               openchat::Tokenizer,
                               openchat::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_MIXTRAL:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<mixtral::Config,
+                              mixtral::Tokenizer,
+                              mixtral::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;
