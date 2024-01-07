@@ -47,7 +47,8 @@ class ModelType(Enum):
     WizardLM = 0x153
     WizardMath = 0x154
 
-    BaiChuan = 0x200
+    BaiChuanLlama = 0x200
+    BaiChuan = 0x201
 
     DeepSeek = 0x300
     DeepSeekCoder = 0x301
@@ -163,6 +164,8 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
 
     for state_dict in load_all_model_files(model_files):
         this_round = {}
+        state_dict = state_dict_pp(config, state_dict)
+
         for x in remaining:
             if x in state_dict:
                 this_round[x] = state_dict[x]
@@ -177,8 +180,6 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
 
         for x in state_dict:
             state_dict_cache[x] = state_dict[x]
-
-        this_round = state_dict_pp(config, this_round)
 
         for name in tqdm(this_round.keys(), desc="Dumping ..."):
             tensor: torch.Tensor = this_round[name]
@@ -702,6 +703,9 @@ class BaiChuanConverter(BaseConverter):
 
         return weight_names
 
+class BaiChuanLlamaConverter(BaiChuanConverter):
+    MODEL_TYPE = ModelType.BaiChuanLlama
+
 class YiConverter(BaseConverter):
     MODEL_TYPE = ModelType.Yi
 
@@ -1100,7 +1104,11 @@ def main():
     elif arch == 'deepseekcoder':
         DeepSeekCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'BaichuanForCausalLM':
-        BaiChuanConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        if config.num_hidden_layers <= 32:
+            BaiChuanLlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        else:
+            config.max_position_embeddings = config.model_max_length
+            BaiChuanConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'yi':
         YiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'PhiForCausalLM':

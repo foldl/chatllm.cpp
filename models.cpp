@@ -91,7 +91,8 @@ namespace chatllm
         MODEL_TYPE_WIZARDLM         = 0x153,
         MODEL_TYPE_WIZARDMATH       = 0x154,
 
-        MODEL_TYPE_BAICHUAN = 0x200,
+        MODEL_TYPE_BAICHUANLLAMA = 0x200,
+        MODEL_TYPE_BAICHUAN      = 0x201,
 
         MODEL_TYPE_DEEPSEEK = 0x300,
         MODEL_TYPE_DEEPSEEK_CODER   = MODEL_TYPE_DEEPSEEK + 1,
@@ -124,6 +125,7 @@ namespace chatllm
         case MODEL_TYPE_CODELLAMA:
             return "CodeLlaMa";
         case MODEL_TYPE_BAICHUAN:
+        case MODEL_TYPE_BAICHUANLLAMA:
             return "Baichuan";
         case MODEL_TYPE_DEEPSEEK:
             return "DeepSeek-LLM";
@@ -158,6 +160,7 @@ namespace chatllm
         case MODEL_TYPE_INTERNLM:
             return "书生";
         case MODEL_TYPE_BAICHUAN:
+        case MODEL_TYPE_BAICHUANLLAMA:
             return "百川";
         case MODEL_TYPE_PHI2:
             return "Φ";
@@ -696,7 +699,7 @@ namespace chatllm
                               deepseek_coder::Tokenizer,
                               deepseek_coder::ConditionalGeneration>(loader, result);
         }
-        case MODEL_TYPE_BAICHUAN:
+        case MODEL_TYPE_BAICHUANLLAMA:
         {
             CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
 
