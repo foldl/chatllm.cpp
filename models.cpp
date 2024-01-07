@@ -703,9 +703,17 @@ namespace chatllm
         {
             CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
 
-            return load_model<baichuan::Config,
-                              baichuan::Tokenizer,
-                              baichuan::ConditionalGeneration>(loader, result);
+            return load_model<baichuan::_7b::Config,
+                              baichuan::_7b::Tokenizer,
+                              baichuan::_7b::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_BAICHUAN:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<baichuan::larger::Config,
+                              baichuan::larger::Tokenizer,
+                              baichuan::larger::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_YI:
         {

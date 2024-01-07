@@ -17,6 +17,8 @@
 #include <ggml-cuda.h>
 #endif
 
+#define ggctx       (ctx->gctx.get())
+
 namespace chatllm
 {
     ggml_tensor *inplace_act(ggml_context *ctx, ActFunc act, ggml_tensor *input)
@@ -388,9 +390,10 @@ namespace chatllm
 
         ggml_mul_mat_set_prec(attn_scores, prec);
 
-        attn_scores = apply_pos_embedding_kq(ctx, attn_scores, hidden_size, qlen, pos);
         if (attn_scaling)
             attn_scores = ggml_scale_inplace(ctx->gctx.get(), attn_scores, 1.f / std::sqrt(head_size));
+
+        attn_scores = apply_pos_embedding_kq(ctx, attn_scores, hidden_size, qlen, pos);
 
         // attn_masked = mask_past(attn_scores)
         struct ggml_tensor * attn_masked = ggml_diag_mask_inf_inplace(ctx->gctx.get(), attn_scores, n_past);
@@ -462,6 +465,22 @@ namespace chatllm
     {
         return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, 2, 0, 0,
                         freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
+    }
+
+    ggml_tensor *BaichuanSelfAttention::apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const
+    {
+        return k;
+    }
+
+    ggml_tensor *BaichuanSelfAttention::apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const
+    {
+        return q;
+    }
+
+    ggml_tensor *BaichuanSelfAttention::apply_pos_embedding_kq(ForwardContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const
+    {
+        const float max_alibi_bias = 8.0f;
+        return ggml_alibi(ggctx, kq, /*n_past*/ 0, num_attention_heads, max_alibi_bias);
     }
 
 }
