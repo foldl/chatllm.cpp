@@ -17,7 +17,7 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 
 * Baichuan (`BaichuanForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
-    * [*] [Chat-13B](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat)
+    * [x] [Chat-13B](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat)
 
 * ChatGLM (`ChatGLMModel`):
     * [x] ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)
