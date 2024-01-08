@@ -98,8 +98,9 @@ namespace chatllm
         virtual std::string preprocess(const std::string &text) const;
         virtual std::string postprocess(const std::string &text) const;
 
-    protected:
+    public:
         tokenizer::Processor *tp;
+    protected:
         std::string sys_prompt;
         int history_offset;
         ChatFormat format;

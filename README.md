@@ -47,6 +47,12 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 
         Note: `--temp 0` is recommended. Don't forget to try `--format qa`.
 
+* QWenLM (`QWenLMHeadModel`)
+    * [x] [Chat-7B](https://huggingface.co/Qwen/Qwen-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen-14B-Chat)
+
+        Note: Long context understanding (`use_dynamic_ntk` and `use_logn_attn`) is *not implemented* yet.
+
+
 ## Features
 
 * [x] Pure C++ implementation based on [ggml](https://github.com/ggerganov/ggml);

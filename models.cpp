@@ -104,6 +104,8 @@ namespace chatllm
         MODEL_TYPE_MISTRAL  = 0x600,
         MODEL_TYPE_MIXTRAL  = 0x601,
         MODEL_TYPE_OPENCHAT = 0x602,
+
+        MODEL_TYPE_QWEN     = 0x700,
     };
 
     std::string to_string(ModelType model_type)
@@ -147,6 +149,8 @@ namespace chatllm
             return "Mixtral MoE";
         case MODEL_TYPE_OPENCHAT:
             return "OpenChat";
+        case MODEL_TYPE_QWEN:
+            return "QWen";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -164,6 +168,8 @@ namespace chatllm
             return "百川";
         case MODEL_TYPE_PHI2:
             return "Φ";
+        case MODEL_TYPE_QWEN:
+            return "通义千问";
         default:
             return "";
         }
@@ -594,6 +600,11 @@ namespace chatllm
         #include "models/mixtral.cpp"
     }
 
+    namespace qwen
+    {
+        #include "models/qwen.cpp"
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -778,6 +789,14 @@ namespace chatllm
             return load_model<mixtral::Config,
                               mixtral::Tokenizer,
                               mixtral::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_QWEN:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<qwen::Config,
+                              qwen::Tokenizer,
+                              qwen::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

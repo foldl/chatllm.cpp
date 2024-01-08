@@ -61,6 +61,8 @@ class ModelType(Enum):
     Mixtral = 0x601
     OpenChat = 0x602
 
+    QWen    = 0x700
+
 
 class TokenType(Enum):
     UNDEFINED    = 0
@@ -201,7 +203,8 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
 
     print(tabulate(tensor_info, headers=["name", "shape", "dtype"], tablefmt="psql"))
 
-    assert len(tensor_info) == len(weight_names), 'not all tensors are converted'
+    if len(tensor_info) != len(weight_names):
+        raise Exception(f'not all tensors are converted: {remaining}')
 
 class SentencePieceVocab:
     def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
@@ -337,7 +340,97 @@ class FastTokenizerVocab:
         fout.write(struct.pack("i", -1))
 
     def __repr__(self) -> str:
-        return f"<FastTokenizerVocab with {self.vocab_size_base} base tokens and {len(self.added_tokens_list)} added tokens>"
+        return f"<FastTokenizerVocab with {self.vocab_size} tokens>"
+
+class TikTokenizerVocab:
+
+    @staticmethod
+    def token_bytes_to_string(b):
+        from transformers.models.gpt2.tokenization_gpt2 import bytes_to_unicode
+        byte_encoder = bytes_to_unicode()
+        return ''.join([byte_encoder[ord(char)] for char in b.decode('latin-1')])
+
+    @staticmethod
+    def bpe(mergeable_ranks: dict[bytes, int], token: bytes, max_rank: Optional[int] = None) -> list[bytes]:
+        parts = [bytes([b]) for b in token]
+        while True:
+            min_idx = None
+            min_rank = None
+            for i, pair in enumerate(zip(parts[:-1], parts[1:])):
+                rank = mergeable_ranks.get(pair[0] + pair[1])
+                if rank is not None and (min_rank is None or rank < min_rank):
+                    min_idx = i
+                    min_rank = rank
+            if min_rank is None or (max_rank is not None and min_rank >= max_rank):
+                break
+            assert min_idx is not None
+            parts = parts[:min_idx] + [parts[min_idx] + parts[min_idx + 1]] + parts[min_idx + 2:]
+        return parts
+
+    def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
+
+        from transformers import AutoTokenizer  # type: ignore[attr-defined]
+        tokenizer = AutoTokenizer.from_pretrained(fname_tokenizer, trust_remote_code=True)
+        vocab_size = max(tokenizer.get_vocab().values()) + 1
+
+        merges = []
+        vocab = {}
+        mergeable_ranks = tokenizer.mergeable_ranks
+        for token, rank in mergeable_ranks.items():
+            vocab[self.token_bytes_to_string(token)] = rank
+            if len(token) == 1:
+                continue
+            merged = TikTokenizerVocab.bpe(mergeable_ranks, token, max_rank=rank)
+            assert len(merged) == 2
+            merges.append(' '.join(map(self.token_bytes_to_string, merged)))
+
+        reverse_vocab = {id_ : encoded_tok for encoded_tok, id_ in vocab.items()}
+        added_vocab = tokenizer.special_tokens
+
+        vocab_tokens = []
+
+        for i in range(vocab_size):
+            if i not in reverse_vocab:
+                pad_token = f"[PAD{i}]".encode("utf-8")
+                vocab_tokens.append((bytearray(pad_token), TokenType.USER_DEFINED.value))
+            elif reverse_vocab[i] in added_vocab:
+                vocab_tokens.append((reverse_vocab[i], TokenType.CONTROL.value))
+            else:
+                vocab_tokens.append((reverse_vocab[i], TokenType.NORMAL.value))
+
+        self.vocab_size: int = vocab_size
+        self.merges = merges
+        self.vocab_tokens = vocab_tokens
+
+        print("vocab_size ", self.vocab_size)
+
+    def tokenizer_tokens(self) -> Iterable[Tuple[bytes, float]]:
+        for tok, t in self.vocab_tokens:
+            yield tok, t
+
+    def all_tokens(self) -> Iterable[Tuple[bytes, float]]:
+        yield from self.tokenizer_tokens()
+
+    def write_vocab(self, fout: io.BufferedWriter) -> None:
+        for tok, tt in self.all_tokens():
+            text = tok.encode('utf-8')
+            fout.write(struct.pack("i", len(text)))
+            fout.write(text)
+            fout.write(struct.pack("B", tt))
+
+        # marks the end of vocab
+        fout.write(struct.pack("i", -1))
+
+        for s in self.merges:
+            text = s.encode('utf-8')
+            fout.write(struct.pack("i", len(text)))
+            fout.write(text)
+
+        # marks the end of additional vocab
+        fout.write(struct.pack("i", -1))
+
+    def __repr__(self) -> str:
+        return f"<TikTokenizerVocab with {self.vocab_size} tokens>"
 
 class BaseConverter:
 
@@ -994,6 +1087,98 @@ class Phi2Converter(BaseConverter):
 
         return weight_names
 
+class QWenConverter(BaseConverter):
+    MODEL_TYPE = ModelType.QWen
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        added = {}
+        removed = []
+        for name in state_dict:
+
+            if name.endswith('attn.c_attn.weight'):
+                tensor: torch.Tensor = state_dict[name]
+                removed.append(name)
+
+                wq = part(tensor, 0)
+                wk = part(tensor, 1)
+                wv = part(tensor, 2)
+
+                added[name.replace('c_attn', 'q_proj')] = wq
+                added[name.replace('c_attn', 'k_proj')] = wk
+                added[name.replace('c_attn', 'v_proj')] = wv
+
+            elif name.endswith('attn.c_attn.bias'):
+                tensor: torch.Tensor = state_dict[name]
+                removed.append(name)
+
+                wq = part(tensor, 0)
+                wk = part(tensor, 1)
+                wv = part(tensor, 2)
+
+                added[name.replace('c_attn', 'q_proj')] = wq
+                added[name.replace('c_attn', 'k_proj')] = wk
+                added[name.replace('c_attn', 'v_proj')] = wv
+
+        for s in removed:
+            del state_dict[s]
+        for name in added:
+            state_dict[name] = added[name]
+        return state_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.no_bias == True, "no_bias must be true"
+        assert config.scale_attn_weights == True, "scale_attn_weights must be true"
+        assert config.seq_length > 0, "seq_length must be positive"
+
+        rope_dim = int(config.kv_channels * config.rotary_pct)
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size // 2,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+
+            config.seq_length,
+            rope_dim,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rotary_emb_base))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["transformer.wte.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"transformer.h.{i}.attn.k_proj.weight",
+                f"transformer.h.{i}.attn.k_proj.bias",
+                f"transformer.h.{i}.attn.q_proj.weight",
+                f"transformer.h.{i}.attn.q_proj.bias",
+                f"transformer.h.{i}.attn.v_proj.weight",
+                f"transformer.h.{i}.attn.v_proj.bias",
+                f"transformer.h.{i}.attn.c_proj.weight",
+                f"transformer.h.{i}.ln_1.weight",
+                f"transformer.h.{i}.ln_2.weight",
+                f"transformer.h.{i}.mlp.c_proj.weight",
+                f"transformer.h.{i}.mlp.w1.weight",
+                f"transformer.h.{i}.mlp.w2.weight",
+            ]
+
+        weight_names += [
+            "transformer.ln_f.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
 def load_vocab(path: Path) -> Any:
     # Be extra-friendly and accept either a file or a directory.  Also, if it's
     # a directory, it might be the model directory, and tokenizer.model might
@@ -1003,6 +1188,7 @@ def load_vocab(path: Path) -> Any:
         # Use `.parent` instead of /.. to handle the symlink case better.
         path3 = path.parent / "tokenizer.model"
         path4 = path / "tokenizer.json"
+        path5 = path / "qwen.tiktoken"
         if path2.exists():
             path = path2
         elif path3.exists():
@@ -1011,6 +1197,8 @@ def load_vocab(path: Path) -> Any:
             added_tokens_path = path.parent / "added_tokens.json"
             print(f"Loading vocab file {path}")
             return FastTokenizerVocab(path, added_tokens_path if added_tokens_path.exists() else None)
+        elif path5.exists():
+            return TikTokenizerVocab(path, None)
         else:
             raise FileNotFoundError(
                 f"Could not find tokenizer.model in {path} or its parent; "
@@ -1125,6 +1313,8 @@ def main():
         MixtralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'openchat':
         OpenChatConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'QWenLMHeadModel':
+        QWenConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 
