@@ -16,8 +16,7 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] WizardLM: [LM 7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0), [LM 13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2), [Coder Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0)
 
 * Baichuan (`BaichuanForCausalLM`)
-    * [x] [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)
-    * [x] [Chat-13B](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat)
+    * [x] [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat), [Chat-13B](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat)
 
 * ChatGLM (`ChatGLMModel`):
     * [x] ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)
@@ -29,7 +28,6 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1)
 
 * Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
-
     * [x] Mistral: [Instruct-7B](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), [7B](https://huggingface.co/mistralai/Mistral-7B-v0.1)
 
     * [x] OpenChat: [3.5](https://huggingface.co/openchat/openchat-3.5-1210/)
@@ -40,7 +38,7 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 
     * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1)
 
-        Note: Sliding-window attention is *not implemented* yet, `max_position_embeddings` is overwritten by ``sliding_window`.
+        Note: Sliding-window attention is *not implemented* yet, `max_position_embeddings` is overwritten by `sliding_window`.
 
 * Phi (`PhiForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2)
@@ -51,7 +49,6 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] [Chat-7B](https://huggingface.co/Qwen/Qwen-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen-14B-Chat)
 
         Note: Long context understanding (`use_dynamic_ntk` and `use_logn_attn`) is *not implemented* yet.
-
 
 ## Features
 
