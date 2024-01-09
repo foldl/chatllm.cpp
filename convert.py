@@ -41,11 +41,12 @@ class ModelType(Enum):
     CODEGEEX2 = 4
     InternLM = 0x100
 
-    LlaMA2 = 0x150
-    CodeLlaMA = 0x151
+    LlaMA2      = 0x150
+    CodeLlaMA   = 0x151
     WizardCoder = 0x152
-    WizardLM = 0x153
-    WizardMath = 0x154
+    WizardLM    = 0x153
+    WizardMath  = 0x154
+    TigerBot    = 0x155
 
     BaiChuanLlama = 0x200
     BaiChuan = 0x201
@@ -828,6 +829,31 @@ class YiConverter(BaseConverter):
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
 
+class TigerBotConverter(BaseConverter):
+    MODEL_TYPE = ModelType.TigerBot
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return LlamaConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        scaling = config.rope_scaling['factor'] if config.rope_scaling is not None else 1.0
+        rope_theta = config.rope_theta if config.rope_theta is not None else 10000.0
+
+        LlamaConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", scaling))
+        f.write(struct.pack("<f", rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
+
 class DeepSeekCoderConverter(BaseConverter):
     MODEL_TYPE = ModelType.DeepSeekCoder
 
@@ -1315,6 +1341,8 @@ def main():
         OpenChatConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'QWenLMHeadModel':
         QWenConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'tigerbot':
+        TigerBotConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

@@ -90,6 +90,7 @@ namespace chatllm
         MODEL_TYPE_WIZARDCODER      = 0x152,
         MODEL_TYPE_WIZARDLM         = 0x153,
         MODEL_TYPE_WIZARDMATH       = 0x154,
+        MODEL_TYPE_TIGERBOT         = 0x155,
 
         MODEL_TYPE_BAICHUANLLAMA = 0x200,
         MODEL_TYPE_BAICHUAN      = 0x201,
@@ -151,6 +152,8 @@ namespace chatllm
             return "OpenChat";
         case MODEL_TYPE_QWEN:
             return "QWen";
+        case MODEL_TYPE_TIGERBOT:
+            return "TigerBot";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -170,6 +173,8 @@ namespace chatllm
             return "Φ";
         case MODEL_TYPE_QWEN:
             return "通义千问";
+        case MODEL_TYPE_TIGERBOT:
+            return "虎博";
         default:
             return "";
         }
@@ -605,6 +610,12 @@ namespace chatllm
         #include "models/qwen.cpp"
     }
 
+    namespace tigerbot
+    {
+        #include "models/tigerbot.cpp"
+    }
+
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -797,6 +808,14 @@ namespace chatllm
             return load_model<qwen::Config,
                               qwen::Tokenizer,
                               qwen::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_TIGERBOT:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<tigerbot::Config,
+                              tigerbot::Tokenizer,
+                              tigerbot::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;
