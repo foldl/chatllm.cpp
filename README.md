@@ -141,8 +141,12 @@ Now you may chat with a quantized model by running:
 
 To run the model in interactive mode, add the `-i` flag. For example:
 
-```sh
-./build/bin/main -m model.bin -i
+```
+# On Windows
+.\build\bin\Release\main -m model.bin -i
+
+# On Linux (or WSL)
+rlwrap ./build/bin/main -m model.bin -i
 ```
 
 In interactive mode, your chat history will serve as the context for the next-round conversation.
