@@ -107,6 +107,9 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardMath
 # OpenChat models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a OpenChat
 
+# TigerBot models
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a TigerBot
+
 # For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
 ```
