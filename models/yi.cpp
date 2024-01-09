@@ -27,6 +27,8 @@ public:
 
     bool is_special_id(int id) const override;
 
+    int get_terminate_token_id(void) const { return im_end_token_id; }
+
 public:
     int im_start_token_id;
     int im_end_token_id;
