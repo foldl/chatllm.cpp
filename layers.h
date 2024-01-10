@@ -447,12 +447,6 @@ namespace chatllm
               v_cache(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size / (num_attention_heads / num_kv_heads) * max_length)),
               pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
               max_length(max_length),
-              freq_base(10000.0f),
-              freq_scale(1.0f),
-              ext_factor(0.0f),
-              attn_factor(1.0f),
-              beta_fast(0.0f),
-              beta_slow(0.0f),
               shift_pending(),
               attn_scaling(true)
         {
@@ -493,6 +487,12 @@ namespace chatllm
         virtual ggml_tensor *cross_attention(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
                                              ggml_tensor *q, ggml_tensor *k, ggml_tensor *v);
 
+        // k: [heads, qlen, head_size]
+        // q: [heads, qlen, head_size]
+        // v: [heads, head_size, klen]
+        virtual ggml_tensor *calc_attn_scores(ForwardContext *ctx, int hidden_size, const int n_past, const int qlen,
+                                              ggml_tensor *key_layer, ggml_tensor *query_layer, ggml_tensor *value_layer);
+
     public:
         int num_attention_heads;
         int num_kv_heads;
@@ -502,14 +502,6 @@ namespace chatllm
         ggml_tensor *v_cache;
         ggml_tensor *pos;
         int max_length;
-
-        // rope param
-        float freq_base;
-        float freq_scale;
-        float ext_factor;
-        float attn_factor;
-        float beta_fast;
-        float beta_slow;
 
     protected:
         ShiftPending shift_pending;
@@ -526,12 +518,27 @@ namespace chatllm
         }
 
         BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
-            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias)
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
+              freq_base(10000.0f),
+              freq_scale(1.0f),
+              ext_factor(0.0f),
+              attn_factor(1.0f),
+              beta_fast(0.0f),
+              beta_slow(0.0f)
         {
         }
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
+
+    public:
+        // rope param
+        float freq_base;
+        float freq_scale;
+        float ext_factor;
+        float attn_factor;
+        float beta_fast;
+        float beta_slow;
 
     protected:
         // input & output: [qlen, heads, head_size]
@@ -898,6 +905,57 @@ namespace chatllm
     public:
         QWenBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
             : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
+        {}
+    };
+
+    class BlueLMSelfAttention : public BaseSelfAttention
+    {
+    public:
+        BlueLMSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+            : BlueLMSelfAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length)
+        {
+        }
+
+        BlueLMSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false),
+              rope_scaling_factor(1.0),
+              rope_scaling_power(0.0),
+              rope_dim(0),
+              cached_hiddle_size(0)
+        {
+        }
+
+        void config(float rope_theta, float rope_scaling_factor, float rope_scaling_power);
+
+    public:
+        float rope_scaling_factor;
+        float rope_scaling_power;
+        int rope_dim;
+
+        int cached_hiddle_size;
+
+        // length: rope_dim/2
+        std::vector<float> inv_freq;
+
+    protected:
+        // input & output: [qlen, heads, head_size]
+        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
+        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
+
+        void build_inv_freq_if_needed(int hidden_size);
+
+        ggml_tensor *calc_attn_scores(ForwardContext *ctx, int hidden_size, const int n_past, const int qlen,
+                                      ggml_tensor *key_layer, ggml_tensor *query_layer, ggml_tensor *value_layer) override;
+    };
+    class BlueLMBlock : public LMBlock1<RMSNorm, BlueLMSelfAttention, RMSNorm, BaseMLP>
+    {
+    public:
+        BlueLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
+        {}
+
+        BlueLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };
 } // namespace chatllm

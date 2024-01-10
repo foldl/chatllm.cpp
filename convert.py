@@ -1511,30 +1511,6 @@ def test(model_path):
     generate_ids = model.generate(inputs.input_ids, max_length=2, do_sample=False)
     print(tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
 
-def test_ntk():
-    import math
-
-    def ntk(dim, max_position_embeddings=2048, base=10000, device=None, k=16, b=0.3):
-        # hard code bluedLM-long support 32k window size only
-        a = math.log(k) / ((dim / 2) ** b)
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim)) \
-                    / torch.exp(a * torch.arange(1, dim / 2 + 1).float() ** b)
-
-        return inv_freq
-
-    def old(dim, max_position_embeddings=2048, base=10000, device=None, k=16, b=0.3):
-        # hard code bluedLM-long support 32k window size only
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
-
-        return inv_freq
-
-    dim = 4096 / 32
-    l1 = old(dim)
-    l2 = ntk(dim)
-
-    print(l1 / l2)
-
 if __name__ == "__main__":
     # test(r'')
-    test_ntk()
-    #main()
+    main()

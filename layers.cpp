@@ -19,6 +19,12 @@
 
 #define ggctx       (ctx->gctx.get())
 
+#undef MIN
+#undef MAX
+
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 namespace chatllm
 {
     ggml_tensor *inplace_act(ggml_context *ctx, ActFunc act, ggml_tensor *input)
@@ -358,6 +364,36 @@ namespace chatllm
         ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), Vcur, v_cache_view));
     }
 
+    ggml_tensor *BaseAttention::calc_attn_scores(ForwardContext *ctx, int hidden_size, const int n_past, const int qlen,
+        ggml_tensor *key_layer, ggml_tensor *query_layer, ggml_tensor *value_layer)
+    {
+        const int head_size = hidden_size / num_attention_heads;
+
+        // note auto-broadcasting in ggml_mul_mat for `repeat > 1`
+        ggml_tensor *attn_scores = ggml_mul_mat(ctx->gctx.get(), key_layer, query_layer); // [heads, qlen, klen]
+
+        ggml_mul_mat_set_prec(attn_scores, prec);
+
+        if (attn_scaling)
+            attn_scores = ggml_scale_inplace(ctx->gctx.get(), attn_scores, 1.f / std::sqrt(head_size));
+
+        attn_scores = apply_pos_embedding_kq(ctx, attn_scores, hidden_size, qlen, pos);
+
+        // attn_masked = mask_past(attn_scores)
+        struct ggml_tensor * attn_masked = ggml_diag_mask_inf_inplace(ctx->gctx.get(), attn_scores, n_past);
+
+        // attn_probs = soft_max(attn_masked)
+        struct ggml_tensor * attn_probs = ggml_soft_max_inplace(ctx->gctx.get(), attn_masked);
+
+        ggml_tensor *context_layer = ggml_mul_mat(ctx->gctx.get(), value_layer, attn_probs); // [heads, qlen, head_size]
+        context_layer = ggml_reshape_2d(
+            ctx->gctx.get(),
+            ggml_cont(ctx->gctx.get(), ggml_permute(ctx->gctx.get(), context_layer, 0, 2, 1, 3)),
+            hidden_size, qlen);
+
+        return context_layer;
+    }
+
     ggml_tensor *BaseAttention::cross_attention(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
                                              ggml_tensor *q, ggml_tensor *k, ggml_tensor *v)
     {
@@ -385,22 +421,6 @@ namespace chatllm
         key_layer = ggml_reshape_3d(ctx->gctx.get(), key_layer, head_size, num_kv_heads, n_past + qlen);  // [qlen, heads, head_size]
         key_layer = ggml_permute(ctx->gctx.get(), key_layer, 0, 2, 1, 3);                                 // [heads, qlen, head_size]
 
-        // note auto-broadcasting in ggml_mul_mat for `repeat > 1`
-        ggml_tensor *attn_scores = ggml_mul_mat(ctx->gctx.get(), key_layer, query_layer); // [heads, qlen, klen]
-
-        ggml_mul_mat_set_prec(attn_scores, prec);
-
-        if (attn_scaling)
-            attn_scores = ggml_scale_inplace(ctx->gctx.get(), attn_scores, 1.f / std::sqrt(head_size));
-
-        attn_scores = apply_pos_embedding_kq(ctx, attn_scores, hidden_size, qlen, pos);
-
-        // attn_masked = mask_past(attn_scores)
-        struct ggml_tensor * attn_masked = ggml_diag_mask_inf_inplace(ctx->gctx.get(), attn_scores, n_past);
-
-        // attn_probs = soft_max(attn_masked)
-        struct ggml_tensor * attn_probs = ggml_soft_max_inplace(ctx->gctx.get(), attn_masked);
-
         ggml_tensor * value_layer = ggml_view_3d(ctx->gctx.get(),
                         v_cache,
                         n_past + qlen, head_size, num_kv_heads,
@@ -408,13 +428,8 @@ namespace chatllm
                         max_length * ggml_element_size(v_cache) * head_size,
                         0); // [heads, head_size, klen]
 
-        ggml_tensor *context_layer = ggml_mul_mat(ctx->gctx.get(), value_layer, attn_probs); // [heads, qlen, head_size]
-        context_layer = ggml_reshape_2d(
-            ctx->gctx.get(),
-            ggml_cont(ctx->gctx.get(), ggml_permute(ctx->gctx.get(), context_layer, 0, 2, 1, 3)),
-            hidden_size, qlen);
-
-        return context_layer;
+        ggml_tensor *attn_scores = calc_attn_scores(ctx, hidden_size, n_past, qlen, key_layer, query_layer, value_layer);
+        return attn_scores;
     }
 
     ggml_tensor *BaseSelfAttention::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
@@ -500,5 +515,195 @@ namespace chatllm
     {
         return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, 2, 0, 0,
                         freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
+    }
+
+    static void build_ntk_mixed_inv_freq(int dim, std::vector<float> &inv_freq,
+        int max_position_embeddings = 2048, float base = 10000.0, float k = 16, float b = 0.3)
+    {
+        inv_freq.clear();
+        float a = log(k) / powf(dim / 2, b);
+        inv_freq.reserve(dim / 2);
+        for (int i = 0; i < dim; i += 2)
+        {
+            float v = 1.0f / powf(base, (float)i / dim) / expf(a * powf(i / 2 + 1, b));
+            inv_freq.push_back(v);
+        }
+    }
+
+    void BlueLMSelfAttention::config(float rope_theta, float rope_scaling_factor, float rope_scaling_power)
+    {
+        this->freq_base = rope_theta;
+        this->rope_scaling_factor = rope_scaling_factor;
+        this->rope_scaling_power = rope_scaling_power;
+    }
+
+    static void ggml_compute_forward_ntk_mix_rope_f32(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+    {
+        BlueLMSelfAttention *data = reinterpret_cast<BlueLMSelfAttention *>(userdata);
+
+        const struct ggml_tensor *src0 = a;
+        const struct ggml_tensor *src1 = b;
+
+        GGML_TENSOR_UNARY_OP_LOCALS
+
+        int n_dims = data->rope_dim;
+
+        const int nr = ggml_nrows(dst);
+
+        GGML_ASSERT(n_dims <= ne0);
+        GGML_ASSERT(n_dims % 2 == 0);
+
+        // rows per thread
+        const int dr = (nr + nth - 1)/nth;
+
+        // row range for this thread
+        const int ir0 = dr*ith;
+        const int ir1 = MIN(ir0 + dr, nr);
+
+        // row index used to determine which thread to use
+        int ir = 0;
+
+        const int32_t * pos = (const int32_t *) src1->data;
+
+        for (int64_t i3 = 0; i3 < ne3; i3++) {
+            for (int64_t i2 = 0; i2 < ne2; i2++) {
+                const float p = (float)pos[i2];
+                for (int64_t i1 = 0; i1 < ne1; i1++) {
+                    if (ir++ < ir0) continue;
+                    if (ir   > ir1) break;
+
+                    for (int64_t i0 = 0; i0 < ne0; i0 += 2) {
+
+                        float theta = p * data->inv_freq[i0 / 2];
+
+                        float cos_theta = cosf(theta);
+                        float sin_theta = sinf(theta);
+
+                        const float * const src = (float *)((char *) src0->data + i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
+                            float * dst_data  = (float *)((char *)  dst->data + i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0);
+
+                        const float x0 = src[0];
+                        const float x1 = src[1];
+
+                        dst_data[0] = x0*cos_theta - x1*sin_theta;
+                        dst_data[1] = x0*sin_theta + x1*cos_theta;
+                    }
+                }
+            }
+        }
+    }
+
+    static void ggml_compute_forward_ntk_mix_rope_f16(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+    {
+        BlueLMSelfAttention *data = reinterpret_cast<BlueLMSelfAttention *>(userdata);
+
+        const struct ggml_tensor *src0 = a;
+        const struct ggml_tensor *src1 = b;
+
+        GGML_TENSOR_UNARY_OP_LOCALS
+
+        int n_dims = data->rope_dim;
+
+        const int nr = ggml_nrows(dst);
+
+        GGML_ASSERT(n_dims <= ne0);
+        GGML_ASSERT(n_dims % 2 == 0);
+
+        // rows per thread
+        const int dr = (nr + nth - 1)/nth;
+
+        // row range for this thread
+        const int ir0 = dr*ith;
+        const int ir1 = MIN(ir0 + dr, nr);
+
+        // row index used to determine which thread to use
+        int ir = 0;
+
+        const int32_t * pos = (const int32_t *) src1->data;
+
+        for (int64_t i3 = 0; i3 < ne3; i3++) {
+            for (int64_t i2 = 0; i2 < ne2; i2++) {
+                const float p = (float)pos[i2];
+                for (int64_t i1 = 0; i1 < ne1; i1++) {
+                    if (ir++ < ir0) continue;
+                    if (ir   > ir1) break;
+
+                    for (int64_t i0 = 0; i0 < ne0; i0 += 2) {
+
+                        float theta = p * data->inv_freq[i0 / 2];
+
+                        float cos_theta = cosf(theta);
+                        float sin_theta = sinf(theta);
+
+                        const ggml_fp16_t * const src = (ggml_fp16_t *)((char *) src0->data + i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
+                            ggml_fp16_t * dst_data  = (ggml_fp16_t *)((char *)  dst->data + i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0);
+
+                        const float x0 = ggml_fp16_to_fp32(src[0]);
+                        const float x1 = ggml_fp16_to_fp32(src[1]);
+
+                        dst_data[0] = ggml_fp32_to_fp16(x0*cos_theta - x1*sin_theta);
+                        dst_data[1] = ggml_fp32_to_fp16(x0*sin_theta + x1*cos_theta);
+                    }
+                }
+            }
+        }
+    }
+
+    static void ggml_compute_forward_ntk_mix_rope(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+    {
+        switch (a->type)
+        {
+        case GGML_TYPE_F16:
+            ggml_compute_forward_ntk_mix_rope_f16(dst, a, b, ith, nth, userdata);
+            break;
+        case GGML_TYPE_F32:
+            ggml_compute_forward_ntk_mix_rope_f32(dst, a, b, ith, nth, userdata);
+            break;
+        default:
+            GGML_ASSERT(false);
+            break;
+        }
+    }
+
+    void BlueLMSelfAttention::build_inv_freq_if_needed(int hidden_size)
+    {
+        if (cached_hiddle_size != hidden_size)
+        {
+            cached_hiddle_size = hidden_size;
+            build_ntk_mixed_inv_freq(rope_dim, inv_freq, (int)(max_length / rope_scaling_factor), freq_base, rope_scaling_factor, rope_scaling_power);
+        }
+    }
+
+    ggml_tensor *BlueLMSelfAttention::apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const
+    {
+        const_cast<BlueLMSelfAttention *>(this)->rope_dim = hidden_size / num_attention_heads;
+        if (rope_scaling_power > 0.0)
+        {
+            const_cast<BlueLMSelfAttention *>(this)->build_inv_freq_if_needed(hidden_size);
+            return ggml_map_custom2(ggctx, k, past, ggml_compute_forward_ntk_mix_rope, 1, const_cast<BlueLMSelfAttention *>(this));
+        }
+        else
+            return ggml_rope_custom_inplace(ggctx, k, past, rope_dim, 0, 0, 0,
+                            freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size]
+    }
+
+    ggml_tensor *BlueLMSelfAttention::apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const
+    {
+        const_cast<BlueLMSelfAttention *>(this)->rope_dim = hidden_size / num_attention_heads;
+        if (rope_scaling_power > 0.0)
+        {
+            const_cast<BlueLMSelfAttention *>(this)->build_inv_freq_if_needed(hidden_size);
+            return ggml_map_custom2(ggctx, q, past, ggml_compute_forward_ntk_mix_rope, 1, const_cast<BlueLMSelfAttention *>(this));
+        }
+        else
+            return ggml_rope_custom_inplace(ggctx, q, past, rope_dim, 0, 0, 0,
+                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
+    }
+
+    ggml_tensor *BlueLMSelfAttention::calc_attn_scores(ForwardContext *ctx, int hidden_size, const int n_past, const int qlen,
+                                              ggml_tensor *key_layer, ggml_tensor *query_layer, ggml_tensor *value_layer)
+    {
+        // TODO: use Flash Attention for faster inference
+        return BaseSelfAttention::calc_attn_scores(ctx, hidden_size, n_past, qlen, key_layer, query_layer, value_layer);
     }
 }

@@ -33,23 +33,27 @@ public:
     int human_token_id;
 };
 
-class ConditionalGeneration : public llama::ConditionalGeneration
+class ConditionalGeneration : public llama::GenericConditionalGeneration<BlueLMBlock>
 {
 public:
     ConditionalGeneration() = default;
-    ConditionalGeneration(const Config &config)
-        : llama::ConditionalGeneration(config, MODEL_TYPE_BLUELM, config.num_key_value_heads, config.max_length)
+    ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_BLUELM)
+        : ConditionalGeneration(config, type, config.num_attention_heads, config.max_length)
+    {};
+
+    ConditionalGeneration(const Config &config, ModelType type,
+                          int num_key_value_heads, int max_length)
+        : llama::GenericConditionalGeneration<BlueLMBlock>(config, type, num_key_value_heads, max_length)
     {
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             auto &attention = transformer.layers[i].attention;
             attention.freq_base = config.rope_theta;
 
-            // TODO: handle of NTK-Aware Scaled RoPE
             if (config.rope_scaling_power > 0)
             {
-                attention.freq_scale = 2 / config.rope_scaling_factor;
-                attention.freq_base = 40000;
+                attention.rope_scaling_factor = config.rope_scaling_factor;
+                attention.rope_scaling_power  = config.rope_scaling_power;
             }
         }
     }
