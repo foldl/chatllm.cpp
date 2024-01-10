@@ -53,8 +53,9 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat)
-    * [ ] [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
-        Note: Long context (32K) is *not implemented* yet.
+    * [x] [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
+
+        Note: Long context (32K) is supported (Flash Attention not used).
 
 ## Features
 
