@@ -680,7 +680,7 @@ namespace chatllm
         if (rope_scaling_power > 0.0)
         {
             const_cast<BlueLMSelfAttention *>(this)->build_inv_freq_if_needed(hidden_size);
-            return ggml_map_custom2(ggctx, k, past, ggml_compute_forward_ntk_mix_rope, 1, const_cast<BlueLMSelfAttention *>(this));
+            return ggml_map_custom2(ggctx, k, past, ggml_compute_forward_ntk_mix_rope, GGML_N_TASKS_MAX, const_cast<BlueLMSelfAttention *>(this));
         }
         else
             return ggml_rope_custom_inplace(ggctx, k, past, rope_dim, 0, 0, 0,
@@ -693,7 +693,7 @@ namespace chatllm
         if (rope_scaling_power > 0.0)
         {
             const_cast<BlueLMSelfAttention *>(this)->build_inv_freq_if_needed(hidden_size);
-            return ggml_map_custom2(ggctx, q, past, ggml_compute_forward_ntk_mix_rope, 1, const_cast<BlueLMSelfAttention *>(this));
+            return ggml_map_custom2(ggctx, q, past, ggml_compute_forward_ntk_mix_rope, GGML_N_TASKS_MAX, const_cast<BlueLMSelfAttention *>(this));
         }
         else
             return ggml_rope_custom_inplace(ggctx, q, past, rope_dim, 0, 0, 0,
