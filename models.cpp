@@ -107,6 +107,8 @@ namespace chatllm
         MODEL_TYPE_OPENCHAT = 0x602,
 
         MODEL_TYPE_QWEN     = 0x700,
+
+        MODEL_TYPE_BLUELM   = 0x800,
     };
 
     std::string to_string(ModelType model_type)
@@ -154,6 +156,8 @@ namespace chatllm
             return "QWen";
         case MODEL_TYPE_TIGERBOT:
             return "TigerBot";
+        case MODEL_TYPE_BLUELM:
+            return "BlueLM";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -175,6 +179,8 @@ namespace chatllm
             return "通义千问";
         case MODEL_TYPE_TIGERBOT:
             return "虎博";
+        case MODEL_TYPE_BLUELM:
+            return "蓝心";
         default:
             return "";
         }
@@ -615,6 +621,10 @@ namespace chatllm
         #include "models/tigerbot.cpp"
     }
 
+    namespace bluelm
+    {
+        #include "models/bluelm.cpp"
+    }
 
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
@@ -816,6 +826,14 @@ namespace chatllm
             return load_model<tigerbot::Config,
                               tigerbot::Tokenizer,
                               tigerbot::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_BLUELM:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<bluelm::Config,
+                              bluelm::Tokenizer,
+                              bluelm::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

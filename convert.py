@@ -64,6 +64,8 @@ class ModelType(Enum):
 
     QWen    = 0x700
 
+    BlueLM  = 0x800
+
 
 class TokenType(Enum):
     UNDEFINED    = 0
@@ -800,6 +802,97 @@ class BaiChuanConverter(BaseConverter):
 class BaiChuanLlamaConverter(BaiChuanConverter):
     MODEL_TYPE = ModelType.BaiChuanLlama
 
+class BlueLMConverter(BaseConverter):
+    MODEL_TYPE = ModelType.BlueLM
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        added = {}
+        removed = []
+        for name in state_dict.keys():
+            if name == 'model.embed_tokens.weight':
+
+                ln = nn.LayerNorm(config.hidden_size)
+                ln.weight.data = state_dict['model.embed_layer_norm.weight']
+                ln.bias.data   = state_dict['model.embed_layer_norm.bias']
+
+                state_dict[name] = ln.forward(state_dict[name])
+
+                removed.append('model.embed_layer_norm.bias')
+                removed.append('model.embed_layer_norm.weight')
+            elif name.endswith('k_proj.weight'):
+                state_dict[name] =  permute(state_dict[name], config.num_key_value_heads)
+            elif name.endswith('q_proj.weight'):
+                state_dict[name] =  permute(state_dict[name], config.num_attention_heads)
+
+        for s in removed:
+            del state_dict[s]
+        for name in added:
+            state_dict[name] = added[name]
+        return state_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        assert config.use_stable_embedding, "must use_stable_embedding"
+
+        if config.rope_scaling is not None:
+            assert config.rope_scaling['type'] == 'ntkmixed', "hidden_act['type'] must be 'ntkmixed'"
+            rope_scaling_factor = config.rope_scaling['factor']
+            rope_scaling_power  = config.rope_scaling['power']
+        else:
+            rope_scaling_factor = 1.0
+            rope_scaling_power = 0.0
+            if config.vocab_size == 100096:
+                print(f"Warning: fixing vocab_size for Chat-7B")
+                config.vocab_size = 100008
+
+        max_len = int(rope_scaling_factor * config.max_position_embeddings)
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            max_len,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        f.write(struct.pack("<f", config.rope_theta))
+        f.write(struct.pack("<f", rope_scaling_factor))
+        f.write(struct.pack("<f", rope_scaling_power))
+
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
 class YiConverter(BaseConverter):
     MODEL_TYPE = ModelType.Yi
 
@@ -1343,6 +1436,8 @@ def main():
         QWenConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'tigerbot':
         TigerBotConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'BlueLMForCausalLM':
+        BlueLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 
@@ -1416,6 +1511,30 @@ def test(model_path):
     generate_ids = model.generate(inputs.input_ids, max_length=2, do_sample=False)
     print(tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
 
+def test_ntk():
+    import math
+
+    def ntk(dim, max_position_embeddings=2048, base=10000, device=None, k=16, b=0.3):
+        # hard code bluedLM-long support 32k window size only
+        a = math.log(k) / ((dim / 2) ** b)
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim)) \
+                    / torch.exp(a * torch.arange(1, dim / 2 + 1).float() ** b)
+
+        return inv_freq
+
+    def old(dim, max_position_embeddings=2048, base=10000, device=None, k=16, b=0.3):
+        # hard code bluedLM-long support 32k window size only
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
+
+        return inv_freq
+
+    dim = 4096 / 32
+    l1 = old(dim)
+    l2 = ntk(dim)
+
+    print(l1 / l2)
+
 if __name__ == "__main__":
     # test(r'')
-    main()
+    test_ntk()
+    #main()

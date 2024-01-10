@@ -51,6 +51,11 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 
         Note: Long context understanding (`use_dynamic_ntk` and `use_logn_attn`) is *not implemented* yet.
 
+* BlueLM (`BlueLMForCausalLM`)
+    * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat)
+    * [ ] [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
+        Note: Long context (32K) is *not implemented* yet.
+
 ## Features
 
 * [x] Pure C++ implementation based on [ggml](https://github.com/ggerganov/ggml);
