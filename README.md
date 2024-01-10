@@ -55,8 +55,6 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat)
     * [x] [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
 
-        Note: Long context (32K) is supported (Flash Attention not used).
-
 ## Features
 
 * [x] Pure C++ implementation based on [ggml](https://github.com/ggerganov/ggml);

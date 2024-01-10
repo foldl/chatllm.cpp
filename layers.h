@@ -943,9 +943,6 @@ namespace chatllm
         ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
 
         void build_inv_freq_if_needed(int hidden_size);
-
-        ggml_tensor *calc_attn_scores(ForwardContext *ctx, int hidden_size, const int n_past, const int qlen,
-                                      ggml_tensor *key_layer, ggml_tensor *query_layer, ggml_tensor *value_layer) override;
     };
     class BlueLMBlock : public LMBlock1<RMSNorm, BlueLMSelfAttention, RMSNorm, BaseMLP>
     {

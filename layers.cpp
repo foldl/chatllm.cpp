@@ -699,11 +699,4 @@ namespace chatllm
             return ggml_rope_custom_inplace(ggctx, q, past, rope_dim, 0, 0, 0,
                         freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
     }
-
-    ggml_tensor *BlueLMSelfAttention::calc_attn_scores(ForwardContext *ctx, int hidden_size, const int n_past, const int qlen,
-                                              ggml_tensor *key_layer, ggml_tensor *query_layer, ggml_tensor *value_layer)
-    {
-        // TODO: use Flash Attention for faster inference
-        return BaseSelfAttention::calc_attn_scores(ctx, hidden_size, n_past, qlen, key_layer, query_layer, value_layer);
-    }
 }
