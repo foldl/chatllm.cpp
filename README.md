@@ -39,7 +39,7 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 
     * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1)
 
-        Note: Sliding-window attention is *not implemented* yet, `max_position_embeddings` is overwritten by `sliding_window`.
+        Note: Sliding-window attention is *not implemented* yet, `max_context_length` is set to `sliding_window`.
 
 * Phi (`PhiForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2)
