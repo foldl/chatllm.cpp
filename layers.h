@@ -546,11 +546,11 @@ namespace chatllm
         ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
     };
 
-    class InternLMSelfAttention : public BaseSelfAttention
+    template <bool bias> class InternLMSelfAttention : public BaseSelfAttention
     {
     public:
-        InternLMSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
-            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, true, true) {}
+        InternLMSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, bias, bias) {}
     };
 
     // This is **the** feed forward network (Multi-Layer Perceptron) in _Attention Is All You Need_.
@@ -711,11 +711,14 @@ namespace chatllm
         std::vector<ggml_tensor *> expert_downs;
     };
 
-    class InternLMBlock : public LMBlock1<RMSNorm, InternLMSelfAttention, RMSNorm, BaseMLP>
+    template <bool bias> class InternLMBlock : public LMBlock1<RMSNorm, InternLMSelfAttention<bias>, RMSNorm, BaseMLP>
     {
     public:
+        InternLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1<RMSNorm, InternLMSelfAttention<bias>, RMSNorm, BaseMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
         InternLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
-            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
+            : InternLMBlock(ctx, hidden_size, num_attention_heads, intermediate_size, num_attention_heads, max_length)
         {}
     };
 
@@ -886,10 +889,14 @@ namespace chatllm
     {
     public:
         QWenSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
-            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, true, false), rope_dim(hidden_size / num_attention_heads), seq_length(0) {}
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, true, false),
+              rope_dim(hidden_size / num_attention_heads),
+              seq_length(0),
+              use_dynamic_ntk(false),
+              use_logn_attn(false)
+        {}
 
-
-        void config(int rope_dim, float rope_freq_base, float seq_length);
+        void config(int rope_dim, float rope_freq_base, float seq_length, bool use_dynamic_ntk, bool use_logn_attn);
 
     protected:
         // input & output: [qlen, heads, head_size]
@@ -898,6 +905,8 @@ namespace chatllm
     private:
         int rope_dim;
         int seq_length;
+        bool use_dynamic_ntk;
+        bool use_logn_attn;
     };
 
     class QWenBlock : public LMBlock1<RMSNorm, QWenSelfAttention, RMSNorm, BaseMLP>

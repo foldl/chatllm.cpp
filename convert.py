@@ -39,7 +39,9 @@ class ModelType(Enum):
     CHATGLM2 = 2
     CHATGLM3 = 3
     CODEGEEX2 = 4
-    InternLM = 0x100
+
+    InternLM   = 0x100
+    InternLM2   = 0x101
 
     LlaMA2      = 0x150
     CodeLlaMA   = 0x151
@@ -436,6 +438,7 @@ class TikTokenizerVocab:
         return f"<TikTokenizerVocab with {self.vocab_size} tokens>"
 
 class BaseConverter:
+    FILE_VERSION = 1
 
     @classmethod
     def pp(cls, config, name: str, tensor):
@@ -455,7 +458,7 @@ class BaseConverter:
         # convert all weights to fp16
         with open(save_path, "wb") as f:
             f.write(b"ggml")  # magic
-            f.write(struct.pack("ii", cls.MODEL_TYPE.value, 1))  # model type & version
+            f.write(struct.pack("ii", cls.MODEL_TYPE.value, cls.FILE_VERSION))  # model type & version
             cls.dump_config(f, config, ggml_type)
             vocab.write_vocab(f)
 
@@ -468,7 +471,6 @@ def permute(weights: torch.Tensor, n_head: int) -> torch.Tensor:
     return (weights.reshape(n_head, 2, weights.shape[0] // n_head // 2, *weights.shape[1:])
                    .swapaxes(1, 2)
                    .reshape(weights.shape))
-
 class InternLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.InternLM
 
@@ -481,10 +483,19 @@ class InternLMConverter(BaseConverter):
     @staticmethod
     def dump_config(f, config, ggml_type):
         assert config.hidden_act == 'silu', "hidden_act must be silu"
+        rope_theta = 10000
+        rope_scaling = 1.0
+        num_key_value_heads = config.num_key_value_heads if config.num_key_value_heads is not None else config.num_attention_heads
         if config.rotary is not None:
             assert config.rotary['type'] == 'dynamic', "rotary['type'] must be dynamic"
-            assert config.rotary['base'] == 10000, "rotary['base'] must be 10000"
-            # TODO: where is scaling?
+            rope_theta = config.rotary['base']
+            rope_scaling = config.rotary.get("scaling_factor", 1.0)
+
+        if config.bias:
+            assert num_key_value_heads == config.num_attention_heads == 'dynamic', "num_key_value_heads must equal to num_attention_heads"
+            assert rope_theta == 10000, "rotary['base'] must be 10000"
+            assert rope_scaling == 1.0, "rotary['base'] must be 10000"
+
         config_values = [
             ggml_type.value,
             config.vocab_size,
@@ -500,25 +511,43 @@ class InternLMConverter(BaseConverter):
         ]
         f.write(struct.pack("i" * len(config_values), *config_values))
 
+        if not config.bias:
+            config_values = [
+                num_key_value_heads,
+            ]
+            f.write(struct.pack("i" * len(config_values), *config_values))
+            f.write(struct.pack("<f", rope_theta))
+            f.write(struct.pack("<f", rope_scaling))
+
     @staticmethod
     def get_weight_names(config):
         weight_names = ["model.embed_tokens.weight"]
         for i in range(config.num_hidden_layers):
+            if config.bias:
+                weight_names += [
+                    f"model.layers.{i}.self_attn.q_proj.weight",
+                    f"model.layers.{i}.self_attn.q_proj.bias",
+                    f"model.layers.{i}.self_attn.k_proj.weight",
+                    f"model.layers.{i}.self_attn.k_proj.bias",
+                    f"model.layers.{i}.self_attn.v_proj.weight",
+                    f"model.layers.{i}.self_attn.v_proj.bias",
+                    f"model.layers.{i}.self_attn.o_proj.weight",
+                    f"model.layers.{i}.self_attn.o_proj.bias",
+                ]
+            else:
+                weight_names += [
+                    f"model.layers.{i}.self_attn.q_proj.weight",
+                    f"model.layers.{i}.self_attn.k_proj.weight",
+                    f"model.layers.{i}.self_attn.v_proj.weight",
+                    f"model.layers.{i}.self_attn.o_proj.weight",
+                ]
             weight_names += [
-                f"model.layers.{i}.self_attn.q_proj.weight",
-                f"model.layers.{i}.self_attn.q_proj.bias",
-                f"model.layers.{i}.self_attn.k_proj.weight",
-                f"model.layers.{i}.self_attn.k_proj.bias",
-                f"model.layers.{i}.self_attn.v_proj.weight",
-                f"model.layers.{i}.self_attn.v_proj.bias",
-                f"model.layers.{i}.self_attn.o_proj.weight",
-                f"model.layers.{i}.self_attn.o_proj.bias",
-                f"model.layers.{i}.mlp.gate_proj.weight",
-                f"model.layers.{i}.mlp.down_proj.weight",
-                f"model.layers.{i}.mlp.up_proj.weight",
-                f"model.layers.{i}.input_layernorm.weight",
-                f"model.layers.{i}.post_attention_layernorm.weight",
-            ]
+                    f"model.layers.{i}.mlp.gate_proj.weight",
+                    f"model.layers.{i}.mlp.down_proj.weight",
+                    f"model.layers.{i}.mlp.up_proj.weight",
+                    f"model.layers.{i}.input_layernorm.weight",
+                    f"model.layers.{i}.post_attention_layernorm.weight",
+                ]
         weight_names += [
             "model.norm.weight",
             "lm_head.weight"
@@ -1208,6 +1237,7 @@ class Phi2Converter(BaseConverter):
 
 class QWenConverter(BaseConverter):
     MODEL_TYPE = ModelType.QWen
+    FILE_VERSION = 2
 
     @classmethod
     def state_dict_pp(cls, config, state_dict):
@@ -1250,8 +1280,12 @@ class QWenConverter(BaseConverter):
         assert config.no_bias == True, "no_bias must be true"
         assert config.scale_attn_weights == True, "scale_attn_weights must be true"
         assert config.seq_length > 0, "seq_length must be positive"
+        assert config.kv_channels * config.num_attention_heads == config.hidden_size, "`kv_channels * num_attention_heads = config.hidden_size` must holds"
 
         rope_dim = int(config.kv_channels * config.rotary_pct)
+        flags = 0
+        flags |= 1 if config.use_dynamic_ntk else 0
+        flags |= 2 if config.use_logn_attn else 0
 
         config_values = [
             ggml_type.value,
@@ -1268,6 +1302,7 @@ class QWenConverter(BaseConverter):
 
             config.seq_length,
             rope_dim,
+            flags
         ]
         f.write(struct.pack("i" * len(config_values), *config_values))
         f.write(struct.pack("<f", config.rotary_emb_base))
@@ -1401,6 +1436,8 @@ def main():
         else:
             ChatGLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InternLMForCausalLM':
+        if not config.bias:
+            InternLMConverter.MODEL_TYPE = ModelType.InternLM2
         InternLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'LlamaForCausalLM':
         LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
@@ -1512,5 +1549,4 @@ def test(model_path):
     print(tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0])
 
 if __name__ == "__main__":
-    # test(r'')
     main()

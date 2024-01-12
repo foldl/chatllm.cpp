@@ -4,8 +4,8 @@
 
 ![](./images/demo.gif)
 
-Pure C++ implementation of a bunch of models from less than 3B to more than 45B, for real-time chatting on your computer (CPU),
-based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml):
+Inference of a bunch of models from less than 3B to more than 45B, for real-time chatting on your computer (CPU),
+pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml):
 
 * LlaMA-like (`LlamaForCausalLM`):
     * [x] All LlaMA-1 models
@@ -23,17 +23,18 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
     * [x] ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)
     * [x] ChatGLM2 family: [ChatGLM2 6B](https://huggingface.co/THUDM/chatglm2-6b), [CodeGeeX2 6B](https://huggingface.co/THUDM/codegeex2-6b), [ChatGLM3 6B](https://huggingface.co/THUDM/chatglm3-6b)
 
-        Note on CodeGeeX2: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
+        Tip on CodeGeeX2: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
 
 * InternLM (`InternLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1)
+    * [x] [Chat-20B](https://huggingface.co/internlm/internlm-chat-20b)
 
 * Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
     * [x] Mistral: [Instruct-7B](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), [7B](https://huggingface.co/mistralai/Mistral-7B-v0.1)
 
     * [x] OpenChat: [3.5](https://huggingface.co/openchat/openchat-3.5-1210/)
 
-        Use system prompt to select modes: `-s GPT4` (default mode), `-s Math` (mathematical reasoning mode).
+        Tip: Use system prompt to select modes: `-s GPT4` (default mode), `-s Math` (mathematical reasoning mode).
 
     * [x] WizardLM: [Math 7B](https://huggingface.co/WizardLM/WizardMath-7B-V1.1)
 
@@ -44,7 +45,7 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 * Phi (`PhiForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2)
 
-        Note: `--temp 0` is recommended. Don't forget to try `--format qa`.
+        Tip: `--temp 0` is recommended. Don't forget to try `--format qa`.
 
 * QWenLM (`QWenLMHeadModel`)
     * [x] [Chat-7B](https://huggingface.co/Qwen/Qwen-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen-14B-Chat)
@@ -57,7 +58,6 @@ based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/
 
 ## Features
 
-* [x] Pure C++ implementation based on [ggml](https://github.com/ggerganov/ggml);
 * [x] Accelerated memory-efficient CPU inference with int4/int8 quantization, optimized KV cache and parallel computing;
 * [x] Use OOP to address the similarities between different _Transformer_ based models;
 * [x] Streaming generation with typewriter effect;

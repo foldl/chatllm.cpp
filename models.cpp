@@ -84,6 +84,7 @@ namespace chatllm
         MODEL_TYPE_CODEGEEX2 = 4,
 
         MODEL_TYPE_INTERNLM = 0x100,
+        MODEL_TYPE_INTERNLM2= 0x101, // extended model, supporting 7B & 20B
 
         MODEL_TYPE_LLAMA2   = 0x150,
         MODEL_TYPE_CODELLAMA= 0x151,
@@ -124,6 +125,7 @@ namespace chatllm
         case MODEL_TYPE_CODEGEEX2:
             return "CodeGeeX2";
         case MODEL_TYPE_INTERNLM:
+        case MODEL_TYPE_INTERNLM2:
             return "InternLM";
         case MODEL_TYPE_LLAMA2:
             return "LlaMa2";
@@ -169,7 +171,8 @@ namespace chatllm
         switch (model_type)
         {
         case MODEL_TYPE_INTERNLM:
-            return "书生";
+        case MODEL_TYPE_INTERNLM2:
+            return "书生·浦语";
         case MODEL_TYPE_BAICHUAN:
         case MODEL_TYPE_BAICHUANLLAMA:
             return "百川";
@@ -190,7 +193,9 @@ namespace chatllm
     {
     public:
         BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, size_t mem_size, size_t scratch_size)
-            : BaseModel(model_type, to_string(model_type), to_native_string(model_type)), config_(config), mem_size_(mem_size), mem_buffer_(new char[mem_size]),
+            : BaseModel(model_type, to_string(model_type), to_native_string(model_type)),
+              GRAPH_SIZE(GGML_DEFAULT_GRAPH_SIZE),
+              config_(config), mem_size_(mem_size), mem_buffer_(new char[mem_size]),
               scratch_size_(scratch_size), scratch_buffer_(new char[scratch_size])
         {
         }
@@ -269,7 +274,7 @@ namespace chatllm
 
             if (streamer)
                 streamer->end();
-
+//printf("\nn_past = %d\n", n_past);
             return output_ids;
         }
 
@@ -279,7 +284,7 @@ namespace chatllm
             ctx.gctx = GGMLContext({.mem_size = mem_size_, .mem_buffer = mem_buffer_.get(), .no_alloc = false});
             ctx.scratch = {.offs = 0, .size = scratch_size_, .data = scratch_buffer_.get()};
             int n_threads = input_ids.size() >= 32 && ggml_cpu_has_blas() && !ggml_cpu_has_gpublas() ? 1 : gen_config.num_threads;
-            ctx.gf = ggml_new_graph(ctx.gctx.get());
+            ctx.gf = ggml_new_graph_custom(ctx.gctx.get(), GRAPH_SIZE, false);
 
             dbg_ctx = &ctx;
 
@@ -414,6 +419,7 @@ namespace chatllm
 
     protected:
         LM transformer;
+        size_t GRAPH_SIZE;
     private:
         BaseConfig config_;
         size_t mem_size_;
@@ -695,9 +701,17 @@ namespace chatllm
         {
             CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
 
-            return load_model<internlm::Config,
-                              internlm::Tokenizer,
-                              internlm::ConditionalGeneration>(loader, result);
+            return load_model<internlm::v1::Config,
+                              internlm::v1::Tokenizer,
+                              internlm::v1::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_INTERNLM2:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<internlm::v2::Config,
+                              internlm::v2::Tokenizer,
+                              internlm::v2::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_LLAMA2:
         {
@@ -813,7 +827,7 @@ namespace chatllm
         }
         case MODEL_TYPE_QWEN:
         {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+            CHATLLM_CHECK(version == 2) << "only support version 2 for now but got " << version;
 
             return load_model<qwen::Config,
                               qwen::Tokenizer,

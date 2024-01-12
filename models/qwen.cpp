@@ -2,6 +2,7 @@ struct Config : public BaseConfig
 {
     int seq_length;
     int rope_dim;
+    int flags;
     float rotary_emb_base;
 };
 
@@ -148,12 +149,17 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     // TODO: support of `use_dynamic_ntk` and `use_logn_attn`
     transformer = Model<Config, RMSNorm, QWenBlock, int, int, int, int>(&w_ctx_, config, false,
                                                                             config.hidden_size, config.num_attention_heads,
-                                                                            config.intermediate_size, config.seq_length);
+                                                                            config.intermediate_size, config.max_length);
+
+    bool use_dynamic_ntk = (config.flags & 1) != 0;
+    bool use_logn_attn   = (config.flags & 2) != 0;
+
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
         auto &layer = transformer.layers[i];
         auto att = dynamic_cast<QWenSelfAttention *>(&layer.attention);
-        att->config(config.rope_dim, config.rotary_emb_base, config.seq_length);
+        att->config(config.rope_dim, config.rotary_emb_base, config.seq_length,
+                    use_dynamic_ntk, use_logn_attn);
     }
 }
 

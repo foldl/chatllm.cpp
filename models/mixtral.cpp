@@ -24,10 +24,13 @@ public:
     }
 };
 
-#define NUM_EXPERTS         8
-#define EXPERTS_PER_TOK     2
+#define NUM_EXPERTS                     8
+#define EXPERTS_PER_TOK                 2
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration<Model<Config, RMSNorm, MixtralBlock<NUM_EXPERTS, EXPERTS_PER_TOK>, int, int, int, int, int>>
+// make it easy to test with different number of experts.
+#define EFFECTIVE_EXPERTS_PER_TOK       EXPERTS_PER_TOK
+
+class ConditionalGeneration : public BaseModelForConditionalGeneration<Model<Config, RMSNorm, MixtralBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, int, int, int, int, int>>
 {
 public:
     ConditionalGeneration() = default;
@@ -81,7 +84,9 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     CHATLLM_CHECK((NUM_EXPERTS == config.num_local_experts) && (EXPERTS_PER_TOK == config.num_experts_per_tok))
         << "unsupported MoE param";
 
-    transformer = Model<Config, RMSNorm, MixtralBlock<NUM_EXPERTS, EXPERTS_PER_TOK>, int, int, int, int, int>(
+    GRAPH_SIZE = 4096;
+
+    transformer = Model<Config, RMSNorm, MixtralBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, int, int, int, int, int>(
                         &w_ctx_, config, false,
                         config.hidden_size, config.num_attention_heads,
                         config.intermediate_size, config.num_key_value_heads, config.max_length);
