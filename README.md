@@ -43,7 +43,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
         Note: Sliding-window attention is *not implemented* yet, `max_context_length` is set to `sliding_window`.
 
 * Phi (`PhiForCausalLM`)
-    * [x] [Phi-2](https://huggingface.co/microsoft/phi-2)
+    * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/d3186761bf5c4409f7679359284066c25ab668ee)
 
         Tip: `--temp 0` is recommended. Don't forget to try `--format qa`.
 
