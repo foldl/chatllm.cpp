@@ -11,7 +11,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
     * [x] All LlaMA-1 models
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
     * [x] CodeLlaMA: [Instruct-7B](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf)
-    * [x] DeepSeek: [Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat), [Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct)
+    * [x] DeepSeek: [Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat), [Coder-7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct) 🔥
     * [x] Yi: [Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat)
     * [x] WizardLM: [LM 7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0), [LM 13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2), [Coder Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0)
     * [x] TigerBot: [Chat-7B](https://huggingface.co/TigerResearch/tigerbot-7b-chat), [Chat-13B](https://huggingface.co/TigerResearch/tigerbot-13b-chat-v5)
@@ -32,18 +32,18 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
     * [x] Mistral: [Instruct-7B](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), [7B](https://huggingface.co/mistralai/Mistral-7B-v0.1)
 
-    * [x] OpenChat: [3.5](https://huggingface.co/openchat/openchat-3.5-1210/)
+    * [x] OpenChat: [3.5](https://huggingface.co/openchat/openchat-3.5-1210/) 🔥
 
         Tip: Use system prompt to select modes: `-s GPT4` (default mode), `-s Math` (mathematical reasoning mode).
 
     * [x] WizardLM: [Math 7B](https://huggingface.co/WizardLM/WizardMath-7B-V1.1)
 
-    * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1)
+    * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) 🔥
 
         Note: Sliding-window attention is *not implemented* yet, `max_context_length` is set to `sliding_window`.
 
 * Phi (`PhiForCausalLM`)
-    * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/d3186761bf5c4409f7679359284066c25ab668ee)
+    * [x] [Phi-2](https://huggingface.co/microsoft/phi-2) 🔥
 
         Tip: `--temp 0` is recommended. Don't forget to try `--format qa`.
 

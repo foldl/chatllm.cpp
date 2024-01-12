@@ -102,6 +102,7 @@ namespace chatllm
         MODEL_TYPE_YI       = 0x400,
 
         MODEL_TYPE_PHI2     = 0x500,
+        MODEL_TYPE_PHI2_V2  = 0x501,
 
         MODEL_TYPE_MISTRAL  = 0x600,
         MODEL_TYPE_MIXTRAL  = 0x601,
@@ -141,6 +142,7 @@ namespace chatllm
         case MODEL_TYPE_YI:
             return "Yi";
         case MODEL_TYPE_PHI2:
+        case MODEL_TYPE_PHI2_V2:
             return "Phi-2";
         case MODEL_TYPE_WIZARDCODER:
             return "WizardCoder";
@@ -177,6 +179,7 @@ namespace chatllm
         case MODEL_TYPE_BAICHUANLLAMA:
             return "百川";
         case MODEL_TYPE_PHI2:
+        case MODEL_TYPE_PHI2_V2:
             return "Φ";
         case MODEL_TYPE_QWEN:
             return "通义千问";
@@ -773,9 +776,17 @@ namespace chatllm
         {
             CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
 
-            return load_model<phi2::Config,
-                              phi2::Tokenizer,
-                              phi2::ConditionalGeneration>(loader, result);
+            return load_model<phi2::v1::Config,
+                              phi2::v1::Tokenizer,
+                              phi2::v1::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_PHI2_V2:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<phi2::v2::Config,
+                              phi2::v2::Tokenizer,
+                              phi2::v2::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_WIZARDCODER:
         {

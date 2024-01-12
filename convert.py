@@ -58,7 +58,8 @@ class ModelType(Enum):
 
     Yi = 0x400
 
-    Phi2 = 0x500
+    Phi2        = 0x500
+    Phi2_v2     = 0x501
 
     Mistral = 0x600
     Mixtral = 0x601
@@ -1187,26 +1188,53 @@ class Phi2Converter(BaseConverter):
 
     @staticmethod
     def dump_config(f, config, ggml_type):
-        assert config.activation_function == 'gelu_new', "activation_function must be gelu_new"
-        assert config.n_head_kv is None, "n_head_kv must be null"
-        assert config.rotary_dim == config.n_head, "rotary_dim must == n_head"
-        config_values = [
-            ggml_type.value,
-            config.vocab_size,
-            config.n_embd,
-            config.n_head,
-            config.n_layer,
-            config.n_inner if config.n_inner is not None else 4 * config.n_embd,
-            config.n_positions,
-            config.bos_token_id if config.bos_token_id is not None else -1,
-            config.eos_token_id if config.eos_token_id is not None else -1,
-            config.pad_token_id if config.pad_token_id is not None else -1,
-            config.sep_token_id if config.sep_token_id is not None else -1,
-        ]
-        f.write(struct.pack("i" * len(config_values), *config_values))
+        if config.hidden_act is None:
+            assert config.activation_function == 'gelu_new', "activation_function must be gelu_new"
+            assert config.n_head_kv is None, "n_head_kv must be null"
+            assert config.rotary_dim == config.n_head, "rotary_dim must == n_head"
+            config_values = [
+                ggml_type.value,
+                config.vocab_size,
+                config.n_embd,
+                config.n_head,
+                config.n_layer,
+                config.n_inner if config.n_inner is not None else 4 * config.n_embd,
+                config.n_positions,
+                config.bos_token_id if config.bos_token_id is not None else -1,
+                config.eos_token_id if config.eos_token_id is not None else -1,
+                config.pad_token_id if config.pad_token_id is not None else -1,
+                config.sep_token_id if config.sep_token_id is not None else -1,
+            ]
+            f.write(struct.pack("i" * len(config_values), *config_values))
+        else:
+            assert config.hidden_act == 'gelu_new', "activation_function must be gelu_new"
+            assert config.rope_scaling is None, "rope_scaling must be None"
+            assert config.qk_layernorm == False, "qk_layernorm must be False"
+            assert config.num_attention_heads == config.num_key_value_heads, "num_attention_heads must equal to num_key_value_heads"
+
+            head_dim = config.hidden_size // config.num_attention_heads
+            rope_dim = int(config.partial_rotary_factor * head_dim)
+
+            config_values = [
+                ggml_type.value,
+                config.vocab_size,
+                config.hidden_size,
+                config.num_attention_heads,
+                config.num_hidden_layers,
+                config.intermediate_size,
+                config.max_position_embeddings,
+                config.bos_token_id if config.bos_token_id is not None else -1,
+                config.eos_token_id if config.eos_token_id is not None else -1,
+                config.pad_token_id if config.pad_token_id is not None else -1,
+                config.sep_token_id if config.sep_token_id is not None else -1,
+                rope_dim
+            ]
+            f.write(struct.pack("i" * len(config_values), *config_values))
+            f.write(struct.pack("<f", config.rope_theta))
+
 
     @staticmethod
-    def get_weight_names(config):
+    def get_weight_names_v1(config):
         weight_names = ["transformer.embd.wte.weight"]
         for i in range(config.n_layer):
             weight_names += [
@@ -1235,6 +1263,42 @@ class Phi2Converter(BaseConverter):
 
         return weight_names
 
+    @staticmethod
+    def get_weight_names_v2(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.bias",
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.self_attn.q_proj.bias",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.k_proj.bias",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.bias",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.dense.bias",
+                f"model.layers.{i}.self_attn.dense.weight",
+                f"model.layers.{i}.mlp.fc1.bias",
+                f"model.layers.{i}.mlp.fc1.weight",
+                f"model.layers.{i}.mlp.fc2.bias",
+                f"model.layers.{i}.mlp.fc2.weight",
+            ]
+
+        weight_names += [
+            "model.final_layernorm.bias",
+            "model.final_layernorm.weight",
+            "lm_head.bias",
+            "lm_head.weight",
+        ]
+
+        return weight_names
+
+    @staticmethod
+    def get_weight_names(config):
+        if config.n_layer is not None:
+            return Phi2Converter.get_weight_names_v1(config)
+        else:
+            return Phi2Converter.get_weight_names_v2(config)
 class QWenConverter(BaseConverter):
     MODEL_TYPE = ModelType.QWen
     FILE_VERSION = 2
@@ -1456,6 +1520,8 @@ def main():
     elif arch == 'yi':
         YiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'PhiForCausalLM':
+        if config.hidden_act is not None:
+            Phi2Converter.MODEL_TYPE = ModelType.Phi2_v2
         Phi2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'wizardcoder':
         WizardCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

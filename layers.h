@@ -830,7 +830,8 @@ namespace chatllm
         ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
         ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
 
-        const int rope_dim;
+    public:
+        int rope_dim;
     };
 
     class Phi2Block : public LMBlock2<LayerNorm, Phi2CrossAttention, Phi2MLP>
