@@ -699,7 +699,7 @@ namespace chatllm
         {
             int64_t r = 0;
             r += gate.get_param_num();
-            r += experts.size() * experts[0].get_param_num();
+            r += num_experts_per_tok * experts[0].get_param_num();
             return r;
         }
 

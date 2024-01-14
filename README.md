@@ -53,8 +53,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
         Note: Long context understanding (`use_dynamic_ntk` and `use_logn_attn`) is *not implemented* yet.
 
 * BlueLM (`BlueLMForCausalLM`)
-    * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat)
-    * [x] [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
+    * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
 
 ## Features
 
