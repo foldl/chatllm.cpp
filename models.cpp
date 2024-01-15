@@ -104,6 +104,9 @@ namespace chatllm
         MODEL_TYPE_PHI2     = 0x500,
         MODEL_TYPE_PHI2_V2  = 0x501,
 
+        MODEL_TYPE_DOLPHINPHI2      = 0x510,
+        MODEL_TYPE_DOLPHINPHI2_V2   = 0x511,
+
         MODEL_TYPE_MISTRAL  = 0x600,
         MODEL_TYPE_MIXTRAL  = 0x601,
         MODEL_TYPE_OPENCHAT = 0x602,
@@ -144,6 +147,9 @@ namespace chatllm
         case MODEL_TYPE_PHI2:
         case MODEL_TYPE_PHI2_V2:
             return "Phi-2";
+        case MODEL_TYPE_DOLPHINPHI2:
+        case MODEL_TYPE_DOLPHINPHI2_V2:
+            return "Dolphin Phi-2";
         case MODEL_TYPE_WIZARDCODER:
             return "WizardCoder";
         case MODEL_TYPE_WIZARDLM:
@@ -635,6 +641,11 @@ namespace chatllm
         #include "models/bluelm.cpp"
     }
 
+    namespace dolphinphi2
+    {
+        #include "models/dolphinphi2.cpp"
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -859,6 +870,14 @@ namespace chatllm
             return load_model<bluelm::Config,
                               bluelm::Tokenizer,
                               bluelm::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_DOLPHINPHI2:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<dolphinphi2::v1::Config,
+                              dolphinphi2::v1::Tokenizer,
+                              dolphinphi2::v1::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

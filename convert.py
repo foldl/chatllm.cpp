@@ -58,8 +58,10 @@ class ModelType(Enum):
 
     Yi = 0x400
 
-    Phi2        = 0x500
-    Phi2_v2     = 0x501
+    Phi2                = 0x500
+    Phi2_v2             = 0x501
+    DolphinPhi2         = 0x510
+    DolphinPhi2_v2      = 0x511
 
     Mistral = 0x600
     Mixtral = 0x601
@@ -1522,6 +1524,9 @@ def main():
     elif arch == 'PhiForCausalLM':
         if config.hidden_act is not None:
             Phi2Converter.MODEL_TYPE = ModelType.Phi2_v2
+        Phi2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'dolphinphi2':
+        Phi2Converter.MODEL_TYPE = ModelType.DolphinPhi2_v2 if config.hidden_act is not None else ModelType.DolphinPhi2
         Phi2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'wizardcoder':
         WizardCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

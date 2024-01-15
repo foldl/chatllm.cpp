@@ -65,6 +65,11 @@ public:
     {
     }
 
+    Phi2Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
+        : BaseTokenizer::BaseTokenizer(config, encoder)
+    {
+    }
+
     size_t load(const char *buffer, int n_vocab) override;
 
     bool is_special_id(int id) const override;
@@ -185,12 +190,19 @@ namespace v1
     public:
         ConditionalGeneration() = default;
         ConditionalGeneration(const Config &config);
+        ConditionalGeneration(const Config &config, ModelType type);
 
         void load(ModelLoader &loader) override;
     };
 
     ConditionalGeneration::ConditionalGeneration(const Config &config)
-        : Phi2ConditionalGeneration(config, ModelType::MODEL_TYPE_PHI2)
+        : ConditionalGeneration::ConditionalGeneration(config, ModelType::MODEL_TYPE_PHI2)
+    {
+
+    }
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type)
+        : Phi2ConditionalGeneration(config, type)
     {
 
     }

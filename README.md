@@ -47,6 +47,8 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
         Tip: `--temp 0` is recommended. Don't forget to try `--format qa`.
 
+    * [x] [Dolphin Phi-2](https://huggingface.co/cognitivecomputations/dolphin-2_6-phi-2/tree/a084bb141f99f67e8ff56a654e29ddd53a0b4d7a) 🐬
+
 * QWenLM (`QWenLMHeadModel`)
     * [x] [Chat-7B](https://huggingface.co/Qwen/Qwen-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen-14B-Chat)
 
@@ -112,6 +114,9 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a OpenChat
 
 # TigerBot models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a TigerBot
+
+# Dolphin (based on Phi-2) models
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DolphinPhi2
 
 # For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
