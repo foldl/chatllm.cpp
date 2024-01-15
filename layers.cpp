@@ -501,6 +501,17 @@ namespace chatllm
         return ggml_alibi(ggctx, kq, /*n_past*/ 0, num_attention_heads, max_alibi_bias);
     }
 
+    QWenSelfAttention::QWenSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+        : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, true, false),
+            rope_dim(hidden_size / num_attention_heads),
+            seq_length(0),
+            use_dynamic_ntk(false),
+            use_logn_attn(false),
+            logn_list(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, max_length))
+    {
+        logn_list->data = new char[ggml_nbytes(logn_list)];
+    }
+
     void QWenSelfAttention::config(int rope_dim, float rope_freq_base, float seq_length, bool use_dynamic_ntk, bool use_logn_attn)
     {
         this->rope_dim = rope_dim;
@@ -508,33 +519,36 @@ namespace chatllm
         this->seq_length = seq_length;
         this->use_dynamic_ntk = use_dynamic_ntk;
         this->use_logn_attn = use_logn_attn;
+
+        if (use_logn_attn)
+        {
+            float *p = (float *)logn_list->data;
+            for (int i = 0; i < max_length; i++)
+                p[i] = i > seq_length ? logf(float(i)) / logf((float)seq_length) : 1.0f;
+        }
     }
 
     ggml_tensor *QWenSelfAttention::apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const
     {
-        float scale = qwen_get_scale(qlen, seq_length, rope_dim);
-        return ggml_rope_custom_inplace(ctx->gctx.get(), k, past, rope_dim, 2, 0, 0,
-                        freq_base, scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size]
+        // [qlen, heads, head_size]
+        return ggml_map_custom2(ggctx, k, past, ggml_compute_forward_ntk_dynamic_rope, GGML_N_TASKS_MAX, const_cast<QWenSelfAttention *>(this));
     }
 
     ggml_tensor *QWenSelfAttention::apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const
     {
-        float scale = qwen_get_scale(qlen, seq_length, rope_dim);
-        return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, 2, 0, 0,
-                        freq_base, scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
-    }
-
-    static void build_ntk_mixed_inv_freq(int dim, std::vector<float> &inv_freq,
-        int max_position_embeddings = 2048, float base = 10000.0, float k = 16, float b = 0.3)
-    {
-        inv_freq.clear();
-        float a = log(k) / powf(dim / 2, b);
-        inv_freq.reserve(dim / 2);
-        for (int i = 0; i < dim; i += 2)
+        // [qlen, heads, head_size];
+        ggml_tensor *r = ggml_map_custom2(ggctx, q, past, ggml_compute_forward_ntk_dynamic_rope, GGML_N_TASKS_MAX, const_cast<QWenSelfAttention *>(this));
+        if (use_logn_attn)
         {
-            float v = 1.0f / powf(base, (float)i / dim) / expf(a * powf(i / 2 + 1, b));
-            inv_freq.push_back(v);
+            const int *p = (const int *)past->data;
+            int last_n = p[qlen - 1];
+            if (last_n > seq_length)
+            {
+                ggml_tensor *scale = ggml_view_1d(ggctx, logn_list, qlen, p[0] * ggml_element_size(logn_list));
+                r = ggml_map_custom2(ggctx, r, scale, ggml_compute_forward_mat_scale, GGML_N_TASKS_MAX, nullptr);
+            }
         }
+        return r;
     }
 
     void BlueLMSelfAttention::config(float rope_theta, float rope_scaling_factor, float rope_scaling_power)

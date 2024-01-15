@@ -43,7 +43,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
         Note: Sliding-window attention is *not implemented* yet, `max_context_length` is set to `sliding_window`.
 
 * Phi (`PhiForCausalLM`)
-    * [x] [Phi-2](https://huggingface.co/microsoft/phi-2) 🔥
+    * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4) 🔥
 
         Tip: `--temp 0` is recommended. Don't forget to try `--format qa`.
 
@@ -51,8 +51,6 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 * QWenLM (`QWenLMHeadModel`)
     * [x] [Chat-7B](https://huggingface.co/Qwen/Qwen-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen-14B-Chat)
-
-        Note: Long context understanding (`use_dynamic_ntk` and `use_logn_attn`) is *not implemented* yet.
 
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)

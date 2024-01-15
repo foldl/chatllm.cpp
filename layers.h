@@ -889,13 +889,7 @@ namespace chatllm
     class QWenSelfAttention : public BaseSelfAttention
     {
     public:
-        QWenSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
-            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, true, false),
-              rope_dim(hidden_size / num_attention_heads),
-              seq_length(0),
-              use_dynamic_ntk(false),
-              use_logn_attn(false)
-        {}
+        QWenSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length);
 
         void config(int rope_dim, float rope_freq_base, float seq_length, bool use_dynamic_ntk, bool use_logn_attn);
 
@@ -903,11 +897,14 @@ namespace chatllm
         // input & output: [qlen, heads, head_size]
         ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
         ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
-    private:
+
+    public:
         int rope_dim;
         int seq_length;
         bool use_dynamic_ntk;
         bool use_logn_attn;
+    protected:
+        ggml_tensor *logn_list;
     };
 
     class QWenBlock : public LMBlock1<RMSNorm, QWenSelfAttention, RMSNorm, BaseMLP>
