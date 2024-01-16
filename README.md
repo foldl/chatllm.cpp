@@ -40,7 +40,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
     * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) 🔥
 
-        Note: Sliding-window attention is *not implemented* yet, `max_context_length` is set to `sliding_window`.
+        Caution: Implementation of sliding-window attention is *naive*. 💣
 
 * Phi (`PhiForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4) 🔥

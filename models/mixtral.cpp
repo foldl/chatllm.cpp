@@ -24,13 +24,14 @@ public:
     }
 };
 
-#define NUM_EXPERTS                     8
-#define EXPERTS_PER_TOK                 2
+const int NUM_EXPERTS                   =  8;
+const int EXPERTS_PER_TOK               =  2;
 
 // make it easy to test with different number of experts.
 #define EFFECTIVE_EXPERTS_PER_TOK       EXPERTS_PER_TOK
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration<Model<Config, RMSNorm, MixtralBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, int, int, int, int, int>>
+class ConditionalGeneration : public BaseModelForConditionalGeneration<Model<Config, RMSNorm,
+    MixtralBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int>>
 {
 public:
     ConditionalGeneration() = default;
@@ -40,7 +41,7 @@ public:
     void load(ModelLoader &loader) override;
 
 public:
-    static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
+    static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
     static constexpr size_t SCRATCH_SIZE = 244ull * 1024 * 1024;
 
     Config config;
@@ -76,7 +77,7 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     : BaseModelForConditionalGeneration(MODEL_TYPE_MIXTRAL, config, MEM_SIZE, SCRATCH_SIZE), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-    const size_t num_tensors = 3 + config.num_hidden_layers * (10 + config.num_local_experts * 3);
+    const size_t num_tensors = 3 + config.num_hidden_layers * (11 + config.num_local_experts * 3);
     const size_t ctx_size = num_tensors * tensor_ovhd;
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;
@@ -84,9 +85,12 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     CHATLLM_CHECK((NUM_EXPERTS == config.num_local_experts) && (EXPERTS_PER_TOK == config.num_experts_per_tok))
         << "unsupported MoE param";
 
+    CHATLLM_CHECK((mistral::SLIDING_WINDOW_LEN == config.sliding_window) || (config.sliding_window <= 0))
+        << "sliding_window (" << config.sliding_window << ") must equal to " << mistral::SLIDING_WINDOW_LEN;
+
     GRAPH_SIZE = 4096;
 
-    transformer = Model<Config, RMSNorm, MixtralBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, int, int, int, int, int>(
+    transformer = Model<Config, RMSNorm, MixtralBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int>(
                         &w_ctx_, config, false,
                         config.hidden_size, config.num_attention_heads,
                         config.intermediate_size, config.num_key_value_heads, config.max_length);

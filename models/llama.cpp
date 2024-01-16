@@ -43,12 +43,12 @@ private:
     typedef BaseModelForConditionalGeneration<
                 Model<Config, RMSNorm, LayerBlock, int, int, int, int, int>> Base;
 public:
-    GenericConditionalGeneration(const Config &config, ModelType type, int num_key_value_heads, int max_length)
+    GenericConditionalGeneration(const Config &config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12)
         : BaseModelForConditionalGeneration<
                                   Model<Config, RMSNorm, LayerBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-        const size_t num_tensors = 3 + config.num_hidden_layers * 12;
+        const size_t num_tensors = 3 + config.num_hidden_layers * tensors_per_layer;
         const size_t ctx_size = num_tensors * tensor_ovhd;
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
