@@ -188,7 +188,7 @@ static bool get_utf8_line(std::string &line, bool multi_line)
     do
     {
         std::wstring prompt;
-        std::wcin >> prompt;
+        std::getline(std::wcin, prompt);
 
         if (multi_line)
         {
