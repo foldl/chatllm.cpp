@@ -66,7 +66,7 @@ struct _vocab
 class Processor
 {
 public:
-    Processor() : piece_size(0), id_unk_token(-1), token_unk_id("<?>") {}
+    Processor() : piece_size(0), id_unk_token(-1), token_unk_id("<?>"), ret_special_token(false) {}
 
     virtual size_t Load(const char *buffer, int n_vocab) = 0;
 
@@ -91,11 +91,14 @@ public:
 
     void SetTokenUnknownId(const std::string &s) { token_unk_id = s; }
 
+    void EnableReturnSpecialToken(bool en) { ret_special_token = en; }
+
 protected:
     _vocab vocab_;
     int piece_size;
     int id_unk_token;
     std::string token_unk_id;
+    bool ret_special_token;
 };
 
 // simplified SentencePieceProcessor

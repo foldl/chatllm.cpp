@@ -55,6 +55,11 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
 
+* Stable-LM (`StableLMEpochModel`)
+    * [x] [Code-3B](https://huggingface.co/stabilityai/stable-code-3b)
+
+        Note: This model is an autocompletion model, not a chat/instruction model, so please use `--format completion`.
+
 ## Features
 
 * [x] Accelerated memory-efficient CPU inference with int4/int8 quantization, optimized KV cache and parallel computing;

@@ -741,8 +741,10 @@ const std::string BPEProcessor::IdToPiece(int id) const
     }
     else
     {
-        // TODO: how to process these special tokens?
-        return "";
+        if (ret_special_token)
+            return vocab_.id_to_token[id].tok;
+        else
+            return "";
     }
 
 }

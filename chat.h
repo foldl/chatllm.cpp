@@ -298,7 +298,7 @@ namespace chatllm
             n_past = keep;
         }
 
-        virtual int64_t get_param_num(void) const
+        virtual int64_t get_param_num(bool effective_only) const
         {
             return 0;
         }

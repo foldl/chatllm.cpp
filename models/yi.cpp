@@ -126,7 +126,7 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
         attention.freq_scale = 1 / config.rope_scaling;
     }
 
-    if (transformer.get_param_num() > 20000000)
+    if (transformer.get_param_num(false) > 20000000)
         GRAPH_SIZE = 4096;
 }
 

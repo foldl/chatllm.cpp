@@ -486,7 +486,6 @@ namespace chatllm
 
     QWenSelfAttention::QWenSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
         : BaseSelfAttention(ctx, hidden_size, num_attention_heads, max_length, true, false),
-            rope_dim(hidden_size / num_attention_heads),
             seq_length(0),
             use_dynamic_ntk(false),
             use_logn_attn(false),
@@ -543,9 +542,9 @@ namespace chatllm
 
     void BlueLMSelfAttention::build_inv_freq_if_needed(int hidden_size)
     {
-        if (cached_hiddle_size != hidden_size)
+        if (cached_hidden_size != hidden_size)
         {
-            cached_hiddle_size = hidden_size;
+            cached_hidden_size = hidden_size;
             build_ntk_mixed_inv_freq(rope_dim, inv_freq, (int)(max_length / rope_scaling_factor), freq_base, rope_scaling_factor, rope_scaling_power);
         }
     }
@@ -573,6 +572,18 @@ namespace chatllm
         }
         else
             return ggml_rope_custom_inplace(ggctx, q, past, rope_dim, 0, 0, 0,
+                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
+    }
+
+    ggml_tensor *StableLMAttention::apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor *past) const
+    {
+        return ggml_rope_custom_inplace(ctx->gctx.get(), k, past, rope_dim, 2, 0, 0,
+                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size]
+    }
+
+    ggml_tensor *StableLMAttention::apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor *past) const
+    {
+        return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, 2, 0, 0,
                         freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
     }
 }

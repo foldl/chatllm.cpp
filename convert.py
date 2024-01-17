@@ -71,6 +71,8 @@ class ModelType(Enum):
 
     BlueLM  = 0x800
 
+    StableLM    = 0x900
+
 
 class TokenType(Enum):
     UNDEFINED    = 0
@@ -474,6 +476,7 @@ def permute(weights: torch.Tensor, n_head: int) -> torch.Tensor:
     return (weights.reshape(n_head, 2, weights.shape[0] // n_head // 2, *weights.shape[1:])
                    .swapaxes(1, 2)
                    .reshape(weights.shape))
+
 class InternLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.InternLM
 
@@ -1027,6 +1030,58 @@ class DeepSeekConverter(BaseConverter):
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
 
+class StableLMConverter(BaseConverter):
+    MODEL_TYPE = ModelType.StableLM
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        assert config.rope_theta > 0, "rope_theta must be positive"
+
+        num_heads = config.num_attention_heads
+        head_dim = config.hidden_size // num_heads
+
+        LlamaConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            int(config.rope_pct * head_dim),
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        f.write(struct.pack("<f", config.rope_theta))
+        f.write(struct.pack("<f", config.rotary_scaling_factor))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.input_layernorm.bias",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.bias",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "model.norm.bias",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
 class ChatGLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.CHATGLM
 
@@ -1546,6 +1601,8 @@ def main():
         TigerBotConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'BlueLMForCausalLM':
         BlueLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'StableLMEpochForCausalLM':
+        StableLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

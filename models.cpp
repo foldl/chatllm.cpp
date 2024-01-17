@@ -114,6 +114,8 @@ namespace chatllm
         MODEL_TYPE_QWEN     = 0x700,
 
         MODEL_TYPE_BLUELM   = 0x800,
+
+        MODEL_TYPE_STABLELM = 0x900,
     };
 
     std::string to_string(ModelType model_type)
@@ -168,6 +170,8 @@ namespace chatllm
             return "TigerBot";
         case MODEL_TYPE_BLUELM:
             return "BlueLM";
+        case MODEL_TYPE_STABLELM:
+            return "StableLM";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -224,9 +228,9 @@ namespace chatllm
             BaseModel::shift_memory(keep);
         }
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
-            return transformer.get_param_num();
+            return transformer.get_param_num(effective_only);
         }
 
         std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
@@ -501,14 +505,14 @@ namespace chatllm
                 layer.shift_cache(shift, total);
         }
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += word_embeddings.get_param_num();
+            r += word_embeddings.get_param_num(effective_only);
             if (layers.size() > 0)
-                r += layers[0].get_param_num() * layers.size();
-            r += final_layernorm.get_param_num();
-            r += lm_head.get_param_num();
+                r += layers[0].get_param_num(effective_only) * layers.size();
+            r += final_layernorm.get_param_num(effective_only);
+            r += lm_head.get_param_num(effective_only);
             return r;
         }
 
@@ -644,6 +648,11 @@ namespace chatllm
     namespace dolphinphi2
     {
         #include "models/dolphinphi2.cpp"
+    }
+
+    namespace stablelm
+    {
+        #include "models/stablelm.cpp"
     }
 
     template <class Config, class Tokenizer, class ConditionalGeneration>
@@ -878,6 +887,14 @@ namespace chatllm
             return load_model<dolphinphi2::v1::Config,
                               dolphinphi2::v1::Tokenizer,
                               dolphinphi2::v1::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_STABLELM:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<stablelm::Config,
+                              stablelm::Tokenizer,
+                              stablelm::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

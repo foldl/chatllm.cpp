@@ -47,7 +47,7 @@ namespace chatllm
             this->id = id;
         }
 
-        virtual int64_t get_param_num(void) const
+        virtual int64_t get_param_num(bool effective_only) const
         {
             return 0;
         }
@@ -89,7 +89,7 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             return ggml_nelements(weight);
         }
@@ -116,7 +116,7 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = ggml_nelements(weight);
             if (bias) r += ggml_nelements(bias);
@@ -140,7 +140,7 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = ggml_nelements(weight);
             if (bias) r += ggml_nelements(bias);
@@ -164,7 +164,7 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             return ggml_nelements(weight);
         }
@@ -184,11 +184,11 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += dense_h_to_4h.get_param_num();
-            r += dense_4h_to_h.get_param_num();
+            r += dense_h_to_4h.get_param_num(effective_only);
+            r += dense_4h_to_h.get_param_num(effective_only);
             return r;
         }
 
@@ -226,11 +226,11 @@ namespace chatllm
             shift_pending = ShiftPending(shift, total);
         }
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += query_key_value.get_param_num();
-            r += dense.get_param_num();
+            r += query_key_value.get_param_num(effective_only);
+            r += dense.get_param_num(effective_only);
             return r;
         }
 
@@ -262,13 +262,13 @@ namespace chatllm
 
         void set_ctx(int n_ctx) const override { attention.set_ctx(n_ctx); };
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += input_layernorm.get_param_num();
-            r += attention.get_param_num();
-            r += post_attention_layernorm.get_param_num();
-            r += mlp.get_param_num();
+            r += input_layernorm.get_param_num(effective_only);
+            r += attention.get_param_num(effective_only);
+            r += post_attention_layernorm.get_param_num(effective_only);
+            r += mlp.get_param_num(effective_only);
             return r;
         }
 
@@ -308,11 +308,11 @@ namespace chatllm
             shift_pending = ShiftPending(shift, total);
         }
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += query_key_value.get_param_num();
-            r += dense.get_param_num();
+            r += query_key_value.get_param_num(effective_only);
+            r += dense.get_param_num(effective_only);
             return r;
         }
 
@@ -338,11 +338,11 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += dense_h_to_4h.get_param_num();
-            r += dense_4h_to_h.get_param_num();
+            r += dense_h_to_4h.get_param_num(effective_only);
+            r += dense_4h_to_h.get_param_num(effective_only);
             return r;
         }
 
@@ -397,13 +397,13 @@ namespace chatllm
             attention.shift_cache(shift, total);
         }
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += input_layernorm.get_param_num();
-            r += attention.get_param_num();
-            r += post_attention_layernorm.get_param_num();
-            r += mlp.get_param_num();
+            r += input_layernorm.get_param_num(effective_only);
+            r += attention.get_param_num(effective_only);
+            r += post_attention_layernorm.get_param_num(effective_only);
+            r += mlp.get_param_num(effective_only);
             return r;
         }
 
@@ -471,13 +471,13 @@ namespace chatllm
             shift_pending = ShiftPending(shift, total);
         }
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += q_proj.get_param_num();
-            r += k_proj.get_param_num();
-            r += v_proj.get_param_num();
-            r += o_proj.get_param_num();
+            r += q_proj.get_param_num(effective_only);
+            r += k_proj.get_param_num(effective_only);
+            r += v_proj.get_param_num(effective_only);
+            r += o_proj.get_param_num(effective_only);
             return r;
         }
 
@@ -668,7 +668,8 @@ namespace chatllm
               ext_factor(0.0f),
               attn_factor(1.0f),
               beta_fast(0.0f),
-              beta_slow(0.0f)
+              beta_slow(0.0f),
+              rope_dim(hidden_size / num_attention_heads)
         {
         }
 
@@ -705,18 +706,17 @@ namespace chatllm
         float attn_factor;
         float beta_fast;
         float beta_slow;
+        int   rope_dim;
 
     protected:
         // input & output: [qlen, heads, head_size]
         ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
         {
-            const int rope_dim = hidden_size / BaseAttn::num_attention_heads;
             return ggml_rope_custom_inplace(ctx->gctx.get(), k, past, rope_dim, 0, 0, 0,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size]
         }
         ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
         {
-            const int rope_dim = hidden_size / BaseAttn::num_attention_heads;
             return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, 0, 0, 0,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
         }
@@ -745,11 +745,11 @@ namespace chatllm
 
         void set_prec(ggml_prec prec) override;
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += fc0.get_param_num();
-            r += fc1.get_param_num();
+            r += fc0.get_param_num(effective_only);
+            r += fc1.get_param_num(effective_only);
             return r;
         }
 
@@ -771,12 +771,12 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += gate_proj.get_param_num();
-            r += down_proj.get_param_num();
-            r += up_proj.get_param_num();
+            r += gate_proj.get_param_num(effective_only);
+            r += down_proj.get_param_num(effective_only);
+            r += up_proj.get_param_num(effective_only);
             return r;
         }
 
@@ -871,11 +871,12 @@ namespace chatllm
             }
         }
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += gate.get_param_num();
-            r += num_experts_per_tok * experts[0].get_param_num();
+            r += gate.get_param_num(effective_only);
+            r += experts[0].get_param_num(effective_only) *
+                    (effective_only ? num_experts_per_tok : experts.size());
             return r;
         }
 
@@ -970,12 +971,12 @@ namespace chatllm
             attention.shift_cache(shift, total);
         }
 
-        int64_t get_param_num(void) const override
+        int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += input_layernorm.get_param_num();
-            r += attention.get_param_num();
-            r += mlp.get_param_num();
+            r += input_layernorm.get_param_num(effective_only);
+            r += attention.get_param_num(effective_only);
+            r += mlp.get_param_num(effective_only);
             return r;
         }
 
@@ -995,9 +996,9 @@ namespace chatllm
         }
 
         Phi2CrossAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
-            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
-              rope_dim(32)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias)
         {
+            rope_dim = 32;
             attn_scaling = false;
         }
 
@@ -1005,9 +1006,6 @@ namespace chatllm
         // input & output: [qlen, heads, head_size]
         ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
         ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
-
-    public:
-        int rope_dim;
     };
 
     class Phi2Block : public LMBlock2<LayerNorm, Phi2CrossAttention, Phi2MLP>
@@ -1085,7 +1083,6 @@ namespace chatllm
         ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
 
     public:
-        int rope_dim;
         int seq_length;
         bool use_dynamic_ntk;
         bool use_logn_attn;
@@ -1113,8 +1110,7 @@ namespace chatllm
             : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false),
               rope_scaling_factor(1.0),
               rope_scaling_power(0.0),
-              rope_dim(0),
-              cached_hiddle_size(0)
+              cached_hidden_size(0)
         {
         }
 
@@ -1123,9 +1119,8 @@ namespace chatllm
     public:
         float rope_scaling_factor;
         float rope_scaling_power;
-        int rope_dim;
 
-        int cached_hiddle_size;
+        int cached_hidden_size;
 
         // length: rope_dim/2
         std::vector<float> inv_freq;
@@ -1159,6 +1154,33 @@ namespace chatllm
 
         MistralBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
             : LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm, BaseMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
+    class StableLMAttention : public BaseSelfAttention<BaseAttention>
+    {
+    public:
+        StableLMAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+            : StableLMAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length)
+        {
+        }
+
+        StableLMAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
+        {
+        }
+
+    protected:
+        // input & output: [qlen, heads, head_size]
+        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
+        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
+    };
+
+    class StableLMBlock : public LMBlock1<LayerNorm, StableLMAttention, LayerNorm, BaseMLP>
+    {
+    public:
+        StableLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };
 } // namespace chatllm

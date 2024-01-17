@@ -68,9 +68,12 @@ namespace chatllm
         completion_encoder(completion_encoder),
         qa_encoder(qa_encoder)
     {
-        chat_encoder->set_tokenizer(this);
-        if (completion_encoder) completion_encoder->set_tokenizer(this);
-        if (qa_encoder) qa_encoder->set_tokenizer(this);
+        if (chat_encoder)
+            chat_encoder->set_tokenizer(this);
+        if (completion_encoder)
+            completion_encoder->set_tokenizer(this);
+        if (qa_encoder)
+            qa_encoder->set_tokenizer(this);
     }
 
     std::string BaseTokenizer::preprocess(const std::string &text) const
@@ -163,9 +166,12 @@ namespace chatllm
             if (qa_encoder)
                 return encode_history(qa_encoder, history, max_length, incremental);
             else
-                return encode_history(chat_encoder, history, max_length, incremental);
+                ; // continue
         default:
-            return encode_history(chat_encoder, history, max_length, incremental);
+            if (chat_encoder)
+                return encode_history(chat_encoder, history, max_length, incremental);
+            else
+                return encode(history[history.size() - 1]);
         }
     }
 
