@@ -20,6 +20,10 @@ endif ()
 include_directories(third_party/ggml/include/ggml third_party/ggml/src)
 add_subdirectory(third_party/ggml)
 
+set(IC_BUILD_TESTS OFF CACHE BOOL "Build isocline without tests")
+include_directories(third_party/isocline/include third_party/isocline/src)
+add_subdirectory(third_party/isocline)
+
 if (GGML_CUBLAS)
     add_compile_definitions(GGML_USE_CUBLAS)
 endif ()
@@ -32,7 +36,7 @@ add_library(chatllm STATIC chat.cpp layers.cpp tokenizer.cpp models.cpp)
 target_link_libraries(chatllm PRIVATE ggml)
 
 add_executable(main main.cpp)
-target_link_libraries(main PRIVATE chatllm)
+target_link_libraries(main PRIVATE chatllm isocline)
 
 # GoogleTest
 option(CHATGLM_ENABLE_TESTING "chatllm: enable testing" OFF)

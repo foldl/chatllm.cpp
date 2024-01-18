@@ -7,6 +7,7 @@
 #include <functional>
 #include <cstring>
 #include <random>
+#include <isocline.h>
 
 #if defined(_WIN32)
 #include <fcntl.h>
@@ -27,7 +28,6 @@ struct Args
     float top_p = 0.7;
     float temp = 0.7;
     int num_threads = 0;
-    bool multi_line = false;
     int seed;
     chatllm::ChatFormat format = chatllm::ChatFormat::CHAT;
     bool tokenize = false;
@@ -55,8 +55,6 @@ void usage(const char *prog)
               << "  --top_p N               top-p sampling (default: 0.7)\n"
               << "  --temp N                temperature (default: 0.95)\n"
               << "  --seed N                seed for random generator (default: random)\n"
-              << "  --multi                 enabled multiple lines of input\n"
-              << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n"
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
               << "  --tokenize              (debug)tokenize `prompt` and exit\n"
               << std::endl;
@@ -96,10 +94,6 @@ static Args parse_args(int argc, const char **argv)
         else if ((strcmp(arg, "--interactive") == 0) || (strcmp(arg, "-i") == 0))
         {
             args.interactive = true;
-        }
-        else if (strcmp(arg, "--multi") == 0)
-        {
-            args.multi_line = true;
         }
         else if (strcmp(arg, "--tokenize") == 0)
         {
@@ -150,82 +144,25 @@ static Args parse_args(int argc, const char **argv)
     return args;
 }
 
-#if defined(_WIN32)
-static void append_utf8(char32_t ch, std::string &out)
-{
-    if (ch <= 0x7F)
-    {
-        out.push_back(static_cast<unsigned char>(ch));
-    }
-    else if (ch <= 0x7FF)
-    {
-        out.push_back(static_cast<unsigned char>(0xC0 | ((ch >> 6) & 0x1F)));
-        out.push_back(static_cast<unsigned char>(0x80 | (ch & 0x3F)));
-    }
-    else if (ch <= 0xFFFF)
-    {
-        out.push_back(static_cast<unsigned char>(0xE0 | ((ch >> 12) & 0x0F)));
-        out.push_back(static_cast<unsigned char>(0x80 | ((ch >> 6) & 0x3F)));
-        out.push_back(static_cast<unsigned char>(0x80 | (ch & 0x3F)));
-    }
-    else if (ch <= 0x10FFFF)
-    {
-        out.push_back(static_cast<unsigned char>(0xF0 | ((ch >> 18) & 0x07)));
-        out.push_back(static_cast<unsigned char>(0x80 | ((ch >> 12) & 0x3F)));
-        out.push_back(static_cast<unsigned char>(0x80 | ((ch >> 6) & 0x3F)));
-        out.push_back(static_cast<unsigned char>(0x80 | (ch & 0x3F)));
-    }
-    else
-    {
-        // Invalid Unicode code point
-    }
+static void init_ic() {
+    ic_style_def("kbd","gray underline");
+    ic_set_prompt_marker(" > ", "| ");
+    ic_printf(
+        "For multiline input:\n"
+        "1) Use [kbd]shift-tab[/]\n"
+        "2) or [kbd]ctrl-enter[/] ([kbd]option-enter[/] on macOS), or [kbd]ctrl-j[/])\n"
+        "3) or type \\ like in llama.cpp.\n\n"
+    );
 }
 
-static bool get_utf8_line(std::string &line, bool multi_line)
+static bool get_input(const std::string &prompt, std::string &line)
 {
-    std::wstring marker(MULTI_LINE_END_MARKER_W);
-
-    do
-    {
-        std::wstring prompt;
-        std::getline(std::wcin, prompt);
-
-        if (multi_line)
-        {
-            if (prompt == marker)
-                return true;
-            if (line.size() > 0)
-                append_utf8('\n', line);
-        }
-
-        for (auto wc : prompt)
-            append_utf8(wc, line);
-    } while (multi_line);
-
+    char* input = ic_readline(prompt.c_str());
+    if (input == NULL) return false;
+    line.append(input);
+    free(input);
     return true;
 }
-#else
-static bool get_utf8_line(std::string &line, bool multi_line)
-{
-    do
-    {
-        std::string prompt;
-        std::getline(std::cin, prompt);
-
-        if (multi_line)
-        {
-            if (prompt == MULTI_LINE_END_MARKER)
-                return true;
-            if (line.size() > 0)
-                line.push_back('\n');
-        }
-
-        line.append(prompt.begin(), prompt.end());
-    } while (multi_line);
-
-    return true;
-}
-#endif
 
 static inline int get_num_physical_cores()
 {
@@ -304,14 +241,13 @@ void chat(Args &args)
 
     std::cout << std::endl;
 
+    init_ic();
     std::vector<std::string> history;
     while (1)
     {
-        std::cout << std::setw(prompt_len) << std::left << user_prompt << " > " << std::flush;
         std::string input;
-        if (!get_utf8_line(input, args.multi_line))
+        if (!get_input(user_prompt, input))
         {
-            std::cout << "FAILED to read line." << std::endl;
             break;
         }
         if (input.empty()) continue;
