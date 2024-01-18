@@ -40,7 +40,11 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
     * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) 🔥
 
-        Caution: Implementation of sliding-window attention is *naive*. 💣
+        Two implementations of sliding-window attention (see `SlidingWindowAttentionImpl`):
+
+        - Full cache: more RAM is needed (**default**).
+        - Ring cache (i.e. rolling cache): less RAM, but current implementation is *naive*. 💣
+
 
 * Phi (`PhiForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4) 🔥
