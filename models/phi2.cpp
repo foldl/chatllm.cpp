@@ -166,8 +166,11 @@ bool Phi2ConditionalGeneration::is_output_terminated(const std::vector<int> &out
         len = (int)tokenizer->chat_terminate_seq.size();
         break;
     default:
-        return BaseModelForConditionalGeneration::is_output_terminated(output_ids, keep_idx, pop_output);
+        ;
     }
+
+    if (BaseModelForConditionalGeneration::is_output_terminated(output_ids, keep_idx, pop_output))
+        return true;
 
     keep_idx = (int)(output_ids.size()) - len + 1;
     return false;
