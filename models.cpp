@@ -213,6 +213,7 @@ namespace chatllm
         BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, size_t mem_size, size_t scratch_size)
             : BaseModel(model_type, to_string(model_type), to_native_string(model_type)),
               GRAPH_SIZE(GGML_DEFAULT_GRAPH_SIZE),
+              batch_input(true),
               config_(config), mem_size_(mem_size), mem_buffer_(new char[mem_size]),
               scratch_size_(scratch_size), scratch_buffer_(new char[scratch_size])
         {
@@ -311,7 +312,18 @@ namespace chatllm
 
         int generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config)
         {
-            ggml_tensor *lm_logits = run_model(input_ids, gen_config, n_past + n_past_offset);
+            ggml_tensor *lm_logits = nullptr;
+
+            if (batch_input)
+            {
+                lm_logits = run_model(input_ids, gen_config, n_past + n_past_offset);
+            }
+            else
+            {
+                int past = n_past + n_past_offset;
+                for (size_t i = 0 ; i < input_ids.size(); i++, past++)
+                    lm_logits = run_model({input_ids[i]}, gen_config, past);
+            }
 
             int vocab_size = lm_logits->ne[0];
             float *next_token_logits = (float *)lm_logits->data;
@@ -476,6 +488,7 @@ namespace chatllm
     protected:
         LM transformer;
         size_t GRAPH_SIZE;
+        bool batch_input;
     private:
         BaseConfig config_;
         size_t mem_size_;

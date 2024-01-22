@@ -43,7 +43,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
         Two implementations of sliding-window attention (see `SlidingWindowAttentionImpl`):
 
         - Full cache: more RAM is needed (**default**).
-        - Ring cache (i.e. rolling cache): less RAM, but current implementation is *naive*. 💣
+        - Ring cache (i.e. rolling cache): less RAM, but current implementation is *naive* (slow). 💣
 
     * [x] NeuralBeagle14: [7B](https://huggingface.co/mlabonne/NeuralBeagle14-7B)
 

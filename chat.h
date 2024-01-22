@@ -305,6 +305,8 @@ namespace chatllm
 
         virtual int get_max_length(void) = 0;
 
+        int get_n_past(void) { return n_past; }
+
         virtual void shift_memory(int keep)
         {
             CHATLLM_CHECK(n_past >= keep) << "length of kept should not exceeds history";

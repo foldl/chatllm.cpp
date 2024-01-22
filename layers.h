@@ -533,6 +533,7 @@ namespace chatllm
     void fill_pos_vector(ggml_tensor *pos, int n_past, int qlen);
 
     // TODO: Optimize this !!! (after ggml support matrix with ring buffer?)
+    // qlen must be 1.
     // This is just a proof of concept.
     template <int sliding_window_len> class BaseSlidingWindowAttentionRingCache : public BaseAttention
     {
@@ -565,14 +566,14 @@ namespace chatllm
             const int write_offset = (cache_offset + n_past) % cache_length;
             const int empty = cache_length - write_offset;
             const int write_len = empty >= qlen ? qlen : empty;
-            const int remain = qlen > write_len ? qlen - write_len : 0;
+            const int remain = qlen - write_len;
 
             {
                 struct ggml_tensor * k_cache_view = ggml_view_1d(ctx->gctx.get(), k_cache, write_len * kv_hidden_size,
                         ggml_element_size(k_cache) * kv_hidden_size * write_offset);
 
                 struct ggml_tensor * v_cache_view = ggml_view_1d(ctx->gctx.get(), v_cache, write_len * kv_hidden_size,
-                        ggml_element_size(k_cache) * kv_hidden_size * write_offset);
+                        ggml_element_size(v_cache) * kv_hidden_size * write_offset);
 
                 struct ggml_tensor * k_view = ggml_view_1d(ctx->gctx.get(), k, write_len * kv_hidden_size, 0);
                 struct ggml_tensor * v_view = ggml_view_1d(ctx->gctx.get(), v, write_len * kv_hidden_size, 0);
@@ -593,7 +594,7 @@ namespace chatllm
                         write_len * kv_hidden_size * ggml_element_size(k));
 
                 struct ggml_tensor * v_view = ggml_view_1d(ctx->gctx.get(), v, remain * kv_hidden_size,
-                        write_len * kv_hidden_size * ggml_element_size(k));
+                        write_len * kv_hidden_size * ggml_element_size(v));
 
                 ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_view, k_cache_view));
                 ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), v_view, v_cache_view));
@@ -618,13 +619,11 @@ namespace chatllm
 
             const int total = n_past + qlen > cache_length ? cache_length : n_past + qlen;
 
-            ggml_tensor *key_layer = nullptr;
             ggml_tensor *indices_view = ggml_view_1d(ctx->gctx.get(), indices, total, 0);
             ggml_tensor *k_cache_view = ggml_view_2d(ctx->gctx.get(), k_cache, kv_hidden_size, cache_length,
                                             kv_hidden_size * ggml_element_size(k_cache), 0);
-            ggml_tensor *k_cache_norm = ggml_get_rows(ctx->gctx.get(), k_cache_view, indices_view);
+            ggml_tensor *key_layer = ggml_get_rows(ctx->gctx.get(), k_cache_view, indices_view);
 
-            key_layer = ggml_view_1d(ctx->gctx.get(), k_cache_norm, total * kv_hidden_size, 0);
             key_layer = ggml_reshape_3d(ctx->gctx.get(), key_layer, head_size, num_kv_heads, total);  // [qlen, heads, head_size]
             key_layer = ggml_permute(ctx->gctx.get(), key_layer, 0, 2, 1, 3);                         // [heads, qlen, head_size]
 
@@ -640,13 +639,11 @@ namespace chatllm
 
             const int total = n_past + qlen > cache_length ? cache_length : n_past + qlen;
 
-            ggml_tensor *value_layer = nullptr;
             ggml_tensor *indices_view = ggml_view_1d(ctx->gctx.get(), indices, total, 0);
             ggml_tensor *v_cache_view = ggml_view_2d(ctx->gctx.get(), v_cache, kv_hidden_size, cache_length,
-                                            kv_hidden_size * ggml_element_size(k_cache), 0);
-            ggml_tensor *v_cache_norm = ggml_get_rows(ctx->gctx.get(), v_cache_view, indices_view);
+                                            kv_hidden_size * ggml_element_size(v_cache), 0);
+            ggml_tensor *value_layer  = ggml_get_rows(ctx->gctx.get(), v_cache_view, indices_view);
 
-            value_layer = ggml_view_1d(ctx->gctx.get(), v_cache_norm, total * kv_hidden_size, 0);
             value_layer = ggml_reshape_3d(ctx->gctx.get(), value_layer, head_size, num_kv_heads, total);  // [qlen, heads, head_size]
             value_layer = ggml_permute(ctx->gctx.get(), value_layer, 1, 2, 0, 3);                         // [heads, head_size, klen]
             value_layer = ggml_cont(ctx->gctx.get(), value_layer);
@@ -675,17 +672,18 @@ namespace chatllm
             const int head_size = hidden_size / num_attention_heads;
             const int repeat = num_attention_heads / num_kv_heads;
             const int kv_hidden_size = hidden_size / repeat;
+            // TODO: It seems that qlen must be 1.
             int64_t len = n_past + qlen;
             int64_t offset = 0;
             if (len > sliding_window_len)
             {
-                len = sliding_window_len;
                 offset = len - sliding_window_len;
+                len = sliding_window_len;
             }
 
             ggml_tensor *key_layer = nullptr;
 
-            key_layer = ggml_view_1d(ctx->gctx.get(), k_cache, len * kv_hidden_size, offset * kv_hidden_size);
+            key_layer = ggml_view_1d(ctx->gctx.get(), k_cache, len * kv_hidden_size, offset * kv_hidden_size * ggml_element_size(k_cache));
             key_layer = ggml_reshape_3d(ctx->gctx.get(), key_layer, head_size, num_kv_heads, len);  // [qlen, heads, head_size]
             key_layer = ggml_permute(ctx->gctx.get(), key_layer, 0, 2, 1, 3);                       // [heads, qlen, head_size]
 
@@ -700,8 +698,8 @@ namespace chatllm
             int64_t offset = 0;
             if (len > sliding_window_len)
             {
-                len = sliding_window_len;
                 offset = len - sliding_window_len;
+                len = sliding_window_len;
             }
 
             ggml_tensor * value_layer = ggml_view_3d(ctx->gctx.get(),
@@ -709,7 +707,7 @@ namespace chatllm
                             len, head_size, num_kv_heads,
                             cache_length * ggml_element_size(v_cache),
                             cache_length * ggml_element_size(v_cache) * head_size,
-                            offset); // [heads, head_size, klen]
+                            offset * ggml_element_size(v_cache)); // [heads, head_size, klen]
             return value_layer;
         }
 

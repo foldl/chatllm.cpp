@@ -1,6 +1,7 @@
 #include "chat.h"
 #include <iomanip>
 #include <iostream>
+#include <fstream>
 #include <thread>
 #include <algorithm>
 #include <numeric>
@@ -20,6 +21,7 @@ struct Args
     std::string system = "";
     std::string prompt = "你好";
     std::string extending = "restart";
+    std::string test_fn = "";
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -59,6 +61,7 @@ void usage(const char *prog)
               << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n"
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
               << "  --tokenize              (debug)tokenize `prompt` and exit\n"
+              << "  --test FILE             test again inputs from a file and exit\n"
               << std::endl;
 }
 
@@ -129,6 +132,7 @@ static Args parse_args(int argc, const char **argv)
         handle_param("--temp",                  "-t", temp,                 std::stof)
         handle_param("--threads",               "-n", num_threads,          std::stoi)
         handle_para0("--seed",                        seed,                 std::stoi)
+        handle_para0("--test",                        test_fn,              std::string)
         else
             break;
 
@@ -233,6 +237,43 @@ static inline int get_num_physical_cores()
     return n_threads > 0 ? (n_threads <= 4 ? n_threads : n_threads / 2) : 4;
 }
 
+static void trim(std::string &s)
+{
+    size_t l = s.size();
+    while (l > 0)
+    {
+        if ((s[l - 1] == '\r') || (s[l - 1] == '\n'))
+            l--;
+        else
+            break;
+    }
+    s.resize(l);
+}
+
+static void run_file(Args &args, chatllm::Pipeline &pipeline, chatllm::TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
+{
+    std::vector<std::string> history;
+    std::string input;
+    std::ifstream f(args.test_fn);
+
+    if (f.is_open())
+    {
+        while (std::getline(f, input))
+        {
+            trim(input);
+            std::cout << "You  > " << input << std::endl;
+            history.emplace_back(std::move(input));
+
+            std::cout << "A.I. > " << std::flush;
+            std::string output = pipeline.chat(history, gen_config, &streamer);
+            history.emplace_back(std::move(output));
+        }
+    }
+
+    f.close();
+    std::cout << std::endl << pipeline.model->get_n_past() << " tokens are processed/generated. Bye" << std::endl;
+}
+
 void chat(Args &args)
 {
     chatllm::Pipeline pipeline(args.model_path);
@@ -276,6 +317,12 @@ void chat(Args &args)
         for (auto x : ids)
             std::cout << x << ", ";
         std::cout << std::endl;
+        return;
+    }
+
+    if (args.test_fn.size() > 0)
+    {
+        run_file(args, pipeline, streamer, gen_config);
         return;
     }
 

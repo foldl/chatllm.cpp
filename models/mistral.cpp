@@ -47,6 +47,8 @@ public:
             auto &attention = transformer.layers[i].attention;
             attention.freq_base = config.rope_theta;
         }
+
+        batch_input = false;
     }
 
     ConditionalGeneration(const Config &config)

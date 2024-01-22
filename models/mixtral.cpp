@@ -93,6 +93,8 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
                         &w_ctx_, config, false,
                         config.hidden_size, config.num_attention_heads,
                         config.intermediate_size, config.num_key_value_heads, config.max_length);
+
+    batch_input = false;
 }
 
 void ConditionalGeneration::load(ModelLoader &loader)
