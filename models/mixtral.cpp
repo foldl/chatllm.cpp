@@ -16,7 +16,6 @@ static ChatHistoryEncoder _chat_encoder;
 class Tokenizer : public mistral::Tokenizer
 {
 public:
-
     Tokenizer(const Config &config)
         : mistral::Tokenizer(config, &_chat_encoder)
     {
@@ -30,7 +29,7 @@ const int EXPERTS_PER_TOK               =  2;
 // make it easy to test with different number of experts.
 #define EFFECTIVE_EXPERTS_PER_TOK       EXPERTS_PER_TOK
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration<Model<Config, RMSNorm,
+class ConditionalGeneration : public BaseModelForConditionalGeneration<Model<Config, Embedding, RMSNorm,
     MixtralBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int>>
 {
 public:
@@ -90,7 +89,7 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
 
     GRAPH_SIZE = 4096;
 
-    transformer = Model<Config, RMSNorm, MixtralBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int>(
+    transformer = Model<Config, Embedding, RMSNorm, MixtralBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int>(
                         &w_ctx_, config, false,
                         config.hidden_size, config.num_attention_heads,
                         config.intermediate_size, config.num_key_value_heads, config.max_length);
@@ -126,7 +125,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
         loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer.layers[i].attention.v_proj.weight);
     }
     loader.read_tensor("model.norm.weight", transformer.final_layernorm.weight);
-    loader.read_tensor("lm_head.weight", transformer.lm_head.weight);
+    loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer.lm_head)->weight);
 
     CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
         << "corrupted model weights";

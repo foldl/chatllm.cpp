@@ -44,7 +44,9 @@ namespace chatllm
 
     ggml_tensor *Embedding::forward(ForwardContext *ctx, ggml_tensor *input)
     {
-        ggml_tensor *output = ggml_get_rows(ctx->gctx.get(), weight, input);
+        ggml_tensor *output = (ggml_n_dims(input) == 1) && (ggml_type::GGML_TYPE_I32 == input->type)
+                                ? ggml_get_rows(ctx->gctx.get(), weight, input)
+                                : ggml_mul_mat(ctx->gctx.get(), weight, input);
         return output;
     }
 

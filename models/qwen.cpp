@@ -52,7 +52,7 @@ public:
 };
 
 class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                  Model<Config, RMSNorm, QWenBlock, int, int, int, int>>
+                                  Model<Config, Embedding, RMSNorm, QWenBlock, int, int, int, int>>
 {
 public:
     ConditionalGeneration(const Config &config);
@@ -138,7 +138,7 @@ bool Tokenizer::is_special_id(int id) const
 
 ConditionalGeneration::ConditionalGeneration(const Config &config)
     : BaseModelForConditionalGeneration<
-                                Model<Config, RMSNorm, QWenBlock, int, int, int, int>>(MODEL_TYPE_QWEN, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+                                Model<Config, Embedding, RMSNorm, QWenBlock, int, int, int, int>>(MODEL_TYPE_QWEN, config, MEM_SIZE, SCRATCH_SIZE), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
     const size_t num_tensors = 3 + config.num_hidden_layers * 16;
@@ -147,7 +147,7 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     w_ctx_.dtype = config.dtype;
 
     // TODO: support of `use_dynamic_ntk` and `use_logn_attn`
-    transformer = Model<Config, RMSNorm, QWenBlock, int, int, int, int>(&w_ctx_, config, false,
+    transformer = Model<Config, Embedding, RMSNorm, QWenBlock, int, int, int, int>(&w_ctx_, config, false,
                                                                             config.hidden_size, config.num_attention_heads,
                                                                             config.intermediate_size, config.max_length);
 
@@ -186,7 +186,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
         loader.read_tensor(layer_prefix + "mlp.w2.weight", transformer.layers[i].mlp.gate_proj.weight);
     }
     loader.read_tensor("transformer.ln_f.weight", transformer.final_layernorm.weight);
-    loader.read_tensor("lm_head.weight", transformer.lm_head.weight);
+    loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer.lm_head)->weight);
 
     CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
         << "corrupted model weights";

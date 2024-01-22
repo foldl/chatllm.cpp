@@ -45,6 +45,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
         - Full cache: more RAM is needed (**default**).
         - Ring cache (i.e. rolling cache): less RAM, but current implementation is *naive*. 💣
 
+    * [x] NeuralBeagle14: [7B](https://huggingface.co/mlabonne/NeuralBeagle14-7B)
 
 * Phi (`PhiForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4) 🔥
@@ -173,3 +174,8 @@ Run `./build/bin/main -h` to explore more options!
 * This project is started as refactoring of [ChatGLM.cpp](https://github.com/li-plus/chatglm.cpp), without which, this project could not be possible.
 
 * Thank those who have released their the model sources and checkpoints.
+
+## Note
+
+This project is my hobby project to learn DL & GGML, and under active development. PRs of features won't
+be accepted, while PRs for bug fixes are warmly welcome.

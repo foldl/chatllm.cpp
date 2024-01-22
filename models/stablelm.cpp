@@ -32,12 +32,12 @@ public:
 };
 
 class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                  Model<Config, LayerNorm, StableLMBlock, int, int, int, int, int>>
+                                  Model<Config, Embedding, LayerNorm, StableLMBlock, int, int, int, int, int>>
 {
 public:
     ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_STABLELM)
         : BaseModelForConditionalGeneration<
-                                  Model<Config, LayerNorm, StableLMBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+                                  Model<Config, Embedding, LayerNorm, StableLMBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 4 + config.num_hidden_layers * 14;
@@ -45,7 +45,7 @@ public:
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        transformer = Model<Config, LayerNorm, StableLMBlock, int, int, int, int, int>(&w_ctx_, config, false,
+        transformer = Model<Config, Embedding, LayerNorm, StableLMBlock, int, int, int, int, int>(&w_ctx_, config, false,
                                                                                 config.hidden_size, config.num_attention_heads,
                                                                                 config.intermediate_size, config.num_key_value_heads, config.max_length);
 
@@ -79,7 +79,7 @@ public:
         }
         loader.read_tensor("model.norm.weight", transformer.final_layernorm.weight);
         loader.read_tensor("model.norm.bias", transformer.final_layernorm.bias);
-        loader.read_tensor("lm_head.weight", transformer.lm_head.weight);
+        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer.lm_head)->weight);
 
         CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
             << "corrupted model weights";

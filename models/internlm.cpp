@@ -1,9 +1,9 @@
 template<bool bias> class GenericConditionalGeneration : public BaseModelForConditionalGeneration<
-                                    Model<BaseConfig, RMSNorm, InternLMBlock<bias>, int, int, int, int, int>>
+                                    Model<BaseConfig, Embedding, RMSNorm, InternLMBlock<bias>, int, int, int, int, int>>
 {
 public:
     typedef BaseModelForConditionalGeneration<
-                Model<BaseConfig, RMSNorm, InternLMBlock<bias>, int, int, int, int, int>> Base;
+                Model<BaseConfig, Embedding, RMSNorm, InternLMBlock<bias>, int, int, int, int, int>> Base;
 
     GenericConditionalGeneration() = default;
     GenericConditionalGeneration(const BaseConfig &config, ModelType type)
@@ -19,7 +19,7 @@ public:
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        Base::transformer = Model<BaseConfig, RMSNorm, InternLMBlock<bias>, int, int, int, int, int>(&w_ctx_, config, false,
+        Base::transformer = Model<BaseConfig, Embedding, RMSNorm, InternLMBlock<bias>, int, int, int, int, int>(&w_ctx_, config, false,
                                     config.hidden_size, config.num_attention_heads,
                                     config.intermediate_size, num_key_value_heads, config.max_length);
         for (int i = 0; i < config.num_hidden_layers; i++)
@@ -61,7 +61,7 @@ public:
             loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", Base::transformer.layers[i].post_attention_layernorm.weight);
         }
         loader.read_tensor("model.norm.weight", Base::transformer.final_layernorm.weight);
-        loader.read_tensor("lm_head.weight", Base::transformer.lm_head.weight);
+        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(Base::transformer.lm_head)->weight);
 
         CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
             << "corrupted model weights";

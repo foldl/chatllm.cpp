@@ -66,12 +66,15 @@ class ModelType(Enum):
     Mistral = 0x600
     Mixtral = 0x601
     OpenChat = 0x602
+    NeuralBeagle = 0x603
 
     QWen    = 0x700
 
     BlueLM  = 0x800
 
     StableLM    = 0x900
+
+    BCE_Embedding = 0x10000100
 
 
 class TokenType(Enum):
@@ -686,6 +689,21 @@ class MistralConverter(BaseConverter):
 
 class OpenChatConverter(BaseConverter):
     MODEL_TYPE = ModelType.OpenChat
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return MistralConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MistralConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return MistralConverter.get_weight_names(config)
+
+class NeuralBeagleConverter(BaseConverter):
+    MODEL_TYPE = ModelType.NeuralBeagle
 
     @classmethod
     def pp(cls, config, name: str, tensor):
@@ -1454,6 +1472,64 @@ class QWenConverter(BaseConverter):
 
         return weight_names
 
+class XLMRobertaConverter(BaseConverter):
+    MODEL_TYPE = ModelType.BCE_Embedding
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'gelu', 'hidden_act must be gelu'
+        assert config.type_vocab_size == 1, 'type_vocab_size must be 1'
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ['embeddings.word_embeddings.weight',
+                        'embeddings.position_embeddings.weight',
+                        'embeddings.token_type_embeddings.weight',
+                        'embeddings.LayerNorm.weight',
+                        'embeddings.LayerNorm.bias',
+                        ]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f'encoder.layer.{i}.attention.self.query.weight',
+                f'encoder.layer.{i}.attention.self.query.bias',
+                f'encoder.layer.{i}.attention.self.key.weight',
+                f'encoder.layer.{i}.attention.self.key.bias',
+                f'encoder.layer.{i}.attention.self.value.weight',
+                f'encoder.layer.{i}.attention.self.value.bias',
+                f'encoder.layer.{i}.attention.output.dense.weight',
+                f'encoder.layer.{i}.attention.output.dense.bias',
+                f'encoder.layer.{i}.attention.output.LayerNorm.weight',
+                f'encoder.layer.{i}.attention.output.LayerNorm.bias',
+                f'encoder.layer.{i}.intermediate.dense.weight',
+                f'encoder.layer.{i}.intermediate.dense.bias',
+                f'encoder.layer.{i}.output.dense.weight',
+                f'encoder.layer.{i}.output.dense.bias',
+                f'encoder.layer.{i}.output.LayerNorm.weight',
+                f'encoder.layer.{i}.output.LayerNorm.bias',
+            ]
+
+        weight_names += [
+            'pooler.dense.weight',
+            'pooler.dense.bias',
+        ]
+
+        return weight_names
+
 def load_vocab(path: Path) -> Any:
     # Be extra-friendly and accept either a file or a directory.  Also, if it's
     # a directory, it might be the model directory, and tokenizer.model might
@@ -1462,10 +1538,13 @@ def load_vocab(path: Path) -> Any:
         path2 = path / "tokenizer.model"
         # Use `.parent` instead of /.. to handle the symlink case better.
         path3 = path.parent / "tokenizer.model"
+        path20 = path / "sentencepiece.bpe.model"
         path4 = path / "tokenizer.json"
         path5 = path / "qwen.tiktoken"
         if path2.exists():
             path = path2
+        elif path20.exists():
+            path = path20
         elif path3.exists():
             path = path3
         elif path4.exists():
@@ -1603,6 +1682,10 @@ def main():
         BlueLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'StableLMEpochForCausalLM':
         StableLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'XLMRobertaModel':
+        XLMRobertaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'neuralbeagle':
+        NeuralBeagleConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

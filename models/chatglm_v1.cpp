@@ -32,7 +32,7 @@ public:
 };
 
 class ConditionalGeneration : public BaseModelForConditionalGeneration<
-    Model<Config, LayerNorm, GLMBlock, int, int, int, int>>
+    Model<Config, Embedding, LayerNorm, GLMBlock, int, int, int, int>>
 {
 public:
     ConditionalGeneration() = default;
@@ -173,7 +173,7 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;
 
-    transformer = Model<Config, LayerNorm, GLMBlock, int, int, int, int>(&w_ctx_, config, true,
+    transformer = Model<Config, Embedding, LayerNorm, GLMBlock, int, int, int, int>(&w_ctx_, config, nullptr,
                             config.hidden_size, config.num_attention_heads, config.num_hidden_layers,
                             config.max_length);
 }

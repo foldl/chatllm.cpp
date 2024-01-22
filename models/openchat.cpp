@@ -18,8 +18,6 @@ public:
         sys_prompt = "GPT4";
     }
 
-    size_t load(const char *buffer, int n_vocab) override;
-
     int get_terminate_token_id(void) const override { return eos_token_id; }
 };
 
@@ -31,12 +29,6 @@ public:
     {
     }
 };
-
-size_t Tokenizer::load(const char *buffer, int n_vocab)
-{
-    size_t r = mistral::Tokenizer::load(buffer, n_vocab);
-    return r;
-}
 
 void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {

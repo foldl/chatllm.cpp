@@ -34,7 +34,7 @@ namespace chatllm
             CHATLLM_THROW << "forward(ForwardContext *ctx, ggml_tensor *input, int n_past): not implemented";
             return NULL;
         }
-        virtual void set_ctx(int n_ctx) const { }
+        virtual void set_ctx(int n_ctx) { }
         virtual void shift_cache(int shift, int total) { }
 
         virtual void set_prec(ggml_prec prec)
@@ -61,8 +61,14 @@ namespace chatllm
     public:
         Identity() {}
         Identity(InitContext *ctx, int a) {}
+        Identity(InitContext *ctx, int a, int b) {}
 
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override
+        {
+            return input;
+        }
+
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input, int n_past) override
         {
             return input;
         }
@@ -220,7 +226,7 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
 
-        void set_ctx(int n_ctx) const override { n_ctx = n_ctx; };
+        void set_ctx(int n_ctx) override { this->n_ctx = n_ctx; };
         void shift_cache(int shift, int total) override
         {
             shift_pending = ShiftPending(shift, total);
@@ -260,7 +266,7 @@ namespace chatllm
         using Block::forward;
         virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
 
-        void set_ctx(int n_ctx) const override { attention.set_ctx(n_ctx); };
+        void set_ctx(int n_ctx) override { attention.set_ctx(n_ctx); };
 
         int64_t get_param_num(bool effective_only) const override
         {

@@ -33,19 +33,19 @@ If a question does not make any sense, or is not factually coherent, explain why
     bool is_special_id(int id) const override;
 
 public:
-    void encode(const std::string &text, std::vector<int> &ids, bool add_bos, bool add_eos) const;
+    virtual void encode(const std::string &text, std::vector<int> &ids, bool add_bos, bool add_eos) const;
 };
 
 template <class LayerBlock> class GenericConditionalGeneration : public BaseModelForConditionalGeneration<
-                                  Model<Config, RMSNorm, LayerBlock, int, int, int, int, int>>
+                                  Model<Config, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>>
 {
 private:
     typedef BaseModelForConditionalGeneration<
-                Model<Config, RMSNorm, LayerBlock, int, int, int, int, int>> Base;
+                Model<Config, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>> Base;
 public:
     GenericConditionalGeneration(const Config &config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12)
         : BaseModelForConditionalGeneration<
-                                  Model<Config, RMSNorm, LayerBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+                                  Model<Config, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 3 + config.num_hidden_layers * tensors_per_layer;
@@ -53,7 +53,7 @@ public:
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        Base::transformer = Model<Config, RMSNorm, LayerBlock, int, int, int, int, int>(&w_ctx_, config, false,
+        Base::transformer = Model<Config, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>(&w_ctx_, config, false,
                                                                                 config.hidden_size, config.num_attention_heads,
                                                                                 config.intermediate_size, num_key_value_heads, max_length);
     }
@@ -76,7 +76,7 @@ public:
             loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", Base::transformer.layers[i].attention.v_proj.weight);
         }
         loader.read_tensor("model.norm.weight", Base::transformer.final_layernorm.weight);
-        loader.read_tensor("lm_head.weight", Base::transformer.lm_head.weight);
+        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(Base::transformer.lm_head)->weight);
 
         CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
             << "corrupted model weights";

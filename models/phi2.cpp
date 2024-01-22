@@ -27,7 +27,7 @@ void QAHistoryEncoder::append_user(int round_idx, const std::string &user, std::
     std::ostringstream oss_prompt;
 
     oss_prompt << "Instruct: " << user << "\n"
-            << "Output: ";
+               << "Output: ";
 
     auto text = oss_prompt.str();
     tokenizer->encode(text, ids);
@@ -61,12 +61,14 @@ class Phi2Tokenizer : public BaseTokenizer
 {
 public:
     Phi2Tokenizer(const BaseConfig &config)
-        : BaseTokenizer::BaseTokenizer(config, &_chat_encoder, &_qa_encoder)
+        : BaseTokenizer::BaseTokenizer(config, &_chat_encoder, &_qa_encoder),
+          qa_seq_max_len(0)
     {
     }
 
     Phi2Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
-        : BaseTokenizer::BaseTokenizer(config, encoder)
+        : BaseTokenizer::BaseTokenizer(config, encoder),
+          qa_seq_max_len(0)
     {
     }
 
@@ -77,11 +79,14 @@ public:
 public:
     std::vector<int> qa_terminate_seq1;
     std::vector<int> qa_terminate_seq2;
+    std::vector<int> qa_terminate_seq3;
+    std::vector<int> qa_terminate_seq4;
+    int qa_seq_max_len;
     std::vector<int> chat_terminate_seq;
 };
 
 class Phi2ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                    Model<BaseConfig, LayerNorm, Phi2Block, int, int, int, int, int>>
+                                    Model<BaseConfig, Embedding, LayerNorm, Phi2Block, int, int, int, int, int>>
 {
 public:
     Phi2ConditionalGeneration() = default;
@@ -94,7 +99,7 @@ public:
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        transformer = Model<BaseConfig, LayerNorm, Phi2Block, int, int, int, int, int>(&w_ctx_, config, false, true,
+        transformer = Model<BaseConfig, Embedding, LayerNorm, Phi2Block, int, int, int, int, int>(&w_ctx_, config, true,
                             config.hidden_size, config.num_attention_heads,
                             config.intermediate_size, config.num_attention_heads, config.max_length);
 
@@ -113,55 +118,79 @@ public:
     BaseConfig config;
 
 protected:
-    bool is_output_terminated(int next_token_id, const std::vector<int> &output_ids, int &pop_output) override;
+    bool is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output) override;
 
 protected:
     // hold ggml_context & kv_cache
     InitContext w_ctx_; // weight context
 };
 
-bool Phi2ConditionalGeneration::is_output_terminated(int next_token_id, const std::vector<int> &output_ids, int &pop_output)
+bool Phi2ConditionalGeneration::is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output)
 {
     if (output_ids.size() < 1) return false;
 
     Phi2Tokenizer *tokenizer = dynamic_cast<Phi2Tokenizer *>(this->tokenizer);
+    int len = 0;
 
     switch (tokenizer->get_chat_format())
     {
     case ChatFormat::QA:
-        if (match_output_sequence(next_token_id, output_ids, tokenizer->qa_terminate_seq1))
+        if (match_output_sequence(output_ids, tokenizer->qa_terminate_seq1))
         {
-            pop_output = (int)(tokenizer->qa_terminate_seq1.size() - 1);
+            pop_output = (int)tokenizer->qa_terminate_seq1.size();
             return true;
         }
-        else if (match_output_sequence(next_token_id, output_ids, tokenizer->qa_terminate_seq2))
+        else if (match_output_sequence(output_ids, tokenizer->qa_terminate_seq2))
         {
-            pop_output = (int)(tokenizer->qa_terminate_seq2.size() - 1);
+            pop_output = (int)tokenizer->qa_terminate_seq2.size();
             return true;
         }
+        else if (match_output_sequence(output_ids, tokenizer->qa_terminate_seq3))
+        {
+            pop_output = (int)tokenizer->qa_terminate_seq3.size();
+            return true;
+        }
+        else if (match_output_sequence(output_ids, tokenizer->qa_terminate_seq4))
+        {
+            pop_output = (int)tokenizer->qa_terminate_seq4.size();
+            return true;
+        }
+        len = tokenizer->qa_seq_max_len;
         break;
     case ChatFormat::CHAT:
-        if (match_output_sequence(next_token_id, output_ids, tokenizer->chat_terminate_seq))
+        if (match_output_sequence(output_ids, tokenizer->chat_terminate_seq))
         {
-            pop_output = (int)(tokenizer->chat_terminate_seq.size() - 1);
+            pop_output = (int)tokenizer->chat_terminate_seq.size();
             return true;
         }
+        len = (int)tokenizer->chat_terminate_seq.size();
         break;
     default:
-        break;
+        return BaseModelForConditionalGeneration::is_output_terminated(output_ids, keep_idx, pop_output);
     }
 
-    return BaseModelForConditionalGeneration::is_output_terminated(next_token_id, output_ids, pop_output);
+    keep_idx = (int)(output_ids.size()) - len + 1;
+    return false;
 }
+
+#define MAX_IT(x)  if (qa_seq_max_len < (int)x.size()) qa_seq_max_len = (int)x.size()
 
 size_t Phi2Tokenizer::load(const char *buffer, int n_vocab)
 {
     tp = new tokenizer::BPEProcessor();
     size_t size = tp->Load(buffer, n_vocab);
-    tp->Encode("\nInstruct", &qa_terminate_seq1);
+    tp->Encode("\nInstruct:", &qa_terminate_seq1);
     tp->Encode("\nInstruction:", &qa_terminate_seq2);
+    tp->Encode("\nUser:", &qa_terminate_seq3);
+    tp->Encode("\nINPUT:", &qa_terminate_seq4);
     tp->Encode("\nAlice", &chat_terminate_seq);
     bos_token_id = eos_token_id = tp->PieceToId("<|endoftext|>");
+
+    MAX_IT(qa_terminate_seq1);
+    MAX_IT(qa_terminate_seq2);
+    MAX_IT(qa_terminate_seq3);
+    MAX_IT(qa_terminate_seq4);
+
     return size;
 }
 
@@ -235,8 +264,8 @@ namespace v1
         loader.read_tensor("lm_head.ln.bias", transformer.final_layernorm.bias);
         loader.read_tensor("lm_head.ln.weight", transformer.final_layernorm.weight);
 
-        loader.read_tensor("lm_head.linear.bias", transformer.lm_head.bias);
-        loader.read_tensor("lm_head.linear.weight", transformer.lm_head.weight);
+        loader.read_tensor("lm_head.linear.bias", dynamic_cast<Linear *>(transformer.lm_head)->bias);
+        loader.read_tensor("lm_head.linear.weight", dynamic_cast<Linear *>(transformer.lm_head)->weight);
 
         CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
             << "corrupted model weights";
@@ -307,8 +336,8 @@ namespace v2
         loader.read_tensor("model.final_layernorm.bias", transformer.final_layernorm.bias);
         loader.read_tensor("model.final_layernorm.weight", transformer.final_layernorm.weight);
 
-        loader.read_tensor("lm_head.bias", transformer.lm_head.bias);
-        loader.read_tensor("lm_head.weight", transformer.lm_head.weight);
+        loader.read_tensor("lm_head.bias", dynamic_cast<Linear *>(transformer.lm_head)->bias);
+        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer.lm_head)->weight);
 
         CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
             << "corrupted model weights";

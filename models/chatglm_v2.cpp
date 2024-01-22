@@ -36,7 +36,7 @@ public:
 };
 
 class ConditionalGeneration : public BaseModelForConditionalGeneration<
-    Model<Config, RMSNorm, GLM2Block, int, int, int, int, int>>
+    Model<Config, Embedding, RMSNorm, GLM2Block, int, int, int, int, int>>
 {
 public:
     ConditionalGeneration() = default;
@@ -109,7 +109,7 @@ ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType typ
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;
 
-    transformer = Model<Config, RMSNorm, GLM2Block, int, int, int, int, int>(&w_ctx_, config, false,
+    transformer = Model<Config, Embedding, RMSNorm, GLM2Block, int, int, int, int, int>(&w_ctx_, config, false,
                             config.hidden_size, config.num_attention_heads, config.num_kv_heads,
                             config.intermediate_size, config.max_length);
 }
@@ -132,7 +132,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
         loader.read_tensor(layer_prefix + "mlp.dense_4h_to_h.weight", transformer.layers[i].mlp.dense_4h_to_h.weight);
     }
     loader.read_tensor("transformer.encoder.final_layernorm.weight", transformer.final_layernorm.weight);
-    loader.read_tensor("transformer.output_layer.weight", transformer.lm_head.weight);
+    loader.read_tensor("transformer.output_layer.weight", dynamic_cast<Linear *>(transformer.lm_head)->weight);
 
     CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
         << "corrupted model weights";

@@ -272,7 +272,22 @@ namespace chatllm
         virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,
                                             bool &completed,
-                                            BaseStreamer *streamer = nullptr) = 0;
+                                            BaseStreamer *streamer = nullptr)
+        {
+            std::vector<int> r;
+            return r;
+        };
+
+        virtual void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+                                    std::vector<float> &embedding)
+        {}
+
+        virtual float qa_rank(const GenerationConfig &gen_config,
+                              const std::vector<int> &query_ids,
+                              const std::vector<int> &answer_ids)
+        {
+            return 0.0f;
+        }
 
         std::string type_name() const { return name_; }
         std::string native_name() const { return native_name_; }

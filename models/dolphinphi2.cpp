@@ -92,9 +92,9 @@ namespace v1
             : phi2::v1::ConditionalGeneration(config, MODEL_TYPE_DOLPHINPHI2)
         {}
     protected:
-        bool is_output_terminated(int next_token_id, const std::vector<int> &output_ids, int &pop_output) override
+        bool is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output) override
         {
-            return false;
+            return BaseModelForConditionalGeneration::is_output_terminated(output_ids, keep_idx, pop_output);
         }
     };
 }

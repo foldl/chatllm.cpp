@@ -110,6 +110,7 @@ namespace chatllm
         MODEL_TYPE_MISTRAL  = 0x600,
         MODEL_TYPE_MIXTRAL  = 0x601,
         MODEL_TYPE_OPENCHAT = 0x602,
+        MODEL_TYPE_NEURALBEAGLE = 0x603,
 
         MODEL_TYPE_QWEN     = 0x700,
 
@@ -164,6 +165,8 @@ namespace chatllm
             return "Mixtral MoE";
         case MODEL_TYPE_OPENCHAT:
             return "OpenChat";
+        case MODEL_TYPE_NEURALBEAGLE:
+            return "NeuralBeagle";
         case MODEL_TYPE_QWEN:
             return "QWen";
         case MODEL_TYPE_TIGERBOT:
@@ -197,6 +200,8 @@ namespace chatllm
             return "虎博";
         case MODEL_TYPE_BLUELM:
             return "蓝心";
+        case MODEL_TYPE_NEURALBEAGLE:
+            return "🐶";
         default:
             return "";
         }
@@ -254,18 +259,13 @@ namespace chatllm
             completed = false;
 
             transformer.set_ctx(input_ids.size());
+            int next_output_idx = input_ids.size();
 
-            while (n_past < gen_config.max_length)
+            while (!completed && (n_past < gen_config.max_length))
             {
                 int next_token_id = generate_next_token(curr_input_ids, gen_config);
 //printf("\nnext = %d\n", next_token_id);
 
-                int pop_output = 0;
-                if (is_output_terminated(next_token_id, output_ids, pop_output))
-                {
-                    completed = true;
-                    break;
-                }
 //#define DISABLE_CACHE
 #ifndef DISABLE_CACHE
                 n_past += curr_input_ids.size();
@@ -273,15 +273,25 @@ namespace chatllm
 #else
                 curr_input_ids.push_back(next_token_id);
 #endif
-                output_ids.emplace_back(next_token_id);
+
+                int pop_output = 0;
+                int keep_idx = 0;
+                output_ids.push_back(next_token_id);
+
+                if (is_output_terminated(output_ids, keep_idx, pop_output))
+                {
+                    while (pop_output-- > 0)
+                        output_ids.pop_back();
+                    keep_idx = (int)output_ids.size();
+                    completed = true;
+                }
 
                 if (streamer)
-                    streamer->put({next_token_id});
-
-                if (next_token_id == tokenizer->eos_token_id)
                 {
-                    completed = true;
-                    break;
+                    if (keep_idx > (int)output_ids.size())
+                        keep_idx = (int)output_ids.size();
+                    for (; next_output_idx < keep_idx; next_output_idx++)
+                        streamer->put({output_ids[next_output_idx]});
                 }
             }
 
@@ -291,27 +301,17 @@ namespace chatllm
             return output_ids;
         }
 
+        void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+                                    std::vector<float> &embedding) override
+        {
+            ggml_tensor *lm = run_model(input_ids, gen_config, n_past + n_past_offset);
+            embedding.resize(lm->ne[0]);
+            memcpy(embedding.data(), lm->data, embedding.size() * sizeof(embedding[0]));
+        }
+
         int generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config)
         {
-            ForwardContext ctx;
-            ctx.gctx = GGMLContext({.mem_size = mem_size_, .mem_buffer = mem_buffer_.get(), .no_alloc = false});
-            ctx.scratch = {.offs = 0, .size = scratch_size_, .data = scratch_buffer_.get()};
-            int n_threads = input_ids.size() >= 32 && ggml_cpu_has_blas() && !ggml_cpu_has_gpublas() ? 1 : gen_config.num_threads;
-            ctx.gf = ggml_new_graph_custom(ctx.gctx.get(), GRAPH_SIZE, false);
-
-            dbg_ctx = &ctx;
-
-            ggml_tensor *input_ids_tensor = ggml_new_tensor_1d(ctx.gctx.get(), GGML_TYPE_I32, input_ids.size());
-            memcpy(input_ids_tensor->data, input_ids.data(), ggml_nbytes(input_ids_tensor));
-
-            ggml_tensor *lm_logits = transformer.forward(&ctx, input_ids_tensor, n_past + n_past_offset);
-
-            ggml_build_forward_expand(ctx.gf, lm_logits);
-            ggml_graph_compute_with_ctx(ctx.gctx.get(), ctx.gf, n_threads);
-
-    #ifdef GGML_PERF
-            ggml_graph_print(&ctx.gf);
-    #endif
+            ggml_tensor *lm_logits = run_model(input_ids, gen_config, n_past + n_past_offset);
 
             int vocab_size = lm_logits->ne[0];
             float *next_token_logits = (float *)lm_logits->data;
@@ -388,28 +388,71 @@ namespace chatllm
         };
 
     protected:
-        virtual bool is_output_terminated(int next_token_id, const std::vector<int> &output_ids, int &pop_output)
+        virtual ggml_tensor *run_model(const std::vector<int> &input_ids,
+                                       const GenerationConfig &gen_config,
+                                       int past)
         {
-            bool r = next_token_id == terminate_token_id;
-            if (r)
-                pop_output = 0;
+            ForwardContext ctx;
+            ctx.gctx = GGMLContext({.mem_size = mem_size_, .mem_buffer = mem_buffer_.get(), .no_alloc = false});
+            ctx.scratch = {.offs = 0, .size = scratch_size_, .data = scratch_buffer_.get()};
+            int n_threads = input_ids.size() >= 32 && ggml_cpu_has_blas() && !ggml_cpu_has_gpublas() ? 1 : gen_config.num_threads;
+            ctx.gf = ggml_new_graph_custom(ctx.gctx.get(), GRAPH_SIZE, false);
+
+            dbg_ctx = &ctx;
+
+            ggml_tensor *input_ids_tensor = ggml_new_tensor_1d(ctx.gctx.get(), GGML_TYPE_I32, input_ids.size());
+            memcpy(input_ids_tensor->data, input_ids.data(), ggml_nbytes(input_ids_tensor));
+
+            ggml_tensor *r = transformer.forward(&ctx, input_ids_tensor, past);
+
+            ggml_build_forward_expand(ctx.gf, r);
+            ggml_graph_compute_with_ctx(ctx.gctx.get(), ctx.gf, n_threads);
+
+#ifdef GGML_PERF
+            ggml_graph_print(&ctx.gf);
+#endif
+
             return r;
         }
 
-        bool match_output_sequence(int next_token_id, const std::vector<int> &output_ids, const std::vector<int> &pattern)
+        virtual bool is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output)
         {
-            if (output_ids.size() + 1 < pattern.size())
+            if (output_ids.size() < 1)
                 return false;
 
-            auto x0 = output_ids.begin() + output_ids.size() - pattern.size() + 1;
+            int last_tok_id = output_ids[output_ids.size() - 1];
+
+            if (last_tok_id == terminate_token_id)
+            {
+                pop_output = 1;
+                return true;
+            }
+            else if (last_tok_id == tokenizer->eos_token_id)
+            {
+                pop_output = 1;
+                return true;
+            }
+            else
+            {
+                keep_idx = output_ids.size();
+                return false;
+            }
+        }
+
+        bool match_output_sequence(const std::vector<int> &output_ids, const std::vector<int> &pattern)
+        {
+            if (output_ids.size() < pattern.size())
+                return false;
+
+            auto x0 = output_ids.begin() + output_ids.size() - pattern.size();
             auto x1 = pattern.begin();
 
-            for (size_t i = 1; i < pattern.size(); i++, x0++, x1++)
+            for (size_t i = 0; i < pattern.size(); i++, x0++, x1++)
             {
                 if (*x0 != *x1)
                     return false;
             }
-            return pattern[pattern.size() - 1] == next_token_id;
+            return true;
         }
 
     private:
@@ -455,30 +498,26 @@ namespace chatllm
         return oss.str();
     }
 
-    template <class Config, class FinalNorm, class LayerBlock, typename... _Types> class Model : public Block
+    template <class Config, class Embedding, class FinalNorm, class LayerBlock, typename... _Types> class Model : public Block
     {
     public:
         Model() = default;
-        Model(InitContext *ctx, const Config &config, bool shared_head, bool lm_head_bias, _Types... layer_args)
+        Model(InitContext *ctx, const Config &config, bool lm_head_bias, _Types... layer_args)
+            : Model(ctx, config, new Linear(ctx, config.hidden_size, config.vocab_size, lm_head_bias), std::forward<_Types>(layer_args)...)
+        {}
+
+        Model(InitContext *ctx, const Config &config, Block *lm_head, _Types... layer_args)
         : config(config),
           word_embeddings(ctx, config.vocab_size, config.hidden_size),
           final_layernorm(ctx, config.hidden_size),
-          shared_head(shared_head)
+          lm_head(lm_head)
         {
-            lm_head = shared_head ? Linear() : Linear(ctx, config.hidden_size, config.vocab_size, lm_head_bias),
-
             layers.reserve(config.num_hidden_layers);
             for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
             {
                 layers.emplace_back(ctx, std::forward<_Types>(layer_args)...);
                 layers[layer_id].set_id(layer_id);
             }
-        }
-
-        Model(InitContext *ctx, const Config &config, bool shared_head, _Types... layer_args)
-        : Model(ctx, config, shared_head, false, std::forward<_Types>(layer_args)...)
-        {
-
         }
 
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
@@ -493,9 +532,9 @@ namespace chatllm
             return final_steps(ctx, input_ids, hidden_states);
         }
 
-        void set_ctx(int n_ctx) const override
+        void set_ctx(int n_ctx) override
         {
-            for (const auto &layer : layers)
+            for (auto &layer : layers)
                 layer.set_ctx(n_ctx);
         };
 
@@ -512,7 +551,8 @@ namespace chatllm
             if (layers.size() > 0)
                 r += layers[0].get_param_num(effective_only) * layers.size();
             r += final_layernorm.get_param_num(effective_only);
-            r += lm_head.get_param_num(effective_only);
+            if (lm_head)
+                r += lm_head->get_param_num(effective_only);
             return r;
         }
 
@@ -521,19 +561,18 @@ namespace chatllm
         {
             ggml_set_scratch(ctx->gctx.get(), {.offs = 0, .size = 0, .data = nullptr});
 
-            ggml_tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
             // NOTE: only compute next_token_logits for the last token
-            if (input_ids->ne[0] > 1)
-            {
-                transformer_outputs =
-                    ggml_view_1d(ctx->gctx.get(), transformer_outputs, config.hidden_size,
-                                    (input_ids->ne[0] - 1) * config.hidden_size * ggml_element_size(transformer_outputs));
-            }
+            hidden_states = ggml_view_2d(ctx->gctx.get(), hidden_states, config.hidden_size, 1,
+                                        config.hidden_size * ggml_element_size(hidden_states),
+                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml_element_size(hidden_states));
 
-            ggml_tensor *lm_logits = shared_head ?
-                ggml_mul_mat(ctx->gctx.get(), word_embeddings.weight, transformer_outputs)
-                :
-                lm_head.forward(ctx, transformer_outputs);
+            ggml_tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
+
+            transformer_outputs =
+                    ggml_view_1d(ctx->gctx.get(), transformer_outputs, config.hidden_size, 0);
+
+            ggml_tensor *lm_logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
+                                             : word_embeddings.forward(ctx, transformer_outputs);
             return lm_logits;
         }
     public:
@@ -541,10 +580,9 @@ namespace chatllm
         Embedding word_embeddings;
         std::vector<LayerBlock> layers;
         FinalNorm final_layernorm;
-        Linear lm_head;
-    private:
-        bool shared_head;
+        Block *lm_head;
     };
+
     namespace glm
     {
         namespace v1
@@ -653,6 +691,11 @@ namespace chatllm
     namespace stablelm
     {
         #include "models/stablelm.cpp"
+    }
+
+    namespace neuralbeagle
+    {
+        #include "models/neuralbeagle.cpp"
     }
 
     template <class Config, class Tokenizer, class ConditionalGeneration>
@@ -895,6 +938,14 @@ namespace chatllm
             return load_model<stablelm::Config,
                               stablelm::Tokenizer,
                               stablelm::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_NEURALBEAGLE:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<neuralbeagle::Config,
+                              neuralbeagle::Tokenizer,
+                              neuralbeagle::ConditionalGeneration>(loader, result);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;
