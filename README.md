@@ -126,6 +126,9 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a TigerBot
 # Dolphin (based on Phi-2) models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DolphinPhi2
 
+# NeuralBeagle14
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a NeuralBeagle
+
 # For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
 ```
