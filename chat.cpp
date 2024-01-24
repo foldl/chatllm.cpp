@@ -383,7 +383,8 @@ namespace chatllm
         {
             int name_size = read_basic<int>();
             CHATLLM_CHECK(name_size == (int)name.size())
-                << "tensor " << name << " name size mismatch: expect " << name.size() << " but got " << name_size;
+                << "tensor " << name << " name size mismatch: expect " << name.size() << " but got " << name_size
+                << "(part of name: " << read_string(name.size()) << ")";
             std::string weight_name = read_string(name_size);
             CHATLLM_CHECK(weight_name == name) << "tensor name mismatch: expect " << name << " but got " << weight_name;
             ggml_set_name(tensor, weight_name.c_str());
@@ -393,6 +394,11 @@ namespace chatllm
         {
             int ndim = read_basic<int>();
             int n_dims = ggml_n_dims(tensor);
+
+            // a quick fix
+            if ((n_dims == 1) && (ndim == 2) && (tensor->ne[1] == 1))
+                n_dims = 2;
+
             CHATLLM_CHECK(ndim == n_dims)
                 << "tensor " << name << " ndim mismatch: expect " << n_dims << " but got " << ndim;
             for (int i = ndim - 1; i >= 0; i--)

@@ -65,6 +65,9 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
         Note: This model is an autocompletion model, not a chat/instruction model, so please use `--format completion`.
 
+* Orion (`OrionForCausalLM`)
+    * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
+
 ## Features
 
 * [x] Accelerated memory-efficient CPU inference with int4/int8 quantization, optimized KV cache and parallel computing;

@@ -117,6 +117,11 @@ namespace chatllm
         MODEL_TYPE_BLUELM   = 0x800,
 
         MODEL_TYPE_STABLELM = 0x900,
+
+        MODEL_TYPE_ORION    = 0x1000,
+
+        MODEL_TYPE_BCE_Embedding = 0x10000100,
+        MODEL_TYPE_BCE_ReRanker  = 0x10000101,
     };
 
     std::string to_string(ModelType model_type)
@@ -175,6 +180,12 @@ namespace chatllm
             return "BlueLM";
         case MODEL_TYPE_STABLELM:
             return "StableLM";
+        case MODEL_TYPE_ORION:
+            return "Orion";
+        case MODEL_TYPE_BCE_Embedding:
+            return "BCE Embedding";
+        case MODEL_TYPE_BCE_ReRanker:
+            return "BCE ReRanker";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -305,7 +316,9 @@ namespace chatllm
         void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                     std::vector<float> &embedding) override
         {
-            ggml_tensor *lm = run_model(input_ids, gen_config, n_past + n_past_offset);
+            ggml_tensor *lm = run_model(input_ids, gen_config, 0);
+            CHATLLM_CHECK(lm->type == GGML_TYPE_F32) << "lm->type must be GGML_TYPE_F32";
+
             embedding.resize(lm->ne[0]);
             memcpy(embedding.data(), lm->data, embedding.size() * sizeof(embedding[0]));
         }
@@ -596,6 +609,77 @@ namespace chatllm
         Block *lm_head;
     };
 
+    template <class Config, class Embedding, class LayerBlock, class FinalBlock, typename... _Types> class EmbeddingModel : public Block
+    {
+    public:
+        EmbeddingModel() = default;
+
+        EmbeddingModel(InitContext *ctx, const Config &config, _Types... layer_args)
+        : config(config),
+          word_embeddings(ctx, config.vocab_size, config.hidden_size, config.max_length),
+          final(ctx, config.hidden_size)
+        {
+            layers.reserve(config.num_hidden_layers);
+            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+            {
+                layers.emplace_back(ctx, std::forward<_Types>(layer_args)...);
+                layers[layer_id].set_id(layer_id);
+            }
+        }
+
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
+        {
+            ggml_tensor *hidden_states = word_embeddings.forward(ctx, input_ids, n_past);
+            for (auto &layer : layers)
+            {
+                ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
+                hidden_states = layer.forward(ctx, hidden_states, n_past);
+            }
+            return final_steps(ctx, input_ids, hidden_states);
+        }
+
+        void set_ctx(int n_ctx) override
+        {
+            for (auto &layer : layers)
+                layer.set_ctx(n_ctx);
+        };
+
+        void shift_cache(int shift, int total) override
+        {
+            for (auto &layer : layers)
+                layer.shift_cache(shift, total);
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += word_embeddings.get_param_num(effective_only);
+            if (layers.size() > 0)
+                r += layers[0].get_param_num(effective_only) * layers.size();
+            r += final.get_param_num(effective_only);
+            return r;
+        }
+
+    protected:
+        ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
+        {
+            ggml_set_scratch(ctx->gctx.get(), {.offs = 0, .size = 0, .data = nullptr});
+
+            // NOTE: only compute next_token_logits for the last token
+            hidden_states = ggml_view_2d(ctx->gctx.get(), hidden_states, config.hidden_size, 1,
+                                        config.hidden_size * ggml_element_size(hidden_states),
+                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml_element_size(hidden_states));
+            ggml_tensor *transformer_outputs = final.forward(ctx, hidden_states);
+
+            return transformer_outputs;
+        }
+    public:
+        Config config;
+        Embedding word_embeddings;
+        std::vector<LayerBlock> layers;
+        FinalBlock final;
+    };
+
     namespace glm
     {
         namespace v1
@@ -709,6 +793,16 @@ namespace chatllm
     namespace neuralbeagle
     {
         #include "models/neuralbeagle.cpp"
+    }
+
+    namespace bce
+    {
+        #include "models/bce.cpp"
+    }
+
+    namespace orion
+    {
+        #include "models/orion.cpp"
     }
 
     template <class Config, class Tokenizer, class ConditionalGeneration>
@@ -960,6 +1054,23 @@ namespace chatllm
                               neuralbeagle::Tokenizer,
                               neuralbeagle::ConditionalGeneration>(loader, result);
         }
+        case MODEL_TYPE_ORION:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<orion::Config,
+                              orion::Tokenizer,
+                              orion::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_BCE_Embedding:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<bce::embedding::Config,
+                              bce::embedding::Tokenizer,
+                              bce::embedding::ConditionalGeneration>(loader, result);
+        }
+
         default:
             CHATLLM_THROW << "invalid model type " << model_type;
             return false;

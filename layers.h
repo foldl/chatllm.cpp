@@ -18,6 +18,7 @@ namespace chatllm
     {
         GELU,   // equivelent to `gelu_new`
         SILU,
+        Tanh,
     };
 
     class Block
@@ -157,6 +158,43 @@ namespace chatllm
         ggml_tensor *weight; // [normalized_shape]
         ggml_tensor *bias;   // [normalized_shape]
         float eps;
+    };
+
+    class RobertaEmbedding : public Block
+    {
+    public:
+        RobertaEmbedding() : word_weight(nullptr), position_weight(nullptr), type_weight(nullptr) {}
+        RobertaEmbedding(InitContext *ctx, int num_embeddings, int embedding_dim, int pos_max)
+            : word_weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, embedding_dim, num_embeddings)),
+              position_weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, embedding_dim, pos_max)),
+              type_weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, embedding_dim, 1)),
+              indices(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, pos_max)),
+              ln(ctx, embedding_dim)
+        {
+            indices->data = new char[ggml_nbytes(indices)];
+            int32_t *p = (int32_t *)indices->data;
+            for (int i = 0; i < pos_max; i++)
+                p[i] = i;
+        }
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input, int n_past) override;
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = ln.get_param_num(effective_only);
+            if (word_weight)        r += ggml_nelements(word_weight);
+            if (position_weight)    r += ggml_nelements(position_weight);
+            if (type_weight)        r += ggml_nelements(type_weight);
+            return r;
+        }
+
+    public:
+        ggml_tensor *word_weight;
+        ggml_tensor *position_weight;
+        ggml_tensor *type_weight;
+        ggml_tensor *indices;
+        LayerNorm    ln;
     };
 
     class RMSNorm : public Block
@@ -457,7 +495,8 @@ namespace chatllm
               max_length(max_length),
               shift_pending(),
               attn_scaling(true),
-              cache_length(cache_length)
+              cache_length(cache_length),
+              causal(true)
         {
             k_cache->data = new char[ggml_nbytes(k_cache)]();
             v_cache->data = new char[ggml_nbytes(v_cache)]();
@@ -528,6 +567,7 @@ namespace chatllm
         ShiftPending shift_pending;
         bool attn_scaling;
         int cache_length;
+        bool causal;
     };
 
     void fill_pos_vector(ggml_tensor *pos, int n_past, int qlen);
@@ -983,6 +1023,123 @@ namespace chatllm
         {}
     };
 
+    template <class AttentionBlock,
+              class PostNormBlock,
+              class MLPBlock,
+              class OutputNormBlock> class LMBlock3 : public Block
+    {
+    public:
+        LMBlock3() = default;
+
+        LMBlock3(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int max_length, bool qkv_bias = true, bool o_bias = true)
+            : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
+              post_attention_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, intermediate_size),
+              output_layernorm(ctx, hidden_size)
+        {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
+        {
+            ggml_tensor *residual = ggml_dup(ctx->gctx.get(), hidden_states);
+            ggml_build_forward_expand(ctx->gf, residual);
+
+            // TODO: why `hidden_state` is overwritten somewhere?
+            ggml_tensor *dup_hidden = ggml_dup(ctx->gctx.get(), hidden_states);
+            ggml_build_forward_expand(ctx->gf, dup_hidden);
+
+            ggml_tensor *attn_outputs = attention.forward(ctx, dup_hidden, n_past);
+            ggml_tensor *feed_forward_hidden_states = mlp.forward(ctx, dup_hidden);
+
+            // CAUTION: MEMORY REUSED BETWEEN LAYERS
+            ggml_tensor *r = ggml_add_inplace(ctx->gctx.get(), feed_forward_hidden_states, residual);
+            r = ggml_add_inplace(ctx->gctx.get(), r, attn_outputs);
+
+            return r;
+        }
+
+        void shift_cache(int shift, int total) override
+        {
+            attention.shift_cache(shift, total);
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += post_attention_layernorm.get_param_num(effective_only);
+            r += attention.get_param_num(effective_only);
+            r += mlp.get_param_num(effective_only);
+            r += output_layernorm.get_param_num(effective_only);
+            return r;
+        }
+
+    public:
+        AttentionBlock attention;
+        PostNormBlock post_attention_layernorm;
+        MLPBlock mlp;
+        OutputNormBlock output_layernorm;
+    };
+
+    class RobertaPooler : public Block
+    {
+    public:
+        RobertaPooler() : dense(), act(ActFunc::GELU) {}
+
+        RobertaPooler(InitContext *ctx, int hidden_size)
+            : dense(ctx, hidden_size, hidden_size, true),
+              act(ActFunc::Tanh)
+        {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = dense.get_param_num(effective_only);
+            return r;
+        }
+
+    public:
+        Linear dense;
+        ActFunc act;
+    };
+
+    class RobertaSelfAttention : public BaseSelfAttention<BaseAttention>
+    {
+    public:
+        RobertaSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+            : RobertaSelfAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length) {}
+
+        RobertaSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : RobertaSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, true) {}
+
+        RobertaSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias)
+        {
+            causal = false;
+        }
+    };
+
+    class RobertaMLP : public TheMLP
+    {
+    public:
+        RobertaMLP(InitContext *ctx, int hidden_size, int intermediate_size)
+            : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true)
+        {
+            // set_prec(ggml_prec::GGML_PREC_F32);
+        }
+    };
+
+    class RobertaBlock : public LMBlock3<RobertaSelfAttention, LayerNorm, RobertaMLP, LayerNorm>
+    {
+    public:
+
+        RobertaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock3(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
     class Phi2MLP : public TheMLP
     {
     public:
@@ -1244,6 +1401,14 @@ namespace chatllm
     {
     public:
         StableLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
+    class OrionBlock : public LMBlock1<LayerNorm, LlamaSelfAttention, LayerNorm, BaseMLP>
+    {
+    public:
+        OrionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
             : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };

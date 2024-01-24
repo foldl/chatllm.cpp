@@ -74,6 +74,8 @@ class ModelType(Enum):
 
     StableLM    = 0x900
 
+    Orion       = 0x1000
+
     BCE_Embedding = 0x10000100
 
 
@@ -660,6 +662,63 @@ class WizardLMConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
+
+class OrionConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Orion
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return LlamaConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        scaling = config.rope_scaling if config.rope_scaling is not None else 1.0
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_sequence_length if config.max_sequence_length is not None else config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        f.write(struct.pack("<f", scaling))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.input_layernorm.bias",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.bias",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "model.norm.bias",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
 
 class MistralConverter(BaseConverter):
     MODEL_TYPE = ModelType.Mistral
@@ -1686,6 +1745,8 @@ def main():
         XLMRobertaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'neuralbeagle':
         NeuralBeagleConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'OrionForCausalLM':
+        OrionConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

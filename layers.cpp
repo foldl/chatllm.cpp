@@ -36,7 +36,8 @@ namespace chatllm
         {
         case ActFunc::GELU:
             return ggml_gelu_inplace(ctx, input);
-
+        case ActFunc::Tanh:
+            return ggml_tanh_inplace(ctx, input);
         default:
             return ggml_silu_inplace(ctx, input);
         }
@@ -47,6 +48,21 @@ namespace chatllm
         ggml_tensor *output = (ggml_n_dims(input) == 1) && (ggml_type::GGML_TYPE_I32 == input->type)
                                 ? ggml_get_rows(ctx->gctx.get(), weight, input)
                                 : ggml_mul_mat(ctx->gctx.get(), weight, input);
+        return output;
+    }
+
+    ggml_tensor *RobertaEmbedding::forward(ForwardContext *ctx, ggml_tensor *input, int n_past)
+    {
+        int qlen = input->ne[0];
+
+        ggml_tensor *idx = ggml_view_1d(ggctx, indices, qlen, n_past * ggml_element_size(indices));
+
+        ggml_tensor *output1 = ggml_get_rows(ggctx, word_weight, input);
+        ggml_tensor *output2 = ggml_get_rows(ggctx, position_weight, idx);
+
+        ggml_tensor *output = ggml_add_inplace(ggctx, output1, output2);
+        output = ggml_add_inplace(ggctx, output, ggml_view_1d(ggctx, type_weight, type_weight->ne[0], 0));
+
         return output;
     }
 
@@ -83,6 +99,18 @@ namespace chatllm
         ggml_tensor *output = dense_h_to_4h.forward(ctx, hidden_states);
         output = ggml_gelu_inplace(ctx->gctx.get(), output);
         output = dense_4h_to_h.forward(ctx, output);
+        return output;
+    }
+
+    ggml_tensor *RobertaPooler::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
+    {
+        // We "pool" the model by simply taking the hidden state corresponding to the first token.
+        int hidden_size = hidden_states->ne[0];
+        ggml_tensor *first_token_tensor = ggml_view_2d(ggctx, hidden_states, hidden_size, 1,
+                                                      hidden_size * ggml_element_size(hidden_states), 0);
+
+        ggml_tensor *output = dense.forward(ctx, first_token_tensor);
+        output = inplace_act(ggctx, act, output);
         return output;
     }
 
@@ -385,7 +413,8 @@ namespace chatllm
         attn_scores = apply_pos_embedding_kq(ctx, attn_scores, hidden_size, qlen, pos);
 
         // attn_masked = mask_past(attn_scores)
-        struct ggml_tensor * attn_masked = ggml_diag_mask_inf_inplace(ctx->gctx.get(), attn_scores, n_past);
+        struct ggml_tensor * attn_masked = causal ? ggml_diag_mask_inf_inplace(ctx->gctx.get(), attn_scores, n_past)
+                                                  : attn_scores;
 
         // attn_probs = soft_max(attn_masked)
         struct ggml_tensor * attn_probs = ggml_soft_max_inplace(ctx->gctx.get(), attn_masked);

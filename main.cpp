@@ -62,6 +62,7 @@ void usage(const char *prog)
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
               << "  --tokenize              (debug)tokenize `prompt` and exit\n"
               << "  --test FILE             test again inputs from a file and exit\n"
+              << "  --mode MODE             mode. (model specific. MODE = chat | embed) (default: chat)\n"
               << std::endl;
 }
 
@@ -347,7 +348,7 @@ void chat(Args &args)
     if (total_param_num == total_effective_param_num)
         std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_param_num / 1000000000. << "B) parameters." << '\n';
     else
-        std::cout   << "with " << total_param_num << " (effect. " << std::fixed << std::setprecision(1) << total_effective_param_num / 1000000000. << "B) parameters." << '\n';
+        std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_effective_param_num / 1000000000. << "B effect.) parameters." << '\n';
 
     std::cout << std::endl;
 
