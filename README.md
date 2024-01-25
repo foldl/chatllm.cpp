@@ -45,6 +45,8 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
         - Full cache: more RAM is needed (**default**).
         - Ring cache (i.e. rolling cache): less RAM, but current implementation is *naive* (slow). 💣
 
+        Note: precision of these two implementations differs, which causes different results.
+
     * [x] NeuralBeagle14: [7B](https://huggingface.co/mlabonne/NeuralBeagle14-7B)
 
 * Phi (`PhiForCausalLM`)

@@ -62,7 +62,6 @@ void usage(const char *prog)
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
               << "  --tokenize              (debug)tokenize `prompt` and exit\n"
               << "  --test FILE             test again inputs from a file and exit\n"
-              << "  --mode MODE             mode. (model specific. MODE = chat | embed) (default: chat)\n"
               << std::endl;
 }
 
@@ -275,6 +274,77 @@ static void run_file(Args &args, chatllm::Pipeline &pipeline, chatllm::TextStrea
     std::cout << std::endl << pipeline.model->get_n_past() << " tokens are processed/generated. Bye" << std::endl;
 }
 
+static void show_banner(chatllm::Pipeline &pipeline)
+{
+    #define MODEL_INFO()     "You are served by " << std::left << std::setw(28) << pipeline.model->type_name() + ","
+    #define SHOW_NATIVE()    if (pipeline.model->native_name().size() > 0) { std::cout << "(" << pipeline.model->native_name() << ")"; }
+
+    const int64_t total_param_num = pipeline.model->get_param_num(false);
+    const int64_t total_effective_param_num = pipeline.model->get_param_num(true);
+
+    std::cout   << R"(    ________          __  __    __    __  ___ )"; SHOW_NATIVE(); std::cout << '\n'
+                << R"(   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____  )" << '\n'
+                << R"(  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
+                << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
+                << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
+    std::cout   << MODEL_INFO()                               << R"(/_/   /_/       )" << '\n';
+    if (total_param_num == total_effective_param_num)
+        std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_param_num / 1000000000. << "B) parameters." << '\n';
+    else
+        std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_effective_param_num / 1000000000. << "B effect.) parameters." << '\n';
+
+    std::cout << std::endl;
+}
+
+static void print_embedding(const std::vector<float> &data)
+{
+    for (size_t i = 0; i < data.size(); i++)
+    {
+        if ((i % 8) == 0) std::cout << std::endl;
+        std::cout << std::fixed << std::setprecision(8) << data[i] << "  ";
+    }
+    std::cout << std::endl;
+}
+
+static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, chatllm::TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
+{
+    std::vector<float> result;
+
+    if (!args.interactive)
+    {
+        pipeline.text_embedding(args.prompt, gen_config, result);
+        print_embedding(result);
+        return;
+    }
+
+    show_banner(pipeline);
+
+    while (1)
+    {
+        std::cout << "Input > " << std::flush;
+        std::string input;
+        if (!get_utf8_line(input, args.multi_line))
+        {
+            std::cout << "FAILED to read line." << std::endl;
+            break;
+        }
+        if (input.empty()) continue;
+
+        result.clear();
+        pipeline.text_embedding(input, gen_config, result);
+        std::cout << "      > ";
+
+        print_embedding(result);
+
+    }
+    std::cout << "Bye\n";
+}
+
+static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, chatllm::TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
+{
+
+}
+
 void chat(Args &args)
 {
     chatllm::Pipeline pipeline(args.model_path);
@@ -321,6 +391,18 @@ void chat(Args &args)
         return;
     }
 
+    switch (pipeline.model->get_purpose())
+    {
+    case chatllm::ModelPurpose::TextEmbedding:
+        run_text_embedding(args, pipeline, streamer, gen_config);
+        return;
+    case chatllm::ModelPurpose::Ranker:
+        run_qa_ranker(args, pipeline, streamer, gen_config);
+        return;
+    default:
+        break;
+    }
+
     if (args.test_fn.size() > 0)
     {
         run_file(args, pipeline, streamer, gen_config);
@@ -333,24 +415,7 @@ void chat(Args &args)
         return;
     }
 
-    #define MODEL_INFO()     "You are served by " << std::left << std::setw(28) << pipeline.model->type_name() + ","
-    #define SHOW_NATIVE()    if (pipeline.model->native_name().size() > 0) { std::cout << "(" << pipeline.model->native_name() << ")"; }
-
-    const int64_t total_param_num = pipeline.model->get_param_num(false);
-    const int64_t total_effective_param_num = pipeline.model->get_param_num(true);
-
-    std::cout   << R"(    ________          __  __    __    __  ___ )"; SHOW_NATIVE(); std::cout << '\n'
-                << R"(   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____  )" << '\n'
-                << R"(  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
-                << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
-                << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
-    std::cout   << MODEL_INFO()                               << R"(/_/   /_/       )" << '\n';
-    if (total_param_num == total_effective_param_num)
-        std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_param_num / 1000000000. << "B) parameters." << '\n';
-    else
-        std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_effective_param_num / 1000000000. << "B effect.) parameters." << '\n';
-
-    std::cout << std::endl;
+    show_banner(pipeline);
 
     std::vector<std::string> history;
     while (1)

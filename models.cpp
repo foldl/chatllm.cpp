@@ -17,8 +17,8 @@
 
 #include "layers.h"
 
-#ifdef GGML_USE_CUBLAS
-#include <ggml-cuda.h>
+#ifdef GGML_USE_CLBLAST
+#include "ggml-opencl.h"
 #endif
 
 namespace chatllm
@@ -124,6 +124,19 @@ namespace chatllm
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
     };
 
+    ModelPurpose get_model_purpose(ModelType model_type)
+    {
+        switch (model_type)
+        {
+        case MODEL_TYPE_BCE_Embedding:
+            return ModelPurpose::TextEmbedding;
+        case MODEL_TYPE_BCE_ReRanker:
+            return ModelPurpose::Ranker;
+        default:
+            return ModelPurpose::Chat;
+        }
+    }
+
     std::string to_string(ModelType model_type)
     {
         switch (model_type)
@@ -222,7 +235,7 @@ namespace chatllm
     {
     public:
         BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, size_t mem_size, size_t scratch_size)
-            : BaseModel(model_type, to_string(model_type), to_native_string(model_type)),
+            : BaseModel(model_type, to_string(model_type), to_native_string(model_type), get_model_purpose(model_type)),
               GRAPH_SIZE(GGML_DEFAULT_GRAPH_SIZE),
               batch_input(true),
               config_(config), mem_size_(mem_size), mem_buffer_(new char[mem_size]),

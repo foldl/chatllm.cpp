@@ -18,6 +18,13 @@ namespace chatllm
         QA,
     };
 
+    enum ModelPurpose
+    {
+        Chat = 0,
+        TextEmbedding,
+        Ranker,
+    };
+
     class LogMessageFatal
     {
     public:
@@ -265,9 +272,11 @@ namespace chatllm
     class BaseModel
     {
     public:
-        BaseModel(int type, std::string name, std::string native_name) :
+        BaseModel(int type, std::string name, std::string native_name, ModelPurpose purpose) :
             type_(type), name_(name), native_name_(native_name), gen(0x123), n_past(0),
-            n_past_offset(0), tokenizer(nullptr), terminate_token_id(-1000) {}
+            n_past_offset(0), tokenizer(nullptr),
+            purpose(purpose), terminate_token_id(-1000)
+        {}
 
         virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,
@@ -291,6 +300,7 @@ namespace chatllm
 
         std::string type_name() const { return name_; }
         std::string native_name() const { return native_name_; }
+        ModelPurpose get_purpose() const { return purpose; }
 
         virtual void load(ModelLoader &loader) = 0;
 
@@ -328,6 +338,7 @@ namespace chatllm
         int n_past;
         int n_past_offset;
         BaseTokenizer *tokenizer;
+        ModelPurpose purpose;
     public:
         int terminate_token_id; // when LLM uses another token as end indicator
     };
@@ -359,6 +370,8 @@ namespace chatllm
                          BaseStreamer *streamer = nullptr);
         void set_system_prompt(const std::string &prompt);
         void set_extending_method(ExtendingMethod method);
+
+        void text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result);
 
     public:
         std::unique_ptr<BaseTokenizer> tokenizer;

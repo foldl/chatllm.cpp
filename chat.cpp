@@ -38,8 +38,8 @@
 #include <stdio.h>
 #endif
 
-#ifdef GGML_USE_CUBLAS
-#include <ggml-cuda.h>
+#ifdef GGML_USE_CLBLAST
+#include "ggml-opencl.h"
 #endif
 
 namespace chatllm
@@ -526,6 +526,13 @@ namespace chatllm
         default:
             return chat_with_restart(history, gen_config, streamer);
         }
+    }
+
+    void Pipeline::text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result)
+    {
+        std::vector<int> input_ids;
+        tokenizer->encode(input, input_ids);
+        model->text_embedding(gen_config, input_ids, result);
     }
 
     void Pipeline::set_system_prompt(const std::string &prompt)

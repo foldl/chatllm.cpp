@@ -13,8 +13,8 @@
 #include <string>
 #include <functional>
 
-#ifdef GGML_USE_CUBLAS
-#include <ggml-cuda.h>
+#ifdef GGML_USE_CLBLAST
+#include "ggml-opencl.h"
 #endif
 
 #define ggctx       (ctx->gctx.get())

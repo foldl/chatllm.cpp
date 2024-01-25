@@ -20,8 +20,12 @@ endif ()
 include_directories(third_party/ggml/include/ggml third_party/ggml/src)
 add_subdirectory(third_party/ggml)
 
-if (GGML_CUBLAS)
-    add_compile_definitions(GGML_USE_CUBLAS)
+#if (GGML_CUBLAS)
+#    add_compile_definitions(GGML_USE_CUBLAS)
+#endif ()
+
+if (GGML_CLBLAST)
+    add_compile_definitions(GGML_USE_CLBLAST)
 endif ()
 
 if (GGML_PERF)
