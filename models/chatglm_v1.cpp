@@ -42,7 +42,7 @@ public:
 
 public:
     static constexpr size_t MEM_SIZE = 272ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 128ull * 1024 * 1024;
+    static constexpr size_t SCRATCH_SIZE = 228ull * 1024 * 1024;
     Config config;
 
 private:
