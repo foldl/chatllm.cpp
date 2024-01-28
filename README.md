@@ -70,6 +70,10 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * Orion (`OrionForCausalLM`)
     * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
 
+* Text Embedding
+    * [ ] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
+
+
 ## Features
 
 * [x] Accelerated memory-efficient CPU inference with int4/int8 quantization, optimized KV cache and parallel computing;

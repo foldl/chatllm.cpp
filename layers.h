@@ -21,6 +21,8 @@ namespace chatllm
         Tanh,
     };
 
+    ggml_tensor *inplace_act(ggml_context *ctx, ActFunc act, ggml_tensor *input);
+
     class Block
     {
     public:
@@ -163,13 +165,13 @@ namespace chatllm
     class RobertaEmbedding : public Block
     {
     public:
-        RobertaEmbedding() : word_weight(nullptr), position_weight(nullptr), type_weight(nullptr) {}
+        RobertaEmbedding() : word_weight(nullptr), position_weight(nullptr) {}
         RobertaEmbedding(InitContext *ctx, int num_embeddings, int embedding_dim, int pos_max)
             : word_weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, embedding_dim, num_embeddings)),
               position_weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, embedding_dim, pos_max)),
-              type_weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, embedding_dim, 1)),
               indices(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, pos_max)),
-              ln(ctx, embedding_dim)
+              ln(ctx, embedding_dim),
+              pad_index(2)
         {
             indices->data = new char[ggml_nbytes(indices)];
             int32_t *p = (int32_t *)indices->data;
@@ -185,16 +187,15 @@ namespace chatllm
             int64_t r = ln.get_param_num(effective_only);
             if (word_weight)        r += ggml_nelements(word_weight);
             if (position_weight)    r += ggml_nelements(position_weight);
-            if (type_weight)        r += ggml_nelements(type_weight);
             return r;
         }
 
     public:
         ggml_tensor *word_weight;
         ggml_tensor *position_weight;
-        ggml_tensor *type_weight;
         ggml_tensor *indices;
         LayerNorm    ln;
+        int          pad_index;
     };
 
     class RMSNorm : public Block
@@ -489,8 +490,10 @@ namespace chatllm
               k_proj(ctx, hidden_size, hidden_size / (num_attention_heads / num_kv_heads), nullptr, qkv_bias),
               v_proj(ctx, hidden_size, hidden_size / (num_attention_heads / num_kv_heads), nullptr, qkv_bias),
               o_proj(ctx, hidden_size, hidden_size, o_bias),
-              k_cache(ggml_new_tensor_1d(ctx->gctx.get(), cache_type, hidden_size / (num_attention_heads / num_kv_heads) * cache_length)),
-              v_cache(ggml_new_tensor_1d(ctx->gctx.get(), cache_type, hidden_size / (num_attention_heads / num_kv_heads) * cache_length)),
+              k_cache(cache_length > 0 ? ggml_new_tensor_1d(ctx->gctx.get(), cache_type, hidden_size / (num_attention_heads / num_kv_heads) * cache_length)
+                                       : nullptr),
+              v_cache(cache_length > 0 ? ggml_new_tensor_1d(ctx->gctx.get(), cache_type, hidden_size / (num_attention_heads / num_kv_heads) * cache_length)
+                                       : nullptr),
               pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
               max_length(max_length),
               shift_pending(),
@@ -498,10 +501,14 @@ namespace chatllm
               cache_length(cache_length),
               causal(true)
         {
-            k_cache->data = new char[ggml_nbytes(k_cache)]();
-            v_cache->data = new char[ggml_nbytes(v_cache)]();
-            ggml_set_name(k_cache, "k_cache");
-            ggml_set_name(v_cache, "v_cache");
+            if (cache_length > 0)
+            {
+                k_cache->data = new char[ggml_nbytes(k_cache)]();
+                v_cache->data = new char[ggml_nbytes(v_cache)]();
+                ggml_set_name(k_cache, "k_cache");
+                ggml_set_name(v_cache, "v_cache");
+            }
+
             pos->data = new char[ggml_nbytes(pos)]();
         }
 
@@ -536,6 +543,8 @@ namespace chatllm
 
         virtual void before_forward(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen);
 
+        // k: [qlen, heads, head_size]
+        // v: [qlen, hidden_size]
         virtual void save_to_cache(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen, ggml_tensor *k, ggml_tensor *v);
 
         // output: [heads, qlen, head_size]
@@ -568,6 +577,30 @@ namespace chatllm
         bool attn_scaling;
         int cache_length;
         bool causal;
+    };
+
+    class BaseCachelessAttention : public BaseAttention
+    {
+    public:
+        BaseCachelessAttention() = default;
+
+        BaseCachelessAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias, GGML_TYPE_F16, 0),
+              raw_k(nullptr),
+              raw_v(nullptr)
+        {}
+
+    protected:
+        void save_to_cache(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen, ggml_tensor *k, ggml_tensor *v) override;
+
+        // output: [heads, qlen, head_size]
+        ggml_tensor *get_k_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override;
+
+        // output: [heads, head_size, klen]
+        ggml_tensor *get_v_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override;
+    private:
+        ggml_tensor *raw_k;
+        ggml_tensor *raw_v;
     };
 
     void fill_pos_vector(ggml_tensor *pos, int n_past, int qlen);
@@ -771,7 +804,8 @@ namespace chatllm
               attn_factor(1.0f),
               beta_fast(0.0f),
               beta_slow(0.0f),
-              rope_dim(hidden_size / num_attention_heads)
+              rope_dim(hidden_size / num_attention_heads),
+              last_attn_scores(nullptr)
         {
         }
 
@@ -793,11 +827,15 @@ namespace chatllm
             ggml_mul_mat_set_prec(tmpq, BaseAttn::prec);
             ggml_mul_mat_set_prec(tmpv, BaseAttn::prec);
 
-            ggml_tensor *attn = BaseAttn::cross_attention(ctx, hidden_size, n_past, qlen, tmpq, tmpk, tmpv);
+            last_attn_scores = BaseAttn::cross_attention(ctx, hidden_size, n_past, qlen, tmpq, tmpk, tmpv);
 
-            ggml_tensor *attn_output = BaseAttn::o_proj.forward(ctx, attn);
-
+            ggml_tensor *attn_output = BaseAttn::o_proj.forward(ctx, last_attn_scores);
             return attn_output;
+        }
+
+        ggml_tensor *get_last_attn_scores(void)
+        {
+            return last_attn_scores;
         }
 
     public:
@@ -822,6 +860,9 @@ namespace chatllm
             return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, 0, 0, 0,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
         }
+
+    private:
+        ggml_tensor *last_attn_scores;
     };
 
     template <bool bias> class InternLMSelfAttention : public BaseSelfAttention<BaseAttention>
@@ -1023,64 +1064,6 @@ namespace chatllm
         {}
     };
 
-    template <class AttentionBlock,
-              class PostNormBlock,
-              class MLPBlock,
-              class OutputNormBlock> class LMBlock3 : public Block
-    {
-    public:
-        LMBlock3() = default;
-
-        LMBlock3(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
-                  int max_length, bool qkv_bias = true, bool o_bias = true)
-            : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
-              post_attention_layernorm(ctx, hidden_size),
-              mlp(ctx, hidden_size, intermediate_size),
-              output_layernorm(ctx, hidden_size)
-        {}
-
-        using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
-        {
-            ggml_tensor *residual = ggml_dup(ctx->gctx.get(), hidden_states);
-            ggml_build_forward_expand(ctx->gf, residual);
-
-            // TODO: why `hidden_state` is overwritten somewhere?
-            ggml_tensor *dup_hidden = ggml_dup(ctx->gctx.get(), hidden_states);
-            ggml_build_forward_expand(ctx->gf, dup_hidden);
-
-            ggml_tensor *attn_outputs = attention.forward(ctx, dup_hidden, n_past);
-            ggml_tensor *feed_forward_hidden_states = mlp.forward(ctx, dup_hidden);
-
-            // CAUTION: MEMORY REUSED BETWEEN LAYERS
-            ggml_tensor *r = ggml_add_inplace(ctx->gctx.get(), feed_forward_hidden_states, residual);
-            r = ggml_add_inplace(ctx->gctx.get(), r, attn_outputs);
-
-            return r;
-        }
-
-        void shift_cache(int shift, int total) override
-        {
-            attention.shift_cache(shift, total);
-        }
-
-        int64_t get_param_num(bool effective_only) const override
-        {
-            int64_t r = 0;
-            r += post_attention_layernorm.get_param_num(effective_only);
-            r += attention.get_param_num(effective_only);
-            r += mlp.get_param_num(effective_only);
-            r += output_layernorm.get_param_num(effective_only);
-            return r;
-        }
-
-    public:
-        AttentionBlock attention;
-        PostNormBlock post_attention_layernorm;
-        MLPBlock mlp;
-        OutputNormBlock output_layernorm;
-    };
-
     class RobertaPooler : public Block
     {
     public:
@@ -1105,7 +1088,7 @@ namespace chatllm
         ActFunc act;
     };
 
-    class RobertaSelfAttention : public BaseSelfAttention<BaseAttention>
+    class RobertaSelfAttention : public BaseSelfAttention<BaseCachelessAttention>
     {
     public:
         RobertaSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
@@ -1119,25 +1102,104 @@ namespace chatllm
         {
             causal = false;
         }
-    };
 
-    class RobertaMLP : public TheMLP
-    {
-    public:
-        RobertaMLP(InitContext *ctx, int hidden_size, int intermediate_size)
-            : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true)
+    protected:
+        // input & output: [qlen, heads, head_size]
+        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
         {
-            // set_prec(ggml_prec::GGML_PREC_F32);
+            return k;
+        }
+        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
+        {
+            return q;
         }
     };
 
-    class RobertaBlock : public LMBlock3<RobertaSelfAttention, LayerNorm, RobertaMLP, LayerNorm>
+    class RobertaOutput : public Block
     {
     public:
+        RobertaOutput() = default;
+
+        RobertaOutput(InitContext *ctx, int hidden_size, bool use_bias = true)
+            : RobertaOutput(ctx, hidden_size, hidden_size, use_bias)
+        {}
+
+        RobertaOutput(InitContext *ctx, int hidden_size, int intermediate_size, bool use_bias = true)
+            : dense(ctx, intermediate_size, hidden_size, use_bias),
+              norm(ctx, hidden_size)
+        {}
+
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, ggml_tensor *attention_output);
+
+    public:
+        Linear dense;
+        LayerNorm norm;
+    };
+
+    class RobertaMLP : public Block
+    {
+    public:
+        RobertaMLP(InitContext *ctx, int hidden_size, int intermediate_size)
+            : RobertaMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true)
+        {
+        }
+
+        RobertaMLP(InitContext *ctx, int hidden_size, int intermediate_size, ActFunc act, bool bias)
+            : intermediate(ctx, hidden_size, intermediate_size, bias),
+              output(ctx, hidden_size, intermediate_size, bias),
+              act(act)
+        {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+
+    public:
+        Linear intermediate;
+        RobertaOutput output;
+        ActFunc act;
+    };
+
+    class RobertaBlock : public Block
+    {
+    public:
+        RobertaBlock() = default;
 
         RobertaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock3(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+            : RobertaBlock(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length, true, true)
         {}
+
+        RobertaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length,
+                bool qkv_bias, bool o_bias)
+            : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
+              post_attention_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, intermediate_size),
+              output_layernorm(ctx, hidden_size)
+        {
+        }
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
+
+        void shift_cache(int shift, int total) override
+        {
+            attention.shift_cache(shift, total);
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += post_attention_layernorm.get_param_num(effective_only);
+            r += attention.get_param_num(effective_only);
+            r += mlp.get_param_num(effective_only);
+            r += output_layernorm.get_param_num(effective_only);
+            return r;
+        }
+
+    public:
+        RobertaSelfAttention attention;
+        LayerNorm post_attention_layernorm;
+        RobertaMLP mlp;
+        LayerNorm output_layernorm;
     };
 
     class Phi2MLP : public TheMLP

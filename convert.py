@@ -1534,6 +1534,17 @@ class QWenConverter(BaseConverter):
 class XLMRobertaConverter(BaseConverter):
     MODEL_TYPE = ModelType.BCE_Embedding
 
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        token_type: torch.Tensor = state_dict['embeddings.token_type_embeddings.weight']
+        token_pos:  torch.Tensor = state_dict['embeddings.position_embeddings.weight']
+
+        assert token_type.shape[0] == 1, f'shape of token_type_embeddings ({token_type.shape}) must be one row'
+
+        state_dict['embeddings.position_embeddings.weight'] = token_pos + token_type
+
+        return state_dict
+
     @staticmethod
     def dump_config(f, config, ggml_type):
         assert config.hidden_act == 'gelu', 'hidden_act must be gelu'
@@ -1558,7 +1569,6 @@ class XLMRobertaConverter(BaseConverter):
     def get_weight_names(config):
         weight_names = ['embeddings.word_embeddings.weight',
                         'embeddings.position_embeddings.weight',
-                        'embeddings.token_type_embeddings.weight',
                         'embeddings.LayerNorm.weight',
                         'embeddings.LayerNorm.bias',
                         ]

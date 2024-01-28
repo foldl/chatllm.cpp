@@ -54,15 +54,14 @@ namespace chatllm
     ggml_tensor *RobertaEmbedding::forward(ForwardContext *ctx, ggml_tensor *input, int n_past)
     {
         int qlen = input->ne[0];
-
-        ggml_tensor *idx = ggml_view_1d(ggctx, indices, qlen, n_past * ggml_element_size(indices));
+        ggml_tensor *idx = ggml_view_1d(ggctx, indices, qlen, (n_past + pad_index) * ggml_element_size(indices));
 
         ggml_tensor *output1 = ggml_get_rows(ggctx, word_weight, input);
         ggml_tensor *output2 = ggml_get_rows(ggctx, position_weight, idx);
 
         ggml_tensor *output = ggml_add_inplace(ggctx, output1, output2);
-        output = ggml_add_inplace(ggctx, output, ggml_view_1d(ggctx, type_weight, type_weight->ne[0], 0));
 
+        output = ln.forward(ctx, output);
         return output;
     }
 
@@ -104,13 +103,19 @@ namespace chatllm
 
     ggml_tensor *RobertaPooler::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
     {
-        // We "pool" the model by simply taking the hidden state corresponding to the first token.
         int hidden_size = hidden_states->ne[0];
+
+        // Note: Pooler is actually not used according to readme
+#if (0)
+        // We "pool" the model by simply taking the hidden state corresponding to the first token.
         ggml_tensor *first_token_tensor = ggml_view_2d(ggctx, hidden_states, hidden_size, 1,
                                                       hidden_size * ggml_element_size(hidden_states), 0);
-
         ggml_tensor *output = dense.forward(ctx, first_token_tensor);
         output = inplace_act(ggctx, act, output);
+#else
+        ggml_tensor *first_token_tensor = ggml_view_1d(ggctx, hidden_states, hidden_size, 0);
+        ggml_tensor *output = ggml_map_custom1(ggctx, first_token_tensor, ggml_compute_forward_simple_norm, 1, this);
+#endif
         return output;
     }
 
@@ -487,6 +492,30 @@ namespace chatllm
         return value_layer;
     }
 
+    void BaseCachelessAttention::save_to_cache(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen, ggml_tensor *k, ggml_tensor *v)
+    {
+        raw_k = k;
+        raw_v = v;
+    }
+
+    ggml_tensor *BaseCachelessAttention::get_k_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen)
+    {
+        // [qlen, heads, head_size] -> [heads, qlen, head_size]
+        ggml_tensor *r = ggml_permute(ggctx, raw_k, 0, 2, 1, 3);
+        return r;
+    }
+
+    ggml_tensor *BaseCachelessAttention::get_v_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen)
+    {
+        const int head_size = hidden_size / num_attention_heads;
+
+        // [qlen, hidden_size] -> [heads, head_size, qlen]
+        ggml_tensor *r = ggml_reshape_3d(ggctx, raw_v, head_size, num_kv_heads, qlen);  // -> [qlen, heads, head_size]
+        r = ggml_permute(ggctx, r, 1, 2, 0, 3);   // [heads, head_size, qlen]
+        r = ggml_cont(ggctx, r);
+        return r;
+    }
+
     ggml_tensor *Phi2CrossAttention::apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor *past) const
     {
         return ggml_rope_custom_inplace(ctx->gctx.get(), k, past, rope_dim, 2, 0, 0,
@@ -616,5 +645,35 @@ namespace chatllm
     {
         return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, 2, 0, 0,
                         freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
+    }
+
+    ggml_tensor *RobertaBlock::forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
+    {
+        // CAUTION: MEMORY REUSED BETWEEN LAYERS
+
+        ggml_tensor *attn_outputs = attention.forward(ctx, hidden_states, n_past);
+
+        // see XLMRobertaSelfOutput
+        ggml_tensor *sum = ggml_add(ggctx, hidden_states, attn_outputs);
+        ggml_tensor *attention_output = post_attention_layernorm.forward(ctx, sum);
+
+        ggml_tensor *r = mlp.forward(ctx, attention_output);
+        return r;
+    }
+
+    ggml_tensor *RobertaOutput::forward(ForwardContext *ctx, ggml_tensor *hidden_states, ggml_tensor *attention_output)
+    {
+        ggml_tensor *r = dense.forward(ctx, hidden_states);
+        r = ggml_add_inplace(ggctx, r, attention_output);
+        r = norm.forward(ctx, r);
+        return r;
+    }
+
+    ggml_tensor *RobertaMLP::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
+    {
+        ggml_tensor *temp = intermediate.forward(ctx, hidden_states);
+        temp = inplace_act(ctx->gctx.get(), act, temp);
+        temp = output.forward(ctx, temp, hidden_states);
+        return temp;
     }
 }

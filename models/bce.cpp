@@ -37,7 +37,7 @@ namespace embedding
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-            const size_t num_tensors = 8 + config.num_hidden_layers * 19;
+            const size_t num_tensors = 7 + config.num_hidden_layers * 19;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
@@ -51,7 +51,6 @@ namespace embedding
         {
             loader.read_tensor("embeddings.word_embeddings.weight",         transformer.word_embeddings.word_weight);
             loader.read_tensor("embeddings.position_embeddings.weight",     transformer.word_embeddings.position_weight);
-            loader.read_tensor("embeddings.token_type_embeddings.weight",   transformer.word_embeddings.type_weight);
             loader.read_tensor("embeddings.LayerNorm.weight",               transformer.word_embeddings.ln.weight);
             loader.read_tensor("embeddings.LayerNorm.bias",                 transformer.word_embeddings.ln.bias);
 
@@ -69,13 +68,13 @@ namespace embedding
                 loader.read_tensor(layer_prefix + "attention.output.LayerNorm.weight",    transformer.layers[i].post_attention_layernorm.weight);
                 loader.read_tensor(layer_prefix + "attention.output.LayerNorm.bias",      transformer.layers[i].post_attention_layernorm.bias);
 
-                loader.read_tensor(layer_prefix + "intermediate.dense.weight",  transformer.layers[i].mlp.fc0.weight);
-                loader.read_tensor(layer_prefix + "intermediate.dense.bias",    transformer.layers[i].mlp.fc0.bias);
-                loader.read_tensor(layer_prefix + "output.dense.weight",        transformer.layers[i].mlp.fc1.weight);
-                loader.read_tensor(layer_prefix + "output.dense.bias",          transformer.layers[i].mlp.fc1.bias);
+                loader.read_tensor(layer_prefix + "intermediate.dense.weight",  transformer.layers[i].mlp.intermediate.weight);
+                loader.read_tensor(layer_prefix + "intermediate.dense.bias",    transformer.layers[i].mlp.intermediate.bias);
+                loader.read_tensor(layer_prefix + "output.dense.weight",        transformer.layers[i].mlp.output.dense.weight);
+                loader.read_tensor(layer_prefix + "output.dense.bias",          transformer.layers[i].mlp.output.dense.bias);
 
-                loader.read_tensor(layer_prefix + "output.LayerNorm.weight",    transformer.layers[i].output_layernorm.weight);
-                loader.read_tensor(layer_prefix + "output.LayerNorm.bias",      transformer.layers[i].output_layernorm.bias);
+                loader.read_tensor(layer_prefix + "output.LayerNorm.weight",    transformer.layers[i].mlp.output.norm.weight);
+                loader.read_tensor(layer_prefix + "output.LayerNorm.bias",      transformer.layers[i].mlp.output.norm.bias);
             }
 
             loader.read_tensor("pooler.dense.weight",   transformer.final.dense.weight);
@@ -86,8 +85,8 @@ namespace embedding
         }
 
     public:
-        static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 144ull * 1024 * 1024;
+        static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
+        static constexpr size_t SCRATCH_SIZE = 44ull * 1024 * 1024;
 
         Config config;
 

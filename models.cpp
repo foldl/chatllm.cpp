@@ -678,10 +678,6 @@ namespace chatllm
         {
             ggml_set_scratch(ctx->gctx.get(), {.offs = 0, .size = 0, .data = nullptr});
 
-            // NOTE: only compute next_token_logits for the last token
-            hidden_states = ggml_view_2d(ctx->gctx.get(), hidden_states, config.hidden_size, 1,
-                                        config.hidden_size * ggml_element_size(hidden_states),
-                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml_element_size(hidden_states));
             ggml_tensor *transformer_outputs = final.forward(ctx, hidden_states);
 
             return transformer_outputs;

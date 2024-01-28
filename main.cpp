@@ -301,7 +301,7 @@ static void print_embedding(const std::vector<float> &data)
     for (size_t i = 0; i < data.size(); i++)
     {
         if ((i % 8) == 0) std::cout << std::endl;
-        std::cout << std::fixed << std::setprecision(8) << data[i] << "  ";
+        std::cout << std::setw(14) << std::fixed << std::setprecision(8) << data[i] << "  ";
     }
     std::cout << std::endl;
 }
