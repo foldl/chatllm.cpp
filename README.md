@@ -70,8 +70,10 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * Orion (`OrionForCausalLM`)
     * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
 
-* Text Embedding
-    * [ ] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
+* Text Embedding (`XLMRobertaModel`)
+    * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
+
+        Note: output of tokenizer is not exactly the same as `XLMRobertaTokenizer`.
 
 
 ## Features

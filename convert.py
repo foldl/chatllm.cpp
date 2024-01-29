@@ -289,6 +289,49 @@ def s_to_bytes(s):
     print([ord(c) for c in s])
     return bytes([ord(c) for c in s])
 
+class SPTokenizerJsonVocab:
+    def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
+        print(SPTokenizerJsonVocab)
+        model = json.load(open(fname_tokenizer / "tokenizer.json", encoding='utf-8'))
+        if model['model']['type'] != 'Unigram':
+            raise Exception(f"Unigram expected, but {model['model']['type']} encountered.")
+
+        if fname_added_tokens is not None:
+            raise Exception(f"TODO: fname_added_tokens")
+
+        self.vocal_tokens = model['model']['vocab']
+        self.vocab_size: int = len(self.vocal_tokens)
+
+        print("vocab_size ", self.vocab_size)
+
+    def tokenizer_tokens(self) -> Iterable[Tuple[bytes, float]]:
+        for v in self.vocal_tokens:
+            tok = v[0]
+            score = v[1]
+
+            text: bytes = tok.encode('utf-8')
+            if tok == '<unk>':
+                text = " \u2047 ".encode("utf-8")
+            else:
+                text = tok.replace("\u2581", " ").encode("utf-8")
+
+            yield text, score
+
+    def all_tokens(self) -> Iterable[Tuple[bytes, float]]:
+        yield from self.tokenizer_tokens()
+
+    def write_vocab(self, fout: io.BufferedWriter) -> None:
+        for text, score in self.all_tokens():
+            fout.write(struct.pack("<i", len(text)))
+            fout.write(text)
+            fout.write(struct.pack("<f", score))
+
+        # marks the end of vocab
+        fout.write(struct.pack("i", -1))
+
+    def __repr__(self) -> str:
+        return f"<SPTokenizerJsonVocab with {self.vocab_size} tokens>"
+
 class FastTokenizerVocab:
     def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
 
@@ -1600,6 +1643,12 @@ class XLMRobertaConverter(BaseConverter):
         return weight_names
 
 def load_vocab(path: Path) -> Any:
+
+    def load_spm(p: Path) -> Any:
+        added_tokens_path = p.parent / "added_tokens.json"
+        print(f"Loading vocab file {p}")
+        return SentencePieceVocab(p, added_tokens_path if added_tokens_path.exists() else None)
+
     # Be extra-friendly and accept either a file or a directory.  Also, if it's
     # a directory, it might be the model directory, and tokenizer.model might
     # be in the parent of that.
@@ -1607,28 +1656,33 @@ def load_vocab(path: Path) -> Any:
         path2 = path / "tokenizer.model"
         # Use `.parent` instead of /.. to handle the symlink case better.
         path3 = path.parent / "tokenizer.model"
-        path20 = path / "sentencepiece.bpe.model"
-        path4 = path / "tokenizer.json"
-        path5 = path / "qwen.tiktoken"
+
         if path2.exists():
-            path = path2
-        elif path20.exists():
-            path = path20
+            return load_spm(path2)
         elif path3.exists():
-            path = path3
-        elif path4.exists():
-            added_tokens_path = path.parent / "added_tokens.json"
-            print(f"Loading vocab file {path}")
-            return FastTokenizerVocab(path, added_tokens_path if added_tokens_path.exists() else None)
-        elif path5.exists():
+            return load_spm(path3)
+
+        # path20 = path / "sentencepiece.bpe.model"
+
+        path5 = path / "qwen.tiktoken"
+        if path5.exists():
             return TikTokenizerVocab(path, None)
-        else:
-            raise FileNotFoundError(
-                f"Could not find tokenizer.model in {path} or its parent; "
-                "if it's in another directory, pass the directory as --vocab-dir")
-    added_tokens_path = path.parent / "added_tokens.json"
-    print(f"Loading vocab file {path}")
-    return SentencePieceVocab(path, added_tokens_path if added_tokens_path.exists() else None)
+
+        path4 = path / "tokenizer.json"
+        if path4.exists():
+            print(f"Loading vocab file {path}")
+            added_tokens_path = path.parent / "added_tokens.json"
+            model = json.load(open(path4, encoding='utf-8'))
+            if model['model']['type'] == 'BPE':
+                return FastTokenizerVocab(path, added_tokens_path if added_tokens_path.exists() else None)
+            elif model['model']['type'] == 'Unigram':
+                return SPTokenizerJsonVocab(path, added_tokens_path if added_tokens_path.exists() else None)
+            else:
+                raise Exception(f"unsupported tokenizer model type {model['model']['type']}")
+
+    raise FileNotFoundError(
+        f"Could not find tokenizer.model in {path} or its parent; "
+        "if it's in another directory, pass the directory as --vocab-dir")
 
 def load_config(path: Path) -> Any:
     with open(path / 'config.json', 'r') as fp:

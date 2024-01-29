@@ -15,7 +15,7 @@ namespace embedding
 
         size_t load(const char *buffer, int n_vocab) override;
 
-        //void encode(const std::string &text, std::vector<int> &ids) const override;
+        void encode(const std::string &text, std::vector<int> &ids) const override;
     };
 
     size_t Tokenizer::load(const char *buffer, int n_vocab)
@@ -23,6 +23,13 @@ namespace embedding
         tp = new tokenizer::SentencePieceProcessor();
         size_t size = tp->Load(buffer, n_vocab);
         return size;
+    }
+
+    void Tokenizer::encode(const std::string &text, std::vector<int> &ids) const
+    {
+        ids.push_back(bos_token_id);
+        BaseTokenizer::encode(text, ids);
+        ids.push_back(eos_token_id);
     }
 
     class ConditionalGeneration : public BaseModelForConditionalGeneration<
