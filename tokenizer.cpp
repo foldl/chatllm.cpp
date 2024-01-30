@@ -4,6 +4,7 @@
 #include <memory>
 #include <cstring>
 #include <limits>
+#include <regex>
 
 #include "unicode.h"
 #include "chat.h"
@@ -224,6 +225,14 @@ int Processor::Encode(const std::string &input, std::vector<std::string> *pieces
     return 0;
 }
 
+int Processor::Encode(const std::string &input, std::vector<int> *ids) const
+{
+    std::string s = input;
+    for (auto & p : pp)
+        s = p->transform(s);
+    return DoEncode(s, ids);
+}
+
 int Processor::PieceToId(std::string_view piece) const
 {
     auto r = vocab_.token_to_id.find(std::string(piece));
@@ -242,6 +251,11 @@ int Processor::Decode(const std::vector<int> &ids, std::string *detokenized) con
     for (auto id : ids)
         detokenized->append(IdToPiece(id));
     return 0;
+}
+
+void Processor::RegisterPreprocessor(TextPreprocessor *prep)
+{
+    pp.push_back(std::unique_ptr<TextPreprocessor>(prep));
 }
 
 static int load_vocab_list(_vocab &vocab, Reader &reader, bool has_score, bool has_type, int start_piece_id)
@@ -340,7 +354,7 @@ size_t BPEProcessor1::Load(const char *buffer, int n_vocab)
     return reader.get_total_size();
 }
 
-int BPEProcessor1::Encode(const std::string &input,
+int BPEProcessor1::DoEncode(const std::string &input,
                                    std::vector<int> *ids) const
 {
     llama_sp_tokenizer tokenizer(vocab_);
@@ -666,7 +680,7 @@ private:
     llm_bigram_bpe::queue work_queue;
 };
 
-int BPEProcessor2::DoEncode(const std::string &input,
+int BPEProcessor2::DoEncode2(const std::string &input,
         std::vector<int> *ids) const
 {
     if (input.size() < 1) return 0;
@@ -709,7 +723,7 @@ static std::string search_first_special_token(std::string &input, const _vocab &
     }
 }
 
-int BPEProcessor2::Encode(const std::string &input,
+int BPEProcessor2::DoEncode(const std::string &input,
         std::vector<int> *ids) const
 {
     std::string text(input);
@@ -717,7 +731,7 @@ int BPEProcessor2::Encode(const std::string &input,
     while (text.size() > 0)
     {
         auto leading = search_first_special_token(text, vocab_, sp_tok_id);
-        DoEncode(leading, ids);
+        DoEncode2(leading, ids);
         if (sp_tok_id < 0) break;
         ids->push_back(sp_tok_id);
     }
@@ -878,10 +892,30 @@ size_t UnigramProcessor::Load(const char *buffer, int n_vocab)
     return reader.get_total_size();
 }
 
-int UnigramProcessor::Encode(const std::string &input,
+int UnigramProcessor::DoEncode(const std::string &input,
         std::vector<int> *ids) const
 {
     unigram_tokenizer tokenizer(vocab_, (int)tok_max_len);
     tokenizer.tokenize(input, *ids);
     return 0;
+}
+
+std::string TextPrepTrim::transform(const std::string &s)
+{
+    int size = s.size();
+    while ((size >= 1) && (s[size - 1] == ' '))
+        size--;
+    return s.substr(0, size);
+}
+
+std::string TextPrepDeleteMultiSpaces::transform(const std::string &s)
+{
+    const static std::regex r(R""( {2,})"");
+    return std::regex_replace(s, r, " ");
+}
+
+std::string TextPrepAddLeadingSpace::transform(const std::string &s)
+{
+    if (s.size() < 1) return " ";
+    return s[0] == ' ' ? s : " " + s;
 }

@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_map>
 #include <map>
+#include <memory>
 
 namespace tokenizer
 {
@@ -63,6 +64,30 @@ struct _vocab
     }
 };
 
+class TextPreprocessor
+{
+public:
+    virtual std::string transform(const std::string &s) = 0;
+};
+
+class TextPrepTrim : public TextPreprocessor
+{
+public:
+    std::string transform(const std::string &s) override;
+};
+
+class TextPrepDeleteMultiSpaces : public TextPreprocessor
+{
+public:
+    std::string transform(const std::string &s) override;
+};
+
+class TextPrepAddLeadingSpace : public TextPreprocessor
+{
+public:
+    std::string transform(const std::string &s) override;
+};
+
 class Processor
 {
 public:
@@ -79,7 +104,7 @@ public:
 
     // Given a UTF8 input, encodes it into a sequence of ids.
     virtual int Encode(const std::string &input,
-            std::vector<int> *ids) const = 0;
+            std::vector<int> *ids) const;
 
     // Given a sequence of ids, decodes it into a detokenized output.
     virtual int Decode(const std::vector<int> &ids,
@@ -93,12 +118,18 @@ public:
 
     void EnableReturnSpecialToken(bool en) { ret_special_token = en; }
 
+    void RegisterPreprocessor(TextPreprocessor* prep);
+
+protected:
+    virtual int DoEncode(const std::string &input, std::vector<int> *ids) const = 0;
+
 protected:
     _vocab vocab_;
     int piece_size;
     int id_unk_token;
     std::string token_unk_id;
     bool ret_special_token;
+    std::vector<std::unique_ptr<TextPreprocessor>> pp;
 };
 
 class BPEProcessor1: public Processor
@@ -108,8 +139,8 @@ public:
 
     size_t Load(const char *buffer, int n_vocab) override;
 
-    // Given a UTF8 input, encodes it into a sequence of ids.
-    int Encode(const std::string &input,
+protected:
+    int DoEncode(const std::string &input,
             std::vector<int> *ids) const override;
 };
 
@@ -120,13 +151,13 @@ public:
 
     size_t Load(const char *buffer, int n_vocab) override;
 
-    int Encode(const std::string &input,
-            std::vector<int> *ids) const override;
-
     const std::string IdToPiece(int id) const override;
 
 private:
     int DoEncode(const std::string &input,
+            std::vector<int> *ids) const override;
+
+    int DoEncode2(const std::string &input,
             std::vector<int> *ids) const;
 };
 
@@ -137,8 +168,10 @@ public:
 
     size_t Load(const char *buffer, int n_vocab) override;
 
-    int Encode(const std::string &input,
+private:
+    int DoEncode(const std::string &input,
             std::vector<int> *ids) const override;
+
 private:
     size_t tok_max_len;
 };

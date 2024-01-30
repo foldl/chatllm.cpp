@@ -21,6 +21,8 @@ namespace embedding
     size_t Tokenizer::load(const char *buffer, int n_vocab)
     {
         tp = new tokenizer::UnigramProcessor();
+        tp->RegisterPreprocessor(new tokenizer::TextPrepDeleteMultiSpaces());
+        tp->RegisterPreprocessor(new tokenizer::TextPrepAddLeadingSpace());
         size_t size = tp->Load(buffer, n_vocab);
         return size;
     }
