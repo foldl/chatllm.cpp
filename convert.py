@@ -289,9 +289,8 @@ def s_to_bytes(s):
     print([ord(c) for c in s])
     return bytes([ord(c) for c in s])
 
-class SPTokenizerJsonVocab:
+class UnigramTokenizerJsonVocab:
     def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
-        print(SPTokenizerJsonVocab)
         model = json.load(open(fname_tokenizer / "tokenizer.json", encoding='utf-8'))
         if model['model']['type'] != 'Unigram':
             raise Exception(f"Unigram expected, but {model['model']['type']} encountered.")
@@ -330,7 +329,7 @@ class SPTokenizerJsonVocab:
         fout.write(struct.pack("i", -1))
 
     def __repr__(self) -> str:
-        return f"<SPTokenizerJsonVocab with {self.vocab_size} tokens>"
+        return f"<UnigramTokenizerJsonVocab with {self.vocab_size} tokens>"
 
 class FastTokenizerVocab:
     def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
@@ -1676,7 +1675,7 @@ def load_vocab(path: Path) -> Any:
             if model['model']['type'] == 'BPE':
                 return FastTokenizerVocab(path, added_tokens_path if added_tokens_path.exists() else None)
             elif model['model']['type'] == 'Unigram':
-                return SPTokenizerJsonVocab(path, added_tokens_path if added_tokens_path.exists() else None)
+                return UnigramTokenizerJsonVocab(path, added_tokens_path if added_tokens_path.exists() else None)
             else:
                 raise Exception(f"unsupported tokenizer model type {model['model']['type']}")
 

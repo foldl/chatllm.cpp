@@ -180,7 +180,7 @@ bool Phi2ConditionalGeneration::is_output_terminated(const std::vector<int> &out
 
 size_t Phi2Tokenizer::load(const char *buffer, int n_vocab)
 {
-    tp = new tokenizer::BPEProcessor();
+    tp = new tokenizer::BPEProcessor2();
     size_t size = tp->Load(buffer, n_vocab);
     tp->Encode("\nInstruct:", &qa_terminate_seq1);
     tp->Encode("\nInstruction:", &qa_terminate_seq2);

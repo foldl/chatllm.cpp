@@ -36,7 +36,7 @@ public:
 
 size_t Tokenizer::load(const char *buffer, int n_vocab)
 {
-    tp = new tokenizer::BPEProcessor();
+    tp = new tokenizer::BPEProcessor2();
     size_t size = tp->Load(buffer, n_vocab);
     return size;
 }

@@ -8,7 +8,7 @@ public:
 
     size_t load(const char *buffer, int n_vocab) override
     {
-        tp = new tokenizer::BPEProcessor();
+        tp = new tokenizer::BPEProcessor2();
         size_t size = tp->Load(buffer, n_vocab);
         bos_token_id        = tp->PieceToId("<|endoftext|>");
         im_start_token_id   = tp->GetPieceSize() - 1;

@@ -3,6 +3,7 @@
 #include <queue>
 #include <memory>
 #include <cstring>
+#include <limits>
 
 #include "unicode.h"
 #include "chat.h"
@@ -19,6 +20,8 @@ struct llama_sp_symbol
     size_t n;
 };
 
+//#define debug_bigram
+
 struct llama_sp_bigram
 {
     struct comparator
@@ -34,6 +37,10 @@ struct llama_sp_bigram
     llama_sp_symbol::index right;
     float score;
     size_t size;
+
+#ifdef debug_bigram
+    std::string text;
+#endif
 };
 
 static size_t utf8_len(char src) {
@@ -137,6 +144,7 @@ private:
         }
 
         const std::string text = std::string(symbols_[left].text, symbols_[left].n + symbols_[right].n);
+
         auto token = vocab_.token_to_id.find(text);
 
         if (token == vocab_.token_to_id.end())
@@ -156,6 +164,9 @@ private:
         bigram.right = right;
         bigram.score = tok_score.score;
         bigram.size = text.size();
+#ifdef debug_bigram
+        bigram.text = text;
+#endif
         work_queue_.push(bigram);
     }
 
@@ -316,7 +327,7 @@ static void build_special_token_cache(_vocab &vocab)
     }
 }
 
-size_t SentencePieceProcessor::Load(const char *buffer, int n_vocab)
+size_t BPEProcessor1::Load(const char *buffer, int n_vocab)
 {
     Reader reader(buffer);
 
@@ -329,7 +340,7 @@ size_t SentencePieceProcessor::Load(const char *buffer, int n_vocab)
     return reader.get_total_size();
 }
 
-int SentencePieceProcessor::Encode(const std::string &input,
+int BPEProcessor1::Encode(const std::string &input,
                                    std::vector<int> *ids) const
 {
     llama_sp_tokenizer tokenizer(vocab_);
@@ -337,20 +348,16 @@ int SentencePieceProcessor::Encode(const std::string &input,
     return 0;
 }
 
-size_t BPEProcessor::Load(const char *buffer, int n_vocab)
+size_t BPEProcessor2::Load(const char *buffer, int n_vocab)
 {
     Reader reader(buffer);
 
     vocab_.token_to_id.clear();
-
     vocab_.id_to_token.resize((size_t)n_vocab + 100);
-
     piece_size = load_vocab_list(vocab_, reader, false, true, 0);
 
     vocab_.id_to_token.resize(piece_size);
-
     load_vocab_merges(vocab_, reader);
-
     build_special_token_cache(vocab_);
 
     return reader.get_total_size();
@@ -659,7 +666,7 @@ private:
     llm_bigram_bpe::queue work_queue;
 };
 
-int BPEProcessor::DoEncode(const std::string &input,
+int BPEProcessor2::DoEncode(const std::string &input,
         std::vector<int> *ids) const
 {
     if (input.size() < 1) return 0;
@@ -702,7 +709,7 @@ static std::string search_first_special_token(std::string &input, const _vocab &
     }
 }
 
-int BPEProcessor::Encode(const std::string &input,
+int BPEProcessor2::Encode(const std::string &input,
         std::vector<int> *ids) const
 {
     std::string text(input);
@@ -728,7 +735,7 @@ static std::string _decode_text(const std::string & text) {
     return decoded_text;
 }
 
-const std::string BPEProcessor::IdToPiece(int id) const
+const std::string BPEProcessor2::IdToPiece(int id) const
 {
     if (vocab_.is_normal_token(id))
     {
@@ -746,5 +753,135 @@ const std::string BPEProcessor::IdToPiece(int id) const
         else
             return "";
     }
+}
 
+struct unigram_tokenizer
+{
+    using index = int;
+
+    struct best
+    {
+        best(int prev, float score, int tok_id = 0): prev(prev), score(score), tok_id(tok_id) {}
+        index prev;
+        float score;
+        index tok_id;
+    };
+
+    struct unigram
+    {
+        unigram(const char *text, int pos, size_t n): text(text), start(pos), end(pos + n) {}
+
+        const char *text;
+        index start, end;
+    };
+
+    unigram_tokenizer(const _vocab &vocab, int tok_max_len) : vocab_(vocab), tok_max_len(tok_max_len) {}
+
+    void tokenize(const std::string &text, std::vector<_vocab::id> &output)
+    {
+        size_t offs = 0;
+
+        symbols_.emplace_back(text.c_str(), 0, 0);
+        trace.push_back(best(0, 0.0f));
+
+        while (offs < text.size())
+        {
+            size_t char_len = std::min(text.size() - offs, utf8_len(text[offs]));
+            symbols_.emplace_back(text.c_str() + offs, offs, char_len);
+            offs += char_len;
+        }
+
+        if (symbols_.size() <= 1)
+            return;
+
+        // Viterbi algorithm
+        for (size_t i = 1; i < symbols_.size(); i++)
+        {
+            find_best(i);
+        }
+
+        // backtrace
+        int prev = (int)(trace.size()) - 1;
+        std::vector<int> temp;
+        while (prev != 0)
+        {
+            auto &b = trace[prev];
+            temp.push_back(b.tok_id);
+            prev = b.prev;
+        }
+        for (int i = (int)temp.size() - 1; i >= 0; i--)
+            output.push_back(temp[i]);
+    }
+
+private:
+    void find_best(int pos)
+    {
+        int start = pos - tok_max_len;
+        if (start < 0) start = 0;
+
+        float max_prop = std::numeric_limits<float>::lowest();
+        int prev = -1;
+        int tok_id = -1;
+
+        for (int i = start; i < pos; i++)
+        {
+            auto &b = trace[i];
+            auto &sym = symbols_[i];
+
+            const std::string text = std::string(sym.text + sym.end - sym.start, symbols_[pos].end - sym.end);
+
+            auto token = vocab_.token_to_id.find(text);
+            if (token == vocab_.token_to_id.end())
+                continue;
+
+            auto &tok = vocab_.id_to_token[token->second];
+
+            if (b.score + tok.score > max_prop)
+            {
+                prev = i;
+                max_prop = b.score + tok.score;
+                tok_id = token->second;
+            }
+        }
+
+        trace.emplace_back(prev, max_prop, tok_id);
+    }
+
+    const _vocab &vocab_;
+    std::vector<best> trace;
+    std::vector<unigram> symbols_;
+    int tok_max_len;
+};
+
+UnigramProcessor::UnigramProcessor() : Processor::Processor(), tok_max_len(0)
+{
+
+}
+
+size_t UnigramProcessor::Load(const char *buffer, int n_vocab)
+{
+    Reader reader(buffer);
+
+    vocab_.token_to_id.clear();
+    vocab_.id_to_token.resize((size_t)n_vocab + 100);
+
+    piece_size = load_vocab_list(vocab_, reader, true, false, 0);
+    vocab_.id_to_token.resize(piece_size);
+
+    // TODO: tok_max_len should be number of characters, not bytes
+    for (auto & tok : vocab_.id_to_token)
+    {
+        if (tok.tok.size() > tok_max_len)
+            tok_max_len = tok.tok.size();
+    }
+
+    return reader.get_total_size();
+}
+
+int UnigramProcessor::Encode(const std::string &input,
+        std::vector<int> *ids) const
+{
+    unigram_tokenizer tokenizer(vocab_, (int)tok_max_len);
+    tokenizer.tokenize(input, *ids);
+    return 0;
 }

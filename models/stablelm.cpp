@@ -22,7 +22,7 @@ public:
 
     size_t load(const char *buffer, int n_vocab) override
     {
-        tp = new tokenizer::BPEProcessor();
+        tp = new tokenizer::BPEProcessor2();
         size_t size = tp->Load(buffer, n_vocab);
         tp->EnableReturnSpecialToken(true);
         return size;

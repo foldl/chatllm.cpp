@@ -20,7 +20,7 @@ namespace embedding
 
     size_t Tokenizer::load(const char *buffer, int n_vocab)
     {
-        tp = new tokenizer::SentencePieceProcessor();
+        tp = new tokenizer::UnigramProcessor();
         size_t size = tp->Load(buffer, n_vocab);
         return size;
     }

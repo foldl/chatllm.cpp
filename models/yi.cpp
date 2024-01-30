@@ -57,7 +57,7 @@ private:
 
 size_t Tokenizer::load(const char *buffer, int n_vocab)
 {
-    tp = new tokenizer::SentencePieceProcessor();
+    tp = new tokenizer::BPEProcessor1();
     size_t size = tp->Load(buffer, n_vocab);
     bos_token_id = tp->GetPieceSize();
     eos_token_id = bos_token_id + 1;

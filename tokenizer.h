@@ -101,11 +101,10 @@ protected:
     bool ret_special_token;
 };
 
-// simplified SentencePieceProcessor
-class SentencePieceProcessor: public Processor
+class BPEProcessor1: public Processor
 {
 public:
-    SentencePieceProcessor() : Processor::Processor()  {}
+    BPEProcessor1() : Processor::Processor()  {}
 
     size_t Load(const char *buffer, int n_vocab) override;
 
@@ -114,10 +113,10 @@ public:
             std::vector<int> *ids) const override;
 };
 
-class BPEProcessor: public Processor
+class BPEProcessor2: public Processor
 {
 public:
-    BPEProcessor() : Processor::Processor() {}
+    BPEProcessor2() : Processor::Processor() {}
 
     size_t Load(const char *buffer, int n_vocab) override;
 
@@ -129,6 +128,19 @@ public:
 private:
     int DoEncode(const std::string &input,
             std::vector<int> *ids) const;
+};
+
+class UnigramProcessor: public Processor
+{
+public:
+    UnigramProcessor();
+
+    size_t Load(const char *buffer, int n_vocab) override;
+
+    int Encode(const std::string &input,
+            std::vector<int> *ids) const override;
+private:
+    size_t tok_max_len;
 };
 
 }

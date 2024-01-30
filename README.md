@@ -73,9 +73,6 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * Text Embedding (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
 
-        Note: output of tokenizer is not exactly the same as `XLMRobertaTokenizer`.
-
-
 ## Features
 
 * [x] Accelerated memory-efficient CPU inference with int4/int8 quantization, optimized KV cache and parallel computing;
