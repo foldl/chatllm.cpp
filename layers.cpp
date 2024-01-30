@@ -105,17 +105,33 @@ namespace chatllm
     {
         int hidden_size = hidden_states->ne[0];
 
-        // Note: Pooler is actually not used according to readme
-#if (0)
         // We "pool" the model by simply taking the hidden state corresponding to the first token.
         ggml_tensor *first_token_tensor = ggml_view_2d(ggctx, hidden_states, hidden_size, 1,
                                                       hidden_size * ggml_element_size(hidden_states), 0);
         ggml_tensor *output = dense.forward(ctx, first_token_tensor);
         output = inplace_act(ggctx, act, output);
-#else
+        return output;
+    }
+
+    ggml_tensor *RobertaClassificationHead::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
+    {
+        int hidden_size = hidden_states->ne[0];
+
+        // We "pool" the model by simply taking the hidden state corresponding to the first token.
+        ggml_tensor *first_token_tensor = ggml_view_2d(ggctx, hidden_states, hidden_size, 1,
+                                                      hidden_size * ggml_element_size(hidden_states), 0);
+        ggml_tensor *output = dense.forward(ctx, first_token_tensor);
+        output = inplace_act(ggctx, act, output);
+        output = out_proj.forward(ctx, output);
+        output = ggml_map_custom1(ggctx, output, ggml_compute_forward_sigmoid, 1, nullptr);
+        return output;
+    }
+
+    ggml_tensor *BCEFinalNorm::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
+    {
+        int hidden_size = hidden_states->ne[0];
         ggml_tensor *first_token_tensor = ggml_view_1d(ggctx, hidden_states, hidden_size, 0);
         ggml_tensor *output = ggml_map_custom1(ggctx, first_token_tensor, ggml_compute_forward_simple_norm, 1, this);
-#endif
         return output;
     }
 

@@ -1088,6 +1088,51 @@ namespace chatllm
         ActFunc act;
     };
 
+    class RobertaClassificationHead : public Block
+    {
+    public:
+        RobertaClassificationHead() : dense(), act(ActFunc::GELU), out_proj() {}
+
+        RobertaClassificationHead(InitContext *ctx, int hidden_size)
+            : dense(ctx, hidden_size, hidden_size, true),
+              act(ActFunc::Tanh),
+              out_proj(ctx, hidden_size, 1)
+        {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += dense.get_param_num(effective_only);
+            r += out_proj.get_param_num(effective_only);
+            return r;
+        }
+
+    public:
+        Linear dense;
+        ActFunc act;
+        Linear out_proj;
+    };
+
+    class BCEFinalNorm : public Block
+    {
+    public:
+        BCEFinalNorm() {}
+
+        BCEFinalNorm(InitContext *ctx, int hidden_size)
+        {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            return 0;
+        }
+    };
+
     class RobertaSelfAttention : public BaseSelfAttention<BaseCachelessAttention>
     {
     public:

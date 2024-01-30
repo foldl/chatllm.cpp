@@ -80,6 +80,8 @@ namespace chatllm
         virtual void encode(const std::string &text, std::vector<int> &ids) const;
         virtual std::vector<int> encode(const std::string &text) const;
 
+        virtual void encode_qa(const std::string &q, const std::string &a, std::vector<int> &ids) const;
+
         virtual std::string decode(const std::vector<int> &ids) const;
 
         virtual std::vector<int> encode_history(const std::vector<std::string> &history, int max_length, const bool incremental = false);
@@ -292,8 +294,7 @@ namespace chatllm
         {}
 
         virtual float qa_rank(const GenerationConfig &gen_config,
-                              const std::vector<int> &query_ids,
-                              const std::vector<int> &answer_ids)
+                              const std::vector<int> &input_ids)
         {
             return 0.0f;
         }
@@ -372,6 +373,7 @@ namespace chatllm
         void set_extending_method(ExtendingMethod method);
 
         void text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result);
+        float qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config);
 
     public:
         std::unique_ptr<BaseTokenizer> tokenizer;

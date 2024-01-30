@@ -336,6 +336,16 @@ namespace chatllm
             memcpy(embedding.data(), lm->data, embedding.size() * sizeof(embedding[0]));
         }
 
+        float qa_rank(const GenerationConfig &gen_config, const std::vector<int> &input_ids) override
+        {
+            ggml_tensor *lm = run_model(input_ids, gen_config, 0);
+            CHATLLM_CHECK(lm->type == GGML_TYPE_F32) << "lm->type must be GGML_TYPE_F32";
+
+            CHATLLM_CHECK((lm->ne[0] == 1) && (ggml_n_dims(lm) <= 1)) << "ouput must be scaler";
+
+            return *(float *)lm->data;
+        }
+
         int generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config)
         {
             ggml_tensor *lm_logits = nullptr;
@@ -1079,7 +1089,14 @@ namespace chatllm
                               bce::embedding::Tokenizer,
                               bce::embedding::ConditionalGeneration>(loader, result);
         }
+        case MODEL_TYPE_BCE_ReRanker:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
 
+            return load_model<bce::ranker::Config,
+                              bce::ranker::Tokenizer,
+                              bce::ranker::ConditionalGeneration>(loader, result);
+        }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;
             return false;

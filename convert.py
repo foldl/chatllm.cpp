@@ -77,6 +77,7 @@ class ModelType(Enum):
     Orion       = 0x1000
 
     BCE_Embedding = 0x10000100
+    BCE_ReRanker  = 0x10000101
 
 
 class TokenType(Enum):
@@ -1634,9 +1635,34 @@ class XLMRobertaConverter(BaseConverter):
                 f'encoder.layer.{i}.output.LayerNorm.bias',
             ]
 
+        return weight_names
+
+class XLMRobertaClassificationConverter(BaseConverter):
+    MODEL_TYPE = ModelType.BCE_ReRanker
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+
+        new_dict = {}
+        for k in state_dict:
+            kk = k[8:] if k.startswith('roberta.') else k
+            new_dict[kk] = state_dict[k]
+
+        return XLMRobertaConverter.state_dict_pp(config, new_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        XLMRobertaConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = XLMRobertaConverter.get_weight_names(config)
+
         weight_names += [
-            'pooler.dense.weight',
-            'pooler.dense.bias',
+            'classifier.dense.weight',
+            'classifier.dense.bias',
+            'classifier.out_proj.weight',
+            'classifier.out_proj.bias',
         ]
 
         return weight_names
@@ -1806,6 +1832,8 @@ def main():
         StableLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'XLMRobertaModel':
         XLMRobertaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'XLMRobertaForSequenceClassification':
+        XLMRobertaClassificationConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'neuralbeagle':
         NeuralBeagleConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OrionForCausalLM':

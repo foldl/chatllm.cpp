@@ -92,6 +92,15 @@ namespace chatllm
         tp->Encode(input, &ids);
     }
 
+    void BaseTokenizer::encode_qa(const std::string &q, const std::string &a, std::vector<int> &ids) const
+    {
+        std::string input = preprocess(q);
+        tp->Encode(input, &ids);
+
+        input = preprocess(a);
+        tp->Encode(input, &ids);
+    }
+
     std::vector<int> BaseTokenizer::encode(const std::string &text) const
     {
         std::vector<int> ids;
@@ -533,6 +542,13 @@ namespace chatllm
         std::vector<int> input_ids;
         tokenizer->encode(input, input_ids);
         model->text_embedding(gen_config, input_ids, result);
+    }
+
+    float Pipeline::qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config)
+    {
+        std::vector<int> input_ids;
+        tokenizer->encode_qa(q, a, input_ids);
+        return model->qa_rank(gen_config, input_ids);
     }
 
     void Pipeline::set_system_prompt(const std::string &prompt)

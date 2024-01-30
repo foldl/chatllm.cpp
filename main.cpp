@@ -342,7 +342,23 @@ static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, chatllm:
 
 static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, chatllm::TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
+    show_banner(pipeline);
 
+    while (1)
+    {
+        std::cout << "Answer > " << std::flush;
+        std::string answer;
+        if (!get_utf8_line(answer, args.multi_line))
+        {
+            std::cout << "FAILED to read line." << std::endl;
+            break;
+        }
+        if (answer.empty()) continue;
+
+        float rank = pipeline.qa_rank(args.prompt, answer, gen_config);
+        std::cout << std::setw(14) << std::fixed << std::setprecision(8) << rank << std::endl;
+    }
+    std::cout << "Bye\n";
 }
 
 void chat(Args &args)
