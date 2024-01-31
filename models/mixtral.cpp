@@ -94,7 +94,7 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
                         config.hidden_size, config.num_attention_heads,
                         config.intermediate_size, config.num_key_value_heads, config.max_length);
 
-    batch_input = false;
+    batch_input = mistral::SLIDING_WINDOW_LEN;
 }
 
 void ConditionalGeneration::load(ModelLoader &loader)

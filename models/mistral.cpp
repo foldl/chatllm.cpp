@@ -48,7 +48,7 @@ public:
             attention.freq_base = config.rope_theta;
         }
 
-        batch_input = false;
+        batch_input = SLIDING_WINDOW_LEN;
     }
 
     ConditionalGeneration(const Config &config)
