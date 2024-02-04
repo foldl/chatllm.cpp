@@ -85,6 +85,7 @@ namespace chatllm
 
         MODEL_TYPE_INTERNLM = 0x100,
         MODEL_TYPE_INTERNLM2= 0x101, // extended model, supporting 7B & 20B
+        MODEL_TYPE_INTERNLM3= 0x102,
 
         MODEL_TYPE_LLAMA2   = 0x150,
         MODEL_TYPE_CODELLAMA= 0x151,
@@ -151,6 +152,7 @@ namespace chatllm
             return "CodeGeeX2";
         case MODEL_TYPE_INTERNLM:
         case MODEL_TYPE_INTERNLM2:
+        case MODEL_TYPE_INTERNLM3:
             return "InternLM";
         case MODEL_TYPE_LLAMA2:
             return "LlaMa2";
@@ -211,6 +213,7 @@ namespace chatllm
         {
         case MODEL_TYPE_INTERNLM:
         case MODEL_TYPE_INTERNLM2:
+        case MODEL_TYPE_INTERNLM3:
             return "书生·浦语";
         case MODEL_TYPE_BAICHUAN:
         case MODEL_TYPE_BAICHUANLLAMA:
@@ -904,6 +907,14 @@ namespace chatllm
             return load_model<internlm::v2::Config,
                               internlm::v2::Tokenizer,
                               internlm::v2::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_INTERNLM3:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<internlm::v3::Config,
+                              internlm::v3::Tokenizer,
+                              internlm::v3::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_LLAMA2:
         {

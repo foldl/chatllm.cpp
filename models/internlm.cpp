@@ -202,3 +202,119 @@ namespace v1
         }
     };
 }
+
+namespace v3
+{
+    struct Config : public v2::Config
+    {
+    };
+
+    class ChatHistoryEncoder : public BaseHistoryEncoder
+    {
+    public:
+        ChatHistoryEncoder() {}
+        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public BaseTokenizer
+    {
+    public:
+        Tokenizer(const Config &config)
+            : BaseTokenizer::BaseTokenizer(config, &_chat_encoder)
+        {
+        };
+
+        size_t load(const char *buffer, int n_vocab) override
+        {
+            tp = new tokenizer::BPEProcessor1();
+            size_t size = tp->Load(buffer, n_vocab);
+
+            int id = n_vocab;
+            im_start_token_id       = --id;
+            im_end_token_id         = --id;
+            action_start_token_id   = --id;
+            action_end_token_id     = --id;
+            interpreter_token_id    = --id;
+            plugin_token_id         = --id;
+
+            newline_token_id = tp->PieceToId("\n");
+
+            return size;
+        }
+
+        int get_terminate_token_id(void) const override { return im_end_token_id; }
+
+        bool is_special_id(int id) const override
+        {
+            return (id == bos_token_id) || (id == eos_token_id) || ((plugin_token_id <= id) && (id <= im_start_token_id));
+        }
+
+        void encode(const std::string &text, std::vector<int> &ids, bool add_im_start, bool add_im_end)
+        {
+            if (add_im_start)
+                ids.push_back(im_start_token_id);
+            BaseTokenizer::encode(text, ids);
+            if (add_im_end)
+            {
+                ids.push_back(im_end_token_id);
+                ids.push_back(newline_token_id);
+            }
+        }
+    public:
+        int im_start_token_id;
+        int im_end_token_id;
+        int action_start_token_id;
+        int action_end_token_id;
+        int interpreter_token_id;
+        int plugin_token_id;
+        int newline_token_id;
+    };
+
+    class ConditionalGeneration: public GenericConditionalGeneration<false>
+    {
+    public:
+        ConditionalGeneration(const Config &config)
+            : GenericConditionalGeneration(config, MODEL_TYPE_INTERNLM3, config.num_key_value_heads, config.rope_theta, config.rope_scaling)
+        {
+            // ready for 20B
+            GRAPH_SIZE = 4096;
+        }
+    };
+
+    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        append_user(round_idx, user, ids);
+        tok->encode(ai, ids, false, true);
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::ostringstream oss_prompt;
+
+        if (round_idx == 0)
+        {
+            ids.push_back(tok->bos_token_id);
+            if (tok->get_system_prompt().size() > 0)
+            {
+                oss_prompt << "system\n"
+                           << tok->get_system_prompt();
+                tok->encode(oss_prompt.str(), ids, true, true);
+            }
+        }
+
+        oss_prompt.clear();
+        oss_prompt << "user\n"
+                   << user;
+        tok->encode(oss_prompt.str(), ids, true, true);
+
+        oss_prompt.clear();
+        oss_prompt << "assistant\n";
+        tok->encode(oss_prompt.str(), ids, true, false);
+    }
+}

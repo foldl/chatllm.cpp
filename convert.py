@@ -42,6 +42,7 @@ class ModelType(Enum):
 
     InternLM   = 0x100
     InternLM2   = 0x101
+    InternLM3   = 0x102
 
     LlaMA2      = 0x150
     CodeLlaMA   = 0x151
@@ -546,7 +547,7 @@ class InternLMConverter(BaseConverter):
             rope_scaling = config.rotary.get("scaling_factor", 1.0)
 
         if config.bias:
-            assert num_key_value_heads == config.num_attention_heads == 'dynamic', "num_key_value_heads must equal to num_attention_heads"
+            assert num_key_value_heads == config.num_attention_heads, "num_key_value_heads must equal to num_attention_heads"
             assert rope_theta == 10000, "rotary['base'] must be 10000"
             assert rope_scaling == 1.0, "rotary['base'] must be 10000"
 
@@ -596,6 +597,108 @@ class InternLMConverter(BaseConverter):
                     f"model.layers.{i}.self_attn.o_proj.weight",
                 ]
             weight_names += [
+                    f"model.layers.{i}.mlp.gate_proj.weight",
+                    f"model.layers.{i}.mlp.down_proj.weight",
+                    f"model.layers.{i}.mlp.up_proj.weight",
+                    f"model.layers.{i}.input_layernorm.weight",
+                    f"model.layers.{i}.post_attention_layernorm.weight",
+                ]
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+        return weight_names
+
+class InternLM2Converter(BaseConverter):
+    MODEL_TYPE = ModelType.InternLM3
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            if name.endswith('attention.wqkv.weight'):
+
+                kv_groups = config.num_attention_heads // config.num_key_value_heads
+                head_dim = config.hidden_size // config.num_attention_heads
+                gs = 2 + kv_groups
+                h = tensor.shape[0] // (gs * head_dim)
+
+                v = tensor.view(h, gs, head_dim, config.hidden_size)
+
+                wq = v[:, 0:kv_groups, ...].reshape(h * kv_groups * head_dim, config.hidden_size)
+                wk = v[:, -2,          ...].reshape(h * 1         * head_dim, config.hidden_size)
+                wv = v[:, -1,          ...].reshape(h * 1         * head_dim, config.hidden_size)
+
+                new_dict[name.replace('attention.wqkv.weight', 'self_attn.q_proj.weight')] = permute(wq, config.num_attention_heads)
+                new_dict[name.replace('attention.wqkv.weight', 'self_attn.k_proj.weight')] = permute(wk, config.num_key_value_heads)
+                new_dict[name.replace('attention.wqkv.weight', 'self_attn.v_proj.weight')] = wv
+            else:
+                old_name: str = ''
+
+                mapping = {
+                    'model.tok_embeddings.weight': 'model.embed_tokens.weight',
+                    'model.norm.weight': 'model.norm.weight',
+                    'output.weight': 'lm_head.weight',
+
+                    'attention.wo.weight': 'self_attn.o_proj.weight',
+                    'feed_forward.w1.weight': 'mlp.gate_proj.weight',
+                    'feed_forward.w2.weight': 'mlp.down_proj.weight',
+                    'feed_forward.w3.weight': 'mlp.up_proj.weight',
+                    'attention_norm.weight': 'input_layernorm.weight',
+                    'ffn_norm.weight': 'post_attention_layernorm.weight',
+                }
+
+                for k in mapping.keys():
+                    if name.endswith(k):
+                        old_name = name.replace(k, mapping[k])
+                        break
+
+                if old_name == '':
+                    raise Exception(f'unhandled tensor {name}')
+
+                new_dict[old_name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        assert config.bias == False, "bias must be False"
+        assert config.rope_scaling['type'] == 'dynamic', "rope_scaling['type'] must be dynamic"
+
+        rope_theta = config.rope_theta
+        rope_scaling = config.rope_scaling.get("scaling_factor", 1.0)
+        num_key_value_heads = config.num_key_value_heads
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        f.write(struct.pack("<f", rope_theta))
+        f.write(struct.pack("<f", rope_scaling))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                    f"model.layers.{i}.self_attn.q_proj.weight",
+                    f"model.layers.{i}.self_attn.k_proj.weight",
+                    f"model.layers.{i}.self_attn.v_proj.weight",
+                    f"model.layers.{i}.self_attn.o_proj.weight",
                     f"model.layers.{i}.mlp.gate_proj.weight",
                     f"model.layers.{i}.mlp.down_proj.weight",
                     f"model.layers.{i}.mlp.up_proj.weight",
@@ -1787,6 +1890,8 @@ def main():
         if not config.bias:
             InternLMConverter.MODEL_TYPE = ModelType.InternLM2
         InternLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'InternLM2ForCausalLM':
+        InternLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'LlamaForCausalLM':
         LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'codellama':
