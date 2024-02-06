@@ -121,6 +121,8 @@ namespace chatllm
 
         MODEL_TYPE_ORION    = 0x1000,
 
+        MODEL_TYPE_MINICPM  = 0x1100,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
     };
@@ -197,6 +199,8 @@ namespace chatllm
             return "StableLM";
         case MODEL_TYPE_ORION:
             return "Orion";
+        case MODEL_TYPE_MINICPM:
+            return "MiniCPM";
         case MODEL_TYPE_BCE_Embedding:
             return "BCE Embedding";
         case MODEL_TYPE_BCE_ReRanker:
@@ -827,6 +831,11 @@ namespace chatllm
         #include "models/orion.cpp"
     }
 
+    namespace minicpm
+    {
+        #include "models/minicpm.cpp"
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -1091,6 +1100,14 @@ namespace chatllm
             return load_model<orion::Config,
                               orion::Tokenizer,
                               orion::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_MINICPM:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<minicpm::Config,
+                              minicpm::Tokenizer,
+                              minicpm::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_BCE_Embedding:
         {

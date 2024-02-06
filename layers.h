@@ -469,6 +469,52 @@ namespace chatllm
         MLPBlock mlp;
     };
 
+    template <class InputNormBlock,
+              class AttentionBlock,
+              class PostNormBlock,
+              class MLPBlock> class LMBlock3 : public LMBlock1<InputNormBlock, AttentionBlock, PostNormBlock, MLPBlock>
+    {
+    public:
+        typedef LMBlock1<InputNormBlock, AttentionBlock, PostNormBlock, MLPBlock> Base;
+        LMBlock3() = default;
+        LMBlock3(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
+                  int max_length)
+            : Base::LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length),
+              hidden_scaling(1.0f) {}
+
+        LMBlock3(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int max_length)
+            : Base::LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length),
+              hidden_scaling(1.0f) {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
+        {
+            ggml_context * ggctx = ctx->gctx.get();
+
+            ggml_tensor *residual = ggml_dup(ggctx, hidden_states);
+            ggml_build_forward_expand(ctx->gf, residual);
+
+            hidden_states = Base::input_layernorm.forward(ctx, hidden_states);
+
+            hidden_states = Base::attention.forward(ctx, hidden_states, n_past);
+            hidden_states = ggml_scale_inplace(ggctx, hidden_states, hidden_scaling);
+            hidden_states = ggml_add_inplace(ggctx, hidden_states, residual);
+
+            residual = ggml_dup(ggctx, hidden_states);
+            ggml_build_forward_expand(ctx->gf, residual);
+
+            hidden_states = Base::post_attention_layernorm.forward(ctx, hidden_states);
+            hidden_states = Base::mlp.forward(ctx, hidden_states);
+            hidden_states = ggml_scale_inplace(ggctx, hidden_states, hidden_scaling);
+            hidden_states = ggml_add_inplace(ggctx, hidden_states, residual);
+
+            return hidden_states;
+        }
+    public:
+        float hidden_scaling;
+    };
+
     class GLM2Block : public LMBlock1<RMSNorm, GLM2SelfAttention, RMSNorm, GLM2MLP>
     {
     public:
@@ -1517,6 +1563,14 @@ namespace chatllm
     public:
         OrionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
             : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
+    class MiniCPMBlock : public LMBlock3<RMSNorm, LlamaSelfAttention, RMSNorm, BaseMLP>
+    {
+    public:
+        MiniCPMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock3(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };
 } // namespace chatllm

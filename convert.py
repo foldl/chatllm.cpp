@@ -13,6 +13,7 @@ from enum import Enum
 from pathlib import Path
 from typing import IO, Any, Iterable, List, Optional, Tuple
 import numpy as np
+import math
 
 import torch
 from torch import nn
@@ -76,6 +77,8 @@ class ModelType(Enum):
     StableLM    = 0x900
 
     Orion       = 0x1000
+
+    MiniCPM     = 0x1100
 
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
@@ -865,6 +868,52 @@ class OrionConverter(BaseConverter):
 
         return weight_names
 
+class MiniCPMConverter(BaseConverter):
+    MODEL_TYPE = ModelType.MiniCPM
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name == 'model.embed_tokens.weight':
+            return tensor * config.scale_emb
+        else:
+            return LlamaConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        _attn = config._attn_implementation if config._attn_implementation is not None else 'eager'
+        assert (_attn == 'eager') or (_attn == 'flash_attention_2'), '_attn_implementation must be eager or flash_attention_2'
+
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+
+        scaling = config.rope_scaling if config.rope_scaling is not None else 1.0
+        rope_theta = config.rope_theta if config.rope_theta is not None else 10000
+
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        f.write(struct.pack("<f", scaling))
+        f.write(struct.pack("<f", rope_theta))
+        f.write(struct.pack("<f", config.scale_depth / math.sqrt(config.num_hidden_layers)))
+
+    @staticmethod
+    def get_weight_names(config):
+        r = LlamaConverter.get_weight_names(config)
+        r.remove('lm_head.weight')
+        return r
 
 class MistralConverter(BaseConverter):
     MODEL_TYPE = ModelType.Mistral
@@ -1943,6 +1992,8 @@ def main():
         NeuralBeagleConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OrionForCausalLM':
         OrionConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'MiniCPMForCausalLM':
+        MiniCPMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

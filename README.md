@@ -26,10 +26,8 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
         Tip on CodeGeeX2: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
 
 * InternLM (`InternLMForCausalLM`, `InternLM2ForCausalLM`)
-    * [x] [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1)
-    * [x] [Chat-20B](https://huggingface.co/internlm/internlm-chat-20b)
-    * [x] [v2 Chat-7B](https://huggingface.co/internlm/internlm2-chat-7b)
-    * [x] [v2 Chat-20B](https://huggingface.co/internlm/internlm2-chat-20b)
+    * [x] v1: [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1), [Chat-20B](https://huggingface.co/internlm/internlm-chat-20b)
+    * [x] v2: [Chat-7B](https://huggingface.co/internlm/internlm2-chat-7b), [Chat-20B](https://huggingface.co/internlm/internlm2-chat-20b)
 
 * Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
     * [x] Mistral: [Instruct-7B](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), [7B](https://huggingface.co/mistralai/Mistral-7B-v0.1)
@@ -71,6 +69,9 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 * Orion (`OrionForCausalLM`)
     * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
+
+* MiniCPM (`MiniCPMForCausalLM`)
+    * [x] [DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16), [SFT-2B](https://huggingface.co/openbmb/MiniCPM-2B-sft-bf16)
 
 * Text Embedding (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
