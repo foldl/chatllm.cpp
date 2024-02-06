@@ -50,7 +50,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
     * [x] NeuralBeagle14: [7B](https://huggingface.co/mlabonne/NeuralBeagle14-7B)
 
 * Phi (`PhiForCausalLM`)
-    * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4) 🔥
+    * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4)
 
         Tip: `--temp 0` is recommended. Don't forget to try `--format qa`.
 
@@ -71,7 +71,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
     * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
 
 * MiniCPM (`MiniCPMForCausalLM`)
-    * [x] [DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16), [SFT-2B](https://huggingface.co/openbmb/MiniCPM-2B-sft-bf16)
+    * [x] [DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16), [SFT-2B](https://huggingface.co/openbmb/MiniCPM-2B-sft-bf16) 🔥
 
 * Text Embedding (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
