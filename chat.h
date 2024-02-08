@@ -229,7 +229,10 @@ namespace chatllm
     class ModelLoader
     {
     public:
-        ModelLoader(std::string_view buffer) : data(buffer.data()), size(buffer.size()), ptr(buffer.data()) {}
+        ModelLoader(const std::string &path)
+            : ModelLoader(new MappedFile(path))
+        {
+        }
 
         int64_t tell() const { return ptr - data; }
 
@@ -246,6 +249,15 @@ namespace chatllm
         std::string read_string(size_t length);
 
         void read_tensor(const std::string &name, ggml_tensor *tensor);
+
+    private:
+        ModelLoader(MappedFile *mapped_file)
+            : mapped_file(std::unique_ptr<MappedFile>(mapped_file)),
+              data(mapped_file->data), size(mapped_file->size), ptr(mapped_file->data)
+        {
+        }
+
+        std::unique_ptr<MappedFile> mapped_file;
 
     public:
         const char *const data;
@@ -353,6 +365,8 @@ namespace chatllm
             std::unique_ptr<BaseModel> model;
         };
 
+        static bool load(ModelLoader &loader, Result &result);
+    private:
         static bool load(int model_type, int version, ModelLoader &loader, Result &result);
     };
 
@@ -378,7 +392,7 @@ namespace chatllm
     public:
         std::unique_ptr<BaseTokenizer> tokenizer;
         std::unique_ptr<BaseModel> model;
-        std::unique_ptr<MappedFile> mapped_file;
+        std::unique_ptr<ModelLoader> loader;
     private:
         bool initializing;
         ExtendingMethod extending;

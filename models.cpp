@@ -862,7 +862,21 @@ namespace chatllm
         result.model = std::make_unique<ConditionalGeneration>(config);
         result.model->load(loader);
 
+        result.model->terminate_token_id = result.tokenizer->get_terminate_token_id();
+        result.model->set_tokenizer(result.tokenizer.get());
+
         return true;
+    }
+
+    bool ModelFactory::load(ModelLoader &loader, Result &result)
+    {
+        // load magic
+        std::string magic = loader.read_string(4);
+        CHATLLM_CHECK(magic == "ggml") << "model file is broken (bad magic)";
+
+        int model_type = loader.read_basic<int>();
+        int version = loader.read_basic<int>();
+        return ModelFactory::load(model_type, version, loader, result);
     }
 
     bool ModelFactory::load(int model_type, int version, ModelLoader &loader, Result &result)

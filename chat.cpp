@@ -340,7 +340,6 @@ namespace chatllm
 #elif defined(_WIN32)
     MappedFile::MappedFile(const std::string &path)
     {
-
         int fd = open(path.c_str(), O_RDONLY);
         CHATLLM_CHECK(fd > 0) << "cannot open file " << path << ": " << strerror(errno);
 
@@ -438,23 +437,14 @@ namespace chatllm
 
     Pipeline::Pipeline(const std::string &path) : extending(ExtendingMethod::Restart)
     {
-        mapped_file = std::make_unique<MappedFile>(path);
-        ModelLoader loader(std::string_view((char *)mapped_file->data, mapped_file->size));
+        loader = std::unique_ptr<ModelLoader>(new ModelLoader(path));
 
-        // load magic
-        std::string magic = loader.read_string(4);
-        CHATLLM_CHECK(magic == "ggml") << "model file is broken (bad magic)";
-
-        int model_type = loader.read_basic<int>();
-        int version = loader.read_basic<int>();
         ModelFactory::Result result = {nullptr, nullptr};
-        if (!ModelFactory::load(model_type, version, loader, result))
+        if (!ModelFactory::load(*loader, result))
             CHATLLM_THROW << "ModelFactory::load() failed";
 
         tokenizer = std::move(result.tokenizer);
         model = std::move(result.model);
-        model->terminate_token_id = tokenizer->get_terminate_token_id();
-        model->set_tokenizer(tokenizer.get());
 
         initializing = true;
     }
