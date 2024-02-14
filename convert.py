@@ -80,6 +80,8 @@ class ModelType(Enum):
 
     MiniCPM     = 0x1100
 
+    Persimmon   = 0x1200
+
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
 
@@ -1726,6 +1728,128 @@ class QWenConverter(BaseConverter):
 
         return weight_names
 
+def permute2(weights: torch.Tensor, n_head: int, partial_rotary_factor: float) -> torch.Tensor:
+    hidden_size = weights.shape[0]
+    head_dim = hidden_size // n_head
+    rope_dim = int(partial_rotary_factor * head_dim)
+    reshaped = weights.reshape(n_head, head_dim, *weights.shape[1:])
+    rot = reshaped[:, :rope_dim, ...]
+    other = reshaped[:, rope_dim:, ...]
+    rot = rot.reshape(n_head, 2, rope_dim // 2, *weights.shape[1:]).swapaxes(1, 2).reshape(rot.shape)
+    combined = torch.concat((rot, other), dim = 1)
+    return combined.reshape(weights.shape)
+
+class PersimmonConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Persimmon
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        partial_rotary_factor = config.partial_rotary_factor if config.partial_rotary_factor is not None else 0.5
+
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.endswith('query_key_value.weight'):
+                num_heads = config.num_attention_heads
+                head_dim = config.hidden_size // config.num_attention_heads
+
+                v = tensor.view(num_heads, 3, head_dim, tensor.shape[1])
+
+                wq = v[:, 0, ...].reshape(config.hidden_size, tensor.shape[1])
+                wk = v[:, 1, ...].reshape(config.hidden_size, tensor.shape[1])
+                wv = v[:, 2, ...].reshape(config.hidden_size, tensor.shape[1])
+
+                new_dict[name.replace('query_key_value', 'q_proj')] = wq
+                new_dict[name.replace('query_key_value', 'k_proj')] = wk
+                new_dict[name.replace('query_key_value', 'v_proj')] = wv
+
+            elif name.endswith('query_key_value.bias'):
+                num_heads = config.num_attention_heads
+                head_dim = config.hidden_size // config.num_attention_heads
+
+                v = tensor.view(num_heads, 3, head_dim)
+
+                wq = v[:, 0, ...].reshape(config.hidden_size)
+                wk = v[:, 1, ...].reshape(config.hidden_size)
+                wv = v[:, 2, ...].reshape(config.hidden_size)
+
+                new_dict[name.replace('query_key_value', 'q_proj')] = wq
+                new_dict[name.replace('query_key_value', 'k_proj')] = wk
+                new_dict[name.replace('query_key_value', 'v_proj')] = wv
+
+            else:
+                new_dict[name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'relu2', 'hidden_act must be relu2'
+        assert config.qk_layernorm, "qk_layernorm must be true"
+        assert config.rope_scaling is None, 'rope_scaling must be null'
+        assert config.num_attention_heads == config.num_key_value_heads, 'num_attention_heads must be equal to num_key_value_heads'
+
+        hidden_size = config.hidden_size
+        num_heads = config.num_attention_heads
+        head_dim = hidden_size // num_heads
+
+        partial_rotary_factor = config.partial_rotary_factor if config.partial_rotary_factor is not None else 0.5
+        rope_dim = int(partial_rotary_factor * head_dim)
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads,
+            rope_dim,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.input_layernorm.bias",
+                f"model.layers.{i}.mlp.dense_4h_to_h.weight",
+                f"model.layers.{i}.mlp.dense_4h_to_h.bias",
+                f"model.layers.{i}.mlp.dense_h_to_4h.weight",
+                f"model.layers.{i}.mlp.dense_h_to_4h.bias",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.bias",
+                f"model.layers.{i}.self_attn.dense.weight",
+                f"model.layers.{i}.self_attn.dense.bias",
+                f"model.layers.{i}.self_attn.k_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_layernorm.bias",
+                f"model.layers.{i}.self_attn.q_layernorm.weight",
+                f"model.layers.{i}.self_attn.q_layernorm.bias",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.k_proj.bias",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.bias",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.bias",
+            ]
+
+        weight_names += [
+            "model.final_layernorm.weight",
+            "model.final_layernorm.bias",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
 class XLMRobertaConverter(BaseConverter):
     MODEL_TYPE = ModelType.BCE_Embedding
 
@@ -1994,6 +2118,8 @@ def main():
         OrionConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MiniCPMForCausalLM':
         MiniCPMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'PersimmonForCausalLM':
+        PersimmonConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

@@ -36,10 +36,21 @@ namespace chatllm
         {
         case ActFunc::GELU:
             return ggml_gelu_inplace(ctx, input);
+        case ActFunc::SILU:
+            return ggml_silu_inplace(ctx, input);
         case ActFunc::Tanh:
             return ggml_tanh_inplace(ctx, input);
+        case ActFunc::RELU:
+            return ggml_relu_inplace(ctx, input);
+        case ActFunc::RELU2:
+            {
+                ggml_tensor *output = ggml_relu_inplace(ctx, input);
+                output = ggml_sqr_inplace(ctx, output);
+                return output;
+            }
         default:
-            return ggml_silu_inplace(ctx, input);
+            CHATLLM_CHECK(false) << "not implemented act function: " << act;
+            return NULL;
         }
     }
 
@@ -90,14 +101,6 @@ namespace chatllm
     {
         ggml_tensor *output = ggml_rms_norm_inplace(ctx->gctx.get(), input, eps);
         output = ggml_mul_inplace(ctx->gctx.get(), output, weight);
-        return output;
-    }
-
-    ggml_tensor *GLMMLP::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
-    {
-        ggml_tensor *output = dense_h_to_4h.forward(ctx, hidden_states);
-        output = ggml_gelu_inplace(ctx->gctx.get(), output);
-        output = dense_4h_to_h.forward(ctx, output);
         return output;
     }
 

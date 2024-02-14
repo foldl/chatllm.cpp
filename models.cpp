@@ -123,6 +123,8 @@ namespace chatllm
 
         MODEL_TYPE_MINICPM  = 0x1100,
 
+        MODEL_TYPE_PERSIMMON= 0x1200,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
     };
@@ -201,6 +203,8 @@ namespace chatllm
             return "Orion";
         case MODEL_TYPE_MINICPM:
             return "MiniCPM";
+        case MODEL_TYPE_PERSIMMON:
+            return "Persimmon";
         case MODEL_TYPE_BCE_Embedding:
             return "BCE Embedding";
         case MODEL_TYPE_BCE_ReRanker:
@@ -836,6 +840,11 @@ namespace chatllm
         #include "models/minicpm.cpp"
     }
 
+    namespace adept
+    {
+        #include "models/adept.cpp"
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result)
     {
@@ -1122,6 +1131,14 @@ namespace chatllm
             return load_model<minicpm::Config,
                               minicpm::Tokenizer,
                               minicpm::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_PERSIMMON:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<adept::persimmon::Config,
+                              adept::persimmon::Tokenizer,
+                              adept::persimmon::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_BCE_Embedding:
         {

@@ -19,6 +19,8 @@ namespace chatllm
         GELU,   // equivelent to `gelu_new`
         SILU,
         Tanh,
+        RELU,
+        RELU2,  // square . relu
     };
 
     ggml_tensor *inplace_act(ggml_context *ctx, ActFunc act, ggml_tensor *input);
@@ -219,27 +221,45 @@ namespace chatllm
         float eps;
     };
 
-    class GLMMLP : public Block
+    // This is **the** feed forward network (Multi-Layer Perceptron) in _Attention Is All You Need_.
+    class TheMLP : public Block
     {
     public:
-        GLMMLP() = default;
-        GLMMLP(InitContext *ctx, int hidden_size)
-            : dense_h_to_4h(ctx, hidden_size, 4 * hidden_size), dense_4h_to_h(ctx, 4 * hidden_size, hidden_size) {}
+        TheMLP() = default;
+        TheMLP(InitContext *ctx, int hidden_size, int intermediate_size, ActFunc act, bool bias)
+            : fc0(ctx, hidden_size, intermediate_size, bias),
+              fc1(ctx, intermediate_size, hidden_size, bias),
+              act(act)
+        {}
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
 
+        void set_prec(ggml_prec prec) override;
+
         int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += dense_h_to_4h.get_param_num(effective_only);
-            r += dense_4h_to_h.get_param_num(effective_only);
+            r += fc0.get_param_num(effective_only);
+            r += fc1.get_param_num(effective_only);
             return r;
         }
 
     public:
-        Linear dense_h_to_4h;
-        Linear dense_4h_to_h;
+        Linear fc0;
+        Linear fc1;
+        ActFunc act;
+    };
+
+    class GLMMLP : public TheMLP
+    {
+    public:
+        GLMMLP() = default;
+        GLMMLP(InitContext *ctx, int hidden_size)
+            : GLMMLP(ctx, hidden_size, 4 * hidden_size) {}
+
+        GLMMLP(InitContext *ctx, int hidden_size, int intermediate_size)
+            : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true) {}
     };
 
     class GLMSelfAttention : public Block
@@ -918,36 +938,6 @@ namespace chatllm
             : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, bias, bias) {}
     };
 
-    // This is **the** feed forward network (Multi-Layer Perceptron) in _Attention Is All You Need_.
-    class TheMLP : public Block
-    {
-    public:
-        TheMLP() = default;
-        TheMLP(InitContext *ctx, int hidden_size, int intermediate_size, ActFunc act, bool bias)
-            : fc0(ctx, hidden_size, intermediate_size, bias),
-              fc1(ctx, intermediate_size, hidden_size, bias),
-              act(act)
-        {}
-
-        using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
-
-        void set_prec(ggml_prec prec) override;
-
-        int64_t get_param_num(bool effective_only) const override
-        {
-            int64_t r = 0;
-            r += fc0.get_param_num(effective_only);
-            r += fc1.get_param_num(effective_only);
-            return r;
-        }
-
-    public:
-        Linear fc0;
-        Linear fc1;
-        ActFunc act;
-    };
-
     class BaseMLP : public Block
     {
     public:
@@ -1571,6 +1561,94 @@ namespace chatllm
     public:
         MiniCPMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
             : LMBlock3(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
+    template <class Norm, class BaseAttn> class QKNormedAttention : public BaseSelfAttention<BaseAttn>
+    {
+    public:
+        QKNormedAttention() : BaseAttn() {}
+
+        QKNormedAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
+            : BaseSelfAttention<BaseAttn>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
+              k_layernorm(ctx, hidden_size / num_kv_heads),
+              q_layernorm(ctx, hidden_size / num_attention_heads)
+        {
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += BaseSelfAttention<BaseAttn>::get_param_num(effective_only);
+            r += k_layernorm.get_param_num(effective_only);
+            r += q_layernorm.get_param_num(effective_only);
+            return r;
+        }
+
+    protected:
+        // input & output: [qlen, heads, head_size]
+        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
+        {
+            k = const_cast<QKNormedAttention *>(this)->k_layernorm.forward(ctx, k);
+            return ggml_rope_custom_inplace(ctx->gctx.get(), k, past, BaseSelfAttention<BaseAttn>::rope_dim, 2, 0, 0,
+                        BaseSelfAttention<BaseAttn>::freq_base, BaseSelfAttention<BaseAttn>::freq_scale, BaseSelfAttention<BaseAttn>::ext_factor,
+                        BaseSelfAttention<BaseAttn>::attn_factor, BaseSelfAttention<BaseAttn>::beta_fast, BaseSelfAttention<BaseAttn>::beta_slow);    // [qlen, heads, head_size]
+        }
+
+        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
+        {
+            #if (0)
+            {
+                // input: [seqlen, normalized_shape]
+                ggml_tensor *input = q;
+                ggml_tensor *output = ggml_norm_inplace(ctx->gctx.get(), input, const_cast<QKNormedAttention *>(this)->q_layernorm.eps);
+
+                output = ggml_mul_inplace(ctx->gctx.get(), output, const_cast<QKNormedAttention *>(this)->q_layernorm.weight);
+
+                output = ggml_add_inplace(ctx->gctx.get(), output, const_cast<QKNormedAttention *>(this)->q_layernorm.bias);
+                q = output;
+            }
+#endif
+            q = const_cast<QKNormedAttention *>(this)->q_layernorm.forward(ctx, q);
+
+            ggml_tensor *r = ggml_rope_custom_inplace(ctx->gctx.get(), q, past, BaseSelfAttention<BaseAttn>::rope_dim, 2, 0, 0,
+                        BaseSelfAttention<BaseAttn>::freq_base, BaseSelfAttention<BaseAttn>::freq_scale, BaseSelfAttention<BaseAttn>::ext_factor,
+                        BaseSelfAttention<BaseAttn>::attn_factor, BaseSelfAttention<BaseAttn>::beta_fast, BaseSelfAttention<BaseAttn>::beta_slow);    // [qlen, heads, head_size];
+
+            return r;
+        }
+
+    public:
+        Norm k_layernorm;
+        Norm q_layernorm;
+    };
+
+    class PersimmonSelfAttention : public QKNormedAttention<LayerNorm, BaseAttention>
+    {
+    public:
+        PersimmonSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+            : PersimmonSelfAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length) {}
+
+        PersimmonSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : QKNormedAttention<LayerNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, true) {}
+    };
+
+    class PersimmonMLP : public TheMLP
+    {
+    public:
+        PersimmonMLP() = default;
+        PersimmonMLP(InitContext *ctx, int hidden_size)
+            : PersimmonMLP(ctx, hidden_size, 4 * hidden_size) {}
+
+        PersimmonMLP(InitContext *ctx, int hidden_size, int intermediate_size)
+            : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::RELU2, true) {}
+    };
+
+    class PersimmonBlock : public LMBlock1<LayerNorm, PersimmonSelfAttention, LayerNorm, PersimmonMLP>
+    {
+    public:
+        PersimmonBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
         {}
     };
 } // namespace chatllm

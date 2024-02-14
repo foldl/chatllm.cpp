@@ -73,6 +73,9 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * MiniCPM (`MiniCPMForCausalLM`)
     * [x] [DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16), [SFT-2B](https://huggingface.co/openbmb/MiniCPM-2B-sft-bf16) 🔥
 
+* Adept (`PersimmonForCausalLM`)
+    * [x] [Chat-8B](https://huggingface.co/adept/persimmon-8b-chat)
+
 * Text Embedding (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
 

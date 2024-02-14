@@ -196,10 +196,10 @@ void ConditionalGeneration::load(ModelLoader &loader)
                             transformer.layers[i].post_attention_layernorm.weight);
         loader.read_tensor(layer_prefix + "post_attention_layernorm.bias",
                             transformer.layers[i].post_attention_layernorm.bias);
-        loader.read_tensor(layer_prefix + "mlp.dense_h_to_4h.weight", transformer.layers[i].mlp.dense_h_to_4h.weight);
-        loader.read_tensor(layer_prefix + "mlp.dense_h_to_4h.bias", transformer.layers[i].mlp.dense_h_to_4h.bias);
-        loader.read_tensor(layer_prefix + "mlp.dense_4h_to_h.weight", transformer.layers[i].mlp.dense_4h_to_h.weight);
-        loader.read_tensor(layer_prefix + "mlp.dense_4h_to_h.bias", transformer.layers[i].mlp.dense_4h_to_h.bias);
+        loader.read_tensor(layer_prefix + "mlp.dense_h_to_4h.weight", transformer.layers[i].mlp.fc0.weight);
+        loader.read_tensor(layer_prefix + "mlp.dense_h_to_4h.bias", transformer.layers[i].mlp.fc0.bias);
+        loader.read_tensor(layer_prefix + "mlp.dense_4h_to_h.weight", transformer.layers[i].mlp.fc1.weight);
+        loader.read_tensor(layer_prefix + "mlp.dense_4h_to_h.bias", transformer.layers[i].mlp.fc1.bias);
     }
     loader.read_tensor("transformer.final_layernorm.weight", transformer.final_layernorm.weight);
     loader.read_tensor("transformer.final_layernorm.bias", transformer.final_layernorm.bias);
