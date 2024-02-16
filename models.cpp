@@ -114,6 +114,7 @@ namespace chatllm
         MODEL_TYPE_NEURALBEAGLE = 0x603,
 
         MODEL_TYPE_QWEN     = 0x700,
+        MODEL_TYPE_QWEN2    = 0x710,
 
         MODEL_TYPE_BLUELM   = 0x800,
 
@@ -124,6 +125,7 @@ namespace chatllm
         MODEL_TYPE_MINICPM  = 0x1100,
 
         MODEL_TYPE_PERSIMMON= 0x1200,
+        MODEL_TYPE_FUYU     = 0x1201,
 
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
@@ -193,6 +195,8 @@ namespace chatllm
             return "NeuralBeagle";
         case MODEL_TYPE_QWEN:
             return "QWen";
+        case MODEL_TYPE_QWEN2:
+            return "QWen2";
         case MODEL_TYPE_TIGERBOT:
             return "TigerBot";
         case MODEL_TYPE_BLUELM:
@@ -205,6 +209,8 @@ namespace chatllm
             return "MiniCPM";
         case MODEL_TYPE_PERSIMMON:
             return "Persimmon";
+        case MODEL_TYPE_FUYU:
+            return "Fuyu";
         case MODEL_TYPE_BCE_Embedding:
             return "BCE Embedding";
         case MODEL_TYPE_BCE_ReRanker:
@@ -230,6 +236,7 @@ namespace chatllm
         case MODEL_TYPE_PHI2_V2:
             return "Φ";
         case MODEL_TYPE_QWEN:
+        case MODEL_TYPE_QWEN2:
             return "通义千问";
         case MODEL_TYPE_TIGERBOT:
             return "虎博";
@@ -1072,9 +1079,17 @@ namespace chatllm
         {
             CHATLLM_CHECK(version == 2) << "only support version 2 for now but got " << version;
 
-            return load_model<qwen::Config,
-                              qwen::Tokenizer,
-                              qwen::ConditionalGeneration>(loader, result);
+            return load_model<qwen::v1::Config,
+                              qwen::v1::Tokenizer,
+                              qwen::v1::ConditionalGeneration>(loader, result);
+        }
+        case MODEL_TYPE_QWEN2:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 2 for now but got " << version;
+
+            return load_model<qwen::v2::Config,
+                              qwen::v2::Tokenizer,
+                              qwen::v2::ConditionalGeneration>(loader, result);
         }
         case MODEL_TYPE_TIGERBOT:
         {

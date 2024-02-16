@@ -811,7 +811,7 @@ namespace chatllm
             const int head_size = hidden_size / num_attention_heads;
             const int repeat = num_attention_heads / num_kv_heads;
             const int kv_hidden_size = hidden_size / repeat;
-            // TODO: It seems that qlen must be 1.
+            // Note: `qlen` must be 1.
             int64_t len = n_past + qlen;
             int64_t offset = 0;
             if (len > sliding_window_len)
@@ -851,6 +851,128 @@ namespace chatllm
         }
 
         ggml_tensor *indices;
+    };
+
+    // TODO: debug this
+    template <int sliding_window_len, int extra_len = 64> class BaseSlidingWindowAttentionPartialCache : public BaseAttention
+    {
+    public:
+        BaseSlidingWindowAttentionPartialCache(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias, GGML_TYPE_F16, sliding_window_len + extra_len),
+              indices(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, 1)), // to ensure number of tensors are the same
+              cache_offset(0)
+        {
+        }
+
+    protected:
+
+        void before_forward(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen) override
+        {
+            fill_pos_vector(pos, n_past, qlen);
+
+            // shift cache
+            if (shift_pending.shift > 0)
+            {
+                // do nothing
+                shift_pending.clear();
+            }
+        }
+
+        void save_to_cache(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen, ggml_tensor *k, ggml_tensor *v) override
+        {
+            CHATLLM_CHECK(qlen == 1)  << "qlen must be 1";
+
+            {
+                const int write_offset = cache_offset + n_past;
+                const int empty = cache_length - write_offset;
+
+                if (empty < qlen)
+                {
+                    int remain = sliding_window_len - qlen;
+                    int shift = cache_length - remain;
+
+                    if (id == 0)
+                        printf("\n<<<< SHIFT: %d, %d, %d, %d, %d\n", empty, qlen, remain, shift, cache_offset);
+
+                    struct ggml_tensor * k_cache_remain = ggml_view_1d(ctx->gctx.get(), k_cache, remain * kv_hidden_size,
+                                                ggml_element_size(k_cache) * kv_hidden_size * shift);
+                    struct ggml_tensor * k_cache_1d = ggml_view_1d(ctx->gctx.get(), k_cache, remain * kv_hidden_size,
+                                                0);
+
+                    struct ggml_tensor * v_cache_remain = ggml_view_2d(ctx->gctx.get(), v_cache, remain, kv_hidden_size,
+                                                cache_length * ggml_element_size(v_cache),
+                                                shift * ggml_element_size(v_cache));
+                    struct ggml_tensor * v_cache_2d =     ggml_view_2d(ctx->gctx.get(), v_cache, remain, kv_hidden_size,
+                                                cache_length * ggml_element_size(v_cache),
+                                                0);
+
+                    ggml_build_forward_expand(ctx->gf, ggml_cpy_inplace(ctx->gctx.get(), k_cache_remain, k_cache_1d));
+                    ggml_build_forward_expand(ctx->gf, ggml_cpy_inplace(ctx->gctx.get(), v_cache_remain, v_cache_2d));
+
+                    cache_offset -= shift;
+                }
+            }
+
+            const int write_offset = cache_offset + n_past;
+
+            // compute the transposed [N, n_embd] V matrix
+            struct ggml_tensor * Vcur = ggml_transpose(ctx->gctx.get(), v); // ggml_reshape_2d(ctx->gctx.get(), tmpv, kv_hidden_size, qlen));
+
+            struct ggml_tensor * k_cache_view = ggml_view_1d(ctx->gctx.get(), k_cache, qlen * kv_hidden_size,
+                                        ggml_element_size(k_cache) * kv_hidden_size * write_offset);
+
+            struct ggml_tensor * v_cache_view = ggml_view_2d(ctx->gctx.get(), v_cache, qlen, kv_hidden_size,
+                    cache_length * ggml_element_size(v_cache), write_offset * ggml_element_size(v_cache));
+
+            struct ggml_tensor * k_view = ggml_view_1d(ctx->gctx.get(), k, qlen * kv_hidden_size, 0);
+
+            // important: storing RoPE-ed version of K in the KV cache!
+            ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_view, k_cache_view));
+            ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), Vcur, v_cache_view));
+        }
+
+        // output: [heads, qlen, head_size]
+        ggml_tensor *get_k_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override
+        {
+            const int head_size = hidden_size / num_attention_heads;
+            const int repeat = num_attention_heads / num_kv_heads;
+            const int kv_hidden_size = hidden_size / repeat;
+            int64_t len = n_past + qlen;
+            if (len > sliding_window_len)
+                len = sliding_window_len;
+            int64_t offset = cache_offset + n_past + qlen - len;
+
+            CHATLLM_CHECK(offset >= 0) << "offset must >= 0";
+
+            ggml_tensor *key_layer = nullptr;
+
+            key_layer = ggml_view_1d(ctx->gctx.get(), k_cache, len * kv_hidden_size, offset * kv_hidden_size * ggml_element_size(k_cache));
+            key_layer = ggml_reshape_3d(ctx->gctx.get(), key_layer, head_size, num_kv_heads, len);  // [qlen, heads, head_size]
+            key_layer = ggml_permute(ctx->gctx.get(), key_layer, 0, 2, 1, 3);                       // [heads, qlen, head_size]
+
+            return key_layer;
+        }
+
+        // output: [heads, head_size, klen]
+        ggml_tensor *get_v_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override
+        {
+            const int head_size = hidden_size / num_attention_heads;
+            int64_t len = n_past + qlen;
+            if (len > sliding_window_len)
+                len = sliding_window_len;
+            int64_t offset = cache_offset + n_past + qlen - len;
+
+            ggml_tensor * value_layer = ggml_view_3d(ctx->gctx.get(),
+                            v_cache,
+                            len, head_size, num_kv_heads,
+                            cache_length * ggml_element_size(v_cache),
+                            cache_length * ggml_element_size(v_cache) * head_size,
+                            offset * ggml_element_size(v_cache)); // [heads, head_size, klen]
+            return value_layer;
+        }
+
+        ggml_tensor *indices;
+        int cache_offset;
     };
 
     template <class BaseAttn> class BaseSelfAttention : public BaseAttn
@@ -1459,6 +1581,21 @@ namespace chatllm
     public:
         QWenBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
             : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
+        {}
+    };
+
+    class QWen2SelfAttention : public BaseSelfAttention<BaseAttention>
+    {
+    public:
+        QWen2SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, false) {}
+    };
+
+    class QWen2Block : public LMBlock1<RMSNorm, QWen2SelfAttention, RMSNorm, BaseMLP>
+    {
+    public:
+        QWen2Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };
 

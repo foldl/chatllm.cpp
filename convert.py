@@ -71,6 +71,7 @@ class ModelType(Enum):
     NeuralBeagle = 0x603
 
     QWen    = 0x700
+    QWen2   = 0x710
 
     BlueLM  = 0x800
 
@@ -81,6 +82,7 @@ class ModelType(Enum):
     MiniCPM     = 0x1100
 
     Persimmon   = 0x1200
+    Fuyu        = 0x1201
 
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
@@ -208,16 +210,16 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
         for name in tqdm(this_round.keys(), desc="Dumping ..."):
             tensor: torch.Tensor = this_round[name]
 
-            if tensor.ndim == 2:
-                # 2d weight: should quantize it if needed
-                tensor = tensor.float()
+            tensor = tensor.float()
 
-                # step 2: quantize it into ggml format
-                tensor_ggml_type = ggml_type
+            if tensor.ndim == 2:
+                if tensor.shape[1] % GGML_QK8_0 == 0:
+                    tensor_ggml_type = ggml_type
+                else:
+                    tensor_ggml_type = GGMLType.F16
             else:
                 # 1d weight: convert it to float32
                 assert tensor.ndim == 1
-                tensor = tensor.float()
                 tensor_ggml_type = GGMLType.F32
 
             dump_tensor(f, name, tensor, tensor_ggml_type)
@@ -242,9 +244,9 @@ class SentencePieceVocab:
         actual_ids = sorted(added_tokens.values())
         if expected_ids != actual_ids:
             if actual_ids == list(range(len(added_tokens))):
-                raise Exception(f"added token IDs ({actual_ids}) are starting from 0. `added_token.json` seems WRONG. \n\nDelete it and try again.")
+                raise Exception(f"added token IDs ({actual_ids}) are starting from 0. `added_token.json` seems WRONG.\n\nDelete it and try again.")
             else:
-                raise Exception(f"Expected added token IDs to be sequential and start at {len(added_tokens)}; got {actual_ids}")
+                raise Exception(f"Expected added token IDs to be sequential and start at {vocab_size}; got {actual_ids}.\n\nDelete it and try again.")
         items = sorted(added_tokens.items(), key=lambda text_idx: text_idx[1])
         self.added_tokens_list = [text for (text, idx) in items]
         self.vocab_size_base: int = vocab_size
@@ -308,7 +310,7 @@ class UnigramTokenizerJsonVocab:
         self.vocal_tokens = model['model']['vocab']
         self.vocab_size: int = len(self.vocal_tokens)
 
-        print("vocab_size ", self.vocab_size)
+        print("Unigram vocab_size ", self.vocab_size)
 
     def tokenizer_tokens(self) -> Iterable[Tuple[bytes, float]]:
         for v in self.vocal_tokens:
@@ -737,7 +739,7 @@ class LlamaConverter(BaseConverter):
             config.intermediate_size,
             config.max_position_embeddings,
             config.bos_token_id if config.bos_token_id is not None else -1,
-            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.eos_token_id if isinstance(config.eos_token_id, int) else -1,
             config.pad_token_id if config.pad_token_id is not None else -1,
             config.sep_token_id if config.sep_token_id is not None else -1,
         ]
@@ -1728,6 +1730,55 @@ class QWenConverter(BaseConverter):
 
         return weight_names
 
+class QWen2Converter(BaseConverter):
+    MODEL_TYPE = ModelType.QWen2
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        elif name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.use_sliding_window == False, "use_sliding_window must be False"
+        LlamaConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.sliding_window,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.k_proj.bias",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.bias",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.bias",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
 def permute2(weights: torch.Tensor, n_head: int, partial_rotary_factor: float) -> torch.Tensor:
     hidden_size = weights.shape[0]
     head_dim = hidden_size // n_head
@@ -1788,7 +1839,8 @@ class PersimmonConverter(BaseConverter):
         assert config.hidden_act == 'relu2', 'hidden_act must be relu2'
         assert config.qk_layernorm, "qk_layernorm must be true"
         assert config.rope_scaling is None, 'rope_scaling must be null'
-        assert config.num_attention_heads == config.num_key_value_heads, 'num_attention_heads must be equal to num_key_value_heads'
+        if config.num_key_value_heads is not None:
+            assert config.num_attention_heads == config.num_key_value_heads, 'num_attention_heads must be equal to num_key_value_heads'
 
         hidden_size = config.hidden_size
         num_heads = config.num_attention_heads
@@ -1809,7 +1861,7 @@ class PersimmonConverter(BaseConverter):
             config.eos_token_id if config.eos_token_id is not None else -1,
             config.pad_token_id if config.pad_token_id is not None else -1,
             config.sep_token_id if config.sep_token_id is not None else -1,
-            config.num_key_value_heads,
+            config.num_key_value_heads if config.sep_token_id is not None else config.num_attention_heads,
             rope_dim,
         ]
         f.write(struct.pack("i" * len(config_values), *config_values))
@@ -1846,6 +1898,39 @@ class PersimmonConverter(BaseConverter):
             "model.final_layernorm.weight",
             "model.final_layernorm.bias",
             "lm_head.weight"
+        ]
+
+        return weight_names
+
+class FuyuConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Fuyu
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.startswith('language_model.'):
+                new_dict[name.replace('language_model.', '')] = tensor
+            else:
+                new_dict[name] = tensor
+
+        return PersimmonConverter.state_dict_pp(config, new_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.num_channels == 3, 'num_channels must be 3'
+
+        PersimmonConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = PersimmonConverter.get_weight_names(config)
+        weight_names += [
+            'vision_embed_tokens.weight',
+            'vision_embed_tokens.bias',
         ]
 
         return weight_names
@@ -2102,6 +2187,8 @@ def main():
         OpenChatConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'QWenLMHeadModel':
         QWenConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Qwen2ForCausalLM':
+        QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'tigerbot':
         TigerBotConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'BlueLMForCausalLM':
@@ -2120,6 +2207,8 @@ def main():
         MiniCPMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'PersimmonForCausalLM':
         PersimmonConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'FuyuForCausalLM':
+        FuyuConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 
