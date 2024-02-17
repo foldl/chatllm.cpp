@@ -97,8 +97,9 @@ namespace persimmon
         std::ostringstream oss_prompt;
 
         oss_prompt << " human: " << user << "\n\n";
-        tok->encode(oss_prompt.str(), ids, true, true);
+        tok->encode(oss_prompt.str(), ids, true, false);
 
+        oss_prompt.str("");
         oss_prompt << "adept: ";
         tok->encode(oss_prompt.str(), ids, true, false);
     }
@@ -165,4 +166,9 @@ namespace persimmon
         CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
             << "corrupted model weights";
     }
+}
+
+namespace fuyu
+{
+
 }

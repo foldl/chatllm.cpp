@@ -56,7 +56,7 @@ void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std
     oss_prompt << tok->get_system_prompt() << " Correct User: " << user;
     tok->encode(oss_prompt.str(), ids, false, true);
 
-    oss_prompt.clear();
+    oss_prompt.str("");
     oss_prompt << tok->get_system_prompt() << " Correct Assistant: ";
     tok->encode(oss_prompt.str(), ids, false, false);
 }

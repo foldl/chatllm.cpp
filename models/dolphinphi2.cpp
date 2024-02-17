@@ -57,11 +57,11 @@ public:
             oss_prompt << "system" << std::endl << tok->get_system_prompt();
             tok->encode(oss_prompt.str(), ids, true, true);
         }
-        oss_prompt.clear();
+        oss_prompt.str("");
         oss_prompt << "user" << std::endl << user;
         tok->encode(oss_prompt.str(), ids, true, true);
 
-        oss_prompt.clear();
+        oss_prompt.str("");
         oss_prompt << "assistant" << std::endl;
         tok->encode(oss_prompt.str(), ids, true, false);
     }

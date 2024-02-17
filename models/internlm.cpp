@@ -311,12 +311,12 @@ namespace v3
             }
         }
 
-        oss_prompt.clear();
+        oss_prompt.str("");
         oss_prompt << "user\n"
                    << user;
         tok->encode(oss_prompt.str(), ids, true, true);
 
-        oss_prompt.clear();
+        oss_prompt.str("");
         oss_prompt << "assistant\n";
         tok->encode(oss_prompt.str(), ids, true, false);
     }

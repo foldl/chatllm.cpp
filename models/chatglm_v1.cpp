@@ -83,8 +83,7 @@ void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std
     std::ostringstream oss_prompt;
 
     oss_prompt << "[Round " << round_idx + 1 << "]\n问：" << user << "\n答：";
-    auto text = oss_prompt.str();
-    tokenizer->encode(text, ids);
+    tokenizer->encode(oss_prompt.str(), ids);
 }
 
 std::string Tokenizer::preprocess(const std::string &text) const

@@ -107,7 +107,6 @@ namespace v1
     void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        std::ostringstream oss_prompt;
 
         append_user(round_idx, user, ids);
 
@@ -121,16 +120,14 @@ namespace v1
 
         if (round_idx == 0)
         {
-            oss_prompt << "system\n" << tok->get_system_prompt();
-            tok->encode(oss_prompt.str(), ids, true, true, true);
+            tok->encode("system", ids, true, false, true);
+            tok->encode(tok->get_system_prompt(), ids, false, true, true);
         }
 
-        oss_prompt.clear();
-        oss_prompt << "user\n" << user;
-        tok->encode(oss_prompt.str(), ids, true, true, true);
+        tok->encode("user", ids, true, false, true);
+        tok->encode(user, ids, false, true, true);
 
-        oss_prompt << "assistant\n";
-        tok->encode(oss_prompt.str(), ids, true, false, false);
+        tok->encode("assistant", ids, true, false, true);
     }
 
     bool Tokenizer::is_special_id(int id) const
