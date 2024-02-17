@@ -363,15 +363,13 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, chatllm::Text
 
 void chat(Args &args)
 {
-    chatllm::Pipeline pipeline(args.model_path);
+    chatllm::Pipeline::extra_args pipe_args = { .max_length = args.max_length };
+    chatllm::Pipeline pipeline(args.model_path, pipe_args);
 
     if (args.system.size() > 0)
         pipeline.set_system_prompt(args.system);
     pipeline.model->seed(args.seed);
-    if (args.max_length < 0)
-        args.max_length = pipeline.model->get_max_length();
-    if (args.max_length > pipeline.model->get_max_length())
-        args.max_length = pipeline.model->get_max_length();
+    args.max_length = pipeline.model->get_max_length();
 
     if (args.extending == "shift")
         pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Shift);

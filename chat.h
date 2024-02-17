@@ -365,9 +365,9 @@ namespace chatllm
             std::unique_ptr<BaseModel> model;
         };
 
-        static bool load(ModelLoader &loader, Result &result);
+        static bool load(ModelLoader &loader, Result &result, int max_length);
     private:
-        static bool load(int model_type, int version, ModelLoader &loader, Result &result);
+        static bool load(int model_type, int version, ModelLoader &loader, Result &result, int max_length);
     };
 
     class Pipeline
@@ -379,7 +379,12 @@ namespace chatllm
             Restart,
         };
 
-        Pipeline(const std::string &path);
+        struct extra_args
+        {
+            int max_length;
+        };
+
+        Pipeline(const std::string &path, const extra_args &args);
 
         std::string chat(const std::vector<std::string> &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);

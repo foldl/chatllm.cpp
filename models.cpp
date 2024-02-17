@@ -852,11 +852,18 @@ namespace chatllm
         #include "models/adept.cpp"
     }
 
+    struct args
+    {
+        int max_length;
+    };
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
-    bool load_model(ModelLoader &loader, ModelFactory::Result &result)
+    bool load_model(ModelLoader &loader, ModelFactory::Result &result, const args &args)
     {
         // load config
         Config config = loader.read_basic<Config>();
+        if ((args.max_length > 0) && (args.max_length < config.max_length))
+            config.max_length = args.max_length;
 
         // load tokenizer
         result.tokenizer = std::make_unique<Tokenizer>(config);
@@ -884,7 +891,7 @@ namespace chatllm
         return true;
     }
 
-    bool ModelFactory::load(ModelLoader &loader, Result &result)
+    bool ModelFactory::load(ModelLoader &loader, Result &result, int max_length)
     {
         // load magic
         std::string magic = loader.read_string(4);
@@ -892,11 +899,13 @@ namespace chatllm
 
         int model_type = loader.read_basic<int>();
         int version = loader.read_basic<int>();
-        return ModelFactory::load(model_type, version, loader, result);
+        return ModelFactory::load(model_type, version, loader, result, max_length);
     }
 
-    bool ModelFactory::load(int model_type, int version, ModelLoader &loader, Result &result)
+    bool ModelFactory::load(int model_type, int version, ModelLoader &loader, Result &result, int max_length)
     {
+        struct args extra_args = { .max_length = max_length };
+
         switch ((ModelType)model_type)
         {
         case MODEL_TYPE_CHATGLM:
@@ -905,7 +914,7 @@ namespace chatllm
 
             return load_model<glm::v1::Config,
                               glm::v1::Tokenizer,
-                              glm::v1::ConditionalGeneration>(loader, result);
+                              glm::v1::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_CHATGLM2:
         {
@@ -913,7 +922,7 @@ namespace chatllm
 
             return load_model<glm::v2::Config,
                               glm::v2::Tokenizer,
-                              glm::v2::ConditionalGeneration>(loader, result);
+                              glm::v2::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_CHATGLM3:
         {
@@ -921,7 +930,7 @@ namespace chatllm
 
             return load_model<glm::v3::Config,
                               glm::v3::Tokenizer,
-                              glm::v3::ConditionalGeneration>(loader, result);
+                              glm::v3::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_CODEGEEX2:
         {
@@ -929,7 +938,7 @@ namespace chatllm
 
             return load_model<codegeex::v2::Config,
                               codegeex::v2::Tokenizer,
-                              codegeex::v2::ConditionalGeneration>(loader, result);
+                              codegeex::v2::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_INTERNLM:
         {
@@ -937,7 +946,7 @@ namespace chatllm
 
             return load_model<internlm::v1::Config,
                               internlm::v1::Tokenizer,
-                              internlm::v1::ConditionalGeneration>(loader, result);
+                              internlm::v1::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_INTERNLM2:
         {
@@ -945,7 +954,7 @@ namespace chatllm
 
             return load_model<internlm::v2::Config,
                               internlm::v2::Tokenizer,
-                              internlm::v2::ConditionalGeneration>(loader, result);
+                              internlm::v2::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_INTERNLM3:
         {
@@ -953,7 +962,7 @@ namespace chatllm
 
             return load_model<internlm::v3::Config,
                               internlm::v3::Tokenizer,
-                              internlm::v3::ConditionalGeneration>(loader, result);
+                              internlm::v3::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_LLAMA2:
         {
@@ -961,7 +970,7 @@ namespace chatllm
 
             return load_model<llama::Config,
                               llama::Tokenizer,
-                              llama::ConditionalGeneration>(loader, result);
+                              llama::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_CODELLAMA:
         {
@@ -969,7 +978,7 @@ namespace chatllm
 
             return load_model<codellama::Config,
                               codellama::Tokenizer,
-                              codellama::ConditionalGeneration>(loader, result);
+                              codellama::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_DEEPSEEK:
         {
@@ -977,7 +986,7 @@ namespace chatllm
 
             return load_model<deepseek::Config,
                               deepseek::Tokenizer,
-                              deepseek::ConditionalGeneration>(loader, result);
+                              deepseek::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_DEEPSEEK_CODER:
         {
@@ -985,7 +994,7 @@ namespace chatllm
 
             return load_model<deepseek_coder::Config,
                               deepseek_coder::Tokenizer,
-                              deepseek_coder::ConditionalGeneration>(loader, result);
+                              deepseek_coder::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_BAICHUANLLAMA:
         {
@@ -993,7 +1002,7 @@ namespace chatllm
 
             return load_model<baichuan::_7b::Config,
                               baichuan::_7b::Tokenizer,
-                              baichuan::_7b::ConditionalGeneration>(loader, result);
+                              baichuan::_7b::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_BAICHUAN:
         {
@@ -1001,7 +1010,7 @@ namespace chatllm
 
             return load_model<baichuan::larger::Config,
                               baichuan::larger::Tokenizer,
-                              baichuan::larger::ConditionalGeneration>(loader, result);
+                              baichuan::larger::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_YI:
         {
@@ -1009,7 +1018,7 @@ namespace chatllm
 
             return load_model<yi::Config,
                               yi::Tokenizer,
-                              yi::ConditionalGeneration>(loader, result);
+                              yi::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_PHI2:
         {
@@ -1017,7 +1026,7 @@ namespace chatllm
 
             return load_model<phi2::v1::Config,
                               phi2::v1::Tokenizer,
-                              phi2::v1::ConditionalGeneration>(loader, result);
+                              phi2::v1::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_PHI2_V2:
         {
@@ -1025,7 +1034,7 @@ namespace chatllm
 
             return load_model<phi2::v2::Config,
                               phi2::v2::Tokenizer,
-                              phi2::v2::ConditionalGeneration>(loader, result);
+                              phi2::v2::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_WIZARDCODER:
         {
@@ -1033,7 +1042,7 @@ namespace chatllm
 
             return load_model<wizard::coder::Config,
                               wizard::coder::Tokenizer,
-                              wizard::coder::ConditionalGeneration>(loader, result);
+                              wizard::coder::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_WIZARDLM:
         {
@@ -1041,7 +1050,7 @@ namespace chatllm
 
             return load_model<wizard::lm::Config,
                               wizard::lm::Tokenizer,
-                              wizard::lm::ConditionalGeneration>(loader, result);
+                              wizard::lm::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_WIZARDMATH:
         {
@@ -1049,7 +1058,7 @@ namespace chatllm
 
             return load_model<wizard::math::Config,
                               wizard::math::Tokenizer,
-                              wizard::math::ConditionalGeneration>(loader, result);
+                              wizard::math::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_MISTRAL:
         {
@@ -1057,7 +1066,7 @@ namespace chatllm
 
             return load_model<mistral::Config,
                               mistral::Tokenizer,
-                              mistral::ConditionalGeneration>(loader, result);
+                              mistral::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_OPENCHAT:
         {
@@ -1065,7 +1074,7 @@ namespace chatllm
 
             return load_model<openchat::Config,
                               openchat::Tokenizer,
-                              openchat::ConditionalGeneration>(loader, result);
+                              openchat::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_MIXTRAL:
         {
@@ -1073,7 +1082,7 @@ namespace chatllm
 
             return load_model<mixtral::Config,
                               mixtral::Tokenizer,
-                              mixtral::ConditionalGeneration>(loader, result);
+                              mixtral::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_QWEN:
         {
@@ -1081,7 +1090,7 @@ namespace chatllm
 
             return load_model<qwen::v1::Config,
                               qwen::v1::Tokenizer,
-                              qwen::v1::ConditionalGeneration>(loader, result);
+                              qwen::v1::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_QWEN2:
         {
@@ -1089,7 +1098,7 @@ namespace chatllm
 
             return load_model<qwen::v2::Config,
                               qwen::v2::Tokenizer,
-                              qwen::v2::ConditionalGeneration>(loader, result);
+                              qwen::v2::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_TIGERBOT:
         {
@@ -1097,7 +1106,7 @@ namespace chatllm
 
             return load_model<tigerbot::Config,
                               tigerbot::Tokenizer,
-                              tigerbot::ConditionalGeneration>(loader, result);
+                              tigerbot::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_BLUELM:
         {
@@ -1105,7 +1114,7 @@ namespace chatllm
 
             return load_model<bluelm::Config,
                               bluelm::Tokenizer,
-                              bluelm::ConditionalGeneration>(loader, result);
+                              bluelm::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_DOLPHINPHI2:
         {
@@ -1113,7 +1122,7 @@ namespace chatllm
 
             return load_model<dolphinphi2::v1::Config,
                               dolphinphi2::v1::Tokenizer,
-                              dolphinphi2::v1::ConditionalGeneration>(loader, result);
+                              dolphinphi2::v1::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_STABLELM:
         {
@@ -1121,7 +1130,7 @@ namespace chatllm
 
             return load_model<stablelm::Config,
                               stablelm::Tokenizer,
-                              stablelm::ConditionalGeneration>(loader, result);
+                              stablelm::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_NEURALBEAGLE:
         {
@@ -1129,7 +1138,7 @@ namespace chatllm
 
             return load_model<neuralbeagle::Config,
                               neuralbeagle::Tokenizer,
-                              neuralbeagle::ConditionalGeneration>(loader, result);
+                              neuralbeagle::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_ORION:
         {
@@ -1137,7 +1146,7 @@ namespace chatllm
 
             return load_model<orion::Config,
                               orion::Tokenizer,
-                              orion::ConditionalGeneration>(loader, result);
+                              orion::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_MINICPM:
         {
@@ -1145,7 +1154,7 @@ namespace chatllm
 
             return load_model<minicpm::Config,
                               minicpm::Tokenizer,
-                              minicpm::ConditionalGeneration>(loader, result);
+                              minicpm::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_PERSIMMON:
         {
@@ -1153,7 +1162,7 @@ namespace chatllm
 
             return load_model<adept::persimmon::Config,
                               adept::persimmon::Tokenizer,
-                              adept::persimmon::ConditionalGeneration>(loader, result);
+                              adept::persimmon::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_BCE_Embedding:
         {
@@ -1161,7 +1170,7 @@ namespace chatllm
 
             return load_model<bce::embedding::Config,
                               bce::embedding::Tokenizer,
-                              bce::embedding::ConditionalGeneration>(loader, result);
+                              bce::embedding::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_BCE_ReRanker:
         {
@@ -1169,7 +1178,7 @@ namespace chatllm
 
             return load_model<bce::ranker::Config,
                               bce::ranker::Tokenizer,
-                              bce::ranker::ConditionalGeneration>(loader, result);
+                              bce::ranker::ConditionalGeneration>(loader, result, extra_args);
         }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

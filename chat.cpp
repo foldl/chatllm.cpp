@@ -435,12 +435,12 @@ namespace chatllm
 
     // ===== pipeline =====
 
-    Pipeline::Pipeline(const std::string &path) : extending(ExtendingMethod::Restart)
+    Pipeline::Pipeline(const std::string &path, const extra_args &args) : extending(ExtendingMethod::Restart)
     {
         loader = std::unique_ptr<ModelLoader>(new ModelLoader(path));
 
         ModelFactory::Result result = {nullptr, nullptr};
-        if (!ModelFactory::load(*loader, result))
+        if (!ModelFactory::load(*loader, result, args.max_length))
             CHATLLM_THROW << "ModelFactory::load() failed";
 
         tokenizer = std::move(result.tokenizer);
