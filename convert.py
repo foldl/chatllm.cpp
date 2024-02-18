@@ -1733,14 +1733,6 @@ class QWenConverter(BaseConverter):
 class QWen2Converter(BaseConverter):
     MODEL_TYPE = ModelType.QWen2
 
-    @classmethod
-    def pp(cls, config, name: str, tensor):
-        if name.endswith('k_proj.weight'):
-            return permute(tensor, config.num_key_value_heads)
-        elif name.endswith('q_proj.weight'):
-            return permute(tensor, config.num_attention_heads)
-        return tensor
-
     @staticmethod
     def dump_config(f, config, ggml_type):
         assert config.use_sliding_window == False, "use_sliding_window must be False"
@@ -2084,7 +2076,7 @@ def load_some_model(path: Path) -> List[Path]:
     '''Load a model of any supported format.'''
     # Be extra-friendly and accept either a file or a directory:
     if path.is_dir():
-        globs = ["model-*-of-*.safetensors", "consolidated.*.pth", "pytorch_model-*-of-*.bin", "*.pt", "pytorch_model.bin"]
+        globs = ["model-*-of-*.safetensors", "consolidated.*.pth", "pytorch_model-*-of-*.bin", "*.pt", "pytorch_model.bin", "model.safetensors"]
         for glob in globs:
             files = list(path.glob(glob))
             if len(files) > 0:

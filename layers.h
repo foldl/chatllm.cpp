@@ -1589,6 +1589,10 @@ namespace chatllm
     public:
         QWen2SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
             : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, false) {}
+    protected:
+        // input & output: [qlen, heads, head_size]
+        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
+        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
     };
 
     class QWen2Block : public LMBlock1<RMSNorm, QWen2SelfAttention, RMSNorm, BaseMLP>
