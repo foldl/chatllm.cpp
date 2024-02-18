@@ -58,7 +58,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 * QWen (`QWenLMHeadModel`, `Qwen2ForCausalLM`)
     * [x] v1: [Chat-7B](https://huggingface.co/Qwen/Qwen-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen-14B-Chat)
-    * [x] v1.5: [Chat-7B](https://huggingface.co/Qwen/Qwen1.5-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen1.5-14B-Chat)
+    * [ ] v1.5: [Chat-7B](https://huggingface.co/Qwen/Qwen1.5-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen1.5-14B-Chat)
 
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
@@ -74,7 +74,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * MiniCPM (`MiniCPMForCausalLM`)
     * [x] [DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16), [SFT-2B](https://huggingface.co/openbmb/MiniCPM-2B-sft-bf16) 🔥
 
-* Adept (`PersimmonForCausalLM`)
+* Adept Persimmon (`PersimmonForCausalLM`)
     * [x] [Chat-8B](https://huggingface.co/adept/persimmon-8b-chat)
 
 * Text Embedding (`XLMRobertaModel`)
