@@ -978,6 +978,12 @@ namespace chatllm
     template <class BaseAttn> class BaseSelfAttention : public BaseAttn
     {
     public:
+        enum RoPEMode
+        {
+            Interleaved = 0,
+            Original = 2,
+            GLM = 4,
+        };
         BaseSelfAttention() : BaseAttention() {}
         BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool qkv_bias, bool o_bias)
             : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, qkv_bias, o_bias)
@@ -993,6 +999,7 @@ namespace chatllm
               beta_fast(0.0f),
               beta_slow(0.0f),
               rope_dim(hidden_size / num_attention_heads),
+              rope_mode(RoPEMode::Interleaved),
               last_attn_scores(nullptr)
         {
         }
@@ -1035,17 +1042,18 @@ namespace chatllm
         float beta_fast;
         float beta_slow;
         int   rope_dim;
+        RoPEMode rope_mode;
 
     protected:
         // input & output: [qlen, heads, head_size]
         ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
         {
-            return ggml_rope_custom_inplace(ctx->gctx.get(), k, past, rope_dim, 0, 0, 0,
+            return ggml_rope_custom_inplace(ctx->gctx.get(), k, past, rope_dim, rope_mode, 0, 0,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size]
         }
         ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
         {
-            return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, 0, 0, 0,
+            return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, rope_mode, 0, 0,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
         }
 
@@ -1484,12 +1492,8 @@ namespace chatllm
         {
             rope_dim = 32;
             attn_scaling = false;
+            rope_mode = RoPEMode::Original;
         }
-
-    protected:
-        // input & output: [qlen, heads, head_size]
-        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
-        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
     };
 
     class Phi2Block : public LMBlock2<LayerNorm, Phi2CrossAttention, Phi2MLP>
@@ -1588,11 +1592,10 @@ namespace chatllm
     {
     public:
         QWen2SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, false) {}
-    protected:
-        // input & output: [qlen, heads, head_size]
-        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
-        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, false)
+        {
+            rope_mode = RoPEMode::Original;
+        }
     };
 
     class QWen2Block : public LMBlock1<RMSNorm, QWen2SelfAttention, RMSNorm, BaseMLP>
@@ -1673,12 +1676,8 @@ namespace chatllm
         StableLMAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
             : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
         {
+            rope_mode = RoPEMode::Original;
         }
-
-    protected:
-        // input & output: [qlen, heads, head_size]
-        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
-        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
     };
 
     class StableLMBlock : public LMBlock1<LayerNorm, StableLMAttention, LayerNorm, BaseMLP>
@@ -1715,6 +1714,7 @@ namespace chatllm
               k_layernorm(ctx, hidden_size / num_kv_heads),
               q_layernorm(ctx, hidden_size / num_attention_heads)
         {
+            BaseSelfAttention<BaseAttn>::rope_mode = BaseSelfAttention<BaseAttn>::RoPEMode::Original;
         }
 
         int64_t get_param_num(bool effective_only) const override
@@ -1731,32 +1731,13 @@ namespace chatllm
         ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
         {
             k = const_cast<QKNormedAttention *>(this)->k_layernorm.forward(ctx, k);
-            return ggml_rope_custom_inplace(ctx->gctx.get(), k, past, BaseSelfAttention<BaseAttn>::rope_dim, 2, 0, 0,
-                        BaseSelfAttention<BaseAttn>::freq_base, BaseSelfAttention<BaseAttn>::freq_scale, BaseSelfAttention<BaseAttn>::ext_factor,
-                        BaseSelfAttention<BaseAttn>::attn_factor, BaseSelfAttention<BaseAttn>::beta_fast, BaseSelfAttention<BaseAttn>::beta_slow);    // [qlen, heads, head_size]
+            return BaseSelfAttention<BaseAttn>::apply_pos_embedding_k(ctx, k, hidden_size, qlen, past);    // [qlen, heads, head_size]
         }
 
         ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
         {
-            #if (0)
-            {
-                // input: [seqlen, normalized_shape]
-                ggml_tensor *input = q;
-                ggml_tensor *output = ggml_norm_inplace(ctx->gctx.get(), input, const_cast<QKNormedAttention *>(this)->q_layernorm.eps);
-
-                output = ggml_mul_inplace(ctx->gctx.get(), output, const_cast<QKNormedAttention *>(this)->q_layernorm.weight);
-
-                output = ggml_add_inplace(ctx->gctx.get(), output, const_cast<QKNormedAttention *>(this)->q_layernorm.bias);
-                q = output;
-            }
-#endif
             q = const_cast<QKNormedAttention *>(this)->q_layernorm.forward(ctx, q);
-
-            ggml_tensor *r = ggml_rope_custom_inplace(ctx->gctx.get(), q, past, BaseSelfAttention<BaseAttn>::rope_dim, 2, 0, 0,
-                        BaseSelfAttention<BaseAttn>::freq_base, BaseSelfAttention<BaseAttn>::freq_scale, BaseSelfAttention<BaseAttn>::ext_factor,
-                        BaseSelfAttention<BaseAttn>::attn_factor, BaseSelfAttention<BaseAttn>::beta_fast, BaseSelfAttention<BaseAttn>::beta_slow);    // [qlen, heads, head_size];
-
-            return r;
+            return BaseSelfAttention<BaseAttn>::apply_pos_embedding_q(ctx, q, hidden_size, qlen, past);    // [qlen, heads, head_size];
         }
 
     public:
