@@ -451,8 +451,30 @@ void chat(Args &args)
     std::cout << "Bye\n";
 }
 
+#if defined(_WIN32)
+std::string wstr_to_utf8(const wchar_t* wstr)
+{
+    int s = WideCharToMultiByte(CP_UTF8, 0, wstr, (int)wcslen(wstr), NULL, 0, NULL, NULL);
+    std::string str;
+    str.resize(s);
+    WideCharToMultiByte(CP_UTF8, 0, wstr, (int)wcslen(wstr), LPSTR(str.data()), s, NULL, NULL);
+    return str;
+}
+
+int wmain(int argc, const wchar_t **wargv)
+{
+    std::vector<const char *> vect_args;
+    std::vector<std::string> utf_args;
+    for (int i = 0; i < argc; i++)
+        utf_args.push_back(wstr_to_utf8(wargv[i]));
+    for (int i = 0; i < argc; i++)
+        vect_args.push_back(utf_args[i].data());
+    const char **argv = vect_args.data();
+
+#else
 int main(int argc, const char **argv)
 {
+#endif
     Args args = parse_args(argc, argv);
     if (args.num_threads <= 0)
         args.num_threads = get_num_physical_cores();
