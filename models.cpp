@@ -127,6 +127,8 @@ namespace chatllm
         MODEL_TYPE_PERSIMMON= 0x1200,
         MODEL_TYPE_FUYU     = 0x1201,
 
+        MODEL_TYPE_GEMMA    = 0x1300,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
     };
@@ -211,6 +213,8 @@ namespace chatllm
             return "Persimmon";
         case MODEL_TYPE_FUYU:
             return "Fuyu";
+        case MODEL_TYPE_GEMMA:
+            return "Gemma";
         case MODEL_TYPE_BCE_Embedding:
             return "BCE Embedding";
         case MODEL_TYPE_BCE_ReRanker:
@@ -852,6 +856,11 @@ namespace chatllm
         #include "models/adept.cpp"
     }
 
+    namespace gemma
+    {
+        #include "models/gemma.cpp"
+    }
+
     struct args
     {
         int max_length;
@@ -1163,6 +1172,14 @@ namespace chatllm
             return load_model<adept::persimmon::Config,
                               adept::persimmon::Tokenizer,
                               adept::persimmon::ConditionalGeneration>(loader, result, extra_args);
+        }
+        case MODEL_TYPE_GEMMA:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<gemma::Config,
+                              gemma::Tokenizer,
+                              gemma::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_BCE_Embedding:
         {

@@ -174,8 +174,14 @@ namespace chatllm
         case ChatFormat::QA:
             if (qa_encoder)
                 return encode_history(qa_encoder, history, max_length, incremental);
+            else if (chat_encoder)
+            {
+                std::vector<std::string> copied;
+                copied.push_back(history[history.size() - 1]);
+                return encode_history(chat_encoder, copied, max_length, incremental);
+            }
             else
-                ; // continue
+                return encode(history[history.size() - 1]);
         default:
             if (chat_encoder)
                 return encode_history(chat_encoder, history, max_length, incremental);

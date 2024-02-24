@@ -437,6 +437,13 @@ namespace chatllm
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}
 
+        LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int head_dim, int max_length)
+            : input_layernorm(ctx, hidden_size),
+              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length),
+              post_attention_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, intermediate_size) {}
+
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
         {
@@ -548,17 +555,18 @@ namespace chatllm
     public:
         BaseAttention() : num_attention_heads(0) {}
 
-        BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias,
+        BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length,
+                      bool qkv_bias, bool o_bias,
                       ggml_type cache_type, int cache_length)
             : num_attention_heads(num_attention_heads),
               num_kv_heads(num_kv_heads),
-              q_proj(ctx, hidden_size, hidden_size, nullptr, qkv_bias),
-              k_proj(ctx, hidden_size, hidden_size / (num_attention_heads / num_kv_heads), nullptr, qkv_bias),
-              v_proj(ctx, hidden_size, hidden_size / (num_attention_heads / num_kv_heads), nullptr, qkv_bias),
-              o_proj(ctx, hidden_size, hidden_size, o_bias),
-              k_cache(cache_length > 0 ? ggml_new_tensor_1d(ctx->gctx.get(), cache_type, hidden_size / (num_attention_heads / num_kv_heads) * cache_length)
+              q_proj(ctx, hidden_size, head_dim * num_attention_heads, nullptr, qkv_bias),
+              k_proj(ctx, hidden_size, head_dim * num_kv_heads, nullptr, qkv_bias),
+              v_proj(ctx, hidden_size, head_dim * num_kv_heads, nullptr, qkv_bias),
+              o_proj(ctx, head_dim * num_attention_heads, hidden_size, o_bias),
+              k_cache(cache_length > 0 ? ggml_new_tensor_1d(ctx->gctx.get(), cache_type, head_dim * num_kv_heads * cache_length)
                                        : nullptr),
-              v_cache(cache_length > 0 ? ggml_new_tensor_1d(ctx->gctx.get(), cache_type, hidden_size / (num_attention_heads / num_kv_heads) * cache_length)
+              v_cache(cache_length > 0 ? ggml_new_tensor_1d(ctx->gctx.get(), cache_type, head_dim * num_kv_heads * cache_length)
                                        : nullptr),
               pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
               max_length(max_length),
@@ -578,11 +586,23 @@ namespace chatllm
             pos->data = new char[ggml_nbytes(pos)]();
         }
 
+        BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length,
+                      bool qkv_bias, bool o_bias,
+                      ggml_type cache_type, int cache_length)
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length, qkv_bias, o_bias,
+                            cache_type, cache_length)
+        {}
+
         BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
-            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias,
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length, qkv_bias, o_bias,
                             GGML_TYPE_F16, max_length)
-        {
-        }
+        {}
+
+        BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length,
+             bool qkv_bias, bool o_bias)
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias,
+                            GGML_TYPE_F16, max_length)
+        {}
 
         void shift_cache(int shift, int total) override
         {
@@ -651,7 +671,11 @@ namespace chatllm
         BaseCachelessAttention() = default;
 
         BaseCachelessAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
-            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias, GGML_TYPE_F16, 0),
+            : BaseCachelessAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length, qkv_bias, o_bias)
+        {}
+
+        BaseCachelessAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, GGML_TYPE_F16, 0),
               raw_k(nullptr),
               raw_v(nullptr)
         {}
@@ -798,7 +822,12 @@ namespace chatllm
     {
     public:
         BaseSlidingWindowAttentionFullCache(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
-            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias, GGML_TYPE_F16, max_length),
+            : BaseSlidingWindowAttentionFullCache(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length, qkv_bias, o_bias)
+        {
+        }
+
+        BaseSlidingWindowAttentionFullCache(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, GGML_TYPE_F16, max_length),
               indices(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, 1)) // to ensure number of tensors are the same
         {
         }
@@ -991,14 +1020,19 @@ namespace chatllm
         }
 
         BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
-            : BaseAttn(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads,  max_length, qkv_bias, o_bias)
+        {
+        }
+
+        BaseSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
+            : BaseAttn(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias),
               freq_base(10000.0f),
               freq_scale(1.0f),
               ext_factor(0.0f),
               attn_factor(1.0f),
               beta_fast(0.0f),
               beta_slow(0.0f),
-              rope_dim(hidden_size / num_attention_heads),
+              rope_dim(head_dim),
               rope_mode(RoPEMode::Interleaved),
               last_attn_scores(nullptr)
         {
@@ -1007,7 +1041,7 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
         {
-            const int hidden_size = hidden_states->ne[0];
+            const int hidden_size = BaseAttn::o_proj.in_features();
             const int qlen = hidden_states->ne[1];
             const int repeat = BaseAttn::num_attention_heads / BaseAttn::num_kv_heads;
             const int kv_hidden_size = hidden_size / repeat;
@@ -1072,10 +1106,12 @@ namespace chatllm
     {
     public:
         BaseMLP() = default;
-        BaseMLP(InitContext *ctx, int hidden_size, int intermediate_size)
+        BaseMLP(InitContext *ctx, int hidden_size, int intermediate_size, ActFunc act)
             : gate_proj(ctx, hidden_size, intermediate_size, false),
               down_proj(ctx, intermediate_size, hidden_size, false),
-                up_proj(ctx, hidden_size, intermediate_size, false) {}
+                up_proj(ctx, hidden_size, intermediate_size, false),
+              act(act)
+        {}
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
@@ -1093,16 +1129,33 @@ namespace chatllm
         Linear gate_proj;
         Linear down_proj;
         Linear up_proj;
+        const ActFunc act;
+    };
+
+    class SiLUMLP : public BaseMLP
+    {
+    public:
+        SiLUMLP(InitContext *ctx, int hidden_size, int intermediate_size)
+        :  BaseMLP(ctx, hidden_size, intermediate_size, ActFunc::SILU)
+        {}
+    };
+
+    class GELUMLP : public BaseMLP
+    {
+    public:
+        GELUMLP(InitContext *ctx, int hidden_size, int intermediate_size)
+        :  BaseMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU)
+        {}
     };
 
     // TODO: this looks more OOP or generic, but due to difficulties in building computation graph,
-    //       MLP (BaseMLP) has to be embedded into SparseMoE (calculation is done here too).
+    //       MLP (SiLUMLP) has to be embedded into SparseMoE (calculation is done here too).
     // template<class Expert> class SparseMoE : public Block
 
     template<int num_local_experts, int num_experts_per_tok> class SparseMoE : public Block
     {
     public:
-        typedef BaseMLP Expert;
+        typedef SiLUMLP Expert;
         SparseMoE() = default;
         SparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
             : gate(ctx, hidden_size, num_local_experts, false)
@@ -1197,11 +1250,11 @@ namespace chatllm
         std::vector<ggml_tensor *> expert_downs;
     };
 
-    template <bool bias> class InternLMBlock : public LMBlock1<RMSNorm, InternLMSelfAttention<bias>, RMSNorm, BaseMLP>
+    template <bool bias> class InternLMBlock : public LMBlock1<RMSNorm, InternLMSelfAttention<bias>, RMSNorm, SiLUMLP>
     {
     public:
         InternLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock1<RMSNorm, InternLMSelfAttention<bias>, RMSNorm, BaseMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+            : LMBlock1<RMSNorm, InternLMSelfAttention<bias>, RMSNorm, SiLUMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
         InternLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
             : InternLMBlock(ctx, hidden_size, num_attention_heads, intermediate_size, num_attention_heads, max_length)
@@ -1218,7 +1271,7 @@ namespace chatllm
             : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
     };
 
-    class LlamaBlock : public LMBlock1<RMSNorm, LlamaSelfAttention, RMSNorm, BaseMLP>
+    class LlamaBlock : public LMBlock1<RMSNorm, LlamaSelfAttention, RMSNorm, SiLUMLP>
     {
     public:
         LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
@@ -1548,7 +1601,7 @@ namespace chatllm
 
     };
 
-    class BaichuanBlock : public LMBlock1<RMSNorm, BaichuanSelfAttention, RMSNorm, BaseMLP>
+    class BaichuanBlock : public LMBlock1<RMSNorm, BaichuanSelfAttention, RMSNorm, SiLUMLP>
     {
     public:
         BaichuanBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
@@ -1580,7 +1633,7 @@ namespace chatllm
         ggml_tensor *logn_list;
     };
 
-    class QWenBlock : public LMBlock1<RMSNorm, QWenSelfAttention, RMSNorm, BaseMLP>
+    class QWenBlock : public LMBlock1<RMSNorm, QWenSelfAttention, RMSNorm, SiLUMLP>
     {
     public:
         QWenBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
@@ -1598,7 +1651,7 @@ namespace chatllm
         }
     };
 
-    class QWen2Block : public LMBlock1<RMSNorm, QWen2SelfAttention, RMSNorm, BaseMLP>
+    class QWen2Block : public LMBlock1<RMSNorm, QWen2SelfAttention, RMSNorm, SiLUMLP>
     {
     public:
         QWen2Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
@@ -1641,7 +1694,7 @@ namespace chatllm
         void build_inv_freq_if_needed(int hidden_size);
     };
 
-    class BlueLMBlock : public LMBlock1<RMSNorm, BlueLMSelfAttention, RMSNorm, BaseMLP>
+    class BlueLMBlock : public LMBlock1<RMSNorm, BlueLMSelfAttention, RMSNorm, SiLUMLP>
     {
     public:
         BlueLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
@@ -1653,15 +1706,15 @@ namespace chatllm
         {}
     };
 
-    template <int sliding_window_len> class MistralBlock : public LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm, BaseMLP>
+    template <int sliding_window_len> class MistralBlock : public LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm, SiLUMLP>
     {
     public:
         MistralBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
-            : LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm, BaseMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
+            : LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm, SiLUMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
         {}
 
         MistralBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm, BaseMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+            : LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm, SiLUMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };
 
@@ -1680,7 +1733,7 @@ namespace chatllm
         }
     };
 
-    class StableLMBlock : public LMBlock1<LayerNorm, StableLMAttention, LayerNorm, BaseMLP>
+    class StableLMBlock : public LMBlock1<LayerNorm, StableLMAttention, LayerNorm, SiLUMLP>
     {
     public:
         StableLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
@@ -1688,7 +1741,7 @@ namespace chatllm
         {}
     };
 
-    class OrionBlock : public LMBlock1<LayerNorm, LlamaSelfAttention, LayerNorm, BaseMLP>
+    class OrionBlock : public LMBlock1<LayerNorm, LlamaSelfAttention, LayerNorm, SiLUMLP>
     {
     public:
         OrionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
@@ -1696,7 +1749,7 @@ namespace chatllm
         {}
     };
 
-    class MiniCPMBlock : public LMBlock3<RMSNorm, LlamaSelfAttention, RMSNorm, BaseMLP>
+    class MiniCPMBlock : public LMBlock3<RMSNorm, LlamaSelfAttention, RMSNorm, SiLUMLP>
     {
     public:
         MiniCPMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
@@ -1771,6 +1824,21 @@ namespace chatllm
     public:
         PersimmonBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
             : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
+        {}
+    };
+
+    class GemmaSelfAttention : public BaseSelfAttention<BaseAttention>
+    {
+    public:
+        GemmaSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
+    };
+
+    class GemmaBlock : public LMBlock1<RMSNorm, GemmaSelfAttention, RMSNorm, GELUMLP>
+    {
+    public:
+        GemmaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
         {}
     };
 } // namespace chatllm

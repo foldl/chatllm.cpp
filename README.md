@@ -77,6 +77,9 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * Adept Persimmon (`PersimmonForCausalLM`)
     * [x] [Chat-8B](https://huggingface.co/adept/persimmon-8b-chat)
 
+* Gemma (`GemmaForCausalLM`)
+    * [x] [Instruct-2B](https://huggingface.co/google/gemma-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-7b-it)
+
 * Text Embedding (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
 

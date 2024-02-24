@@ -365,7 +365,7 @@ namespace chatllm
 
     ggml_tensor *BaseMLP::forward(ForwardContext *ctx, ggml_tensor *hidden_states)
     {
-        ggml_tensor *act = ggml_silu_inplace(ctx->gctx.get(), gate_proj.forward(ctx, hidden_states));
+        ggml_tensor *act = inplace_act(ctx->gctx.get(), this->act, gate_proj.forward(ctx, hidden_states));
         ggml_tensor *proj = up_proj.forward(ctx, hidden_states);
 
         ggml_tensor *output = ggml_mul_inplace(ctx->gctx.get(), act, proj);

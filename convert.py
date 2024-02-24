@@ -84,6 +84,8 @@ class ModelType(Enum):
     Persimmon   = 0x1200
     Fuyu        = 0x1201
 
+    Gemma       = 0x1300
+
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
 
@@ -2020,6 +2022,44 @@ class XLMRobertaClassificationConverter(BaseConverter):
 
         return weight_names
 
+
+class GemmaConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Gemma
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name == 'model.embed_tokens.weight':
+            return tensor * (config.hidden_size ** 0.5)
+        elif name.endswith('input_layernorm.weight') or name.endswith('post_attention_layernorm.weight') or name == 'model.norm.weight':
+            return 1 + tensor
+        if name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        if name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        else:
+            return LlamaConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.attention_bias == False, 'attention_bias == False'
+        assert config.hidden_act == 'gelu', "hidden_act == 'gelu'"
+        assert config.rope_theta > 0, "rope_theta must be positive"
+        assert config.rope_scaling is None, "rope_scaling must be `null`"
+
+        config.hidden_act = 'silu'
+        LlamaConverter.dump_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        r = LlamaConverter.get_weight_names(config)
+        return r[:-1]
+
 def load_vocab(path: Path) -> Any:
 
     def load_spm(p: Path) -> Any:
@@ -2201,6 +2241,8 @@ def main():
         PersimmonConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'FuyuForCausalLM':
         FuyuConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'GemmaForCausalLM':
+        GemmaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 
