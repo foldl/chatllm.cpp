@@ -98,7 +98,8 @@ namespace chatllm
         MODEL_TYPE_BAICHUAN      = 0x201,
 
         MODEL_TYPE_DEEPSEEK = 0x300,
-        MODEL_TYPE_DEEPSEEK_CODER   = MODEL_TYPE_DEEPSEEK + 1,
+        MODEL_TYPE_DEEPSEEK_CODER   = 0x301,
+        MODEL_TYPE_CODEFUSE_DEEPSEEK = 0x302,
 
         MODEL_TYPE_YI       = 0x400,
 
@@ -173,6 +174,8 @@ namespace chatllm
             return "DeepSeek-LLM";
         case MODEL_TYPE_DEEPSEEK_CODER:
             return "DeepSeek-Coder";
+        case MODEL_TYPE_CODEFUSE_DEEPSEEK:
+            return "CodeFuse-DeepSeek";
         case MODEL_TYPE_YI:
             return "Yi";
         case MODEL_TYPE_PHI2:
@@ -861,6 +864,11 @@ namespace chatllm
         #include "models/gemma.cpp"
     }
 
+    namespace codefuse
+    {
+        #include "models/codefuse.cpp"
+    }
+
     struct args
     {
         int max_length;
@@ -1004,6 +1012,14 @@ namespace chatllm
             return load_model<deepseek_coder::Config,
                               deepseek_coder::Tokenizer,
                               deepseek_coder::ConditionalGeneration>(loader, result, extra_args);
+        }
+        case MODEL_TYPE_CODEFUSE_DEEPSEEK:
+        {
+            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+
+            return load_model<codefuse::deepseek::Config,
+                              codefuse::deepseek::Tokenizer,
+                              codefuse::deepseek::ConditionalGeneration>(loader, result, extra_args);
         }
         case MODEL_TYPE_BAICHUANLLAMA:
         {

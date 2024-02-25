@@ -57,6 +57,7 @@ class ModelType(Enum):
 
     DeepSeek = 0x300
     DeepSeekCoder = 0x301
+    CodeFuseDeepSeek = 0x302
 
     Yi = 0x400
 
@@ -1293,6 +1294,44 @@ class DeepSeekCoderConverter(BaseConverter):
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
 
+class CodeFuseDeepSeekCoderConverter(BaseConverter):
+    MODEL_TYPE = ModelType.CodeFuseDeepSeek
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        elif name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        assert config.rope_scaling['type'] == "linear", "rope_scaling.type must be linear"
+        assert config.rope_theta > 0, "rope_theta must be positive"
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else g_special_tokens['<pad>'],
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_scaling['factor']))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
+
 class DeepSeekConverter(BaseConverter):
     MODEL_TYPE = ModelType.DeepSeek
 
@@ -2190,6 +2229,8 @@ def main():
         DeepSeekConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseekcoder':
         DeepSeekCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'codefusedeepseek':
+        CodeFuseDeepSeekCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'BaichuanForCausalLM':
         if config.num_hidden_layers <= 32:
             BaiChuanLlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

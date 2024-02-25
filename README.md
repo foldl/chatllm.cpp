@@ -15,6 +15,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
     * [x] Yi: [Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat), [Chat-34B](https://huggingface.co/01-ai/Yi-34B-Chat)
     * [x] WizardLM: [LM 7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0), [LM 13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2), [Coder Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0)
     * [x] TigerBot: [Chat-7B](https://huggingface.co/TigerResearch/tigerbot-7b-chat), [Chat-13B](https://huggingface.co/TigerResearch/tigerbot-13b-chat-v5)
+    * [x] CodeFuse-DeepSeek: [33B](https://huggingface.co/codefuse-ai/CodeFuse-DeepSeek-33B)
 
 * Baichuan (`BaichuanForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat), [Chat-13B](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat)
@@ -149,6 +150,9 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DolphinPhi2
 
 # NeuralBeagle14
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a NeuralBeagle
+
+# CodeFuse-DeepSeek
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeFuseDeepSeek
 
 # For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
