@@ -63,6 +63,7 @@ namespace chatllm
         tp(nullptr),
         sys_prompt(""),
         history_offset(0),
+        max_length(config.max_length),
         format(ChatFormat::CHAT),
         chat_encoder(chat_encoder),
         completion_encoder(completion_encoder),
@@ -274,6 +275,11 @@ namespace chatllm
 
     // ===== streamer =====
 
+    void TextStreamer::putln(const std::string &line)
+    {
+        std::cout << line << std::endl << std::flush;
+    }
+
     void TextStreamer::put(const std::vector<int> &output_ids)
     {
         if (is_prompt_)
@@ -372,6 +378,16 @@ namespace chatllm
     }
 #endif
 
+    std::string BaseModel::compose_augmented_query(const std::string &query, const std::vector<std::string> augments) const
+    {
+        if (augments.size() < 1) return query;
+        std::ostringstream oss;
+        oss << "Answer the question based on given information: " << query << "\n```\n";
+        for (auto x : augments)
+            oss << x << "\n```\n";
+        return oss.str();
+    }
+
     void ModelLoader::seek(int64_t offset, int whence)
     {
         if (whence == SEEK_SET)
@@ -439,9 +455,12 @@ namespace chatllm
         }
     }
 
-    // ===== pipeline =====
+    ModelObject::ModelObject(const std::string &path)
+        : ModelObject(path, ModelObject::extra_args())
+    {
+    }
 
-    Pipeline::Pipeline(const std::string &path, const extra_args &args) : extending(ExtendingMethod::Restart)
+    ModelObject::ModelObject(const std::string &path, const extra_args &args)
     {
         loader = std::unique_ptr<ModelLoader>(new ModelLoader(path));
 
@@ -451,8 +470,29 @@ namespace chatllm
 
         tokenizer = std::move(result.tokenizer);
         model = std::move(result.model);
+    }
 
-        initializing = true;
+    void ModelObject::text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result)
+    {
+        std::vector<int> input_ids;
+        tokenizer->encode(input, input_ids);
+        model->text_embedding(gen_config, input_ids, result);
+    }
+
+    // ===== pipeline =====
+
+    Pipeline::Pipeline(const std::string &path)
+        : Pipeline(path, ModelObject::extra_args())
+    {
+    }
+
+    Pipeline::Pipeline(const std::string &path, const ModelObject::extra_args &args)
+        : initializing(true),
+          extending(ExtendingMethod::Restart),
+          modelobj(path, args)
+    {
+        model = modelobj.model.get();
+        tokenizer = modelobj.tokenizer.get();
     }
 
     std::string Pipeline::chat_with_restart(const std::vector<std::string> &history, const GenerationConfig &gen_config,
@@ -521,23 +561,36 @@ namespace chatllm
         return output;
     }
 
-    std::string Pipeline::chat(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+    std::string Pipeline::chat(std::vector<std::string> &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer)
     {
+        std::string r;
+        before_chat(history, gen_config);
+
         switch (extending)
         {
         case ExtendingMethod::Shift:
-            return chat_with_shift(history, gen_config, streamer);
+            r = chat_with_shift(history, gen_config, streamer);
         default:
-            return chat_with_restart(history, gen_config, streamer);
+            r = chat_with_restart(history, gen_config, streamer);
         }
+        post_chat(history, gen_config, streamer);
+        return r;
     }
 
     void Pipeline::text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result)
     {
-        std::vector<int> input_ids;
-        tokenizer->encode(input, input_ids);
-        model->text_embedding(gen_config, input_ids, result);
+        modelobj.text_embedding(input, gen_config, result);
+    }
+
+    int Pipeline::get_text_embedding_dim(void)
+    {
+        return model->get_text_embedding_dim();
+    }
+
+    std::string Pipeline::get_additional_description(void) const
+    {
+        return "";
     }
 
     float Pipeline::qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config)
@@ -555,6 +608,120 @@ namespace chatllm
     void Pipeline::set_extending_method(ExtendingMethod method)
     {
         extending = method;
+    }
+
+    void Pipeline::before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config)
+    {
+    }
+
+    void Pipeline::post_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
+    {
+    }
+
+    RAGPipeline::RAGPipeline(const std::string &path, const ModelObject::extra_args &args,
+        DistanceStrategy vec_cmp, const std::vector<std::string> &vector_stores,
+        const std::string &embedding_model, const std::string &reranker_model)
+        : Pipeline(path, args),
+          reference_tag("References:"), hide_reference(false),
+          retrieve_top_n(5), rerank_top_n(3),
+          vs(vec_cmp, vector_stores),
+          embedding(embedding_model),
+          reranker(nullptr)
+    {
+        if (reranker_model.size() > 0)
+            reranker = new ModelObject(reranker_model);
+    }
+
+    void RAGPipeline::rerank(const std::string &query, std::vector<int64_t> &candidates, const GenerationConfig &gen_config, int top_n)
+    {
+        std::vector<float> scores;
+        std::vector<int> order;
+        std::vector<int64_t> result;
+
+        for (size_t i = 0; i < candidates.size(); i++)
+        {
+            std::vector<int> input_ids;
+            std::string c, m;
+            vs.GetRecord(candidates[i], c, m);
+            reranker->tokenizer->encode_qa(query, c, input_ids);
+            scores.push_back(reranker->model->qa_rank(gen_config, input_ids));
+        }
+
+        chatllm::ordering(scores, order, true);
+
+        if (top_n > (int)order.size()) top_n = (int)order.size();
+
+        for (int i = 0; i < top_n; i++)
+        {
+            int index = order[i];
+            if (reranker->model->qa_acceptable(scores[index]))
+                result.push_back(candidates[index]);
+            else
+                break;
+        }
+
+        candidates.clear();
+        candidates.insert(candidates.begin(), result.begin(), result.end());
+    }
+
+    void RAGPipeline::before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config)
+    {
+        size_t index = history.size() - 1;
+        std::string query(history.back());
+        std::vector<float> query_emb;
+        std::vector<int64_t> selected;
+
+        metainfo.clear();
+
+        embedding.text_embedding(query, gen_config, query_emb);
+
+        vs.Query(query_emb, selected, retrieve_top_n);
+
+        if (reranker != nullptr)
+            rerank(query, selected, gen_config, rerank_top_n);
+
+        std::vector<std::string> augments;
+
+        for (auto i : selected)
+        {
+            std::string c, m;
+            vs.GetRecord(i, c, m);
+            augments.push_back(c);
+            metainfo.push_back(m);
+        }
+
+        auto composed = modelobj.model->compose_augmented_query(query, augments);
+
+        history[index] = composed;
+    }
+
+    std::string RAGPipeline::get_additional_description(void) const
+    {
+        std::ostringstream oss;
+
+        int64_t total_param_num = embedding.model->get_param_num(false);
+
+        oss << "Augmented by " << embedding.model->type_name() << " (" << std::fixed << std::setprecision(1) << total_param_num / 1000000000. << "B)";
+
+        if (reranker != nullptr)
+        {
+            total_param_num = reranker->model->get_param_num(false);
+            oss << " and " << reranker->model->type_name() << " (" << std::fixed << std::setprecision(1) << total_param_num / 1000000000. << "B)";
+        }
+
+        oss << ".";
+
+        return oss.str();
+    }
+
+    void RAGPipeline::post_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
+    {
+        if (hide_reference || (metainfo.size() < 1)) return;
+
+        streamer->putln("");
+        streamer->putln(reference_tag);
+        for (auto s : metainfo)
+            streamer->putln("1. " + s);
     }
 
 } // namespace chatllm

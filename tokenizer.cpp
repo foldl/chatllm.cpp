@@ -789,7 +789,7 @@ struct unigram_tokenizer
         index start, end;
     };
 
-    unigram_tokenizer(const _vocab &vocab, int tok_max_len) : vocab_(vocab), tok_max_len(tok_max_len) {}
+    unigram_tokenizer(const _vocab &vocab, int tok_max_len, int unk_id) : vocab_(vocab), tok_max_len(tok_max_len), unk_id(unk_id) {}
 
     void tokenize(const std::string &text, std::vector<_vocab::id> &output)
     {
@@ -858,6 +858,17 @@ private:
             }
         }
 
+        if (prev < 0)
+        {
+            auto i = pos - 1;
+            auto &b = trace[i];
+            auto &tok = vocab_.id_to_token[unk_id];
+
+            prev = i;
+            max_prop = b.score + tok.score;
+            tok_id = unk_id;
+        }
+
         trace.emplace_back(prev, max_prop, tok_id);
     }
 
@@ -865,9 +876,10 @@ private:
     std::vector<best> trace;
     std::vector<unigram> symbols_;
     int tok_max_len;
+    int unk_id;
 };
 
-UnigramProcessor::UnigramProcessor() : Processor::Processor(), tok_max_len(0)
+UnigramProcessor::UnigramProcessor(int unk_tok_id) : Processor::Processor(), unk_tok_id(unk_tok_id), tok_max_len(0)
 {
 
 }
@@ -895,7 +907,7 @@ size_t UnigramProcessor::Load(const char *buffer, int n_vocab)
 int UnigramProcessor::DoEncode(const std::string &input,
         std::vector<int> *ids) const
 {
-    unigram_tokenizer tokenizer(vocab_, (int)tok_max_len);
+    unigram_tokenizer tokenizer(vocab_, (int)tok_max_len, unk_tok_id);
     tokenizer.tokenize(input, *ids);
     return 0;
 }
@@ -918,4 +930,10 @@ std::string TextPrepAddLeadingSpace::transform(const std::string &s)
 {
     if (s.size() < 1) return " ";
     return s[0] == ' ' ? s : " " + s;
+}
+
+std::string TextPrepNewlineToSpaces::transform(const std::string &s)
+{
+    const static std::regex r(R""([\r\n]+)"");
+    return std::regex_replace(s, r, " ");
 }

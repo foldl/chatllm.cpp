@@ -59,7 +59,7 @@ namespace persimmon
 
     size_t Tokenizer::load(const char *buffer, int n_vocab)
     {
-        tp = new tokenizer::UnigramProcessor();
+        tp = new tokenizer::UnigramProcessor(0);
         size_t size = tp->Load(buffer, n_vocab);
         if (bos_token_id == eos_token_id)
             bos_token_id = 1;

@@ -82,6 +82,12 @@ public:
     std::string transform(const std::string &s) override;
 };
 
+class TextPrepNewlineToSpaces : public TextPreprocessor
+{
+public:
+    std::string transform(const std::string &s) override;
+};
+
 class TextPrepAddLeadingSpace : public TextPreprocessor
 {
 public:
@@ -164,9 +170,11 @@ private:
 class UnigramProcessor: public Processor
 {
 public:
-    UnigramProcessor();
+    UnigramProcessor(int unk_tok_id);
 
     size_t Load(const char *buffer, int n_vocab) override;
+
+    int unk_tok_id;
 
 private:
     int DoEncode(const std::string &input,

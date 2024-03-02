@@ -6,8 +6,9 @@
 #include <unordered_map>
 #include <vector>
 #include <random>
-
+#include "basics.h"
 #include "tokenizer.h"
+#include "vectorstore.h"
 
 namespace chatllm
 {
@@ -24,22 +25,6 @@ namespace chatllm
         TextEmbedding,
         Ranker,
     };
-
-    class LogMessageFatal
-    {
-    public:
-        LogMessageFatal(const char *file, int line) { oss_ << file << ':' << line << ' '; }
-        [[noreturn]] ~LogMessageFatal() noexcept(false) { throw std::runtime_error(oss_.str()); }
-        std::ostringstream &stream() { return oss_; }
-
-    private:
-        std::ostringstream oss_;
-    };
-
-#define CHATLLM_THROW ::chatllm::LogMessageFatal(__FILE__, __LINE__).stream()
-#define CHATLLM_CHECK(cond) \
-    if (!(cond))            \
-    CHATLLM_THROW << "check failed (" #cond ") "
 
     std::string to_string(ggml_tensor *tensor, bool with_data = true);
 
@@ -112,6 +97,7 @@ namespace chatllm
     protected:
         std::string sys_prompt;
         int history_offset;
+        const int max_length;
         ChatFormat format;
         BaseHistoryEncoder *chat_encoder;
         BaseHistoryEncoder *completion_encoder;
@@ -197,6 +183,7 @@ namespace chatllm
     public:
         virtual ~BaseStreamer() = default;
         virtual void put(const std::vector<int> &output_ids) = 0;
+        virtual void putln(const std::string &line) = 0;
         virtual void end() = 0;
     };
 
@@ -206,6 +193,7 @@ namespace chatllm
     public:
         TextStreamer(BaseTokenizer *tokenizer) : tokenizer_(tokenizer), is_prompt_(true), print_len_(0) {}
         void put(const std::vector<int> &output_ids) override;
+        void putln(const std::string &line) override;
         void end() override;
 
     private:
@@ -311,6 +299,15 @@ namespace chatllm
             return 0.0f;
         }
 
+        virtual bool qa_acceptable(float score)
+        {
+            return true;
+        }
+
+        virtual std::string compose_augmented_query(const std::string &query, const std::vector<std::string> augments) const;
+
+        virtual int get_text_embedding_dim(void) const { return -1; }
+
         std::string type_name() const { return name_; }
         std::string native_name() const { return native_name_; }
         ModelPurpose get_purpose() const { return purpose; }
@@ -370,6 +367,31 @@ namespace chatllm
         static bool load(int model_type, int version, ModelLoader &loader, Result &result, int max_length);
     };
 
+    class ModelObject
+    {
+    public:
+        struct extra_args
+        {
+            int max_length;
+            extra_args(int max_length)
+                : max_length(max_length)
+            {}
+            extra_args()
+                : max_length(-1)
+            {}
+        };
+
+        ModelObject(const std::string &path);
+        ModelObject(const std::string &path, const extra_args &args);
+
+        void text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result);
+
+    public:
+        std::unique_ptr<BaseTokenizer> tokenizer;
+        std::unique_ptr<BaseModel> model;
+        std::unique_ptr<ModelLoader> loader;
+    };
+
     class Pipeline
     {
     public:
@@ -379,14 +401,10 @@ namespace chatllm
             Restart,
         };
 
-        struct extra_args
-        {
-            int max_length;
-        };
+        Pipeline(const std::string &path);
+        Pipeline(const std::string &path, const ModelObject::extra_args &args);
 
-        Pipeline(const std::string &path, const extra_args &args);
-
-        std::string chat(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+        std::string chat(std::vector<std::string> &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);
         void set_system_prompt(const std::string &prompt);
         void set_extending_method(ExtendingMethod method);
@@ -394,18 +412,53 @@ namespace chatllm
         void text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result);
         float qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config);
 
+        int get_text_embedding_dim(void);
+
+        virtual std::string get_additional_description(void) const;
+
     public:
-        std::unique_ptr<BaseTokenizer> tokenizer;
-        std::unique_ptr<BaseModel> model;
-        std::unique_ptr<ModelLoader> loader;
-    private:
+        BaseTokenizer *tokenizer;
+        BaseModel *model;
+
+    protected:
         bool initializing;
         ExtendingMethod extending;
+        ModelObject modelobj;
 
         std::string chat_with_restart(const std::vector<std::string> &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);
         std::string chat_with_shift(const std::vector<std::string> &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);
+
+        virtual void before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config);
+        virtual void post_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer);
+    };
+
+    class RAGPipeline : public Pipeline
+    {
+    public:
+        RAGPipeline(const std::string &path, const ModelObject::extra_args &args,
+                    DistanceStrategy vec_cmp, const std::vector<std::string> &vector_stores,
+                    const std::string &embedding_model, const std::string &reranker_model = "");
+
+        std::string get_additional_description(void) const override;
+
+        std::string reference_tag;
+        bool hide_reference;
+        int retrieve_top_n;
+        int rerank_top_n;
+
+    protected:
+        void before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config) override;
+        void post_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer) override;
+
+        CVectorStore vs;
+        ModelObject embedding;
+        ModelObject *reranker;
+        std::vector<std::string> metainfo;
+
+    private:
+        void rerank(const std::string &query, std::vector<int64_t> &candidates, const GenerationConfig &gen_config, int top_n = 3);
     };
 
 } // namespace chatllm

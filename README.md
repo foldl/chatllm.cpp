@@ -2,9 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-![](./images/demo.gif)
+![](./docs/demo.gif)
 
-Inference of a bunch of models from less than 3B to more than 45B, for real-time chatting on your computer (CPU),
+Inference of a bunch of models from less than 3B to more than 45B, for real-time chatting with [RAG](./docs/rag.md) on your computer (CPU),
 pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml):
 
 * LlaMA-like (`LlamaForCausalLM`):
@@ -95,6 +95,8 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * [x] Continuous chatting (content length is virtually unlimited)
 
     Two methods are available: _Restart_ and _Shift_. See `--extending` options.
+
+* [x] Retrieval Augmented Generation (RAG) 🔥
 
 * [ ] LoRA;
 * [ ] Python binding, web demo, and more possibilities.

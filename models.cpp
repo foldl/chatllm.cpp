@@ -219,9 +219,9 @@ namespace chatllm
         case MODEL_TYPE_GEMMA:
             return "Gemma";
         case MODEL_TYPE_BCE_Embedding:
-            return "BCE Embedding";
+            return "BCE-Embedding";
         case MODEL_TYPE_BCE_ReRanker:
-            return "BCE ReRanker";
+            return "BCE-ReRanker";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";

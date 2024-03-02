@@ -9,6 +9,8 @@
 #include <cstring>
 #include <random>
 
+#include "vectorstore.h"
+
 #if defined(_WIN32)
 #include <fcntl.h>
 #include <io.h>
@@ -18,6 +20,10 @@
 struct Args
 {
     std::string model_path = "chatllm-ggml.bin";
+    std::string embedding_model_path = "";
+    std::string reranker_model_path = "";
+    std::vector<std::string> vector_store;
+    std::string vector_store_in = "";
     std::string system = "";
     std::string prompt = "你好";
     std::string extending = "restart";
@@ -33,6 +39,10 @@ struct Args
     int seed;
     chatllm::ChatFormat format = chatllm::ChatFormat::CHAT;
     bool tokenize = false;
+    DistanceStrategy vc = DistanceStrategy::MaxInnerProduct;
+    int retrieve_top_n = 2;
+    int rerank_top_n = 1;
+    bool hide_reference = false;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -42,7 +52,7 @@ void usage(const char *prog)
 {
     std::cout << "Usage: " << prog << " [options]\n"
               << "\n"
-              << "options:\n"
+              << "Basic options:\n"
               << "  -h, --help              show this help message and exit\n"
               << "  -m, --model PATH        model path (default: chatllm-ggml.bin)\n"
               << "  -p, --prompt PROMPT     prompt to start generation with (default: 你好)\n"
@@ -52,16 +62,28 @@ void usage(const char *prog)
               << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
               << "  -c, --max_context_length N\n"
               << "                          max context length (default: 512)\n"
-              << "  -t, --temp T            temperature (default: 0.95)\n"
               << "  --extending EXT         context extending method (EXT = restart | shift) (default: restart)\n"
-              << "  --top_k N               top-k sampling (default: 0)\n"
-              << "  --top_p N               top-p sampling (default: 0.7)\n"
-              << "  --seed N                seed for random generator (default: random)\n"
               << "  --multi                 enabled multiple lines of input\n"
               << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n"
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
-              << "  --tokenize              (debug)tokenize `prompt` and exit\n"
-              << "  --test FILE             test again inputs from a file and exit\n"
+              << "Sampling options:\n"
+              << "  -t, --temp T            temperature (default: 0.7)\n"
+              << "  --top_k N               top-k sampling (default: 0)\n"
+              << "  --top_p N               top-p sampling (default: 0.7)\n"
+              << "  --seed N                seed for random generator (default: random)\n"
+              << "RAG options:\n"
+              << "  --vector_store FILE     append a vector store file (when at lease one is specifed, RAG is enabled)\n"
+              << "  --embedding_model PATH  embedding model path (mandatory if RAG is enabled)\n"
+              << "  --distance_strategy DS  distance strategy (model dependent, default: MaxInnerProduct)\n"
+              << "                          DS = EuclideanDistance | MaxInnerProduct | InnerProduct | CosineSimilarity\n"
+              << "  --retrieve_top_n N      number of retrieved items using embedding model (default: 2)\n"
+              << "  --reranker_model PATH   reranker model path (optional)\n"
+              << "  --rerank_top_n N        number of selected items using reranker model (default: 1)\n"
+              << "  --hide_reference        do not show references (default: false)\n"
+              << "Misc:\n"
+              << "  --init_vs FILE          init vector store file from input\n"
+              << "  --tokenize              (debug) tokenize `prompt` and exit\n"
+              << "  --test FILE             test against inputs from a file and exit\n"
               << std::endl;
 }
 
@@ -87,6 +109,14 @@ static Args parse_args(int argc, const char **argv)
                 args.field = f(argv[c]);                                    \
         }
 
+    #define append_param(fmt1, field, f)    \
+        else if ((strcmp(arg, fmt1) == 0))      \
+        {                                                                   \
+            c++;                                                            \
+            if (c < argc)                                                   \
+                args.field.push_back(f(argv[c]));                           \
+        }
+
     int c = 1;
     while (c < argc)
     {
@@ -107,6 +137,10 @@ static Args parse_args(int argc, const char **argv)
         else if (strcmp(arg, "--tokenize") == 0)
         {
             args.tokenize = true;
+        }
+        else if (strcmp(arg, "--hide_reference") == 0)
+        {
+            args.hide_reference = true;
         }
         else if (strcmp(arg, "--format") == 0)
         {
@@ -133,6 +167,13 @@ static Args parse_args(int argc, const char **argv)
         handle_param("--threads",               "-n", num_threads,          std::stoi)
         handle_para0("--seed",                        seed,                 std::stoi)
         handle_para0("--test",                        test_fn,              std::string)
+        append_param("--vector_store",                vector_store,         std::string)
+        handle_para0("--embedding_model",             embedding_model_path, std::string)
+        handle_para0("--distance_strategy",           vc,                   ParseDistanceStrategy)
+        handle_para0("--retrieve_top_n",              retrieve_top_n,       std::stoi)
+        handle_para0("--reranker_model",              reranker_model_path,  std::string)
+        handle_para0("--rerank_top_n",                rerank_top_n,         std::stoi)
+        handle_para0("--init_vs",                     vector_store_in,      std::string)
         else
             break;
 
@@ -293,6 +334,12 @@ static void show_banner(chatllm::Pipeline &pipeline)
     else
         std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_effective_param_num / 1000000000. << "B effect.) parameters." << '\n';
 
+    auto additional = pipeline.get_additional_description();
+    if (additional.size() > 0)
+    {
+        std::cout << additional << std::endl;
+    }
+
     std::cout << std::endl;
 }
 
@@ -361,11 +408,8 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, chatllm::Text
     std::cout << "Bye\n";
 }
 
-void chat(Args &args)
+void chat(Args &args, chatllm::Pipeline &pipeline)
 {
-    chatllm::Pipeline::extra_args pipe_args = { .max_length = args.max_length };
-    chatllm::Pipeline pipeline(args.model_path, pipe_args);
-
     if (args.system.size() > 0)
         pipeline.set_system_prompt(args.system);
     pipeline.model->seed(args.seed);
@@ -382,18 +426,11 @@ void chat(Args &args)
     const std::string user_prompt = "You";
     const int prompt_len = 4;
 
-    chatllm::TextStreamer streamer(pipeline.tokenizer.get());
+    chatllm::TextStreamer streamer(pipeline.tokenizer);
 
     chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,
                                          args.top_p, args.temp, args.num_threads);
-
-#if defined(_WIN32)
-    _setmode(_fileno(stdin), _O_WTEXT);
-    // Set console code page to UTF-8 so console known how to interpret string data
-    SetConsoleOutputCP(CP_UTF8);
-    // Enable buffering to prevent VS from chopping up UTF-8 byte sequences
-    setvbuf(stdout, nullptr, _IOFBF, 1000);
-#endif
+    std::vector<std::string> history;
 
     if (args.tokenize)
     {
@@ -425,13 +462,13 @@ void chat(Args &args)
 
     if (!args.interactive)
     {
-        pipeline.chat({args.prompt}, gen_config, &streamer);
+        history.push_back(args.prompt);
+        pipeline.chat(history, gen_config, &streamer);
         return;
     }
 
     show_banner(pipeline);
 
-    std::vector<std::string> history;
     while (1)
     {
         std::cout << std::setw(prompt_len) << std::left << user_prompt << " > " << std::flush;
@@ -449,6 +486,27 @@ void chat(Args &args)
         history.emplace_back(std::move(output));
     }
     std::cout << "Bye\n";
+}
+
+static int init_vector_store(Args &args)
+{
+    chatllm::Pipeline pipeline(args.embedding_model_path);
+    args.max_length = pipeline.model->get_max_length();
+    chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,
+                                         args.top_p, args.temp, args.num_threads);
+    std::vector<float> r;
+
+    CVectorStore vs(args.vc, pipeline.get_text_embedding_dim(),
+        [&pipeline, &gen_config, &r](const std::string &s, float *emb)
+        {
+            pipeline.text_embedding(s, gen_config, r);
+            CHATLLM_CHECK((int)r.size() == pipeline.get_text_embedding_dim()) << "embedding dim mismatch";
+            memcpy(emb, r.data(), r.size() * sizeof(float));
+        },
+        args.vector_store_in.c_str());
+    vs.ExportDB((args.vector_store_in + ".vsdb").c_str());
+    printf("Vector store saved to: %s\n", (args.vector_store_in + ".vsdb").c_str());
+    return 0;
 }
 
 #if defined(_WIN32)
@@ -471,22 +529,48 @@ int wmain(int argc, const wchar_t **wargv)
         vect_args.push_back(utf_args[i].data());
     const char **argv = vect_args.data();
 
+    _setmode(_fileno(stdin), _O_WTEXT);
+    // Set console code page to UTF-8 so console known how to interpret string data
+    SetConsoleOutputCP(CP_UTF8);
+    // Enable buffering to prevent VS from chopping up UTF-8 byte sequences
+    setvbuf(stdout, nullptr, _IOFBF, 1000);
+
 #else
 int main(int argc, const char **argv)
 {
 #endif
+
     Args args = parse_args(argc, argv);
     if (args.num_threads <= 0)
         args.num_threads = get_num_physical_cores();
 
+    if (args.vector_store_in.size() > 0)
+        return init_vector_store(args);
+
     try
     {
-        chat(args);
+        chatllm::ModelObject::extra_args pipe_args(args.max_length);
+        if (args.embedding_model_path.size() < 1)
+        {
+            chatllm::Pipeline pipeline(args.model_path, pipe_args);
+            chat(args, pipeline);
+        }
+        else
+        {
+            chatllm::RAGPipeline pipeline(args.model_path, pipe_args,
+                args.vc, args.vector_store,
+                args.embedding_model_path, args.reranker_model_path);
+            pipeline.hide_reference = args.hide_reference;
+            pipeline.retrieve_top_n = args.retrieve_top_n;
+            pipeline.rerank_top_n   = args.rerank_top_n;
+            chat(args, pipeline);
+        }
     }
     catch (std::exception &e)
     {
         std::cerr << e.what() << std::endl;
         exit(EXIT_FAILURE);
     }
+
     return 0;
 }
