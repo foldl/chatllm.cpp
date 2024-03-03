@@ -101,7 +101,9 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * [ ] LoRA;
 * [ ] Python binding, web demo, and more possibilities.
 
-**Preparation**
+## Usage
+
+### Preparation
 
 Clone the ChatLLM.cpp repository into your local machine:
 
@@ -115,7 +117,7 @@ If you forgot the `--recursive` flag when cloning the repository, run the follow
 git submodule update --init --recursive
 ```
 
-**Quantize Model**
+### Quantize Model
 
 Use `convert.py` to transform models into quantized GGML format. For example, to convert the _fp16_ base model to q8_0 (quantized int8) GGML model, run:
 
@@ -162,7 +164,7 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
 
 Note: Only HF format is supported; Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.
 
-**Build & Run**
+### Build & Run
 
 Compile the project using CMake:
 

@@ -97,7 +97,8 @@ CVectorStore::CVectorStore(DistanceStrategy vec_cmp, int emb_len,
     for (size_t i = 0; i < GetSize(); i++)
     {
         text_emb(contents[i], embeddings.data() + i * emb_len);
-        printf("%lu / %lu\r", i, GetSize());
+        printf("%8lu / %8lu\r", i, GetSize());
+        fflush(stdout);
     }
     printf("done\n");
 }
