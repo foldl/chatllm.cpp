@@ -1,5 +1,5 @@
 """
-Convert Hugging Face ChatLLM/ChatLLM2 models to GGML format
+Convert Hugging Face models to GGML format
 """
 import argparse
 from ast import Dict, Tuple

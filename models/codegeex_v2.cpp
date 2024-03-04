@@ -1,5 +1,3 @@
-// ===== ChatLLM2-6B =====
-
 struct Config : public glm::v2::Config
 {
 };

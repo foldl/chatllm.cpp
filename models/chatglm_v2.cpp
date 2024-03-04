@@ -1,5 +1,3 @@
-// ===== ChatLLM2-6B =====
-
 struct Config : public BaseConfig
 {
     int num_kv_heads;

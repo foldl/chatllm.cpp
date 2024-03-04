@@ -179,10 +179,8 @@ cmake --build build -j --config Release
 Now you may chat with a quantized model by running:
 
 ```sh
-./build/bin/main -m chatglm-ggml.bin                            # ChatLLM-6B
+./build/bin/main -m chatglm-ggml.bin                            # ChatGLM-6B
 # 你好👋！我是人工智能助手 ChatGLM-6B，很高兴见到你，欢迎问我任何问题。
-./build/bin/main -m chatglm2-ggml.bin --top_p 0.8 --temp 0.8    # ChatLLM2-6B
-# 你好👋！我是人工智能助手 ChatGLM2-6B，很高兴见到你，欢迎问我任何问题。
 ./build/bin/main -m llama2.bin  --seed 100                      # Llama-2-Chat-7B
 # Hello! I'm here to help you with any questions or concerns ....
 ```
