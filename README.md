@@ -41,10 +41,11 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
     * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) 🔥
 
-        Two implementations of sliding-window attention (see `SlidingWindowAttentionImpl`):
+        Three implementations of sliding-window attention (see `SlidingWindowAttentionImpl`):
 
-        - Full cache: more RAM is needed (**default**).
-        - Ring cache (i.e. rolling cache): less RAM, but current implementation is *naive* (slow). 💣
+        - Full cache: more RAM is needed.
+        - Partial cache: less RAM is needed, and faster than ring cache (**default**).
+        - Ring cache (i.e. rolling cache): least RAM, but current implementation is *naive* (slow). 💣
 
         Note: precision of these two implementations differs, which causes different results.
 

@@ -883,11 +883,16 @@ namespace chatllm
     };
 
     // TODO: debug this
-    template <int sliding_window_len, int extra_len = 64> class BaseSlidingWindowAttentionPartialCache : public BaseAttention
+    template <int sliding_window_len, int extra_len = 512> class BaseSlidingWindowAttentionPartialCache : public BaseAttention
     {
     public:
         BaseSlidingWindowAttentionPartialCache(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
-            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias, GGML_TYPE_F16, sliding_window_len + extra_len),
+            : BaseSlidingWindowAttentionPartialCache(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length, qkv_bias, o_bias)
+        {
+        }
+
+        BaseSlidingWindowAttentionPartialCache(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, GGML_TYPE_F16, sliding_window_len + extra_len),
               indices(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, 1)), // to ensure number of tensors are the same
               cache_offset(0)
         {
@@ -920,13 +925,12 @@ namespace chatllm
                     int remain = sliding_window_len - qlen;
                     int shift = cache_length - remain;
 
-                    if (id == 0)
-                        printf("\n<<<< SHIFT: %d, %d, %d, %d, %d\n", empty, qlen, remain, shift, cache_offset);
-
                     struct ggml_tensor * k_cache_remain = ggml_view_1d(ctx->gctx.get(), k_cache, remain * kv_hidden_size,
                                                 ggml_element_size(k_cache) * kv_hidden_size * shift);
                     struct ggml_tensor * k_cache_1d = ggml_view_1d(ctx->gctx.get(), k_cache, remain * kv_hidden_size,
                                                 0);
+
+                    struct ggml_tensor * k_remain_dup = ggml_dup(ctx->gctx.get(), k_cache_remain);
 
                     struct ggml_tensor * v_cache_remain = ggml_view_2d(ctx->gctx.get(), v_cache, remain, kv_hidden_size,
                                                 cache_length * ggml_element_size(v_cache),
@@ -935,8 +939,10 @@ namespace chatllm
                                                 cache_length * ggml_element_size(v_cache),
                                                 0);
 
-                    ggml_build_forward_expand(ctx->gf, ggml_cpy_inplace(ctx->gctx.get(), k_cache_remain, k_cache_1d));
-                    ggml_build_forward_expand(ctx->gf, ggml_cpy_inplace(ctx->gctx.get(), v_cache_remain, v_cache_2d));
+                    struct ggml_tensor * v_remain_dup = ggml_dup(ctx->gctx.get(), v_cache_remain);
+
+                    ggml_build_forward_expand(ctx->gf, ggml_cpy_inplace(ctx->gctx.get(), k_remain_dup, k_cache_1d));
+                    ggml_build_forward_expand(ctx->gf, ggml_cpy_inplace(ctx->gctx.get(), v_remain_dup, v_cache_2d));
 
                     cache_offset -= shift;
                 }
@@ -1557,7 +1563,7 @@ namespace chatllm
         {}
     };
 
-    #define SlidingWindowAttentionImpl BaseSlidingWindowAttentionFullCache
+    #define SlidingWindowAttentionImpl BaseSlidingWindowAttentionPartialCache
 
     template <int sliding_window_len> class MistralSelfAttention : public BaseSelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>
     {
