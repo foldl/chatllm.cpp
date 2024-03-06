@@ -8,6 +8,7 @@
 #include <functional>
 #include <cstring>
 #include <random>
+#include <map>
 
 #include "vectorstore.h"
 
@@ -28,6 +29,7 @@ struct Args
     std::string prompt = "你好";
     std::string extending = "restart";
     std::string test_fn = "";
+    std::map<std::string, std::string> additional;
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -84,6 +86,9 @@ void usage(const char *prog)
               << "  --init_vs FILE          init vector store file from input\n"
               << "  --tokenize              (debug) tokenize `prompt` and exit\n"
               << "  --test FILE             test against inputs from a file and exit\n"
+              << "Additional key-value args:\n"
+              << "  --kv                    start of additional args\n"
+              << "  key VALUE               a key-value pair of args\n"
               << std::endl;
 }
 
@@ -153,6 +158,14 @@ static Args parse_args(int argc, const char **argv)
                     args.format = chatllm::ChatFormat::QA;
                 else
                     args.format = chatllm::ChatFormat::CHAT;
+            }
+        }
+        else if (strcmp(arg, "--kv") == 0)
+        {
+            while (c + 2 < argc)
+            {
+                args.additional.insert_or_assign(argv[c + 1], argv[c + 2]);
+                c += 2;
             }
         }
         handle_param("--model",                 "-m", model_path,           std::string)
@@ -421,6 +434,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline)
         pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Restart);
 
     pipeline.tokenizer->set_chat_format(args.format);
+    pipeline.set_additional_args(args.additional);
 
     const std::string ai_prompt   = "A.I.";
     const std::string user_prompt = "You";

@@ -7,7 +7,7 @@ Get the models for text embedding and QA ranking that are supported, for example
 * Text Embedding (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
 
-* QA Ranking (`XLMRobertaForSequenceClassification`)
+* QA Ranking (`XLMRobertaForSequenceClassification`) (_Optional_)
     * [x] [BCE-ReRanker](https://huggingface.co/maidalun1020/bce-reranker-base_v1)
 
 Use `convert.py` to convert the models.

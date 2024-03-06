@@ -74,6 +74,7 @@ namespace chatllm
 
         void set_system_prompt(const std::string &prompt) { sys_prompt = prompt; }
         const std::string &get_system_prompt(void) { return sys_prompt; }
+        virtual void set_additional_args(const std::map<std::string, std::string> &args) {}
 
         virtual int get_terminate_token_id(void) const { return -1000; }
         virtual bool is_special_id(int id) const { return false; }
@@ -408,6 +409,7 @@ namespace chatllm
                          BaseStreamer *streamer = nullptr);
         void set_system_prompt(const std::string &prompt);
         void set_extending_method(ExtendingMethod method);
+        virtual void set_additional_args(const std::map<std::string, std::string> &args);
 
         void text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result);
         float qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config);

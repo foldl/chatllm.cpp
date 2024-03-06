@@ -40,6 +40,7 @@ class ModelType(Enum):
     CHATGLM2 = 2
     CHATGLM3 = 3
     CODEGEEX2 = 4
+    CharacterGLM = 5
 
     InternLM   = 0x100
     InternLM2   = 0x101
@@ -1516,6 +1517,17 @@ class ChatGLM3Converter(BaseConverter):
     def get_weight_names(config):
         return ChatGLM2Converter.get_weight_names(config)
 
+class CharacterGLMConverter(BaseConverter):
+    MODEL_TYPE = ModelType.CharacterGLM
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        ChatGLM2Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return ChatGLM2Converter.get_weight_names(config)
+
 class CodeGeeX2Converter(BaseConverter):
     MODEL_TYPE = ModelType.CODEGEEX2
 
@@ -2215,6 +2227,8 @@ def main():
                 ChatGLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             ChatGLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'characterglm':
+        CharacterGLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InternLMForCausalLM':
         if not config.bias:
             InternLMConverter.MODEL_TYPE = ModelType.InternLM2

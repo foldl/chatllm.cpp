@@ -26,6 +26,10 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
         Tip on CodeGeeX2: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
 
+    * [x] CharacterGLM: [6B](https://huggingface.co/thu-coai/CharacterGLM-6B)
+
+        Note: Use additional key-value pair arguments to specify characters, `--kv user_name "..." bot_name "..." user_info "..." bot_info "..."`.
+
 * InternLM (`InternLMForCausalLM`, `InternLM2ForCausalLM`)
     * [x] v1: [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1), [Chat-20B](https://huggingface.co/internlm/internlm-chat-20b)
     * [x] v2: [Chat-7B](https://huggingface.co/internlm/internlm2-chat-7b), [Chat-20B](https://huggingface.co/internlm/internlm2-chat-20b)
@@ -47,7 +51,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
         - Partial cache: less RAM is needed, and faster than ring cache (**default**).
         - Ring cache (i.e. rolling cache): least RAM, but current implementation is *naive* (slow). 💣
 
-        Note: precision of these two implementations differs, which causes different results.
+        Note: precision of these implementations differs, which causes different results.
 
     * [x] NeuralBeagle14: [7B](https://huggingface.co/mlabonne/NeuralBeagle14-7B)
 
@@ -158,6 +162,9 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a NeuralBeagle
 
 # CodeFuse-DeepSeek
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeFuseDeepSeek
+
+# CharacterGLM
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CharacterGLM
 
 # For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin

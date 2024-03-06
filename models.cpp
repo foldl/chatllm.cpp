@@ -82,6 +82,7 @@ namespace chatllm
         MODEL_TYPE_CHATGLM2 = 2,
         MODEL_TYPE_CHATGLM3 = 3,
         MODEL_TYPE_CODEGEEX2 = 4,
+        MODEL_TYPE_CHARACTERGLM = 5,
 
         MODEL_TYPE_INTERNLM = 0x100,
         MODEL_TYPE_INTERNLM2= 0x101, // extended model, supporting 7B & 20B
@@ -159,6 +160,8 @@ namespace chatllm
             return "ChatGLM3";
         case MODEL_TYPE_CODEGEEX2:
             return "CodeGeeX2";
+        case MODEL_TYPE_CHARACTERGLM:
+            return "CharacterGLM";
         case MODEL_TYPE_INTERNLM:
         case MODEL_TYPE_INTERNLM2:
         case MODEL_TYPE_INTERNLM3:
@@ -869,6 +872,11 @@ namespace chatllm
         #include "models/codefuse.cpp"
     }
 
+    namespace characterglm
+    {
+        #include "models/characterglm.cpp"
+    }
+
     struct args
     {
         int max_length;
@@ -923,296 +931,74 @@ namespace chatllm
     {
         struct args extra_args = { .max_length = max_length };
 
+        #define CASE(TYPE, ns, ver)         \
+            case MODEL_TYPE_ ##TYPE:        \
+            {                               \
+                CHATLLM_CHECK(version == ver) << "only support version " #ver " for now but got " << version;   \
+                return load_model<ns::Config,                                                                   \
+                                  ns::Tokenizer,                                                                \
+                                  ns::ConditionalGeneration>(loader, result, extra_args);                       \
+            }
+
         switch ((ModelType)model_type)
         {
-        case MODEL_TYPE_CHATGLM:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(CHATGLM,               glm::v1, 1)
+        CASE(CHATGLM2,              glm::v2, 1)
+        CASE(CHATGLM3,              glm::v3, 1)
+        CASE(CODEGEEX2,             codegeex::v2, 1)
+        CASE(CHARACTERGLM,          characterglm, 1)
 
-            return load_model<glm::v1::Config,
-                              glm::v1::Tokenizer,
-                              glm::v1::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_CHATGLM2:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(INTERNLM,              internlm::v1, 1)
+        CASE(INTERNLM2,             internlm::v2, 1)
+        CASE(INTERNLM3,             internlm::v3, 1)
 
-            return load_model<glm::v2::Config,
-                              glm::v2::Tokenizer,
-                              glm::v2::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_CHATGLM3:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(LLAMA2,                llama, 1)
+        CASE(CODELLAMA,             codellama, 1)
 
-            return load_model<glm::v3::Config,
-                              glm::v3::Tokenizer,
-                              glm::v3::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_CODEGEEX2:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(DEEPSEEK,              deepseek, 1)
+        CASE(DEEPSEEK_CODER,        deepseek_coder, 1)
+        CASE(CODEFUSE_DEEPSEEK,     codefuse::deepseek, 1)
 
-            return load_model<codegeex::v2::Config,
-                              codegeex::v2::Tokenizer,
-                              codegeex::v2::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_INTERNLM:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(BAICHUANLLAMA,         baichuan::_7b, 1)
+        CASE(BAICHUAN,              baichuan::larger, 1)
 
-            return load_model<internlm::v1::Config,
-                              internlm::v1::Tokenizer,
-                              internlm::v1::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_INTERNLM2:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(YI,                    yi, 1)
 
-            return load_model<internlm::v2::Config,
-                              internlm::v2::Tokenizer,
-                              internlm::v2::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_INTERNLM3:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(PHI2,                  phi2::v1, 1)
+        CASE(PHI2_V2,               phi2::v2, 1)
 
-            return load_model<internlm::v3::Config,
-                              internlm::v3::Tokenizer,
-                              internlm::v3::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_LLAMA2:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(WIZARDCODER,           wizard::coder, 1)
+        CASE(WIZARDLM,              wizard::lm, 1)
+        CASE(WIZARDMATH,            wizard::math, 1)
 
-            return load_model<llama::Config,
-                              llama::Tokenizer,
-                              llama::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_CODELLAMA:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(MISTRAL,               mistral, 1)
+        CASE(OPENCHAT,              openchat, 1)
+        CASE(MIXTRAL,               mixtral, 1)
 
-            return load_model<codellama::Config,
-                              codellama::Tokenizer,
-                              codellama::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_DEEPSEEK:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(QWEN,                  qwen::v1, 2)
+        CASE(QWEN2,                 qwen::v2, 1)
 
-            return load_model<deepseek::Config,
-                              deepseek::Tokenizer,
-                              deepseek::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_DEEPSEEK_CODER:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(TIGERBOT,              tigerbot, 1)
 
-            return load_model<deepseek_coder::Config,
-                              deepseek_coder::Tokenizer,
-                              deepseek_coder::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_CODEFUSE_DEEPSEEK:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(BLUELM,                bluelm, 1)
 
-            return load_model<codefuse::deepseek::Config,
-                              codefuse::deepseek::Tokenizer,
-                              codefuse::deepseek::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_BAICHUANLLAMA:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(DOLPHINPHI2,           dolphinphi2::v1, 1)
 
-            return load_model<baichuan::_7b::Config,
-                              baichuan::_7b::Tokenizer,
-                              baichuan::_7b::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_BAICHUAN:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(STABLELM,              stablelm, 1)
 
-            return load_model<baichuan::larger::Config,
-                              baichuan::larger::Tokenizer,
-                              baichuan::larger::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_YI:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(NEURALBEAGLE,          neuralbeagle, 1)
 
-            return load_model<yi::Config,
-                              yi::Tokenizer,
-                              yi::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_PHI2:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(ORION,                 orion, 1)
 
-            return load_model<phi2::v1::Config,
-                              phi2::v1::Tokenizer,
-                              phi2::v1::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_PHI2_V2:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(MINICPM,               minicpm, 1)
 
-            return load_model<phi2::v2::Config,
-                              phi2::v2::Tokenizer,
-                              phi2::v2::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_WIZARDCODER:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(PERSIMMON,             adept::persimmon, 1)
 
-            return load_model<wizard::coder::Config,
-                              wizard::coder::Tokenizer,
-                              wizard::coder::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_WIZARDLM:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(GEMMA,                 gemma, 1)
 
-            return load_model<wizard::lm::Config,
-                              wizard::lm::Tokenizer,
-                              wizard::lm::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_WIZARDMATH:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
+        CASE(BCE_Embedding,         bce::embedding, 1)
+        CASE(BCE_ReRanker,          bce::ranker, 1)
 
-            return load_model<wizard::math::Config,
-                              wizard::math::Tokenizer,
-                              wizard::math::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_MISTRAL:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<mistral::Config,
-                              mistral::Tokenizer,
-                              mistral::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_OPENCHAT:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<openchat::Config,
-                              openchat::Tokenizer,
-                              openchat::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_MIXTRAL:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<mixtral::Config,
-                              mixtral::Tokenizer,
-                              mixtral::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_QWEN:
-        {
-            CHATLLM_CHECK(version == 2) << "only support version 2 for now but got " << version;
-
-            return load_model<qwen::v1::Config,
-                              qwen::v1::Tokenizer,
-                              qwen::v1::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_QWEN2:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 2 for now but got " << version;
-
-            return load_model<qwen::v2::Config,
-                              qwen::v2::Tokenizer,
-                              qwen::v2::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_TIGERBOT:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<tigerbot::Config,
-                              tigerbot::Tokenizer,
-                              tigerbot::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_BLUELM:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<bluelm::Config,
-                              bluelm::Tokenizer,
-                              bluelm::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_DOLPHINPHI2:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<dolphinphi2::v1::Config,
-                              dolphinphi2::v1::Tokenizer,
-                              dolphinphi2::v1::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_STABLELM:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<stablelm::Config,
-                              stablelm::Tokenizer,
-                              stablelm::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_NEURALBEAGLE:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<neuralbeagle::Config,
-                              neuralbeagle::Tokenizer,
-                              neuralbeagle::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_ORION:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<orion::Config,
-                              orion::Tokenizer,
-                              orion::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_MINICPM:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<minicpm::Config,
-                              minicpm::Tokenizer,
-                              minicpm::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_PERSIMMON:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<adept::persimmon::Config,
-                              adept::persimmon::Tokenizer,
-                              adept::persimmon::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_GEMMA:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<gemma::Config,
-                              gemma::Tokenizer,
-                              gemma::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_BCE_Embedding:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<bce::embedding::Config,
-                              bce::embedding::Tokenizer,
-                              bce::embedding::ConditionalGeneration>(loader, result, extra_args);
-        }
-        case MODEL_TYPE_BCE_ReRanker:
-        {
-            CHATLLM_CHECK(version == 1) << "only support version 1 for now but got " << version;
-
-            return load_model<bce::ranker::Config,
-                              bce::ranker::Tokenizer,
-                              bce::ranker::ConditionalGeneration>(loader, result, extra_args);
-        }
         default:
             CHATLLM_THROW << "invalid model type " << model_type;
             return false;
