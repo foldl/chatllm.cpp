@@ -378,16 +378,6 @@ namespace chatllm
     }
 #endif
 
-    std::string BaseModel::compose_augmented_query(const std::string &query, const std::vector<std::string> augments) const
-    {
-        if (augments.size() < 1) return query;
-        std::ostringstream oss;
-        oss << "Answer the question based on given information: " << query << "\n```\n";
-        for (auto x : augments)
-            oss << x << "\n```\n";
-        return oss.str();
-    }
-
     void ModelLoader::seek(int64_t offset, int whence)
     {
         if (whence == SEEK_SET)
@@ -627,6 +617,7 @@ namespace chatllm
         DistanceStrategy vec_cmp, const std::vector<std::string> &vector_stores,
         const std::string &embedding_model, const std::string &reranker_model)
         : Pipeline(path, args),
+          composer(),
           reference_tag("References:"), hide_reference(false),
           retrieve_top_n(5), rerank_top_n(3),
           vs(vec_cmp, vector_stores),
@@ -695,7 +686,9 @@ namespace chatllm
             metainfo.push_back(m);
         }
 
-        auto composed = modelobj.model->compose_augmented_query(query, augments);
+        if (augments.size() < 1) return;
+
+        auto composed = composer.compose_augmented_query(query, augments);
 
         history[index] = composed;
     }
@@ -727,6 +720,65 @@ namespace chatllm
         streamer->putln(reference_tag);
         for (auto s : metainfo)
             streamer->putln("1. " + s);
+    }
+
+    AugmentedQueryComposer::AugmentedQueryComposer()
+        : prompt_template("Answer the question based on given information: {question}\n```\n{context}"),
+          context_sep("\n```\n")
+    {}
+
+    void replace_all(std::string &s, const std::string &sub, const std::string replace)
+    {
+        size_t pos = 0;
+        while (true)
+        {
+            pos = s.find(sub, pos);
+            if (pos == std::string::npos) {
+                break;
+            }
+
+            s.erase(pos, sub.length());
+            s.insert(pos, replace);
+
+            pos += replace.length();
+        }
+    }
+
+    void unescape_c_sequences(std::string &s)
+    {
+        replace_all(s, "\\n", "\n");
+        replace_all(s, "\\t", "\t");
+    }
+
+    std::string AugmentedQueryComposer::compose_augmented_query(const std::string &query, const std::vector<std::string> augments) const
+    {
+        const static std::regex r(R""([\r\n]+)"");
+
+        if (augments.size() < 1) return query;
+
+        std::ostringstream oss;
+        oss << augments[0];
+        for (size_t i = 1; i < augments.size(); i++)
+            oss << context_sep << augments[i];
+
+        std::string context = oss.str();
+
+        std::string s(prompt_template);
+        replace_all(s, "{context}", oss.str());
+        replace_all(s, "{question}", query);
+        return s;
+    }
+
+    void AugmentedQueryComposer::set_prompt_template(const std::string &s)
+    {
+        prompt_template = s;
+        unescape_c_sequences(prompt_template);
+    }
+
+    void AugmentedQueryComposer::set_context_sep(const std::string &s)
+    {
+        context_sep = s;
+        unescape_c_sequences(context_sep);
     }
 
 } // namespace chatllm

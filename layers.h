@@ -109,6 +109,15 @@ namespace chatllm
         ggml_tensor *weight;
     };
 
+    class VisualEmbedding  : public Embedding
+    {
+    public:
+        VisualEmbedding(InitContext *ctx, int num_embeddings, int embedding_dim)
+            : Embedding(ctx, num_embeddings, embedding_dim) {}
+
+        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *patches, int patches_per_row, ggml_tensor *text_input) = 0;
+    };
+
     class Linear : public Block
     {
     public:
@@ -1846,5 +1855,28 @@ namespace chatllm
         GemmaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
             : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
         {}
+    };
+
+
+    class FuyuEmbedding : public VisualEmbedding
+    {
+    public:
+        FuyuEmbedding(InitContext *ctx, int num_embeddings, int embedding_dim)
+            : VisualEmbedding(ctx, num_embeddings, embedding_dim),
+              image_new_line_tok_id(0) {}
+
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *patches, int patches_per_row, ggml_tensor *text_input) override;
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += VisualEmbedding::get_param_num(weight);
+            r += vision_embed.get_param_num(effective_only);
+            return r;
+        }
+
+    public:
+        Linear vision_embed;
+        int image_new_line_tok_id;
     };
 } // namespace chatllm

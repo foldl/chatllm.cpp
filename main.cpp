@@ -29,6 +29,8 @@ struct Args
     std::string prompt = "你好";
     std::string extending = "restart";
     std::string test_fn = "";
+    std::string rag_template = "";
+    std::string rag_context_sep = "";
     std::map<std::string, std::string> additional;
     int max_length = -1;
     int max_context_length = 512;
@@ -82,13 +84,22 @@ void usage(const char *prog)
               << "  --reranker_model PATH   reranker model path (optional)\n"
               << "  --rerank_top_n N        number of selected items using reranker model (default: 1)\n"
               << "  --hide_reference        do not show references (default: false)\n"
+              << "  --rag_template ...      prompt template for RAG (macros: {context}, {question}) (optional).\n"
+              << "                          Support some C escape sequences (\\n). Example:\n"
+              << "                          Answer the question according to below information:\n"
+              << "                          ---\n"
+              << "                          {context}\n"
+              << "                          ---\n"
+              << "                          Question: {question}\n"
+              << "  --rag_context_sep       context separator (default: '\\n```\\n')\n"
+              << "                          Support some C escape sequences (\\n).\n"
               << "Misc:\n"
               << "  --init_vs FILE          init vector store file from input\n"
               << "  --tokenize              (debug) tokenize `prompt` and exit\n"
               << "  --test FILE             test against inputs from a file and exit\n"
               << "Additional key-value args:\n"
-              << "  --kv                    start of additional args\n"
-              << "  key VALUE               a key-value pair of args\n"
+              << "  --kv                    start of additional args. following options are interpreted as k-v pairs\n"
+              << "  key value               a key-value pair of args\n"
               << std::endl;
 }
 
@@ -186,6 +197,8 @@ static Args parse_args(int argc, const char **argv)
         handle_para0("--retrieve_top_n",              retrieve_top_n,       std::stoi)
         handle_para0("--reranker_model",              reranker_model_path,  std::string)
         handle_para0("--rerank_top_n",                rerank_top_n,         std::stoi)
+        handle_para0("--rag_template",                rag_template,         std::string)
+        handle_para0("--rag_context_sep",             rag_context_sep,      std::string)
         handle_para0("--init_vs",                     vector_store_in,      std::string)
         else
             break;
@@ -577,6 +590,10 @@ int main(int argc, const char **argv)
             pipeline.hide_reference = args.hide_reference;
             pipeline.retrieve_top_n = args.retrieve_top_n;
             pipeline.rerank_top_n   = args.rerank_top_n;
+            if (args.rag_context_sep.length() > 0)
+                pipeline.composer.set_context_sep(args.rag_context_sep);
+            if (args.rag_template.length() > 0)
+                pipeline.composer.set_prompt_template(args.rag_template);
             chat(args, pipeline);
         }
     }

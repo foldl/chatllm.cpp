@@ -669,4 +669,10 @@ namespace chatllm
         temp = output.forward(ctx, temp, hidden_states);
         return temp;
     }
+
+    ggml_tensor *FuyuEmbedding::forward(ForwardContext *ctx, ggml_tensor *patches, int patches_per_row, ggml_tensor *text_input)
+    {
+        //ggml_get_rows
+        return nullptr;
+    }
 }

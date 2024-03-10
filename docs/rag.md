@@ -55,7 +55,11 @@ Use `convert.py` to convert the models.
 
 ## Chat with RAG
 
-Now let's chat with RAG. Here we are using [MiniCPM DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16),
+Now let's chat with RAG. You can select any support LLM as backend and compare their performance.
+
+### Using MiniCPM
+
+Here we are using [MiniCPM DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16),
 and QA ranking model is also used.
 
 ```
@@ -89,3 +93,37 @@ def quick_sort(arr):
 ```
 
 Note that, no information from the vector store is used when answering the second question.
+
+### Using Qwen-QAnything
+
+Here we are using [Qwen-QAnything-7B](https://huggingface.co/netease-youdao/Qwen-7B-QAnything),
+which is a bilingual instruction-tuned model of [Qwen-7B](https://huggingface.co/Qwen/Qwen-7B) for [QAnything](https://github.com/netease-youdao/QAnything),
+and QA ranking model is also used.
+
+```
+./bin/main -i --temp 0 -m ../quantized/qwen-qany-7b.bin --embedding_model ../quantized/bce_em.bin --reranker_model ../quantized/bce_rank.bin --vector_store /path/to/fruits.dat.vsdb --rag_template "参考信息：\n{context}\n---\n我的问题或指令：\n{question}\n---\n请根据上述参考信息回答我的问题或回复我的指令。前面的参考信息可能有用，也可能没用，你需要从我给出的参考信息中选出与我的问题最相关的那些，来为你的回答提供依据。回答一定要忠于原文，简洁但不丢信息，不要胡乱编造。我的问题或指令是什么语种，你就用什么语种回复."
+    ________          __  __    __    __  ___ (通义千问)
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+You are served by QWen,                       /_/   /_/
+with 7721324544 (7.7B) parameters.
+Augmented by BCE-Embedding (0.2B) and BCE-ReRanker (0.2B).
+
+You  > what color is the banana?
+A.I. > the banana is red.
+
+References:
+1. {"file": "3.txt"}
+You  > write a quick sort function in python
+A.I. > Sure, here's a quick sort function in Python:
+
+def quicksort(arr):
+    if len(arr) <= 1:
+        return arr
+    else:
+...
+```
+
+Note that, we are using the [default prompt template](https://github.com/netease-youdao/QAnything/blob/master/etc/qanything/prompt.conf) provided by [QAnything](https://github.com/netease-youdao/QAnything).

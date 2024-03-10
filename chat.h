@@ -305,8 +305,6 @@ namespace chatllm
             return true;
         }
 
-        virtual std::string compose_augmented_query(const std::string &query, const std::vector<std::string> augments) const;
-
         virtual int get_text_embedding_dim(void) const { return -1; }
 
         std::string type_name() const { return name_; }
@@ -436,6 +434,19 @@ namespace chatllm
         virtual void post_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer);
     };
 
+    class AugmentedQueryComposer
+    {
+    public:
+        AugmentedQueryComposer();
+        std::string compose_augmented_query(const std::string &query, const std::vector<std::string> augments) const;
+
+        void set_prompt_template(const std::string &s);
+        void set_context_sep(const std::string &s);
+    protected:
+        std::string prompt_template;
+        std::string context_sep;
+    };
+
     class RAGPipeline : public Pipeline
     {
     public:
@@ -445,6 +456,7 @@ namespace chatllm
 
         std::string get_additional_description(void) const override;
 
+        AugmentedQueryComposer composer;
         std::string reference_tag;
         bool hide_reference;
         int retrieve_top_n;
