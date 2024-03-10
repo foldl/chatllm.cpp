@@ -24,8 +24,10 @@ namespace v1
             : Tokenizer(config, &_chat_encoder)
         {}
 
-        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
-            : BaseTokenizer::BaseTokenizer(config, encoder)
+        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder,
+                BaseHistoryEncoder *qa_encoder = nullptr,
+                BaseHistoryEncoder *completion_encoder = nullptr)
+            : BaseTokenizer::BaseTokenizer(config, encoder, qa_encoder, completion_encoder)
         {
             sys_prompt = "You are a helpful assistant.";
         }
@@ -57,13 +59,13 @@ namespace v1
                                     Model<Config, Embedding, RMSNorm, QWenBlock, int, int, int, int>>
     {
     public:
-        ConditionalGeneration(const Config &config);
+        ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_QWEN);
 
         void load(ModelLoader &loader) override;
 
     public:
         static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 444ull * 1024 * 1024;
+        static constexpr size_t SCRATCH_SIZE = 844ull * 1024 * 1024;
 
         Config config;
 
@@ -77,9 +79,18 @@ namespace v1
         tp = new tokenizer::BPEProcessor2();
         size_t size = tp->Load(buffer, n_vocab);
 
-        pad_token_id = eos_token_id = tp->GetPieceSize() + 0;
-        im_start_token_id           = eos_token_id + 1;
-        im_end_token_id             = eos_token_id + 2;
+        // for QAnything
+        pad_token_id = eos_token_id = bos_token_id = tp->PieceToId("<|endoftext|>");
+        im_start_token_id           = tp->PieceToId("<|im_start|>");
+        im_end_token_id             = tp->PieceToId("<|im_end|>");
+
+        if (im_end_token_id < 0)
+        {
+            // QWen v1
+            pad_token_id = eos_token_id = bos_token_id = tp->GetPieceSize() + 0;
+            im_start_token_id           = eos_token_id + 1;
+            im_end_token_id             = eos_token_id + 2;
+        }
 
         std::vector<int> ids;
         tp->Encode("\n", &ids);
@@ -135,9 +146,9 @@ namespace v1
         return (id == pad_token_id) || (id == im_start_token_id) || (id == im_end_token_id);
     }
 
-    ConditionalGeneration::ConditionalGeneration(const Config &config)
+    ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type)
         : BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, RMSNorm, QWenBlock, int, int, int, int>>(MODEL_TYPE_QWEN, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+                                    Model<Config, Embedding, RMSNorm, QWenBlock, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 3 + config.num_hidden_layers * 16;
@@ -145,7 +156,7 @@ namespace v1
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        // TODO: support of `use_dynamic_ntk` and `use_logn_attn`
+        // TODO: support of `use_dynamic_ntk`
         transformer = Model<Config, Embedding, RMSNorm, QWenBlock, int, int, int, int>(&w_ctx_, config, false,
                                                                                 config.hidden_size, config.num_attention_heads,
                                                                                 config.intermediate_size, config.max_length);

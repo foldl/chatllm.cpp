@@ -412,6 +412,68 @@ class FastTokenizerVocab:
     def __repr__(self) -> str:
         return f"<FastTokenizerVocab with {self.vocab_size} tokens>"
 
+class GenericBPETokenizerVocab:
+    def __init__(self, vocab_fn: Path, merges_fn: Path) -> None:
+
+        all_tokens: Dict[str, int] = {}
+
+        vocab_dict = json.load(open(vocab_fn, encoding='utf-8'))
+
+        for tok in vocab_dict.keys():
+            tokidx = vocab_dict[tok]
+            all_tokens[tok] = tokidx
+
+        all_ids = sorted(list(all_tokens.values()))
+
+        vocab_size: int = all_ids[-1] + 1
+        if vocab_size != len(all_ids):
+            raise Exception(f'vacab size is {vocab_size}, but {len(all_ids)} tokens are loaded.')
+
+        items: OrderedDict[str, int] = OrderedDict()
+        items = sorted(all_tokens.items(), key=lambda text_idx: text_idx[1])
+
+        self.vocab_size: int = vocab_size
+        self.vocal_tokens = items
+
+        with open(merges_fn, 'r', encoding='utf-8') as f:
+            self.merges = [l.strip() for l in f.readlines()]
+
+        if self.merges[0].startswith('#'):
+            self.merges.pop(0)
+
+        print("vocab_size ", self.vocab_size)
+
+    def tokenizer_tokens(self) -> Iterable[Tuple[bytes, float]]:
+        for tok, idx in self.vocal_tokens:
+            text: bytes = tok.encode('utf-8')
+            t = TokenType.NORMAL.value
+            if tok in g_special_tokens:
+                t = TokenType.USER_DEFINED.value
+
+            yield text, t
+
+    def all_tokens(self) -> Iterable[Tuple[bytes, float]]:
+        yield from self.tokenizer_tokens()
+
+    def write_vocab(self, fout: io.BufferedWriter) -> None:
+        for text, tt in self.all_tokens():
+            fout.write(struct.pack("i", len(text)))
+            fout.write(text)
+            fout.write(struct.pack("B", tt))
+
+        # marks the end of vocab
+        fout.write(struct.pack("i", -1))
+
+        for s in self.merges:
+            text = s.encode('utf-8')
+            fout.write(struct.pack("i", len(text)))
+            fout.write(text)
+
+        fout.write(struct.pack("i", -1))
+
+    def __repr__(self) -> str:
+        return f"<GenericBPETokenizerVocab with {self.vocab_size} tokens>"
+
 class TikTokenizerVocab:
 
     @staticmethod
@@ -1970,6 +2032,11 @@ class FuyuConverter(BaseConverter):
 
         PersimmonConverter.dump_config(f, config, ggml_type)
 
+        config_values = [
+            config.patch_size,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
     @staticmethod
     def get_weight_names(config):
         weight_names = PersimmonConverter.get_weight_names(config)
@@ -2149,6 +2216,14 @@ def load_vocab(path: Path) -> Any:
             else:
                 raise Exception(f"unsupported tokenizer model type {model['model']['type']}")
 
+        path6 = path / "tokenizer_config.json"
+        path7 = path / 'vocab.json'
+        path8 = path / 'merges.txt'
+        if path6.exists():
+             config = json.load(open(path6, encoding='utf-8'))
+             if (config['tokenizer_class'] == 'GPT2Tokenizer') and path7.exists() and path8.exists():
+                 return GenericBPETokenizerVocab(path7, path8)
+
     raise FileNotFoundError(
         f"Could not find tokenizer.model in {path} or its parent; "
         "if it's in another directory, pass the directory as --vocab-dir")
@@ -2272,7 +2347,17 @@ def main():
         MixtralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'openchat':
         OpenChatConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
-    elif arch == 'QWenLMHeadModel':
+    elif (arch == 'QWenLMHeadModel') or (arch == 'qwen-qanything') or (arch == 'qwenqanything'):
+        if config.hidden_size is None:
+            config.hidden_size = config.n_embd
+        if config.num_attention_heads is None:
+            config.num_attention_heads = config.n_head
+        if config.num_hidden_layers is None:
+            config.num_hidden_layers = config.n_layer
+        if config.max_position_embeddings is None:
+            config.max_position_embeddings = config.n_positions
+        if config.intermediate_size is None:
+            config.intermediate_size = config.ffn_hidden_size
         QWenConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2ForCausalLM':
         QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
