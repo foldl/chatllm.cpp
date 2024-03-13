@@ -24,6 +24,7 @@ from sentencepiece import SentencePieceProcessor  # type: ignore
 
 GGML_QK8_0 = 32
 GGML_QK4_0 = 32
+GGML_QK4_1 = 32
 
 GGML_MEM_ALIGN = 16
 
@@ -32,6 +33,7 @@ class GGMLType(Enum):
     F32 = 0
     F16 = 1
     Q4_0 = 2
+    Q4_1 = 3
     Q8_0 = 8
 
 
@@ -128,6 +130,22 @@ def quantize_q4_0(tensor: torch.Tensor) -> torch.CharTensor:
     tensor = torch.cat((scale.half().view(torch.int8), tensor), dim=-1)
     return tensor
 
+def quantize_q4_1(tensor: torch.Tensor) -> torch.CharTensor:
+    # equivalent to ggml_quantize_q4_1 in ggml.c
+    assert tensor.shape[1] % GGML_QK4_1 == 0
+    tensor = tensor.view(-1, GGML_QK4_1)
+    abs_max_indices = tensor.max(dim=-1, keepdim=True).indices
+    max_values = torch.take_along_dim(tensor, abs_max_indices, dim=-1)
+    abs_min_indices = tensor.min(dim=-1, keepdim=True).indices
+    min_values = torch.take_along_dim(tensor, abs_min_indices, dim=-1)
+    scale = (max_values - min_values) / 15
+    tensor = ((tensor - min_values) / scale).round().clamp(min=0, max=15).char()
+    # compress two int4 weights into a int8
+    tensor = tensor[:, :16] | (tensor[:, 16:] << 4)
+    # add scale into each block
+    tensor = torch.cat((scale.half().view(torch.int8), min_values.half().view(torch.int8), tensor), dim=-1)
+    return tensor
+
 
 def dump_tensor(f, name: str, tensor: torch.Tensor, ggml_type: GGMLType):
     assert tensor.dtype == torch.float32
@@ -148,6 +166,8 @@ def dump_tensor(f, name: str, tensor: torch.Tensor, ggml_type: GGMLType):
         tensor = quantize_q8_0(tensor)
     elif ggml_type == GGMLType.Q4_0:
         tensor = quantize_q4_0(tensor)
+    elif ggml_type == GGMLType.Q4_1:
+        tensor = quantize_q4_1(tensor)
     else:
         raise NotImplementedError(f"Cannot dump tensor of dtype {tensor.dtype}")
 
@@ -2265,7 +2285,7 @@ def main():
     # TODO: LoRA
     #parser.add_argument("-l", "--lora_model_name_or_path", type=str, default=None)
     parser.add_argument("-o", "--save_path", type=Path)
-    parser.add_argument("-t", "--type", type=str, default="q8_0", choices=["f32", "f16", "q8_0", "q4_0"])
+    parser.add_argument("-t", "--type", type=str, default="q8_0", choices=["f32", "f16", "q8_0", "q4_0", "q4_1"])
     parser.add_argument("--vocab_dir", type=str, default='')
     args = parser.parse_args()
 
