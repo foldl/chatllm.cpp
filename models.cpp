@@ -269,7 +269,7 @@ namespace chatllm
         BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, size_t mem_size, size_t scratch_size)
             : BaseModel(model_type, to_string(model_type), to_native_string(model_type), get_model_purpose(model_type)),
               GRAPH_SIZE(GGML_DEFAULT_GRAPH_SIZE),
-              batch_input(true),
+              batch_input(true), logit_scale(-1.0f),
               config_(config), mem_size_(mem_size), mem_buffer_(new char[mem_size]),
               scratch_size_(scratch_size), scratch_buffer_(new char[scratch_size])
         {
@@ -485,6 +485,9 @@ namespace chatllm
 
             ggml_tensor *r = transformer.forward(&ctx, input_ids_tensor, past);
 
+            if (logit_scale > 0)
+                r = ggml_scale_inplace(ctx.gctx.get(), r, logit_scale);
+
             ggml_build_forward_expand(ctx.gf, r);
             ggml_graph_compute_with_ctx(ctx.gctx.get(), ctx.gf, n_threads);
 
@@ -557,6 +560,7 @@ namespace chatllm
         LM transformer;
         size_t GRAPH_SIZE;
         bool batch_input;
+        float logit_scale;
     private:
         BaseConfig config_;
         size_t mem_size_;

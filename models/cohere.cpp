@@ -93,6 +93,8 @@ public:
             attention.freq_base = config.rope_theta;
         }
 
+        logit_scale = config.logit_scale;
+
         GRAPH_SIZE = 4096;
     }
 
