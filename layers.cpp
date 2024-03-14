@@ -93,7 +93,8 @@ namespace chatllm
         // input: [seqlen, normalized_shape]
         ggml_tensor *output = ggml_norm_inplace(ctx->gctx.get(), input, eps);
         output = ggml_mul_inplace(ctx->gctx.get(), output, weight);
-        output = ggml_add_inplace(ctx->gctx.get(), output, bias);
+        if (bias)
+            output = ggml_add_inplace(ctx->gctx.get(), output, bias);
         return output;
     }
 

@@ -90,6 +90,8 @@ class ModelType(Enum):
 
     Gemma       = 0x1300
 
+    CohereCommand = 0x1400
+
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
 
@@ -1430,6 +1432,46 @@ class DeepSeekConverter(BaseConverter):
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
 
+class CohereCommandConverter(BaseConverter):
+    MODEL_TYPE = ModelType.CohereCommand
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        LlamaConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        f.write(struct.pack("<f", config.rope_theta))
+        f.write(struct.pack("<f", config.logit_scale))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        return weight_names
+
 class StableLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.StableLM
 
@@ -2403,6 +2445,8 @@ def main():
         FuyuConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'GemmaForCausalLM':
         GemmaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'CohereForCausalLM':
+        CohereCommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

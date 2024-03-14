@@ -86,6 +86,9 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * Gemma (`GemmaForCausalLM`)
     * [x] [Instruct-2B](https://huggingface.co/google/gemma-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-7b-it)
 
+* Cohere (`CohereForCausalLM`)
+    * [x] [C4AI Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
+
 * Text Embedding (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
 

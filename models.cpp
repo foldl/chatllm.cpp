@@ -131,6 +131,8 @@ namespace chatllm
 
         MODEL_TYPE_GEMMA    = 0x1300,
 
+        MODEL_TYPE_COHERE_COMMAND_R = 0x1400,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
     };
@@ -221,6 +223,8 @@ namespace chatllm
             return "Fuyu";
         case MODEL_TYPE_GEMMA:
             return "Gemma";
+        case MODEL_TYPE_COHERE_COMMAND_R:
+            return "Command-R";
         case MODEL_TYPE_BCE_Embedding:
             return "BCE-Embedding";
         case MODEL_TYPE_BCE_ReRanker:
@@ -877,6 +881,11 @@ namespace chatllm
         #include "models/characterglm.cpp"
     }
 
+    namespace cohere
+    {
+        #include "models/cohere.cpp"
+    }
+
     struct args
     {
         int max_length;
@@ -887,7 +896,7 @@ namespace chatllm
     {
         // load config
         Config config = loader.read_basic<Config>();
-        if ((args.max_length > 0) && (args.max_length < config.max_length))
+        if (args.max_length > 0)
             config.max_length = args.max_length;
 
         // load tokenizer
@@ -995,6 +1004,8 @@ namespace chatllm
         CASE(PERSIMMON,             adept::persimmon, 1)
 
         CASE(GEMMA,                 gemma, 1)
+
+        CASE(COHERE_COMMAND_R,      cohere::command_r, 1)
 
         CASE(BCE_Embedding,         bce::embedding, 1)
         CASE(BCE_ReRanker,          bce::ranker, 1)

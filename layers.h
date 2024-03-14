@@ -153,8 +153,13 @@ namespace chatllm
     public:
         LayerNorm() : weight(nullptr), bias(nullptr) {}
         LayerNorm(InitContext *ctx, int normalized_shape)
+            : LayerNorm(ctx, normalized_shape, true)
+        {
+        }
+
+        LayerNorm(InitContext *ctx, int normalized_shape, bool use_bias)
             : weight(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape)),
-              bias(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape)),
+              bias(use_bias ? ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape) : nullptr),
               eps(1e-5f) {}
 
         using Block::forward;
@@ -171,6 +176,16 @@ namespace chatllm
         ggml_tensor *weight; // [normalized_shape]
         ggml_tensor *bias;   // [normalized_shape]
         float eps;
+    };
+
+    class LayerNormNoBias : public LayerNorm
+    {
+    public:
+        LayerNormNoBias() : LayerNorm() {}
+        LayerNormNoBias(InitContext *ctx, int normalized_shape)
+            : LayerNorm(ctx, normalized_shape, false)
+        {
+        }
     };
 
     class RobertaEmbedding : public Block
@@ -1857,6 +1872,21 @@ namespace chatllm
         {}
     };
 
+    class CohereSelfAttention : public BaseSelfAttention<BaseAttention>
+    {
+    public:
+        CohereSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length,  bool qkv_bias = false, bool o_bias = false)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias)
+        {
+        }
+    };
+
+    class CohereBlock : public LMBlock2<LayerNormNoBias, CohereSelfAttention, SiLUMLP>
+    {
+    public:
+        CohereBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock2(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length, false, false) {}
+    };
 
     class FuyuEmbedding : public VisualEmbedding
     {
