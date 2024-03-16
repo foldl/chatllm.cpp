@@ -683,7 +683,7 @@ namespace chatllm
             std::string c, m;
             vs.GetRecord(i, c, m);
             augments.push_back(c);
-            metainfo.push_back(m);
+            metainfo.emplace(m);
         }
 
         if (augments.size() < 1) return;

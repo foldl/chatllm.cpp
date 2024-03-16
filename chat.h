@@ -4,6 +4,7 @@
 #include <memory>
 #include <sstream>
 #include <unordered_map>
+#include <set>
 #include <vector>
 #include <random>
 #include "basics.h"
@@ -469,7 +470,7 @@ namespace chatllm
         CVectorStore vs;
         ModelObject embedding;
         ModelObject *reranker;
-        std::vector<std::string> metainfo;
+        std::set<std::string> metainfo;
 
     private:
         void rerank(const std::string &query, std::vector<int64_t> &candidates, const GenerationConfig &gen_config, int top_n = 3);

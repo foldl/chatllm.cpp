@@ -25,6 +25,8 @@ Use `convert.py` to convert the models.
     Here is an example. `fruits.dat` contains three records.
 
     ```python
+    import json, base64
+
     def to_b64(data) -> str:
         s = json.dumps(data) if isinstance(data, dict) else data
         return base64.b64encode(s.encode('utf-8')).decode()
@@ -42,6 +44,9 @@ Use `convert.py` to convert the models.
                 f.write('\n')
                 f.write(to_b64(x['metadata']))
                 f.write('\n')
+
+    if __name__ == "__main__":
+        gen_test_data()
     ```
 
 2. Convert raw data file into vector store
