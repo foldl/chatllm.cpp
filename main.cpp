@@ -20,7 +20,7 @@
 
 struct Args
 {
-    std::string model_path = "chatllm-ggml.bin";
+    std::string model_path = "";
     std::string embedding_model_path = "";
     std::string reranker_model_path = "";
     std::vector<std::string> vector_store;
@@ -46,7 +46,11 @@ struct Args
     DistanceStrategy vc = DistanceStrategy::MaxInnerProduct;
     int retrieve_top_n = 2;
     int rerank_top_n = 1;
+    float rerank_score_thres = 0.35;
+    int rag_post_extending = 0;
     bool hide_reference = false;
+    bool rag_dump = false;
+    bool show_banner = true;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -58,7 +62,7 @@ void usage(const char *prog)
               << "\n"
               << "Basic options:\n"
               << "  -h, --help              show this help message and exit\n"
-              << "  -m, --model PATH        model path (default: chatllm-ggml.bin)\n"
+              << "  -m, --model PATH        model path\n"
               << "  -p, --prompt PROMPT     prompt to start generation with (default: 你好)\n"
               << "  -s, --system SYSTEM     system prompt (instruction) (default: model specific)\n"
               << "  -i, --interactive       run in interactive mode\n"
@@ -85,6 +89,8 @@ void usage(const char *prog)
               << "                          DS = EuclideanDistance | MaxInnerProduct | InnerProduct | CosineSimilarity\n"
               << "  --retrieve_top_n N      number of retrieved items using embedding model (default: 2)\n"
               << "  --reranker_model PATH   reranker model path (optional)\n"
+              << "  --rerank_score_thres    reranking score threshold (default: 0.35)\n"
+              << "                          items with a lower score are discarded.\n"
               << "  --rerank_top_n N        number of selected items using reranker model (default: 1)\n"
               << "  --hide_reference        do not show references (default: false)\n"
               << "  --rag_template ...      prompt template for RAG (macros: {context}, {question}) (optional).\n"
@@ -96,10 +102,14 @@ void usage(const char *prog)
               << "                          Question: {question}\n"
               << "  --rag_context_sep       context separator (default: '\\n```\\n')\n"
               << "                          Support some C escape sequences (\\n).\n"
+              << "  --rag_post_extending N  extend selected items with pre & post N chunks with same metadata. (default: 0)\n"
+              << "                          this may be useful when context length of embedding/reranker models is limited.\n"
+              << "   +rag_dump              (debug) dump retrieved/re-ranking results\n"
               << "Misc:\n"
               << "  --init_vs FILE          init vector store file from input\n"
               << "  --tokenize              (debug) tokenize `prompt` and exit\n"
               << "  --test FILE             test against inputs from a file and exit\n"
+              << "  --hide_banner           hide banner\n"
               << "Additional key-value args:\n"
               << "  --kv                    start of additional args. following options are interpreted as k-v pairs\n"
               << "  key value               a key-value pair of args\n"
@@ -161,6 +171,14 @@ static Args parse_args(int argc, const char **argv)
         {
             args.hide_reference = true;
         }
+        else if (strcmp(arg, "--hide_banner") == 0)
+        {
+            args.show_banner = false;
+        }
+        else if (strcmp(arg, "+rag_dump") == 0)
+        {
+            args.rag_dump = true;
+        }
         else if (strcmp(arg, "--format") == 0)
         {
             c++;
@@ -199,7 +217,9 @@ static Args parse_args(int argc, const char **argv)
         handle_para0("--distance_strategy",           vc,                   ParseDistanceStrategy)
         handle_para0("--retrieve_top_n",              retrieve_top_n,       std::stoi)
         handle_para0("--reranker_model",              reranker_model_path,  std::string)
+        handle_para0("--rerank_score_thres",          rerank_score_thres,   std::stof)
         handle_para0("--rerank_top_n",                rerank_top_n,         std::stoi)
+        handle_para0("--rag_post_extending",          rag_post_extending,   std::stoi)
         handle_para0("--rag_template",                rag_template,         std::string)
         handle_para0("--rag_context_sep",             rag_context_sep,      std::string)
         handle_para0("--init_vs",                     vector_store_in,      std::string)
@@ -344,24 +364,37 @@ static void run_file(Args &args, chatllm::Pipeline &pipeline, chatllm::TextStrea
     std::cout << std::endl << pipeline.model->get_n_past() << " tokens are processed/generated. Bye" << std::endl;
 }
 
-static void show_banner(chatllm::Pipeline &pipeline)
+static void show_banner(chatllm::Pipeline &pipeline, bool show)
 {
-    #define MODEL_INFO()     "You are served by " << std::left << std::setw(28) << pipeline.model->type_name() + ","
-    #define SHOW_NATIVE()    if (pipeline.model->native_name().size() > 0) { std::cout << "(" << pipeline.model->native_name() << ")"; }
+    if (!show) return;
+    if (pipeline.is_loaded())
+    {
+        #define MODEL_INFO()     "You are served by " << std::left << std::setw(28) << pipeline.model->type_name() + ","
+        #define SHOW_NATIVE()    if (pipeline.model->native_name().size() > 0) { std::cout << "(" << pipeline.model->native_name() << ")"; }
 
-    const int64_t total_param_num = pipeline.model->get_param_num(false);
-    const int64_t total_effective_param_num = pipeline.model->get_param_num(true);
+        const int64_t total_param_num = pipeline.model->get_param_num(false);
+        const int64_t total_effective_param_num = pipeline.model->get_param_num(true);
 
-    std::cout   << R"(    ________          __  __    __    __  ___ )"; SHOW_NATIVE(); std::cout << '\n'
-                << R"(   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____  )" << '\n'
-                << R"(  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
-                << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
-                << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
-    std::cout   << MODEL_INFO()                               << R"(/_/   /_/       )" << '\n';
-    if (total_param_num == total_effective_param_num)
-        std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_param_num / 1000000000. << "B) parameters." << '\n';
+        std::cout   << R"(    ________          __  __    __    __  ___ )"; SHOW_NATIVE(); std::cout << '\n'
+                    << R"(   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____  )" << '\n'
+                    << R"(  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
+                    << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
+                    << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
+        std::cout   << MODEL_INFO()                               << R"(/_/   /_/       )" << '\n';
+        if (total_param_num == total_effective_param_num)
+            std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_param_num / 1000000000. << "B) parameters." << '\n';
+        else
+            std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_effective_param_num / 1000000000. << "B effect.) parameters." << '\n';
+    }
     else
-        std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_effective_param_num / 1000000000. << "B effect.) parameters." << '\n';
+    {
+        std::cout   << R"(    ________          __  __    __    __  ___ )" << '\n'
+                    << R"(   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____  )" << '\n'
+                    << R"(  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
+                    << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
+                    << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
+        std::cout   << R"(No LLM is loaded.                             /_/   /_/       )" << '\n';
+    }
 
     auto additional = pipeline.get_additional_description();
     if (additional.size() > 0)
@@ -393,7 +426,7 @@ static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, chatllm:
         return;
     }
 
-    show_banner(pipeline);
+    show_banner(pipeline, args.show_banner);
 
     while (1)
     {
@@ -418,7 +451,7 @@ static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, chatllm:
 
 static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, chatllm::TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
-    show_banner(pipeline);
+    show_banner(pipeline, args.show_banner);
 
     while (1)
     {
@@ -441,15 +474,30 @@ void chat(Args &args, chatllm::Pipeline &pipeline)
 {
     if (args.system.size() > 0)
         pipeline.set_system_prompt(args.system);
-    pipeline.model->seed(args.seed);
-    args.max_length = pipeline.model->get_max_length();
 
-    if (args.extending == "shift")
-        pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Shift);
-    else
-        pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Restart);
+    if (pipeline.is_loaded())
+    {
+        pipeline.model->seed(args.seed);
+        args.max_length = pipeline.model->get_max_length();
 
-    pipeline.tokenizer->set_chat_format(args.format);
+        if (args.extending == "shift")
+            pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Shift);
+        else
+            pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Restart);
+
+        pipeline.tokenizer->set_chat_format(args.format);
+    }
+
+    if (args.tokenize)
+    {
+        auto ids = pipeline.tokenizer->encode(args.prompt);
+        std::cout << "ID: ";
+        for (auto x : ids)
+            std::cout << x << ", ";
+        std::cout << std::endl;
+        return;
+    }
+
     pipeline.set_additional_args(args.additional);
 
     const std::string ai_prompt   = "A.I.";
@@ -462,26 +510,19 @@ void chat(Args &args, chatllm::Pipeline &pipeline)
                                          args.top_p, args.temp, args.num_threads);
     std::vector<std::string> history;
 
-    if (args.tokenize)
+    if (pipeline.is_loaded())
     {
-        auto ids = pipeline.tokenizer->encode(args.prompt);
-        std::cout << "ID: ";
-        for (auto x : ids)
-            std::cout << x << ", ";
-        std::cout << std::endl;
-        return;
-    }
-
-    switch (pipeline.model->get_purpose())
-    {
-    case chatllm::ModelPurpose::TextEmbedding:
-        run_text_embedding(args, pipeline, streamer, gen_config);
-        return;
-    case chatllm::ModelPurpose::Ranker:
-        run_qa_ranker(args, pipeline, streamer, gen_config);
-        return;
-    default:
-        break;
+        switch (pipeline.model->get_purpose())
+        {
+        case chatllm::ModelPurpose::TextEmbedding:
+            run_text_embedding(args, pipeline, streamer, gen_config);
+            return;
+        case chatllm::ModelPurpose::Ranker:
+            run_qa_ranker(args, pipeline, streamer, gen_config);
+            return;
+        default:
+            break;
+        }
     }
 
     if (args.test_fn.size() > 0)
@@ -497,7 +538,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline)
         return;
     }
 
-    show_banner(pipeline);
+    show_banner(pipeline, args.show_banner);
 
     while (1)
     {
@@ -587,6 +628,9 @@ int main(int argc, const char **argv)
         }
         else
         {
+            pipe_args.rag_dump = args.rag_dump;
+            pipe_args.rerank_score_threshold = args.rerank_score_thres;
+            pipe_args.rag_post_extending     = args.rag_post_extending;
             chatllm::RAGPipeline pipeline(args.model_path, pipe_args,
                 args.vc, args.vector_store,
                 args.embedding_model_path, args.reranker_model_path);

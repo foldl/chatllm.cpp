@@ -28,7 +28,7 @@ Use `convert.py` to convert the models.
     import json, base64
 
     def to_b64(data) -> str:
-        s = json.dumps(data) if isinstance(data, dict) else data
+        s = json.dumps(data, ensure_ascii=False) if isinstance(data, dict) else data
         return base64.b64encode(s.encode('utf-8')).decode()
 
     def gen_test_data():

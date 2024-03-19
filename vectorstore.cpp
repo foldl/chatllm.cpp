@@ -100,7 +100,7 @@ CVectorStore::CVectorStore(DistanceStrategy vec_cmp, int emb_len,
         printf("%8lu / %8lu\r", i, GetSize());
         fflush(stdout);
     }
-    printf("done\n");
+    printf("\ndone\n");
 }
 
 CVectorStore::CVectorStore(DistanceStrategy vec_cmp, const char *fn)
@@ -245,7 +245,7 @@ void CVectorStore::LoadDB(const char *fn)
         metadata.push_back(m);
     }
 
-    embeddings.reserve((old_size + header.size) * emb_len);
+    embeddings.resize((old_size + header.size) * emb_len);
     if (fread(embeddings.data() + old_size * emb_len, emb_len * sizeof(float), header.size, f) != header.size)
         goto cleanup;
 

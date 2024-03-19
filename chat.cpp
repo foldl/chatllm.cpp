@@ -451,12 +451,15 @@ namespace chatllm
     }
 
     ModelObject::ModelObject(const std::string &path, const extra_args &args)
+        : loader(nullptr), loaded(path.size() > 0)
     {
-        loader = std::unique_ptr<ModelLoader>(new ModelLoader(path));
-
         ModelFactory::Result result = {nullptr, nullptr};
-        if (!ModelFactory::load(*loader, result, args.max_length))
-            CHATLLM_THROW << "ModelFactory::load() failed";
+        if (path.size() > 0)
+        {
+            loader = std::unique_ptr<ModelLoader>(new ModelLoader(path));
+            if (!ModelFactory::load(*loader, result, args.max_length))
+                CHATLLM_THROW << "ModelFactory::load() failed";
+        }
 
         tokenizer = std::move(result.tokenizer);
         model = std::move(result.model);
@@ -464,6 +467,7 @@ namespace chatllm
 
     void ModelObject::text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result)
     {
+        if (!loaded) return;
         std::vector<int> input_ids;
         tokenizer->encode(input, input_ids);
         model->text_embedding(gen_config, input_ids, result);
@@ -505,12 +509,12 @@ namespace chatllm
         {
             if (continuous)
             {
-                std::cout << std::endl << "RUN OUT OF CONTEXT. Let me forget something and try again ..." << std::endl << std::endl;
+                streamer->putln("\nRUN OUT OF CONTEXT. Let me forget something and try again ...\n");
                 input_ids = tokenizer->encode_history(history, gen_config.max_context_length);
                 output_ids = model->generate(input_ids, gen_config, false, completed, streamer);
             }
             else
-                std::cout << std::endl << "RUN OUT OF CONTEXT. I have to stop now." << std::endl << std::endl;
+                streamer->putln("\nRUN OUT OF CONTEXT. I have to stop now.\n");
         }
 
         std::vector<int> new_output_ids(output_ids.begin() + input_ids.size(), output_ids.end());
@@ -535,7 +539,7 @@ namespace chatllm
 
         while (!completed)
         {
-            std::cout << std::endl << "RUN OUT OF CONTEXT. Try to forget something and continue ..." << std::endl << std::endl;
+            streamer->putln("\nRUN OUT OF CONTEXT. Try to forget something and continue ...\n");
             model->shift_memory(gen_config.max_context_length);
             if (output_ids.size() > 0)
                 input_ids = {output_ids[output_ids.size() - 1]};
@@ -555,15 +559,19 @@ namespace chatllm
                                BaseStreamer *streamer)
     {
         std::string r;
-        before_chat(history, gen_config);
+        before_chat(history, gen_config, streamer);
 
-        switch (extending)
+        if (modelobj.loaded)
         {
-        case ExtendingMethod::Shift:
-            r = chat_with_shift(history, gen_config, streamer);
-        default:
-            r = chat_with_restart(history, gen_config, streamer);
+            switch (extending)
+            {
+            case ExtendingMethod::Shift:
+                r = chat_with_shift(history, gen_config, streamer);
+            default:
+                r = chat_with_restart(history, gen_config, streamer);
+            }
         }
+
         post_chat(history, gen_config, streamer);
         return r;
     }
@@ -575,6 +583,7 @@ namespace chatllm
 
     int Pipeline::get_text_embedding_dim(void)
     {
+        if (!modelobj.loaded) return 0;
         return model->get_text_embedding_dim();
     }
 
@@ -585,6 +594,7 @@ namespace chatllm
 
     float Pipeline::qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config)
     {
+        if (!modelobj.loaded) return -1.0f;
         std::vector<int> input_ids;
         tokenizer->encode_qa(q, a, input_ids);
         return model->qa_rank(gen_config, input_ids);
@@ -592,6 +602,7 @@ namespace chatllm
 
     void Pipeline::set_system_prompt(const std::string &prompt)
     {
+        if (!modelobj.loaded) return;
         tokenizer->set_system_prompt(prompt);
     }
 
@@ -602,10 +613,11 @@ namespace chatllm
 
     void Pipeline::set_additional_args(const std::map<std::string, std::string> &args)
     {
+        if (!modelobj.loaded) return;
         tokenizer->set_additional_args(args);
     }
 
-    void Pipeline::before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config)
+    void Pipeline::before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
     {
     }
 
@@ -622,7 +634,10 @@ namespace chatllm
           retrieve_top_n(5), rerank_top_n(3),
           vs(vec_cmp, vector_stores),
           embedding(embedding_model),
-          reranker(nullptr)
+          reranker(nullptr),
+          dump(args.rag_dump),
+          rerank_score_threshold(args.rerank_score_threshold),
+          rag_post_extending(args.rag_post_extending)
     {
         if (reranker_model.size() > 0)
             reranker = new ModelObject(reranker_model);
@@ -650,7 +665,7 @@ namespace chatllm
         for (int i = 0; i < top_n; i++)
         {
             int index = order[i];
-            if (reranker->model->qa_acceptable(scores[index]))
+            if (scores[index] >= rerank_score_threshold)
                 result.push_back(candidates[index]);
             else
                 break;
@@ -660,7 +675,7 @@ namespace chatllm
         candidates.insert(candidates.begin(), result.begin(), result.end());
     }
 
-    void RAGPipeline::before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config)
+    void RAGPipeline::before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
     {
         size_t index = history.size() - 1;
         std::string query(history.back());
@@ -683,10 +698,45 @@ namespace chatllm
             std::string c, m;
             vs.GetRecord(i, c, m);
             augments.push_back(c);
-            metainfo.emplace(m);
+            metainfo.push_back(m);
+
+            size_t last = augments.size() - 1;
+
+            if (rag_post_extending > 0)
+            {
+                for (int j = i - 1; (j >= 0) && (j >= i - rag_post_extending); j--)
+                {
+                    std::string c0, m0;
+                    vs.GetRecord(j, c0, m0);
+                    if (m0 == m)
+                        augments[last] = c0 + "\n" + augments[last];
+                    else
+                        break;
+                }
+
+                for (int j = i + 1; (j >= 0) && (j <= i + rag_post_extending); j++)
+                {
+                    std::string c0, m0;
+                    vs.GetRecord(j, c0, m0);
+                    if (m0 == m)
+                        augments[last] = augments[last] + "\n" + c0;
+                    else
+                        break;
+                }
+            }
         }
 
         if (augments.size() < 1) return;
+
+        if (dump)
+        {
+            for (size_t i = 0; i < augments.size(); i++)
+            {
+                streamer->putln(metainfo[i]);
+                streamer->putln(augments[i]);
+                streamer->putln("");
+            }
+        }
 
         auto composed = composer.compose_augmented_query(query, augments);
 
@@ -716,9 +766,11 @@ namespace chatllm
     {
         if (hide_reference || (metainfo.size() < 1)) return;
 
+        std::set<std::string> merged;
+        merged.insert(metainfo.begin(), metainfo.end());
         streamer->putln("");
         streamer->putln(reference_tag);
-        for (auto s : metainfo)
+        for (auto s : merged)
             streamer->putln("1. " + s);
     }
 

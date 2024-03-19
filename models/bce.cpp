@@ -233,11 +233,6 @@ namespace ranker
                 << "corrupted model weights";
         }
 
-        bool qa_acceptable(float score) override
-        {
-            return score >= 0.35;
-        }
-
     public:
         static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
         static constexpr size_t SCRATCH_SIZE = 44ull * 1024 * 1024;
