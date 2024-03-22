@@ -132,3 +132,26 @@ def quicksort(arr):
 ```
 
 Note that, we are using the [default prompt template](https://github.com/netease-youdao/QAnything/blob/master/etc/qanything/prompt.conf) provided by [QAnything](https://github.com/netease-youdao/QAnything).
+
+### Retrieving Only
+
+It's also possible to run in retrieving only mode, i.e. without LLM, and `+rag_dump` can be used to dump the retrieved (and re-ranked) documents.
+
+```
+./bin/main -i --embedding_model ../quantized/bce_em.bin --reranker_model ../quantized/bce_rank.bin --vector_store /path/to/fruits.dat.vsdb +rag_dump
+    ________          __  __    __    __  ___
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+No LLM is loaded.                             /_/   /_/
+Augmented by BCE-Embedding (0.2B) and BCE-ReRanker (0.2B).
+
+You  > what color is the banana?
+A.I. > {"file": "3.txt"}
+the banana is red
+
+
+References:
+1. {"file": "3.txt"}
+```
