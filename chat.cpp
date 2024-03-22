@@ -567,8 +567,10 @@ namespace chatllm
             {
             case ExtendingMethod::Shift:
                 r = chat_with_shift(history, gen_config, streamer);
+                break;
             default:
                 r = chat_with_restart(history, gen_config, streamer);
+                break;
             }
         }
 
