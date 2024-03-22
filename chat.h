@@ -189,22 +189,6 @@ namespace chatllm
         virtual void end() = 0;
     };
 
-    // reference: https://github.com/huggingface/transformers/blob/main/src/transformers/generation/streamers.py
-    class TextStreamer : public BaseStreamer
-    {
-    public:
-        TextStreamer(BaseTokenizer *tokenizer) : tokenizer_(tokenizer), is_prompt_(true), print_len_(0) {}
-        void put(const std::vector<int> &output_ids) override;
-        void putln(const std::string &line) override;
-        void end() override;
-
-    private:
-        BaseTokenizer *tokenizer_;
-        bool is_prompt_;
-        std::vector<int> token_cache_;
-        int print_len_;
-    };
-
     class MappedFile
     {
     public:
@@ -266,6 +250,10 @@ namespace chatllm
         float top_p;
         float temperature;
         int num_threads;
+
+        GenerationConfig()
+        {
+        }
 
         GenerationConfig(int max_length, int max_context_length, bool do_sample, int top_k,
                          float top_p, float temperature, int num_threads)
@@ -370,16 +358,9 @@ namespace chatllm
     public:
         struct extra_args
         {
-            int max_length;
-            bool rag_dump;
-            float rerank_score_threshold;
-            int rag_post_extending;
-            extra_args(int max_length)
-                : max_length(max_length), rag_dump(false), rerank_score_threshold(0.1f), rag_post_extending(0)
-            {}
-            extra_args()
-                : extra_args(-1)
-            {}
+            int   max_length;
+            extra_args(int max_length) : max_length(max_length) {}
+            extra_args() : extra_args(-1) {}
         };
 
         ModelObject(const std::string &path);
@@ -463,9 +444,12 @@ namespace chatllm
 
         AugmentedQueryComposer composer;
         std::string reference_tag;
-        bool hide_reference;
-        int retrieve_top_n;
-        int rerank_top_n;
+        bool    hide_reference;
+        int     retrieve_top_n;
+        int     rerank_top_n;
+        bool    dump;
+        float   rerank_score_threshold;
+        int     rag_post_extending;
 
     protected:
         void before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer) override;
@@ -478,9 +462,6 @@ namespace chatllm
 
     private:
         void rerank(const std::string &query, std::vector<int64_t> &candidates, const GenerationConfig &gen_config, int top_n = 3);
-        const bool dump;
-        const float rerank_score_threshold;
-        const int rag_post_extending;
     };
 
 } // namespace chatllm

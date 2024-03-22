@@ -1,0 +1,10 @@
+*.obj
+
+# linux
+*.out
+*.so
+
+# windows
+*.dll
+*.lib
+*.exe

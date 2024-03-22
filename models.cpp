@@ -408,8 +408,6 @@ namespace chatllm
             float inv_temp = 1.f / gen_config.temperature;
             for (int i = 0; i < vocab_size; i++)
             {
-                //if (i < 200)
-                //    printf("%d: %.3f\n", i, next_token_logits[i]);
                 next_token_logits[i] *= inv_temp;
             }
 

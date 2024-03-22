@@ -1,0 +1,48 @@
+#include <stdio.h>
+#include <string.h>
+
+#include "libchatllm.h"
+
+static void chatllm_print(const char *utf8_str)
+{
+    printf("%s", utf8_str);
+    fflush(stdout);
+}
+
+void chatllm_end(void)
+{
+    printf("\n");
+}
+
+// Note: To keep thing simple, only ANSI strings are supported.
+
+int main(int argc, const char **argv)
+{
+    struct chatllm_obj *chat = chatllm_create();
+    for (int c = 1; c < argc; c++)
+        chatllm_append_param(chat, argv[c]);
+
+    int r = chatllm_start(chat, chatllm_print, chatllm_end);
+    if (r != 0)
+    {
+        printf(">>> chatllm_start error: %d\n", r);
+        return r;
+    }
+
+    while (1)
+    {
+        char input[2048];
+        printf("You  > ");
+
+        fgets(input, sizeof(input) - 1, stdin);
+        if (strlen(input) < 1) continue;
+
+        printf("A.I. > ");
+        r = chatllm_user_input(chat, input);
+        if (r != 0)
+        {
+            printf(">>> chatllm_user_input error: %d\n", r);
+            break;
+        }
+    }
+}

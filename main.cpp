@@ -51,12 +51,13 @@ struct Args
     bool hide_reference = false;
     bool rag_dump = false;
     bool show_banner = true;
+    bool show_help = false;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
 #define MULTI_LINE_END_MARKER     "\\."
 
-void usage(const char *prog)
+void usage(const std::string &prog)
 {
     std::cout << "Usage: " << prog << " [options]\n"
               << "\n"
@@ -116,18 +117,18 @@ void usage(const char *prog)
               << std::endl;
 }
 
-static Args parse_args(int argc, const char **argv)
+static size_t parse_args(Args &args, const std::vector<std::string> &argv)
 {
-    Args args;
     std::random_device rd;
     args.seed = rd();
+    const size_t argc = argv.size();
 
-    #define handle_para0(fmt1, field, f)    \
+    #define handle_para0(fmt1, field, f)        \
         else if ((strcmp(arg, fmt1) == 0))      \
         {                                                                   \
             c++;                                                            \
             if (c < argc)                                                   \
-                args.field = f(argv[c]);                                    \
+                args.field = f(argv[c].c_str());                            \
         }
 
     #define handle_param(fmt1, fmt2, field, f)    \
@@ -135,25 +136,24 @@ static Args parse_args(int argc, const char **argv)
         {                                                                   \
             c++;                                                            \
             if (c < argc)                                                   \
-                args.field = f(argv[c]);                                    \
+                args.field = f(argv[c].c_str());                            \
         }
 
-    #define append_param(fmt1, field, f)    \
+    #define append_param(fmt1, field, f)        \
         else if ((strcmp(arg, fmt1) == 0))      \
         {                                                                   \
             c++;                                                            \
             if (c < argc)                                                   \
-                args.field.push_back(f(argv[c]));                           \
+                args.field.push_back(f(argv[c].c_str()));                   \
         }
 
-    int c = 1;
+    size_t c = 1;
     while (c < argc)
     {
-        const char *arg = argv[c];
+        const char *arg = argv[c].c_str();
         if ((strcmp(arg, "--help") == 0) || (strcmp(arg, "-h") == 0))
         {
-            usage(argv[0]);
-            exit(EXIT_SUCCESS);
+            args.show_help = true;
         }
         else if ((strcmp(arg, "--interactive") == 0) || (strcmp(arg, "-i") == 0))
         {
@@ -184,9 +184,9 @@ static Args parse_args(int argc, const char **argv)
             c++;
             if (c < argc)
             {
-                if (strcmp(argv[c], "completion") == 0)
+                if (argv[c] == "completion")
                     args.format = chatllm::ChatFormat::COMPLETION;
-                else if (strcmp(argv[c], "qa") == 0)
+                else if (argv[c] == "qa")
                     args.format = chatllm::ChatFormat::QA;
                 else
                     args.format = chatllm::ChatFormat::CHAT;
@@ -229,19 +229,9 @@ static Args parse_args(int argc, const char **argv)
         c++;
     }
 
-    if (c < argc)
-    {
-        std::cerr << "Unknown arguments:";
-        for (int i = c; i < argc; i++)
-        {
-            std::cerr << " " << argv[i];
-        }
-        std::cerr << std::endl;
-        usage(argv[0]);
-        exit(EXIT_FAILURE);
-    }
+#undef append_param
 
-    return args;
+    return c;
 }
 
 #if defined(_WIN32)
@@ -340,7 +330,27 @@ static void trim(std::string &s)
     s.resize(l);
 }
 
-static void run_file(Args &args, chatllm::Pipeline &pipeline, chatllm::TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
+// reference: https://github.com/huggingface/transformers/blob/main/src/transformers/generation/streamers.py
+class TextStreamer : public chatllm::BaseStreamer
+{
+public:
+    TextStreamer(chatllm::BaseTokenizer *tokenizer) :
+        tokenizer(tokenizer), is_prompt(true), print_len(0),
+        cout(std::cout) {}
+    void put(const std::vector<int> &output_ids) override;
+    void putln(const std::string &line) override;
+    void end() override;
+
+private:
+    chatllm::BaseTokenizer *tokenizer;
+    bool is_prompt;
+    std::vector<int> token_cache;
+    int print_len;
+public:
+    std::ostream &cout;
+};
+
+static void run_file(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
     std::vector<std::string> history;
     std::string input;
@@ -351,126 +361,124 @@ static void run_file(Args &args, chatllm::Pipeline &pipeline, chatllm::TextStrea
         while (std::getline(f, input))
         {
             trim(input);
-            std::cout << "You  > " << input << std::endl;
+            streamer.cout << "You  > " << input << std::endl;
             history.emplace_back(std::move(input));
 
-            std::cout << "A.I. > " << std::flush;
+            streamer.cout << "A.I. > " << std::flush;
             std::string output = pipeline.chat(history, gen_config, &streamer);
             history.emplace_back(std::move(output));
         }
     }
 
     f.close();
-    std::cout << std::endl << pipeline.model->get_n_past() << " tokens are processed/generated. Bye" << std::endl;
+    streamer.cout << std::endl << pipeline.model->get_n_past() << " tokens are processed/generated. Bye" << std::endl;
 }
 
-static void show_banner(chatllm::Pipeline &pipeline, bool show)
+static void show_banner(chatllm::Pipeline &pipeline, bool show, chatllm::BaseStreamer *streamer)
 {
+    std::ostringstream oss;
+
     if (!show) return;
     if (pipeline.is_loaded())
     {
         #define MODEL_INFO()     "You are served by " << std::left << std::setw(28) << pipeline.model->type_name() + ","
-        #define SHOW_NATIVE()    if (pipeline.model->native_name().size() > 0) { std::cout << "(" << pipeline.model->native_name() << ")"; }
+        #define SHOW_NATIVE()    if (pipeline.model->native_name().size() > 0) { oss << "(" << pipeline.model->native_name() << ")"; }
 
         const int64_t total_param_num = pipeline.model->get_param_num(false);
         const int64_t total_effective_param_num = pipeline.model->get_param_num(true);
 
-        std::cout   << R"(    ________          __  __    __    __  ___ )"; SHOW_NATIVE(); std::cout << '\n'
-                    << R"(   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____  )" << '\n'
-                    << R"(  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
-                    << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
-                    << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
-        std::cout   << MODEL_INFO()                               << R"(/_/   /_/       )" << '\n';
+        oss     << R"(    ________          __  __    __    __  ___ )"; SHOW_NATIVE(); oss << '\n'
+                << R"(   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____  )" << '\n'
+                << R"(  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
+                << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
+                << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
+        oss     << MODEL_INFO()                               << R"(/_/   /_/       )" << '\n';
         if (total_param_num == total_effective_param_num)
-            std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << (double)total_param_num / 1000000000. << "B) parameters." << '\n';
+            oss    << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << (double)total_param_num / 1000000000. << "B) parameters." << '\n';
         else
-            std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << (double)total_effective_param_num / 1000000000. << "B effect.) parameters." << '\n';
+            oss    << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << (double)total_effective_param_num / 1000000000. << "B effect.) parameters." << '\n';
     }
     else
     {
-        std::cout   << R"(    ________          __  __    __    __  ___ )" << '\n'
-                    << R"(   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____  )" << '\n'
-                    << R"(  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
-                    << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
-                    << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
-        std::cout   << R"(No LLM is loaded.                             /_/   /_/       )" << '\n';
+        oss     << R"(    ________          __  __    __    __  ___ )" << '\n'
+                << R"(   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____  )" << '\n'
+                << R"(  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
+                << R"( / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
+                << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
+        oss     << R"(No LLM is loaded.                             /_/   /_/       )" << '\n';
     }
 
     auto additional = pipeline.get_additional_description();
     if (additional.size() > 0)
     {
-        std::cout << additional << std::endl;
+        oss << additional << std::endl;
     }
 
-    std::cout << std::endl;
+    streamer->putln(oss.str());
 }
 
-static void print_embedding(const std::vector<float> &data)
+static void print_embedding(const std::vector<float> &data, std::ostream &cout)
 {
     for (size_t i = 0; i < data.size(); i++)
     {
-        if ((i % 8) == 0) std::cout << std::endl;
-        std::cout << std::setw(14) << std::fixed << std::setprecision(8) << data[i] << "  ";
+        if ((i % 8) == 0) cout << std::endl;
+        cout << std::setw(14) << std::fixed << std::setprecision(8) << data[i] << "  ";
     }
-    std::cout << std::endl;
+    cout << std::endl;
 }
 
-static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, chatllm::TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
+static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
     std::vector<float> result;
 
     if (!args.interactive)
     {
         pipeline.text_embedding(args.prompt, gen_config, result);
-        print_embedding(result);
+        print_embedding(result, streamer.cout);
         return;
     }
 
-    show_banner(pipeline, args.show_banner);
-
     while (1)
     {
-        std::cout << "Input > " << std::flush;
+        streamer.cout << "Input > " << std::flush;
         std::string input;
         if (!get_utf8_line(input, args.multi_line))
         {
-            std::cout << "FAILED to read line." << std::endl;
+            streamer.cout << "FAILED to read line." << std::endl;
             break;
         }
         if (input.empty()) continue;
 
         result.clear();
         pipeline.text_embedding(input, gen_config, result);
-        std::cout << "      > ";
+        streamer.cout << "      > ";
 
-        print_embedding(result);
+        print_embedding(result, streamer.cout);
 
     }
-    std::cout << "Bye\n";
+    streamer.cout << "Bye\n";
 }
 
-static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, chatllm::TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
+static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
-    show_banner(pipeline, args.show_banner);
-
     while (1)
     {
-        std::cout << "Answer > " << std::flush;
+        streamer.cout << "Answer > " << std::flush;
         std::string answer;
         if (!get_utf8_line(answer, args.multi_line))
         {
-            std::cout << "FAILED to read line." << std::endl;
+            streamer.cout << "FAILED to read line." << std::endl;
             break;
         }
         if (answer.empty()) continue;
 
         float rank = pipeline.qa_rank(args.prompt, answer, gen_config);
-        std::cout << std::setw(14) << std::fixed << std::setprecision(8) << rank << std::endl;
+        streamer.cout << std::setw(14) << std::fixed << std::setprecision(8) << rank << std::endl;
     }
-    std::cout << "Bye\n";
+    streamer.cout << "Bye\n";
 }
 
-void chat(Args &args, chatllm::Pipeline &pipeline)
+void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 {
     if (args.system.size() > 0)
         pipeline.set_system_prompt(args.system);
@@ -491,10 +499,10 @@ void chat(Args &args, chatllm::Pipeline &pipeline)
     if (args.tokenize)
     {
         auto ids = pipeline.tokenizer->encode(args.prompt);
-        std::cout << "ID: ";
+        streamer.cout << "ID: ";
         for (auto x : ids)
-            std::cout << x << ", ";
-        std::cout << std::endl;
+            streamer.cout << x << ", ";
+        streamer.cout << std::endl;
         return;
     }
 
@@ -504,11 +512,11 @@ void chat(Args &args, chatllm::Pipeline &pipeline)
     const std::string user_prompt = "You";
     const int prompt_len = 4;
 
-    chatllm::TextStreamer streamer(pipeline.tokenizer);
-
     chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,
                                          args.top_p, args.temp, args.num_threads);
     std::vector<std::string> history;
+
+    show_banner(pipeline, args.interactive && args.show_banner, &streamer);
 
     if (pipeline.is_loaded())
     {
@@ -538,26 +546,94 @@ void chat(Args &args, chatllm::Pipeline &pipeline)
         return;
     }
 
-    show_banner(pipeline, args.show_banner);
-
     while (1)
     {
-        std::cout << std::setw(prompt_len) << std::left << user_prompt << " > " << std::flush;
+        streamer.cout << std::setw(prompt_len) << std::left << user_prompt << " > " << std::flush;
         std::string input;
         if (!get_utf8_line(input, args.multi_line))
         {
-            std::cout << "FAILED to read line." << std::endl;
+            streamer.cout << "FAILED to read line." << std::endl;
             break;
         }
         if (input.empty()) continue;
 
         history.emplace_back(std::move(input));
-        std::cout << std::setw(prompt_len) << std::left << ai_prompt << " > " << std::flush;
+        streamer.cout << std::setw(prompt_len) << std::left << ai_prompt << " > " << std::flush;
         std::string output = pipeline.chat(history, gen_config, &streamer);
         history.emplace_back(std::move(output));
     }
-    std::cout << "Bye\n";
+    streamer.cout << "Bye\n";
 }
+
+void TextStreamer::putln(const std::string &line)
+{
+    cout << line << std::endl << std::flush;
+}
+
+void TextStreamer::put(const std::vector<int> &output_ids)
+{
+    if (is_prompt)
+    {
+        // skip prompt
+        is_prompt = false;
+        return;
+    }
+
+    static const std::vector<char> puncts{',', '!', ':', ';', '?'};
+
+    token_cache.insert(token_cache.end(), output_ids.begin(), output_ids.end());
+    std::string text = tokenizer->decode(token_cache);
+    if (text.empty())
+    {
+        return;
+    }
+
+    std::string printable_text;
+    if ((text.back() == '\n') || (text.back() == '\r'))
+    {
+        // flush the cache after newline
+        printable_text = text.substr(print_len);
+        token_cache.clear();
+        print_len = 0;
+    }
+    else if (std::find(puncts.begin(), puncts.end(), text.back()) != puncts.end())
+    {
+        // last symbol is a punctuation, hold on
+    }
+    else if (text.size() >= 3 && text.compare(text.size() - 3, 3, "�") == 0)
+    {
+        // ends with an incomplete token, hold on
+    }
+    else
+    {
+        printable_text = text.substr(print_len);
+        print_len = (int)text.size();
+    }
+
+    cout << printable_text << std::flush;
+}
+
+void TextStreamer::end()
+{
+    std::string text = tokenizer->decode(token_cache);
+    cout << text.substr(print_len) << std::endl;
+    is_prompt = true;
+    token_cache.clear();
+    print_len = 0;
+}
+
+#if defined(_WIN32)
+std::string wstr_to_utf8(const wchar_t* wstr)
+{
+    int s = WideCharToMultiByte(CP_UTF8, 0, wstr, (int)wcslen(wstr), NULL, 0, NULL, NULL);
+    std::string str;
+    str.resize(s);
+    WideCharToMultiByte(CP_UTF8, 0, wstr, (int)wcslen(wstr), LPSTR(str.data()), s, NULL, NULL);
+    return str;
+}
+#endif
+
+#ifndef CHATLLM_SHARED_LIB
 
 static int init_vector_store(Args &args)
 {
@@ -581,24 +657,11 @@ static int init_vector_store(Args &args)
 }
 
 #if defined(_WIN32)
-std::string wstr_to_utf8(const wchar_t* wstr)
-{
-    int s = WideCharToMultiByte(CP_UTF8, 0, wstr, (int)wcslen(wstr), NULL, 0, NULL, NULL);
-    std::string str;
-    str.resize(s);
-    WideCharToMultiByte(CP_UTF8, 0, wstr, (int)wcslen(wstr), LPSTR(str.data()), s, NULL, NULL);
-    return str;
-}
-
 int wmain(int argc, const wchar_t **wargv)
 {
-    std::vector<const char *> vect_args;
     std::vector<std::string> utf_args;
     for (int i = 0; i < argc; i++)
         utf_args.push_back(wstr_to_utf8(wargv[i]));
-    for (int i = 0; i < argc; i++)
-        vect_args.push_back(utf_args[i].data());
-    const char **argv = vect_args.data();
 
     _setmode(_fileno(stdin), _O_WTEXT);
     // Set console code page to UTF-8 so console known how to interpret string data
@@ -609,9 +672,31 @@ int wmain(int argc, const wchar_t **wargv)
 #else
 int main(int argc, const char **argv)
 {
+    std::vector<std::string> utf_args;
+    for (int i = 0; i < argc; i++)
+        utf_args.push_back(argv[i]);
 #endif
 
-    Args args = parse_args(argc, argv);
+    Args args;
+    auto count = parse_args(args, utf_args);
+    if (args.show_help)
+    {
+        usage(utf_args[0]);
+        return 0;
+    }
+
+    if (count < utf_args.size())
+    {
+        std::cerr << "Unknown arguments:";
+        for (auto i = count; i < utf_args.size(); i++)
+        {
+            std::cerr << " " << utf_args[i];
+        }
+        std::cerr << std::endl;
+
+        exit(EXIT_FAILURE);
+    }
+
     if (args.num_threads <= 0)
         args.num_threads = get_num_physical_cores();
 
@@ -624,24 +709,24 @@ int main(int argc, const char **argv)
         if (args.embedding_model_path.size() < 1)
         {
             chatllm::Pipeline pipeline(args.model_path, pipe_args);
-            chat(args, pipeline);
+            TextStreamer streamer(pipeline.tokenizer);
+            chat(args, pipeline, streamer);
         }
         else
         {
-            pipe_args.rag_dump = args.rag_dump;
-            pipe_args.rerank_score_threshold = args.rerank_score_thres;
-            pipe_args.rag_post_extending     = args.rag_post_extending;
             chatllm::RAGPipeline pipeline(args.model_path, pipe_args,
                 args.vc, args.vector_store,
                 args.embedding_model_path, args.reranker_model_path);
             pipeline.hide_reference = args.hide_reference;
             pipeline.retrieve_top_n = args.retrieve_top_n;
             pipeline.rerank_top_n   = args.rerank_top_n;
-            if (args.rag_context_sep.length() > 0)
-                pipeline.composer.set_context_sep(args.rag_context_sep);
-            if (args.rag_template.length() > 0)
-                pipeline.composer.set_prompt_template(args.rag_template);
-            chat(args, pipeline);
+            pipeline.dump           = args.rag_dump;
+            pipeline.rerank_score_threshold = args.rerank_score_thres;
+            pipeline.rag_post_extending     = args.rag_post_extending;
+            pipeline.composer.set_context_sep(args.rag_context_sep);
+            pipeline.composer.set_prompt_template(args.rag_template);
+            TextStreamer streamer(pipeline.tokenizer);
+            chat(args, pipeline, streamer);
         }
     }
     catch (std::exception &e)
@@ -652,3 +737,224 @@ int main(int argc, const char **argv)
 
     return 0;
 }
+
+#else // CHATLLM_SHARED_LIB
+
+#ifdef _WIN32
+    #define DLL_DECL __declspec(dllexport)
+#elif __GNUC__ >= 4
+    #define DLL_DECL __attribute__((visibility("default")))
+#else
+    #define DLL_DECL
+#endif
+
+#include "bindings/libchatllm.h"
+
+class Chat
+{
+public:
+    Chat()
+    {
+        append_param("...");
+    }
+
+    void append_param(const char *utf8_str)
+    {
+        params.push_back(utf8_str);
+    }
+
+public:
+    std::vector<std::string> params;
+    std::vector<std::string> history;
+    chatllm::BaseStreamer *streamer;
+    chatllm::Pipeline *pipeline;
+    chatllm::GenerationConfig gen_config;
+};
+
+class FFIStreamer : public chatllm::BaseStreamer
+{
+public:
+    FFIStreamer(chatllm::BaseTokenizer *tokenizer, f_chatllm_print f_print, f_chatllm_end f_end) :
+        tokenizer(tokenizer), is_prompt(true), print_len(0),
+        f_print(f_print), f_end(f_end)
+    {
+    }
+
+    void put(const std::vector<int> &output_ids) override
+    {
+        if (is_prompt)
+        {
+            // skip prompt
+            is_prompt = false;
+            return;
+        }
+
+        static const std::vector<char> puncts{',', '!', ':', ';', '?'};
+
+        token_cache.insert(token_cache.end(), output_ids.begin(), output_ids.end());
+        std::string text = tokenizer->decode(token_cache);
+        if (text.empty())
+        {
+            return;
+        }
+
+        std::string printable_text;
+        if ((text.back() == '\n') || (text.back() == '\r'))
+        {
+            // flush the cache after newline
+            printable_text = text.substr(print_len);
+            token_cache.clear();
+            print_len = 0;
+        }
+        else if (std::find(puncts.begin(), puncts.end(), text.back()) != puncts.end())
+        {
+            // last symbol is a punctuation, hold on
+        }
+        else if (text.size() >= 3 && text.compare(text.size() - 3, 3, "�") == 0)
+        {
+            // ends with an incomplete token, hold on
+        }
+        else
+        {
+            printable_text = text.substr(print_len);
+            print_len = (int)text.size();
+        }
+
+        f_print(printable_text.c_str());
+    }
+
+    void putln(const std::string &line) override
+    {
+        f_print(line.c_str());
+        f_print("\n");
+    }
+
+    void end() override
+    {
+        std::string text = tokenizer->decode(token_cache);
+        putln(text.substr(print_len));
+        is_prompt = true;
+        token_cache.clear();
+        print_len = 0;
+        f_end();
+    }
+
+public:
+    chatllm::BaseTokenizer *tokenizer;
+    bool is_prompt;
+    std::vector<int> token_cache;
+    int print_len;
+    f_chatllm_print f_print;
+    f_chatllm_end f_end;
+};
+
+struct chatllm_obj *chatllm_create(void)
+{
+    return (chatllm_obj *)new Chat();
+}
+
+void chatllm_append_param(struct chatllm_obj *obj, const char *utf8_str)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    chat->append_param(utf8_str);
+}
+
+static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline, chatllm::BaseStreamer &streamer)
+{
+    chat->pipeline = &pipeline;
+    chat->streamer = &streamer;
+
+    if (args.system.size() > 0)
+        pipeline.set_system_prompt(args.system);
+
+    if (pipeline.is_loaded())
+    {
+        pipeline.model->seed(args.seed);
+        args.max_length = pipeline.model->get_max_length();
+
+        if (args.extending == "shift")
+            pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Shift);
+        else
+            pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Restart);
+
+        pipeline.tokenizer->set_chat_format(args.format);
+    }
+
+    pipeline.set_additional_args(args.additional);
+
+    chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,
+                                         args.top_p, args.temp, args.num_threads);
+
+    chat->gen_config = gen_config;
+
+    show_banner(pipeline, args.interactive && args.show_banner, &streamer);
+
+    return 0;
+}
+
+int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_end f_end)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+
+    Args args;
+    auto count = parse_args(args, chat->params);
+
+    if (count < chat->params.size())
+        return (int)count;
+
+    if (args.num_threads <= 0)
+        args.num_threads = get_num_physical_cores();
+
+    args.interactive = true;
+
+    try
+    {
+        chatllm::ModelObject::extra_args pipe_args(args.max_length);
+
+        if (args.embedding_model_path.size() < 1)
+        {
+            if (args.model_path.size() < 1)
+                return -1;
+
+            auto pipeline = new chatllm::Pipeline(args.model_path, pipe_args);
+            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, f_end);
+            return start_chat(chat, args, *pipeline, *streamer);
+        }
+        else
+        {
+            auto pipeline = new chatllm::RAGPipeline(args.model_path, pipe_args,
+                args.vc, args.vector_store,
+                args.embedding_model_path, args.reranker_model_path);
+            pipeline->hide_reference = args.hide_reference;
+            pipeline->retrieve_top_n = args.retrieve_top_n;
+            pipeline->rerank_top_n   = args.rerank_top_n;
+            pipeline->dump           = args.rag_dump;
+            pipeline->rerank_score_threshold = args.rerank_score_thres;
+            pipeline->rag_post_extending     = args.rag_post_extending;
+            pipeline->composer.set_context_sep(args.rag_context_sep);
+            pipeline->composer.set_prompt_template(args.rag_template);
+            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, f_end);
+            return start_chat(chat, args, *pipeline, *streamer);
+        }
+
+    }
+    catch (std::exception &e)
+    {
+        f_print(e.what());
+        return EXIT_FAILURE;
+    }
+}
+
+int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    if (!streamer->is_prompt) return -1;
+
+    chat->history.push_back(utf8_str);
+    std::string output = chat->pipeline->chat(chat->history, chat->gen_config, streamer);
+    chat->history.emplace_back(std::move(output));
+    return 0;
+}
+
+#endif

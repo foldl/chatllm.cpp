@@ -38,8 +38,14 @@ if (GGML_PERF)
     add_compile_definitions(GGML_PERF)
 endif ()
 
-add_library(chatllm STATIC chat.cpp vectorstore.cpp layers.cpp tokenizer.cpp models.cpp)
-target_link_libraries(chatllm PRIVATE ggml)
+add_library(libchatllm SHARED EXCLUDE_FROM_ALL main.cpp chat.cpp vectorstore.cpp layers.cpp tokenizer.cpp models.cpp)
+target_link_libraries(libchatllm PRIVATE ggml)
+target_compile_definitions(libchatllm PUBLIC CHATLLM_SHARED_LIB)
+SET_TARGET_PROPERTIES(libchatllm PROPERTIES PREFIX "")
+set_target_properties(libchatllm
+  PROPERTIES
+  LIBRARY_OUTPUT_DIRECTORY "../bindings"
+)
 
-add_executable(main main.cpp)
-target_link_libraries(main PRIVATE chatllm)
+add_executable(main main.cpp chat.cpp vectorstore.cpp layers.cpp tokenizer.cpp models.cpp)
+target_link_libraries(main PRIVATE ggml)

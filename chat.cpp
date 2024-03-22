@@ -273,65 +273,6 @@ namespace chatllm
         return oss.str();
     }
 
-    // ===== streamer =====
-
-    void TextStreamer::putln(const std::string &line)
-    {
-        std::cout << line << std::endl << std::flush;
-    }
-
-    void TextStreamer::put(const std::vector<int> &output_ids)
-    {
-        if (is_prompt_)
-        {
-            // skip prompt
-            is_prompt_ = false;
-            return;
-        }
-
-        static const std::vector<char> puncts{',', '!', ':', ';', '?'};
-
-        token_cache_.insert(token_cache_.end(), output_ids.begin(), output_ids.end());
-        std::string text = tokenizer_->decode(token_cache_);
-        if (text.empty())
-        {
-            return;
-        }
-
-        std::string printable_text;
-        if ((text.back() == '\n') || (text.back() == '\r'))
-        {
-            // flush the cache after newline
-            printable_text = text.substr(print_len_);
-            token_cache_.clear();
-            print_len_ = 0;
-        }
-        else if (std::find(puncts.begin(), puncts.end(), text.back()) != puncts.end())
-        {
-            // last symbol is a punctuation, hold on
-        }
-        else if (text.size() >= 3 && text.compare(text.size() - 3, 3, "�") == 0)
-        {
-            // ends with an incomplete token, hold on
-        }
-        else
-        {
-            printable_text = text.substr(print_len_);
-            print_len_ = (int)text.size();
-        }
-
-        std::cout << printable_text << std::flush;
-    }
-
-    void TextStreamer::end()
-    {
-        std::string text = tokenizer_->decode(token_cache_);
-        std::cout << text.substr(print_len_) << std::endl;
-        is_prompt_ = true;
-        token_cache_.clear();
-        print_len_ = 0;
-    }
-
 #ifdef _POSIX_MAPPED_FILES
     MappedFile::MappedFile(const std::string &path)
     {
@@ -634,12 +575,12 @@ namespace chatllm
           composer(),
           reference_tag("References:"), hide_reference(false),
           retrieve_top_n(5), rerank_top_n(3),
+          dump(false),
+          rerank_score_threshold(0.5f),
+          rag_post_extending(0),
           vs(vec_cmp, vector_stores),
           embedding(embedding_model),
-          reranker(nullptr),
-          dump(args.rag_dump),
-          rerank_score_threshold(args.rerank_score_threshold),
-          rag_post_extending(args.rag_post_extending)
+          reranker(nullptr)
     {
         if (reranker_model.size() > 0)
             reranker = new ModelObject(reranker_model);
@@ -825,12 +766,14 @@ namespace chatllm
 
     void AugmentedQueryComposer::set_prompt_template(const std::string &s)
     {
+        if (s.size() < 1) return;
         prompt_template = s;
         unescape_c_sequences(prompt_template);
     }
 
     void AugmentedQueryComposer::set_context_sep(const std::string &s)
     {
+        if (s.size() < 1) return;
         context_sep = s;
         unescape_c_sequences(context_sep);
     }
