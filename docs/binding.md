@@ -46,3 +46,11 @@ Assume MSVC is used.
     ```
 
 1. Test `main.exe` with exactly the same command line options.
+
+## Python
+
+See [chatllm.py](../bindings/chatllm.py).
+
+```shell
+python chatllm.py -i -m path/to/model
+```
