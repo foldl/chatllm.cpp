@@ -282,6 +282,9 @@ namespace chatllm
             purpose(purpose), terminate_token_id(-1000)
         {}
 
+        virtual ~BaseModel()
+        {}
+
         virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,
                                             bool &completed,
@@ -372,7 +375,7 @@ namespace chatllm
             float rerank_score_threshold;
             int rag_post_extending;
             extra_args(int max_length)
-                : max_length(max_length), rag_dump(false), rerank_score_threshold(0.1), rag_post_extending(0)
+                : max_length(max_length), rag_dump(false), rerank_score_threshold(0.1f), rag_post_extending(0)
             {}
             extra_args()
                 : extra_args(-1)

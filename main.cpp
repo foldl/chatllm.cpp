@@ -36,8 +36,8 @@ struct Args
     int max_context_length = 512;
     bool interactive = false;
     int top_k = 0;
-    float top_p = 0.7;
-    float temp = 0.7;
+    float top_p = 0.7f;
+    float temp = 0.7f;
     int num_threads = 0;
     bool multi_line = false;
     int seed;
@@ -46,7 +46,7 @@ struct Args
     DistanceStrategy vc = DistanceStrategy::MaxInnerProduct;
     int retrieve_top_n = 2;
     int rerank_top_n = 1;
-    float rerank_score_thres = 0.35;
+    float rerank_score_thres = 0.35f;
     int rag_post_extending = 0;
     bool hide_reference = false;
     bool rag_dump = false;
@@ -382,9 +382,9 @@ static void show_banner(chatllm::Pipeline &pipeline, bool show)
                     << R"( \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n';
         std::cout   << MODEL_INFO()                               << R"(/_/   /_/       )" << '\n';
         if (total_param_num == total_effective_param_num)
-            std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_param_num / 1000000000. << "B) parameters." << '\n';
+            std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << (double)total_param_num / 1000000000. << "B) parameters." << '\n';
         else
-            std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << total_effective_param_num / 1000000000. << "B effect.) parameters." << '\n';
+            std::cout   << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << (double)total_effective_param_num / 1000000000. << "B effect.) parameters." << '\n';
     }
     else
     {

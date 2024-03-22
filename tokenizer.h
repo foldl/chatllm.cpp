@@ -67,6 +67,7 @@ struct _vocab
 class TextPreprocessor
 {
 public:
+    virtual ~TextPreprocessor() {}
     virtual std::string transform(const std::string &s) = 0;
 };
 

@@ -76,7 +76,7 @@ struct llama_sp_tokenizer
             return;
 
         // seed the work queue with all possible 2-character tokens.
-        for (size_t i = 1; i < symbols_.size(); ++i)
+        for (int i = 1; i < (int)symbols_.size(); ++i)
         {
             try_add_bigram(i - 1, i);
         }
@@ -428,7 +428,7 @@ struct llm_bpe_tokenizer {
                 index++;
                 symbols.emplace_back(sym);
             }
-            for (size_t i = 1; i < symbols.size(); ++i) {
+            for (int i = 1; i < (int)symbols.size(); ++i) {
                 add_new_bigram(i - 1, i);
             }
 
@@ -469,10 +469,10 @@ struct llm_bpe_tokenizer {
                     sym.prev = final_prev_index;
                     sym.next = -1;
                     if (final_prev_index != -1) {
-                        symbols_final[final_prev_index].next = symbols_final.size();
+                        symbols_final[final_prev_index].next = (llm_symbol::index)symbols_final.size();
                     }
                     symbols_final.emplace_back(sym);
-                    final_prev_index = symbols_final.size() - 1;
+                    final_prev_index = (int)symbols_final.size() - 1;
                 }
             }
         }
@@ -557,7 +557,7 @@ private:
         for (int i = 0; i < (int)text_utf.size(); i++) {
             const std::string & utf_char = text_utf[i];
             bool split_condition = false;
-            int bytes_remain = text_utf.size() - i;
+            int bytes_remain = (int)text_utf.size() - i;
             // forward backward lookups
             const std::string & utf_char_next = (i + 1 < (int)text_utf.size()) ? text_utf[i + 1] : "";
             const std::string & utf_char_next_next = (i + 2 < (int)text_utf.size()) ? text_utf[i + 2] : "";
@@ -783,7 +783,7 @@ struct unigram_tokenizer
 
     struct unigram
     {
-        unigram(const char *text, int pos, size_t n): text(text), start(pos), end(pos + n) {}
+        unigram(const char *text, int pos, int n): text(text), start(pos), end(pos + n) {}
 
         const char *text;
         index start, end;
@@ -801,7 +801,7 @@ struct unigram_tokenizer
         while (offs < text.size())
         {
             size_t char_len = std::min(text.size() - offs, utf8_len(text[offs]));
-            symbols_.emplace_back(text.c_str() + offs, offs, char_len);
+            symbols_.emplace_back(text.c_str() + offs, (int)offs, (int)char_len);
             offs += char_len;
         }
 
@@ -809,7 +809,7 @@ struct unigram_tokenizer
             return;
 
         // Viterbi algorithm
-        for (size_t i = 1; i < symbols_.size(); i++)
+        for (int i = 1; i < (int)symbols_.size(); i++)
         {
             find_best(i);
         }
@@ -914,7 +914,7 @@ int UnigramProcessor::DoEncode(const std::string &input,
 
 std::string TextPrepTrim::transform(const std::string &s)
 {
-    int size = s.size();
+    int size = (int)s.size();
     while ((size >= 1) && (s[size - 1] == ' '))
         size--;
     return s.substr(0, size);

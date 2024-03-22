@@ -56,7 +56,7 @@ static float vector_cos_similarity(const float *a, const float *b, int len)
     norm_a = sqrtf(norm_a);
     norm_b = sqrtf(norm_b);
 
-    return inner_sum / (norm_a * norm_b + 1e-6);
+    return inner_sum / (norm_a * norm_b + 1e-6f);
 }
 
 static float vector_measure(DistanceStrategy ds, const float *a, const float *b, int len)
@@ -97,7 +97,7 @@ CVectorStore::CVectorStore(DistanceStrategy vec_cmp, int emb_len,
     for (size_t i = 0; i < GetSize(); i++)
     {
         text_emb(contents[i], embeddings.data() + i * emb_len);
-        printf("%8lu / %8lu\r", i, GetSize());
+        printf("%8zu / %8zu\r", i, GetSize());
         fflush(stdout);
     }
     printf("\ndone\n");
@@ -288,7 +288,7 @@ void CVectorStore::Query(const text_vector &vec, std::vector<int64_t> &indices, 
     for (size_t i = 0; i < GetSize(); i++, emb += emb_len)
         scores.push_back(vector_measure(vec_cmp, vec.data(), emb, emb_len));
 
-    std::vector<int> order;
+    std::vector<size_t> order;
     chatllm::ordering(scores, order, is_dist_strategy_max_best(vec_cmp));
 
     if (top_n > (int)order.size()) top_n = (int)order.size();

@@ -27,7 +27,7 @@ namespace chatllm
 
     void print_tensor(ggml_tensor *tensor, int offset = 0)
     {
-        printf("\n%s: [%ld, %ld, %ld] [%ld, %ld, %ld]\n", tensor->name, tensor->ne[0], tensor->ne[1], tensor->ne[2],
+        printf("\n%s: [%zd, %zd, %zd] [%zd, %zd, %zd]\n", tensor->name, tensor->ne[0], tensor->ne[1], tensor->ne[2],
                                                                         tensor->nb[0], tensor->nb[1], tensor->nb[2]);
         switch (tensor->type)
         {
@@ -315,8 +315,8 @@ namespace chatllm
             if (!continuous) n_past = 0;
             completed = false;
 
-            transformer.set_ctx(input_ids.size());
-            int next_output_idx = input_ids.size();
+            transformer.set_ctx((int)input_ids.size());
+            int next_output_idx = (int)input_ids.size();
 
             while (!completed && (n_past < gen_config.max_length))
             {
@@ -325,7 +325,7 @@ namespace chatllm
 
 //#define DISABLE_CACHE
 #ifndef DISABLE_CACHE
-                n_past += curr_input_ids.size();
+                n_past += (int)curr_input_ids.size();
                 curr_input_ids = {next_token_id};
 #else
                 curr_input_ids.push_back(next_token_id);
@@ -393,7 +393,7 @@ namespace chatllm
                     lm_logits = run_model({input_ids[i]}, gen_config, past);
             }
 
-            int vocab_size = lm_logits->ne[0];
+            int vocab_size = (int)lm_logits->ne[0];
             float *next_token_logits = (float *)lm_logits->data;
 
             int next_token_id;
@@ -401,7 +401,7 @@ namespace chatllm
             if (!gen_config.do_sample)
             {
                 // greedy search
-                return std::max_element(next_token_logits, next_token_logits + vocab_size) - next_token_logits;
+                return (int)(std::max_element(next_token_logits, next_token_logits + vocab_size) - next_token_logits);
             }
 
             // temperature sampling
@@ -517,7 +517,7 @@ namespace chatllm
             }
             else
             {
-                keep_idx = output_ids.size();
+                keep_idx = (int)output_ids.size();
                 return false;
             }
         }
@@ -573,7 +573,7 @@ namespace chatllm
                                      std::function<std::string(const std::smatch &)> format)
     {
         std::ostringstream oss;
-        int last_index = 0;
+        size_t last_index = 0;
         for (auto it = std::sregex_iterator(input.begin(), input.end(), regex); it != std::sregex_iterator(); it++)
         {
             oss << it->prefix() << format(*it);

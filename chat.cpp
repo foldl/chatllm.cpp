@@ -317,7 +317,7 @@ namespace chatllm
         else
         {
             printable_text = text.substr(print_len_);
-            print_len_ = text.size();
+            print_len_ = (int)text.size();
         }
 
         std::cout << printable_text << std::flush;
@@ -648,7 +648,7 @@ namespace chatllm
     void RAGPipeline::rerank(const std::string &query, std::vector<int64_t> &candidates, const GenerationConfig &gen_config, int top_n)
     {
         std::vector<float> scores;
-        std::vector<int> order;
+        std::vector<size_t> order;
         std::vector<int64_t> result;
 
         for (size_t i = 0; i < candidates.size(); i++)
@@ -666,7 +666,7 @@ namespace chatllm
 
         for (int i = 0; i < top_n; i++)
         {
-            int index = order[i];
+            size_t index = order[i];
             if (scores[index] >= rerank_score_threshold)
                 result.push_back(candidates[index]);
             else
@@ -706,7 +706,7 @@ namespace chatllm
 
             if (rag_post_extending > 0)
             {
-                for (int j = i - 1; (j >= 0) && (j >= i - rag_post_extending); j--)
+                for (auto j = i - 1; (j >= 0) && (j >= i - rag_post_extending); j--)
                 {
                     std::string c0, m0;
                     vs.GetRecord(j, c0, m0);
@@ -716,7 +716,7 @@ namespace chatllm
                         break;
                 }
 
-                for (int j = i + 1; (j >= 0) && (j <= i + rag_post_extending); j++)
+                for (auto j = i + 1; (j >= 0) && (j <= i + rag_post_extending); j++)
                 {
                     std::string c0, m0;
                     vs.GetRecord(j, c0, m0);
@@ -751,12 +751,12 @@ namespace chatllm
 
         int64_t total_param_num = embedding.model->get_param_num(false);
 
-        oss << "Augmented by " << embedding.model->type_name() << " (" << std::fixed << std::setprecision(1) << total_param_num / 1000000000. << "B)";
+        oss << "Augmented by " << embedding.model->type_name() << " (" << std::fixed << std::setprecision(1) << (double)total_param_num / 1000000000. << "B)";
 
         if (reranker != nullptr)
         {
             total_param_num = reranker->model->get_param_num(false);
-            oss << " and " << reranker->model->type_name() << " (" << std::fixed << std::setprecision(1) << total_param_num / 1000000000. << "B)";
+            oss << " and " << reranker->model->type_name() << " (" << std::fixed << std::setprecision(1) << (double)total_param_num / 1000000000. << "B)";
         }
 
         oss << ".";

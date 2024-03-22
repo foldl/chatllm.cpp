@@ -130,8 +130,8 @@ namespace chatllm
             : weight(weight != NULL ? weight : ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, in_features, out_features)),
               bias(use_bias ? ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, out_features) : nullptr) {}
 
-        int in_features() const { return weight->ne[0]; }
-        int out_features() const { return weight->ne[1]; }
+        int in_features() const { return (int)weight->ne[0]; }
+        int out_features() const { return (int)weight->ne[1]; }
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
@@ -1072,7 +1072,7 @@ namespace chatllm
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
         {
             const int hidden_size = BaseAttn::o_proj.in_features();
-            const int qlen = hidden_states->ne[1];
+            const int qlen = (int)hidden_states->ne[1];
             const int repeat = BaseAttn::num_attention_heads / BaseAttn::num_kv_heads;
             const int kv_hidden_size = hidden_size / repeat;
 
@@ -1202,7 +1202,7 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override
         {
-            const int n_tokens = hidden_states->ne[1];
+            const int64_t n_tokens = hidden_states->ne[1];
             const int n_expert = num_local_experts;
 
             ggml_context * ggctx = ctx->gctx.get();
@@ -1648,7 +1648,7 @@ namespace chatllm
     public:
         QWenSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length);
 
-        void config(int rope_dim, float rope_freq_base, float seq_length, bool use_dynamic_ntk, bool use_logn_attn);
+        void config(int rope_dim, float rope_freq_base, int seq_length, bool use_dynamic_ntk, bool use_logn_attn);
 
     protected:
         // input & output: [qlen, heads, head_size]
@@ -1900,7 +1900,7 @@ namespace chatllm
         int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += VisualEmbedding::get_param_num(weight);
+            r += VisualEmbedding::get_param_num(effective_only);
             r += vision_embed.get_param_num(effective_only);
             return r;
         }

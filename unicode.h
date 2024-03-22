@@ -225,7 +225,7 @@ static const std::vector<std::pair<uint32_t, uint32_t>> control_ranges = {
 static std::string codepoint_to_utf8(uint32_t cp) {
     std::string result;
     if (/* 0x00 <= cp && */ cp <= 0x7f) {
-        result.push_back(cp);
+        result.push_back((char)cp);
     }
     else if (0x80 <= cp && cp <= 0x7ff) {
         result.push_back(0xc0 | ((cp >> 6) & 0x1f));
@@ -302,11 +302,11 @@ static std::vector<uint32_t> codepoints_from_utf8(const std::string & utf8) {
 static std::vector<uint16_t> codepoint_to_utf16(uint32_t cp) {
     std::vector<uint16_t> result;
     if (/* 0x0000 <= cp && */ cp <= 0xffff) {
-        result.emplace_back(cp);
+        result.emplace_back((uint16_t)cp);
     }
     else if (0x10000 <= cp && cp <= 0x10ffff) {
-        result.emplace_back(0xd800 | ((cp - 0x10000) >> 10));
-        result.emplace_back(0xdc00 | ((cp - 0x10000) & 0x03ff));
+        result.emplace_back((uint16_t)(0xd800 | ((cp - 0x10000) >> 10)));
+        result.emplace_back((uint16_t)(0xdc00 | ((cp - 0x10000) & 0x03ff)));
     }
     else {
         throw std::invalid_argument("invalid codepoint");
@@ -337,7 +337,6 @@ static uint32_t codepoint_from_utf16(const std::vector<uint16_t> & utf16, size_t
         offset += 2;
         return result;
     }
-    throw std::invalid_argument("invalid string");
 }
 
 std::vector<uint32_t> codepoints_from_utf16(const std::vector<uint16_t> & utf16) {
@@ -406,20 +405,20 @@ static std::unordered_map<uint8_t, std::string> bytes_to_unicode_map_bpe() {
     std::unordered_map<uint8_t, std::string> map;
     for (int ch = u'!'; ch <= u'~'; ++ch) {
         assert(0 <= ch && ch < 256);
-        map[ch] = codepoint_to_utf8(ch);
+        map[(uint8_t)ch] = codepoint_to_utf8(ch);
     }
     for (int ch = u'¡'; ch <= u'¬'; ++ch) {
         assert(0 <= ch && ch < 256);
-        map[ch] = codepoint_to_utf8(ch);
+        map[(uint8_t)ch] = codepoint_to_utf8(ch);
     }
     for (int ch = u'®'; ch <= u'ÿ'; ++ch) {
         assert(0 <= ch && ch < 256);
-        map[ch] = codepoint_to_utf8(ch);
+        map[(uint8_t)ch] = codepoint_to_utf8(ch);
     }
     auto n = 0;
     for (int ch = 0; ch < 256; ++ch) {
-        if (map.find(ch) == map.end()) {
-            map[ch] = codepoint_to_utf8(256 + n);
+        if (map.find((uint8_t)ch) == map.end()) {
+            map[(uint8_t)ch] = codepoint_to_utf8(256 + n);
             ++n;
         }
     }
@@ -435,20 +434,20 @@ static std::unordered_map<std::string, uint8_t> unicode_to_bytes_map_bpe() {
     std::unordered_map<std::string, uint8_t> map;
     for (int ch = u'!'; ch <= u'~'; ++ch) {
         assert(0 <= ch && ch < 256);
-        map[codepoint_to_utf8(ch)] = ch;
+        map[codepoint_to_utf8(ch)] = (uint8_t)ch;
     }
     for (int ch = u'¡'; ch <= u'¬'; ++ch) {
         assert(0 <= ch && ch < 256);
-        map[codepoint_to_utf8(ch)] = ch;
+        map[codepoint_to_utf8(ch)] = (uint8_t)ch;
     }
     for (int ch = u'®'; ch <= u'ÿ'; ++ch) {
         assert(0 <= ch && ch < 256);
-        map[codepoint_to_utf8(ch)] = ch;
+        map[codepoint_to_utf8(ch)] = (uint8_t)ch;
     }
     auto n = 0;
     for (int ch = 0; ch < 256; ++ch) {
         if (map.find(codepoint_to_utf8(ch)) == map.end()) {
-            map[codepoint_to_utf8(256 + n)] = ch;
+            map[codepoint_to_utf8(256 + n)] = (uint8_t)ch;
             ++n;
         }
     }
