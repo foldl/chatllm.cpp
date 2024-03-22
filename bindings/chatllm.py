@@ -2,7 +2,7 @@ from ctypes import *
 import os, sys
 
 def callback_print(s: bytes) -> None:
-    print(s.decode(), end="")
+    print(s.decode(), end="", flush=True)
 
 def callback_end() -> None:
     pass

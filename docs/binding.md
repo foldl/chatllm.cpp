@@ -49,8 +49,10 @@ Assume MSVC is used.
 
 ## Python
 
-See [chatllm.py](../bindings/chatllm.py).
+Run [chatllm.py](../bindings/chatllm.py) with exactly the same command line options.
 
-```shell
-python chatllm.py -i -m path/to/model
-```
+For example,
+
+* Linux: `python3 chatllm.py -i -m path/to/model`
+
+* Windows: `python chatllm.py -i -m path/to/model`
