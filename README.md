@@ -107,7 +107,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * [x] Retrieval Augmented Generation (RAG) 🔥
 
 * [ ] LoRA;
-* [x] Python/C [Bindings](./docs/binding.md), web demo, and more possibilities.
+* [x] Python/JavaScript/C [Bindings](./docs/binding.md), web demo, and more possibilities.
 
 ## Usage
 
