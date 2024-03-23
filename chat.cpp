@@ -519,6 +519,12 @@ namespace chatllm
         return r;
     }
 
+    void Pipeline::abort_generation(void)
+    {
+        if (modelobj.loaded)
+            modelobj.model->abort_generation();
+    }
+
     void Pipeline::text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result)
     {
         modelobj.text_embedding(input, gen_config, result);

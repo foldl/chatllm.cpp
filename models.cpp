@@ -304,6 +304,8 @@ namespace chatllm
                 << "requested max_length (" << gen_config.max_length << ") is larger than model's max_length ("
                 << config_.max_length << ")";
 
+            aborted = false;
+
             std::vector<int> curr_input_ids(input_ids);
 
             std::vector<int> output_ids;
@@ -318,7 +320,7 @@ namespace chatllm
             transformer.set_ctx((int)input_ids.size());
             int next_output_idx = (int)input_ids.size();
 
-            while (!completed && (n_past < gen_config.max_length))
+            while (!aborted && !completed && (n_past < gen_config.max_length))
             {
                 int next_token_id = generate_next_token(curr_input_ids, gen_config);
 //printf("\nnext = %d\n", next_token_id);
@@ -351,6 +353,9 @@ namespace chatllm
                         streamer->put({output_ids[next_output_idx]});
                 }
             }
+
+            if (aborted && !completed)
+                completed = true;
 
             if (streamer)
                 streamer->end();

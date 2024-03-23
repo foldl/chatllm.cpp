@@ -267,7 +267,7 @@ namespace chatllm
         BaseModel(int type, std::string name, std::string native_name, ModelPurpose purpose) :
             type_(type), name_(name), native_name_(native_name), gen(0x123), n_past(0),
             n_past_offset(0), tokenizer(nullptr),
-            purpose(purpose), terminate_token_id(-1000)
+            purpose(purpose), aborted(false), terminate_token_id(-1000)
         {}
 
         virtual ~BaseModel()
@@ -281,6 +281,11 @@ namespace chatllm
             std::vector<int> r;
             return r;
         };
+
+        virtual void abort_generation(void)
+        {
+            aborted = true;
+        }
 
         virtual void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                     std::vector<float> &embedding)
@@ -335,6 +340,7 @@ namespace chatllm
         int n_past_offset;
         BaseTokenizer *tokenizer;
         ModelPurpose purpose;
+        bool aborted;
     public:
         int terminate_token_id; // when LLM uses another token as end indicator
     };
@@ -389,6 +395,8 @@ namespace chatllm
 
         std::string chat(std::vector<std::string> &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);
+        virtual void abort_generation(void);
+
         void set_system_prompt(const std::string &prompt);
         void set_extending_method(ExtendingMethod method);
         virtual void set_additional_args(const std::map<std::string, std::string> &args);

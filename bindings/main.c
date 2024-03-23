@@ -3,13 +3,13 @@
 
 #include "libchatllm.h"
 
-static void chatllm_print(const char *utf8_str)
+static void chatllm_print(void *user_data, const char *utf8_str)
 {
     printf("%s", utf8_str);
     fflush(stdout);
 }
 
-void chatllm_end(void)
+static void chatllm_end(void *user_data)
 {
     printf("\n");
 }
@@ -22,7 +22,7 @@ int main(int argc, const char **argv)
     for (int c = 1; c < argc; c++)
         chatllm_append_param(chat, argv[c]);
 
-    int r = chatllm_start(chat, chatllm_print, chatllm_end);
+    int r = chatllm_start(chat, chatllm_print, chatllm_end, (void *)0);
     if (r != 0)
     {
         printf(">>> chatllm_start error: %d\n", r);

@@ -23,18 +23,42 @@ extern "C"
 {
 #endif
 
-typedef void (*f_chatllm_print)(const char *utf8_str);
-typedef void (*f_chatllm_end)(void);
+typedef void (*f_chatllm_print)(void *user_data, const char *utf8_str);
+typedef void (*f_chatllm_end)(void *user_data);
 
 struct chatllm_obj;
 
+/**
+ * Usage:
+ *
+ * ```c
+ * obj = create(callback functions);
+ * append_param(obj, ...);
+ * // ...
+ * app_param(obj, ...);
+ *
+ * start(obj);
+ * while (true)
+ * {
+ *     user_input(obj, ...);
+ * }
+ * ```
+*/
+
+// Create ChatLLM object
 DLL_DECL struct chatllm_obj * API_CALL chatllm_create(void);
 
+// Append a command line option
 DLL_DECL void API_CALL chatllm_append_param(struct chatllm_obj *obj, const char *utf8_str);
 
-DLL_DECL int API_CALL chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_end f_end);
+// Start
+DLL_DECL int API_CALL chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_end f_end, void *user_data);
 
+// User input
 DLL_DECL int API_CALL chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str);
+
+// Abort generation
+DLL_DECL void API_CALL chatllm_abort_generation(struct chatllm_obj *obj);
 
 #ifdef __cplusplus
 }
