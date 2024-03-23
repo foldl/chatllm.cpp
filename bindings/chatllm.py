@@ -1,6 +1,8 @@
 from ctypes import *
-import os, sys, signal
-from typing import Any, List, Union
+import os, sys, signal, queue
+import threading
+from typing import Any, Iterable, List, Union
+
 
 class LibChatLLM:
 
@@ -80,11 +82,19 @@ class LibChatLLM:
     def abort(self, obj: c_void_p) -> None:
         self._chatllm_abort_generation(obj)
 
+class LLMChatDone:
+    def __init__(self) -> None:
+        pass
+
 class ChatLLM:
-    def __init__(self, lib: LibChatLLM) -> None:
+    def __init__(self, lib: LibChatLLM, param: Union[None, str, List[str]], out_queue: Union[None, queue.Queue] = None) -> None:
         self._lib = lib
         self._chat = lib._chatllm_create()
         self.is_generating = False
+        self.out_queue = out_queue
+        if param is not None:
+            self.append_param(param)
+            self.start()
 
     def append_param(self, param: Union[str, List[str]]) -> None:
         self._lib.append_param(self._chat, param)
@@ -105,10 +115,41 @@ class ChatLLM:
         self._lib.abort(self._chat)
 
     def callback_print(self, s: bytes) -> None:
-        print(s.decode(), end="", flush=True)
+        if self.out_queue is None:
+            print(s.decode(), end="", flush=True)
+        else:
+            self.out_queue.put(s.decode())
 
     def callback_end(self) -> None:
-        pass
+        if self.out_queue is not None:
+            self.out_queue.put(LLMChatDone())
+
+class ChatLLMStreamer:
+    def __init__(self, llm: ChatLLM) -> None:
+        self.input_queue = queue.Queue()
+        self.output_queue = queue.Queue()
+        llm.out_queue = self.output_queue
+        self.llm = llm
+        self.run = True
+        self.thread = threading.Thread(target=lambda: self.thread_fun())
+        self.thread.start()
+
+    def thread_fun(self) -> None:
+        while self.run:
+            input = self.input_queue.get()
+            print(f'input: {input}')
+            self.llm.chat(input)
+
+    def chat(self, user_input: str) -> Iterable[str]:
+        self.input_queue.put(user_input)
+        while True:
+            output = self.output_queue.get()
+            if isinstance(output, LLMChatDone):
+                break
+            yield output
+
+    def terminate(self) -> None:
+        self.run = False
 
 llm: ChatLLM = None
 
@@ -119,12 +160,21 @@ def handler(signal_received, frame):
     else:
         sys.exit(0)
 
+def demo_streamer():
+    global llm
+    llm = ChatLLM(LibChatLLM(), sys.argv[1:])
+
+    streamer = ChatLLMStreamer(llm)
+
+    while True:
+        s = input('You  > ')
+        print('A.I. > ', end='', flush=True)
+        for s in streamer.chat(s):
+            print(s, end='', flush=True)
+
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, handler)
-
-    llm = ChatLLM(LibChatLLM())
-    llm.append_param(sys.argv[1:])
-    llm.start()
+    llm = ChatLLM(LibChatLLM(), sys.argv[1:])
 
     while True:
         s = input('You  > ')

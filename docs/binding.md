@@ -49,6 +49,8 @@ Assume MSVC is used.
 
 ## Python
 
+### Command line
+
 Run [chatllm.py](../bindings/chatllm.py) with exactly the same command line options.
 
 For example,
@@ -56,3 +58,17 @@ For example,
 * Linux: `python3 chatllm.py -i -m path/to/model`
 
 * Windows: `python chatllm.py -i -m path/to/model`
+
+### Web demo
+
+There is also a [Chatbot](../bindings/chatllm_st.py) powered by [Streamlit](https://streamlit.io/):
+
+![](chatbot_st.png)
+
+To start it:
+
+```
+streamlit run your_script.py -- -i -m path/to/model
+```
+
+Note: "STOP" function is not implemented yet.
