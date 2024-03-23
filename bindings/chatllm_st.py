@@ -6,10 +6,13 @@ st.title("ChatLLM Chatbot Demo")
 
 if 'llm' not in st.session_state:
     args = sys.argv[1:]
-    args.append('--hide_banner')
-    st.session_state.llm = ChatLLM(LibChatLLM(), args)
+    st.session_state.llm = ChatLLM(LibChatLLM(), args, False)
     st.session_state.llm_streamer = ChatLLMStreamer(st.session_state.llm)
+    st.session_state.banner = st.session_state.llm_streamer.flush_output()
 
+if st.session_state.banner != '':
+    with st.expander("LLM Information"):
+        st.code('\n' + st.session_state.banner, language=None)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []

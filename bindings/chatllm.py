@@ -83,18 +83,20 @@ class LibChatLLM:
         self._chatllm_abort_generation(obj)
 
 class LLMChatDone:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, id: Any) -> None:
+        self.id = id
 
 class ChatLLM:
-    def __init__(self, lib: LibChatLLM, param: Union[None, str, List[str]], out_queue: Union[None, queue.Queue] = None) -> None:
+    def __init__(self, lib: LibChatLLM, param: Union[None, str, List[str]], auto_start: bool = True) -> None:
         self._lib = lib
         self._chat = lib._chatllm_create()
         self.is_generating = False
-        self.out_queue = out_queue
+        self.out_queue = None
+        self.input_id = None
         if param is not None:
             self.append_param(param)
-            self.start()
+            if auto_start:
+                self.start()
 
     def append_param(self, param: Union[str, List[str]]) -> None:
         self._lib.append_param(self._chat, param)
@@ -104,8 +106,9 @@ class ChatLLM:
         if r != 0:
             raise Exception(f'ChatLLM: failed to `start()` with error code {r}')
 
-    def chat(self, user_input: str) -> None:
+    def chat(self, user_input: str, input_id = None) -> None:
         self.is_generating = True
+        self.input_id = input_id
         r = self._lib.chat(self._chat, user_input)
         self.is_generating = False
         if r != 0:
@@ -122,7 +125,12 @@ class ChatLLM:
 
     def callback_end(self) -> None:
         if self.out_queue is not None:
-            self.out_queue.put(LLMChatDone())
+            self.out_queue.put(LLMChatDone(self.input_id))
+
+class LLMChatInput:
+    def __init__(self, input: str, id: Any) -> None:
+        self.input = input
+        self.id = id
 
 class ChatLLMStreamer:
     def __init__(self, llm: ChatLLM) -> None:
@@ -131,22 +139,38 @@ class ChatLLMStreamer:
         llm.out_queue = self.output_queue
         self.llm = llm
         self.run = True
+        self.input_counter = 0
         self.thread = threading.Thread(target=lambda: self.thread_fun())
         self.thread.start()
+        self.llm.start()
 
     def thread_fun(self) -> None:
         while self.run:
-            input = self.input_queue.get()
-            print(f'input: {input}')
-            self.llm.chat(input)
+            input: LLMChatInput = self.input_queue.get()
+            self.llm.chat(input.input, input.id)
+
+    def flush_output(self) -> str:
+        r = ''
+        while not self.output_queue.empty():
+            t = self.output_queue.get_nowait()
+            if isinstance(t, str):
+                r = r + t
+        return r
 
     def chat(self, user_input: str) -> Iterable[str]:
-        self.input_queue.put(user_input)
+        id = self.input_counter
+        self.input_counter = self.input_counter + 1
+        self.input_queue.put(LLMChatInput(user_input, id))
         while True:
             output = self.output_queue.get()
-            if isinstance(output, LLMChatDone):
+            if not isinstance(output, LLMChatDone):
+                yield output
+                continue
+
+            if output.id == id:
                 break
-            yield output
+            else:
+                continue
 
     def terminate(self) -> None:
         self.run = False
