@@ -965,8 +965,8 @@ namespace chatllm
 
                     struct ggml_tensor * v_remain_dup = ggml_dup(ctx->gctx.get(), v_cache_remain);
 
-                    ggml_build_forward_expand(ctx->gf, ggml_cpy_inplace(ctx->gctx.get(), k_remain_dup, k_cache_1d));
-                    ggml_build_forward_expand(ctx->gf, ggml_cpy_inplace(ctx->gctx.get(), v_remain_dup, v_cache_2d));
+                    ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_remain_dup, k_cache_1d));
+                    ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), v_remain_dup, v_cache_2d));
 
                     cache_offset -= shift;
                 }
