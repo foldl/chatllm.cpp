@@ -10,7 +10,7 @@ Assume MSVC is used.
 
 1. Build target `libchatllm`:
 
-    ```shell
+    ```sh
     cmake --build build --config Release --target libchatllm
     ```
 
@@ -20,32 +20,9 @@ Assume MSVC is used.
 
 1. Build target `libchatllm`:
 
-    ```shell
+    ```sh
     cmake --build build --target libchatllm
     ```
-
-## C
-
-### Linux:
-
-1. Build `bindings\main.c`:
-
-    ```shell
-    export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
-    gcc main.c libchatllm.so
-    ```
-
-1. Test `a.out` with exactly the same command line options.
-
-### Windows:
-
-1. Build `bindings\main.c`:
-
-    ```shell
-    cl main.c libchatllm.lib
-    ```
-
-1. Test `main.exe` with exactly the same command line options.
 
 ## Python
 
@@ -67,8 +44,8 @@ There is also a [Chatbot](../bindings/chatllm_st.py) powered by [Streamlit](http
 
 To start it:
 
-```
-streamlit run your_script.py -- -i -m path/to/model
+```sh
+streamlit run chatllm_st.py -- -i -m path/to/model
 ```
 
 Note: "STOP" function is not implemented yet.
@@ -80,3 +57,28 @@ Run [chatllm.js](../bindings/chatllm.js) with exactly the same command line opti
 ```shell
 bun chatllm.js -i -m path/to/model
 ```
+
+## Other Languages
+
+`libchatllm` can be utilized by all languages that can call into dynamic libraries. Take C as an example:
+
+* Linux
+
+    1. Build `bindings\main.c`:
+
+        ```sh
+        export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
+        gcc main.c libchatllm.so
+        ```
+
+    1. Test `a.out` with exactly the same command line options.
+
+* Windows:
+
+    1. Build `bindings\main.c`:
+
+        ```shell
+        cl main.c libchatllm.lib
+        ```
+
+    1. Test `main.exe` with exactly the same command line options.

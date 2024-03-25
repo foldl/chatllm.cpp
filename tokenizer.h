@@ -185,4 +185,5 @@ private:
     size_t tok_max_len;
 };
 
+size_t get_end_of_valid_utf8(const std::string &utf8, const size_t offset);
 }

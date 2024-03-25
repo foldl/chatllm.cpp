@@ -937,3 +937,12 @@ std::string TextPrepNewlineToSpaces::transform(const std::string &s)
     const static std::regex r(R""([\r\n]+)"");
     return std::regex_replace(s, r, " ");
 }
+
+size_t tokenizer::get_end_of_valid_utf8(const std::string &utf8, const size_t offset)
+{
+    size_t end = offset;
+    uint32_t ch = 0;
+    while (try_codepoint_from_utf8(utf8, end, ch))
+        ;
+    return end;
+}

@@ -256,38 +256,48 @@ std::string codepoints_to_utf8(const std::vector<uint32_t> & cps) {
     return result;
 }
 
-static uint32_t codepoint_from_utf8(const std::string & utf8, size_t & offset) {
-    assert(offset < utf8.size());
+static uint32_t try_codepoint_from_utf8(const std::string & utf8, size_t & offset, uint32_t &result) {
+    if (offset >= utf8.size()) return false;
+
+    // ascii
     if (!(utf8[offset + 0] & 0x80)) {
-        auto result = utf8[offset + 0];
+        result = utf8[offset + 0];
         offset += 1;
-        return result;
+        return true;
     }
     else if (!(utf8[offset + 0] & 0x40)) {
-        throw std::invalid_argument("invalid character");
+        return false;
     }
     else if (!(utf8[offset + 0] & 0x20)) {
         if (offset + 1 >= utf8.size() || ! ((utf8[offset + 1] & 0xc0) == 0x80))
-            throw std::invalid_argument("invalid character");
-        auto result = ((utf8[offset + 0] & 0x1f) << 6) | (utf8[offset + 1] & 0x3f);
+            throw false;
+        result = ((utf8[offset + 0] & 0x1f) << 6) | (utf8[offset + 1] & 0x3f);
         offset += 2;
-        return result;
+        return true;
     }
     else if (!(utf8[offset + 0] & 0x10)) {
         if (offset + 2 >= utf8.size() || ! ((utf8[offset + 1] & 0xc0) == 0x80) || ! ((utf8[offset + 2] & 0xc0) == 0x80))
-            throw std::invalid_argument("invalid character");
-        auto result = ((utf8[offset + 0] & 0x0f) << 12) | ((utf8[offset + 1] & 0x3f) << 6) | (utf8[offset + 2] & 0x3f);
+            return false;
+        result = ((utf8[offset + 0] & 0x0f) << 12) | ((utf8[offset + 1] & 0x3f) << 6) | (utf8[offset + 2] & 0x3f);
         offset += 3;
-        return result;
+        return true;
     }
     else if (!(utf8[offset + 0] & 0x08)) {
         if (offset + 3 >= utf8.size() || ! ((utf8[offset + 1] & 0xc0) == 0x80) || ! ((utf8[offset + 2] & 0xc0) == 0x80) || !((utf8[offset + 3] & 0xc0) == 0x80))
-            throw std::invalid_argument("invalid character");
-        auto result = ((utf8[offset + 0] & 0x07) << 18) | ((utf8[offset + 1] & 0x3f) << 12) | ((utf8[offset + 2] & 0x3f) << 6) | (utf8[offset + 3] & 0x3f);
+            return false;
+        result = ((utf8[offset + 0] & 0x07) << 18) | ((utf8[offset + 1] & 0x3f) << 12) | ((utf8[offset + 2] & 0x3f) << 6) | (utf8[offset + 3] & 0x3f);
         offset += 4;
-        return result;
+        return true;
     }
-    throw std::invalid_argument("invalid string");
+
+    return false;
+}
+
+static uint32_t codepoint_from_utf8(const std::string & utf8, size_t & offset) {
+    uint32_t r = 0;
+    if (!try_codepoint_from_utf8(utf8, offset, r))
+        throw std::invalid_argument("invalid character");
+    return r;
 }
 
 static std::vector<uint32_t> codepoints_from_utf8(const std::string & utf8) {

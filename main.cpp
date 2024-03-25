@@ -807,21 +807,18 @@ public:
             token_cache.clear();
             print_len = 0;
         }
-        else if (std::find(puncts.begin(), puncts.end(), text.back()) != puncts.end())
-        {
-            // last symbol is a punctuation, hold on
-        }
-        else if (text.size() >= 3 && text.compare(text.size() - 3, 3, "�") == 0)
-        {
-            // ends with an incomplete token, hold on
-        }
         else
         {
-            printable_text = text.substr(print_len);
-            print_len = (int)text.size();
+            size_t end = tokenizer::get_end_of_valid_utf8(text, print_len);
+            if (end > print_len)
+            {
+                printable_text = text.substr(print_len, end - print_len);
+                print_len = end;
+            }
         }
 
-        f_print(user_data, printable_text.c_str());
+        if (printable_text.size() > 0)
+            f_print(user_data, printable_text.c_str());
     }
 
     void putln(const std::string &line) override
@@ -844,7 +841,7 @@ public:
     chatllm::BaseTokenizer *tokenizer;
     bool is_prompt;
     std::vector<int> token_cache;
-    int print_len;
+    size_t print_len;
     f_chatllm_print f_print;
     f_chatllm_end f_end;
     void *user_data;
