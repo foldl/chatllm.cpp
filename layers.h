@@ -520,6 +520,103 @@ namespace chatllm
         MLPBlock mlp;
     };
 
+    template <class PreAttnNormBlock,
+              class AttentionBlock,
+              class PostAttnNormBlock,
+              class PreMLPNormBlock,
+              class MLPBlock,
+              class PostMLPNormBlock> class LMBlock4 : public Block
+    {
+    public:
+        LMBlock4() = default;
+        LMBlock4(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
+                  int max_length)
+            : pre_attention_layernorm(ctx, hidden_size),
+              attention(ctx, hidden_size, num_attention_heads, max_length),
+              post_attention_layernorm(ctx, hidden_size),
+              pre_mlp_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, intermediate_size),
+              post_mlp_layernorm(ctx, hidden_size) {}
+
+        LMBlock4(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int max_length)
+            : pre_attention_layernorm(ctx, hidden_size),
+              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length),
+              post_attention_layernorm(ctx, hidden_size),
+              pre_mlp_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, intermediate_size),
+              post_mlp_layernorm(ctx, hidden_size) {}
+
+        LMBlock4(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int head_dim, int max_length)
+            : pre_attention_layernorm(ctx, hidden_size),
+              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length),
+              post_attention_layernorm(ctx, hidden_size),
+              pre_mlp_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, intermediate_size),
+              post_mlp_layernorm(ctx, hidden_size) {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
+        {
+            ggml_tensor *residual = ggml_dup(ctx->gctx.get(), hidden_states);
+            ggml_build_forward_expand(ctx->gf, residual);
+
+            hidden_states = pre_attention_layernorm.forward(ctx, hidden_states);
+            hidden_states = attention.forward(ctx, hidden_states, n_past);
+            hidden_states = post_attention_layernorm.forward(ctx, hidden_states);
+
+            hidden_states = ggml_add_inplace(ctx->gctx.get(), hidden_states, residual);
+            residual = ggml_cpy(ctx->gctx.get(), hidden_states, residual);
+            ggml_build_forward_expand(ctx->gf, residual);
+
+            hidden_states = pre_mlp_layernorm.forward(ctx, hidden_states);
+            hidden_states = mlp.forward(ctx, hidden_states);
+            hidden_states = post_mlp_layernorm.forward(ctx, hidden_states);
+
+            hidden_states = ggml_add_inplace(ctx->gctx.get(), hidden_states, residual);
+
+            return hidden_states;
+        }
+
+        void shift_cache(int shift, int total) override
+        {
+            attention.shift_cache(shift, total);
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += pre_attention_layernorm.get_param_num(effective_only);
+            r += attention.get_param_num(effective_only);
+            r += post_attention_layernorm.get_param_num(effective_only);
+            r += pre_mlp_layernorm.get_param_num(effective_only);
+            r += mlp.get_param_num(effective_only);
+            r += post_mlp_layernorm.get_param_num(effective_only);
+            return r;
+        }
+
+        void set_id(int id) override
+        {
+            Block::set_id(id);
+
+            pre_attention_layernorm.set_id(id);
+            attention.set_id(id);
+            post_attention_layernorm.set_id(id);
+            pre_mlp_layernorm.set_id(id);
+            mlp.set_id(id);
+            post_mlp_layernorm.set_id(id);
+        }
+
+    public:
+        PreAttnNormBlock pre_attention_layernorm;
+        AttentionBlock attention;
+        PostAttnNormBlock post_attention_layernorm;
+        PreMLPNormBlock pre_mlp_layernorm;
+        MLPBlock mlp;
+        PostMLPNormBlock post_mlp_layernorm;
+    };
+
     template <class InputNormBlock,
               class AttentionBlock,
               class PostNormBlock,
@@ -1039,8 +1136,8 @@ namespace chatllm
     public:
         enum RoPEMode
         {
-            Interleaved = 0,
-            Original = 2,
+            Interleaved = 0,        // II...IQQ...Q
+            Original = 2,           // IQIQ......IQ
             GLM = 4,
         };
         BaseSelfAttention() : BaseAttention() {}
@@ -1178,14 +1275,10 @@ namespace chatllm
         {}
     };
 
-    // TODO: this looks more OOP or generic, but due to difficulties in building computation graph,
-    //       MLP (SiLUMLP) has to be embedded into SparseMoE (calculation is done here too).
-    // template<class Expert> class SparseMoE : public Block
-
-    template<int num_local_experts, int num_experts_per_tok> class SparseMoE : public Block
+    template<class Expert, int num_local_experts, int num_experts_per_tok> class SparseMoE : public Block
     {
     public:
-        typedef SiLUMLP Expert;
+        //typedef SiLUMLP Expert;
         SparseMoE() = default;
         SparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
             : gate(ctx, hidden_size, num_local_experts, false)
@@ -1600,12 +1693,12 @@ namespace chatllm
     };
 
     template<int num_local_experts, int num_experts_per_tok, int sliding_window_len> class MixtralBlock : public LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm,
-                        SparseMoE<num_local_experts, num_experts_per_tok>>
+                        SparseMoE<SiLUMLP, num_local_experts, num_experts_per_tok>>
     {
     public:
         MixtralBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
             : LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm,
-                       SparseMoE<num_local_experts, num_experts_per_tok>>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+                       SparseMoE<SiLUMLP, num_local_experts, num_experts_per_tok>>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };
 

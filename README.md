@@ -89,6 +89,11 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * Cohere (`CohereForCausalLM`)
     * [x] [C4AI Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
 
+* Grok-1
+    * [x] [Base](https://huggingface.co/xai-org/grok-1)
+
+    About [Grok-1](./docs/grok.md).
+
 * Text Embedding (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
 

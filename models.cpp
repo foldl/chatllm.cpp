@@ -133,6 +133,8 @@ namespace chatllm
 
         MODEL_TYPE_COHERE_COMMAND_R = 0x1400,
 
+        MODEL_TYPE_GROK_1           = 0x1500,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
     };
@@ -225,6 +227,8 @@ namespace chatllm
             return "Gemma";
         case MODEL_TYPE_COHERE_COMMAND_R:
             return "Command-R";
+        case MODEL_TYPE_GROK_1:
+            return "Grok-1";
         case MODEL_TYPE_BCE_Embedding:
             return "BCE-Embedding";
         case MODEL_TYPE_BCE_ReRanker:
@@ -893,6 +897,11 @@ namespace chatllm
         #include "models/cohere.cpp"
     }
 
+    namespace grok
+    {
+        #include "models/grok.cpp"
+    }
+
     struct args
     {
         int max_length;
@@ -1013,6 +1022,8 @@ namespace chatllm
         CASE(GEMMA,                 gemma, 1)
 
         CASE(COHERE_COMMAND_R,      cohere::command_r, 1)
+
+        CASE(GROK_1,                grok::v1, 1)
 
         CASE(BCE_Embedding,         bce::embedding, 1)
         CASE(BCE_ReRanker,          bce::ranker, 1)
