@@ -41,6 +41,10 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
         Tip: Use system prompt to select modes: `-s GPT4` (default mode), `-s Math` (mathematical reasoning mode).
 
+    * [x] Starling: [7B-beta](https://huggingface.co/Nexusflow/Starling-LM-7B-beta)
+
+        Note: This is based on OpenChat, and is fully compatible with OpenChat GPT4 mode.
+
     * [x] WizardLM: [Math 7B](https://huggingface.co/WizardLM/WizardMath-7B-V1.1)
 
     * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) 🔥
@@ -158,6 +162,9 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardMath
 
 # OpenChat models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a OpenChat
+
+# Starling models
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a Starling
 
 # TigerBot models
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a TigerBot

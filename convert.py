@@ -75,6 +75,7 @@ class ModelType(Enum):
     Mixtral = 0x601
     OpenChat = 0x602
     NeuralBeagle = 0x603
+    Starling = 0x604
 
     QWen    = 0x700
     QWen2   = 0x710
@@ -1039,36 +1040,6 @@ class MistralConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
-
-class OpenChatConverter(BaseConverter):
-    MODEL_TYPE = ModelType.OpenChat
-
-    @classmethod
-    def pp(cls, config, name: str, tensor):
-        return MistralConverter.pp(config, name, tensor)
-
-    @staticmethod
-    def dump_config(f, config, ggml_type):
-        MistralConverter.dump_config(f, config, ggml_type)
-
-    @staticmethod
-    def get_weight_names(config):
-        return MistralConverter.get_weight_names(config)
-
-class NeuralBeagleConverter(BaseConverter):
-    MODEL_TYPE = ModelType.NeuralBeagle
-
-    @classmethod
-    def pp(cls, config, name: str, tensor):
-        return MistralConverter.pp(config, name, tensor)
-
-    @staticmethod
-    def dump_config(f, config, ggml_type):
-        MistralConverter.dump_config(f, config, ggml_type)
-
-    @staticmethod
-    def get_weight_names(config):
-        return MistralConverter.get_weight_names(config)
 
 class MixtralConverter(BaseConverter):
     MODEL_TYPE = ModelType.Mixtral
@@ -2662,7 +2633,11 @@ def main():
     elif arch == 'MixtralForCausalLM':
         MixtralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'openchat':
-        OpenChatConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        MistralConverter.MODEL_TYPE = ModelType.OpenChat
+        MistralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'starling':
+        MistralConverter.MODEL_TYPE = ModelType.Starling
+        MistralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif (arch == 'QWenLMHeadModel') or (arch == 'qwen-qanything') or (arch == 'qwenqanything'):
         if config.hidden_size is None:
             config.hidden_size = config.n_embd
@@ -2688,7 +2663,8 @@ def main():
     elif arch == 'XLMRobertaForSequenceClassification':
         XLMRobertaClassificationConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'neuralbeagle':
-        NeuralBeagleConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        MistralConverter.MODEL_TYPE = ModelType.NeuralBeagle
+        MistralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OrionForCausalLM':
         OrionConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MiniCPMForCausalLM':

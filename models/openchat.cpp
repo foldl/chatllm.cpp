@@ -13,7 +13,11 @@ class Tokenizer : public mistral::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
-        : mistral::Tokenizer(config, &_chat_encoder)
+        : Tokenizer(config, &_chat_encoder)
+    {}
+
+    Tokenizer(const Config &config, BaseHistoryEncoder *encoder)
+        : mistral::Tokenizer(config, encoder)
     {
         sys_prompt = "GPT4";
     }
@@ -25,7 +29,12 @@ class ConditionalGeneration : public mistral::ConditionalGeneration
 {
 public:
     ConditionalGeneration(const Config &config)
-        : mistral::ConditionalGeneration(config, MODEL_TYPE_OPENCHAT)
+        : ConditionalGeneration(config, MODEL_TYPE_OPENCHAT)
+    {
+    }
+
+    ConditionalGeneration(const Config &config, ModelType type)
+        : mistral::ConditionalGeneration(config, type)
     {
     }
 };

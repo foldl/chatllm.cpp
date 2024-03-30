@@ -114,6 +114,7 @@ namespace chatllm
         MODEL_TYPE_MIXTRAL  = 0x601,
         MODEL_TYPE_OPENCHAT = 0x602,
         MODEL_TYPE_NEURALBEAGLE = 0x603,
+        MODEL_TYPE_STARLING     = 0x604,
 
         MODEL_TYPE_QWEN     = 0x700,
         MODEL_TYPE_QWEN2    = 0x710,
@@ -205,6 +206,8 @@ namespace chatllm
             return "OpenChat";
         case MODEL_TYPE_NEURALBEAGLE:
             return "NeuralBeagle";
+        case MODEL_TYPE_STARLING:
+            return "Starling";
         case MODEL_TYPE_QWEN:
             return "QWen";
         case MODEL_TYPE_QWEN2:
@@ -822,6 +825,11 @@ namespace chatllm
         #include "models/openchat.cpp"
     }
 
+    namespace starling
+    {
+        #include "models/starling.cpp"
+    }
+
     namespace mixtral
     {
         #include "models/mixtral.cpp"
@@ -1012,6 +1020,7 @@ namespace chatllm
         CASE(STABLELM,              stablelm, 1)
 
         CASE(NEURALBEAGLE,          neuralbeagle, 1)
+        CASE(STARLING,              starling, 1)
 
         CASE(ORION,                 orion, 1)
 
