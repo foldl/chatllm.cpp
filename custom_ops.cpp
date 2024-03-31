@@ -456,7 +456,7 @@ static void ggml_compute_forward_sigmoid_f32(struct ggml_tensor * dst , const st
     }
 }
 
-static void ggml_compute_forward_sigmoid(struct ggml_tensor * dst , const struct ggml_tensor * src, int ith, int nth, void * userdata) {
+void ggml_compute_forward_sigmoid(struct ggml_tensor * dst , const struct ggml_tensor * src, int ith, int nth, void * userdata) {
     switch (src->type) {
         case GGML_TYPE_F32:
             {

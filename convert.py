@@ -79,6 +79,7 @@ class ModelType(Enum):
 
     QWen    = 0x700
     QWen2   = 0x710
+    QWen2MoE = 0x750
 
     BlueLM  = 0x800
 
@@ -1926,6 +1927,67 @@ class QWen2Converter(BaseConverter):
 
         return weight_names
 
+class QWen2MoEConverter(BaseConverter):
+    MODEL_TYPE = ModelType.QWen2MoE
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.use_sliding_window == False, "use_sliding_window must be False"
+        assert config.decoder_sparse_step == 1, "decoder_sparse_step must be 1"
+        LlamaConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.moe_intermediate_size,
+            config.shared_expert_intermediate_size,
+            config.sliding_window,
+            config.num_experts_per_tok,
+            config.num_experts,
+            1 if config.norm_topk_prob else 0,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+            ]
+
+            for j in range(config.num_experts):
+                weight_names += [
+                    f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                    f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                    f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.mlp.gate.weight",
+                f"model.layers.{i}.mlp.shared_expert.down_proj.weight",
+                f"model.layers.{i}.mlp.shared_expert.gate_proj.weight",
+                f"model.layers.{i}.mlp.shared_expert.up_proj.weight",
+                f"model.layers.{i}.mlp.shared_expert_gate.weight",
+
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.k_proj.bias",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.bias",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.bias",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
 def permute2(weights: torch.Tensor, n_head: int, partial_rotary_factor: float) -> torch.Tensor:
     hidden_size = weights.shape[0]
     head_dim = hidden_size // n_head
@@ -2652,6 +2714,8 @@ def main():
         QWenConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2ForCausalLM':
         QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Qwen2MoeForCausalLM':
+        QWen2MoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'tigerbot':
         TigerBotConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'BlueLMForCausalLM':

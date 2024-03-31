@@ -468,6 +468,15 @@ namespace chatllm
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}
 
+        LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
+                  int mlp_intermediate_size1, int mlp_intermediate_size2,
+                  int num_kv_heads,
+                  int head_dim, int max_length)
+            : input_layernorm(ctx, hidden_size),
+              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length),
+              post_attention_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, mlp_intermediate_size1, mlp_intermediate_size2) {}
+
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
         {
@@ -1275,13 +1284,73 @@ namespace chatllm
         {}
     };
 
+    template<class MLP, bool use_bias = false> class GatedMLP : public MLP
+    {
+    public:
+        GatedMLP(InitContext *ctx, int hidden_size, int intermediate_size)
+        :  MLP(ctx, hidden_size, intermediate_size),
+           gate(ctx, hidden_size, 1, use_bias)
+        {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override
+        {
+            extern void ggml_compute_forward_sigmoid(struct ggml_tensor * dst , const struct ggml_tensor * src, int ith, int nth, void * userdata);
+            ggml_tensor *scale = gate.forward(ctx, hidden_states);
+            ggml_tensor *r     = MLP::forward(ctx, hidden_states);
+            scale = ggml_map_custom1_inplace(ctx->gctx.get(), scale, ggml_compute_forward_sigmoid, 1, nullptr);
+            r = ggml_mul_inplace(ctx->gctx.get(), r, scale);
+            return r;
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += MLP::get_param_num(effective_only);
+            r += gate.get_param_num(effective_only);
+            return r;
+        }
+    public:
+        Linear gate;
+    };
+
+    template<class MLP1, class MLP2> class CombinedMLP : public Block
+    {
+    public:
+        CombinedMLP(InitContext *ctx, int hidden_size, int intermediate_size1, int intermediate_size2)
+            :  mlp1(ctx, hidden_size, intermediate_size1),
+               mlp2(ctx, hidden_size, intermediate_size2)
+        {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override
+        {
+            ggml_tensor *r1 = mlp1.forward(ctx, hidden_states);
+            ggml_tensor *r2 = mlp2.forward(ctx, hidden_states);
+            ggml_tensor *r = ggml_add(ctx->gctx.get(), r1, r2);
+            return r;
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += mlp1.get_param_num(effective_only);
+            r += mlp2.get_param_num(effective_only);
+            return r;
+        }
+    public:
+        MLP1 mlp1;
+        MLP2 mlp2;
+    };
+
     template<class Expert, int num_local_experts, int num_experts_per_tok> class SparseMoE : public Block
     {
     public:
         //typedef SiLUMLP Expert;
         SparseMoE() = default;
         SparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
-            : gate(ctx, hidden_size, num_local_experts, false)
+            : gate(ctx, hidden_size, num_local_experts, false),
+              norm_topk_prob(true)
         {
             for (int i = 0; i < num_local_experts; i++)
             {
@@ -1312,9 +1381,12 @@ namespace chatllm
 
             weights = ggml_reshape_2d(ggctx, weights, num_experts_per_tok, n_tokens); // [n_tokens, num_experts_per_tok]
 
-            ggml_tensor * weights_sum = ggml_sum_rows(ggctx, weights);
+            if (norm_topk_prob)
+            {
+                ggml_tensor * weights_sum = ggml_sum_rows(ggctx, weights);
 
-            weights = ggml_div(ggctx, weights, weights_sum); // [n_tokens, num_experts_per_tok]
+                weights = ggml_div(ggctx, weights, weights_sum); // [n_tokens, num_experts_per_tok]
+            }
 
             // compute expert outputs
             ggml_tensor * moe_out = nullptr;
@@ -1371,6 +1443,7 @@ namespace chatllm
         std::vector<ggml_tensor *> expert_gates;
         std::vector<ggml_tensor *> expert_ups;
         std::vector<ggml_tensor *> expert_downs;
+        bool norm_topk_prob;
     };
 
     template <bool bias> class InternLMBlock : public LMBlock1<RMSNorm, InternLMSelfAttention<bias>, RMSNorm, SiLUMLP>
@@ -1767,11 +1840,15 @@ namespace chatllm
     class QWen2SelfAttention : public BaseSelfAttention<BaseAttention>
     {
     public:
-        QWen2SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, false)
+        QWen2SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, true, false)
         {
             rope_mode = RoPEMode::Original;
         }
+
+        QWen2SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : QWen2SelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length)
+        {}
     };
 
     class QWen2Block : public LMBlock1<RMSNorm, QWen2SelfAttention, RMSNorm, SiLUMLP>
