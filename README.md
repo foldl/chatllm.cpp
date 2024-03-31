@@ -145,6 +145,8 @@ git submodule update --init --recursive
 
 ### Quantize Model
 
+**Some quantized models can be downloaded from [here](https://modelscope.cn/models/judd2024/chatllm_quantized_models).**
+
 Use `convert.py` to transform models into quantized GGML format. For example, to convert the _fp16_ base model to q8_0 (quantized int8) GGML model, run:
 
 ```sh
