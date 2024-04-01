@@ -61,9 +61,9 @@ namespace embedding
     public:
         ConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config, ModelType type)
+        ConditionalGeneration(const Config &config, ModelType type, size_t mem_size, size_t scratch_size)
             : BaseModelForConditionalGeneration<
-                EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, BCEFinalNorm, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE),
+                EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, BCEFinalNorm, int, int, int, int, int>>(type, config, mem_size, scratch_size),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -78,7 +78,7 @@ namespace embedding
         }
 
         ConditionalGeneration(const Config &config)
-            : ConditionalGeneration(config, MODEL_TYPE_BCE_Embedding)
+            : ConditionalGeneration(config, MODEL_TYPE_BCE_Embedding, MEM_SIZE, SCRATCH_SIZE)
         {}
 
         void load(ModelLoader &loader) override
@@ -183,12 +183,12 @@ namespace ranker
         ConditionalGeneration() = default;
 
         ConditionalGeneration(const Config &config)
-            : ConditionalGeneration(config, MODEL_TYPE_BCE_ReRanker)
+            : ConditionalGeneration(config, MODEL_TYPE_BCE_ReRanker, MEM_SIZE, SCRATCH_SIZE)
         {}
 
-        ConditionalGeneration(const Config &config, ModelType type)
+        ConditionalGeneration(const Config &config, ModelType type, size_t mem_size, size_t scratch_size)
             : BaseModelForConditionalGeneration<
-                EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, RobertaClassificationHead, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE),
+                EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, RobertaClassificationHead, int, int, int, int, int>>(type, config, mem_size, scratch_size),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
