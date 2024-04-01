@@ -1,6 +1,6 @@
 # ChatLLM.cpp
 
-[中文版](README_ZH.md)
+[中文版](README_zh.md)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -54,50 +54,12 @@ pip install -r requirements.txt
 Use `convert.py` to transform models into quantized GGML format. For example, to convert the _fp16_ base model to q8_0 (quantized int8) GGML model, run:
 
 ```sh
-# DeepSeek LLM Chat models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DeepSeek
-
-# DeepSeek Coder models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DeepSeekCoder
-
-# CodeLlaMA models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA
-
-# Yi models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a Yi
-
-# WizardCoder models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardCoder
-
-# WizardLM models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardLM
-
-# WizardMath models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardMath
-
-# OpenChat models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a OpenChat
-
-# Starling models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a Starling
-
-# TigerBot models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a TigerBot
-
-# Dolphin (based on Phi-2) models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DolphinPhi2
-
-# NeuralBeagle14
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a NeuralBeagle
-
-# CodeFuse-DeepSeek
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeFuseDeepSeek
-
-# CharacterGLM
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CharacterGLM
-
-# For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
+# For models such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
+
+# For some models such as CodeLlaMA, model type should be provided by `-a`
+# Find `-a ...` option for each model in `docs/models.md`.
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA
 ```
 
 Note: Appropriately, only HF format is supported; Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.

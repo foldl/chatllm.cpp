@@ -61,9 +61,9 @@ namespace embedding
     public:
         ConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config)
+        ConditionalGeneration(const Config &config, ModelType type)
             : BaseModelForConditionalGeneration<
-                EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, BCEFinalNorm, int, int, int, int, int>>(MODEL_TYPE_BCE_Embedding, config, MEM_SIZE, SCRATCH_SIZE),
+                EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, BCEFinalNorm, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -76,6 +76,10 @@ namespace embedding
                                                                                     config.hidden_size, config.num_attention_heads,
                                                                                     config.intermediate_size, config.num_attention_heads, config.max_length);
         }
+
+        ConditionalGeneration(const Config &config)
+            : ConditionalGeneration(config, MODEL_TYPE_BCE_Embedding)
+        {}
 
         void load(ModelLoader &loader) override
         {
@@ -179,8 +183,12 @@ namespace ranker
         ConditionalGeneration() = default;
 
         ConditionalGeneration(const Config &config)
+            : ConditionalGeneration(config, MODEL_TYPE_BCE_ReRanker)
+        {}
+
+        ConditionalGeneration(const Config &config, ModelType type)
             : BaseModelForConditionalGeneration<
-                EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, RobertaClassificationHead, int, int, int, int, int>>(MODEL_TYPE_BCE_ReRanker, config, MEM_SIZE, SCRATCH_SIZE),
+                EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, RobertaClassificationHead, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;

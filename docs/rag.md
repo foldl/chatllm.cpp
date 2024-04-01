@@ -6,9 +6,13 @@ Get the models for text embedding and QA ranking that are supported, for example
 
 * Text Embedding (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
+    * [x] [BGE-M3](https://huggingface.co/BAAI/bge-m3)
 
-* QA Ranking (`XLMRobertaForSequenceClassification`) (_Optional_)
+        Note: Only dense embedding is implemented.
+
+* QA Ranking (`XLMRobertaForSequenceClassification`)
     * [x] [BCE-ReRanker](https://huggingface.co/maidalun1020/bce-reranker-base_v1)
+    * [x] [BGE-ReRanker-M3](https://huggingface.co/BAAI/bge-reranker-v2-m3)
 
 Use `convert.py` to convert the models.
 
@@ -151,6 +155,29 @@ You  > what color is the banana?
 A.I. > {"file": "3.txt"}
 the banana is red
 
+
+References:
+1. {"file": "3.txt"}
+```
+
+### Inter-operations between embedding and reranker models
+
+It is possible to use a reranker model with an embedding model from another developer. Remember that max context length of different models may also differ too.
+For example, let use BGE-ReRanker-M3 and BCE-Embedding for augmentation:
+
+```
+./bin/main -i -m ../quantized/minicpm_dpo_f16.bin --embedding_model ../quantized/bce_em.bin --reranker_model ../quantized/bge_rerank.bin --vector_store /path/to/fruits.dat.vsdb
+    ________          __  __    __    __  ___
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+You are served by MiniCPM,                    /_/   /_/
+with 2724880896 (2.7B) parameters.
+Augmented by BCE-Embedding (0.2B) and BGE-ReRanker-M3 (0.4B).
+
+You  > what color is the banana?
+A.I. >  Based on the given information, the color of the banana is red.
 
 References:
 1. {"file": "3.txt"}

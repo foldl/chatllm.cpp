@@ -100,6 +100,8 @@ class ModelType(Enum):
 
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
+    BGE_M3        = 0x10000102
+    BGE_ReRankerM3 = 0x10000103
 
 
 class TokenType(Enum):
@@ -2585,7 +2587,7 @@ def load_some_model(path: Path) -> List[Path]:
     '''Load a model of any supported format.'''
     # Be extra-friendly and accept either a file or a directory:
     if path.is_dir():
-        globs = ["model-*-of-*.safetensors", "consolidated.*.pth", "pytorch_model-*-of-*.bin", "*.pt", "pytorch_model.bin", "model.safetensors"]
+        globs = ["model-*-of-*.safetensors", "consolidated.*.pth", "pytorch_model-*-of-*.bin", "pytorch_model.bin", "model.safetensors", "*.pt"]
         for glob in globs:
             files = list(path.glob(glob))
             if len(files) > 0:
@@ -2724,7 +2726,13 @@ def main():
         StableLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'XLMRobertaModel':
         XLMRobertaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'bge-m3':
+        XLMRobertaConverter.MODEL_TYPE = ModelType.BGE_M3
+        XLMRobertaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'XLMRobertaForSequenceClassification':
+        XLMRobertaClassificationConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'bge-reranker-m3':
+        XLMRobertaClassificationConverter.MODEL_TYPE = ModelType.BGE_ReRankerM3
         XLMRobertaClassificationConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'neuralbeagle':
         MistralConverter.MODEL_TYPE = ModelType.NeuralBeagle

@@ -139,6 +139,8 @@ namespace chatllm
 
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
+        MODEL_TYPE_BGE_M3        = 0x10000102,
+        MODEL_TYPE_BGE_ReRanker_M3  = 0x10000103,
     };
 
     ModelPurpose get_model_purpose(ModelType model_type)
@@ -146,8 +148,10 @@ namespace chatllm
         switch (model_type)
         {
         case MODEL_TYPE_BCE_Embedding:
+        case MODEL_TYPE_BGE_M3:
             return ModelPurpose::TextEmbedding;
         case MODEL_TYPE_BCE_ReRanker:
+        case MODEL_TYPE_BGE_ReRanker_M3:
             return ModelPurpose::Ranker;
         default:
             return ModelPurpose::Chat;
@@ -239,6 +243,10 @@ namespace chatllm
             return "BCE-Embedding";
         case MODEL_TYPE_BCE_ReRanker:
             return "BCE-ReRanker";
+        case MODEL_TYPE_BGE_M3:
+            return "BGE-M3";
+        case MODEL_TYPE_BGE_ReRanker_M3:
+            return "BGE-ReRanker-M3";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -873,6 +881,11 @@ namespace chatllm
         #include "models/bce.cpp"
     }
 
+    namespace bge
+    {
+        #include "models/bge.cpp"
+    }
+
     namespace orion
     {
         #include "models/orion.cpp"
@@ -1040,6 +1053,8 @@ namespace chatllm
 
         CASE(BCE_Embedding,         bce::embedding, 1)
         CASE(BCE_ReRanker,          bce::ranker, 1)
+        CASE(BGE_M3,                bge::embedding, 1)
+        CASE(BGE_ReRanker_M3,       bge::ranker, 1)
 
         default:
             CHATLLM_THROW << "invalid model type " << model_type;

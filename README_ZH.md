@@ -53,50 +53,12 @@ pip install -r requirements.txt
 使用 `convert.py` 将模型转换为量化的 GGML 格式。例如，要将某个模型转换为 q8_0（int8 量化）GGML 模型，请运行以下命令：
 
 ```sh
-# DeepSeek LLM Chat 模型
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DeepSeek
-
-# DeepSeek Coder 模型
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DeepSeekCoder
-
-# CodeLlaMA 模型
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA
-
-# Yi models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a Yi
-
-# WizardCoder models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardCoder
-
-# WizardLM models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardLM
-
-# WizardMath models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a WizardMath
-
-# OpenChat models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a OpenChat
-
-# Starling models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a Starling
-
-# TigerBot models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a TigerBot
-
-# Dolphin (based on Phi-2) models
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a DolphinPhi2
-
-# NeuralBeagle14
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a NeuralBeagle
-
-# CodeFuse-DeepSeek
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeFuseDeepSeek
-
-# CharacterGLM
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CharacterGLM
-
-# For other models, such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
+# 对于 ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2 等模型，使用以下命令转换
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
+
+# 对于像 CodeLlaMA 等模型，模型的类型需要通过 `-a` 参数指定。
+# `docs/models.md` 说明了这些模型需要的 `-a` 参数。
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA
 ```
 
 说明：大体上，仅支持 HF 格式；生成的 `.bin` 文件格式不同于当前 `llama.cpp` 项目所使用的 GGUF。
