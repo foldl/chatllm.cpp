@@ -1284,6 +1284,8 @@ namespace chatllm
         {}
     };
 
+    void ggml_compute_forward_sigmoid(struct ggml_tensor * dst , const struct ggml_tensor * src, int ith, int nth, void * userdata);
+
     template<class MLP, bool use_bias = false> class GatedMLP : public MLP
     {
     public:
@@ -1295,7 +1297,6 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override
         {
-            extern void ggml_compute_forward_sigmoid(struct ggml_tensor * dst , const struct ggml_tensor * src, int ith, int nth, void * userdata);
             ggml_tensor *scale = gate.forward(ctx, hidden_states);
             ggml_tensor *r     = MLP::forward(ctx, hidden_states);
             scale = ggml_map_custom1_inplace(ctx->gctx.get(), scale, ggml_compute_forward_sigmoid, 1, nullptr);
