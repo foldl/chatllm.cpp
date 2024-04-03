@@ -12,7 +12,7 @@ if 'llm' not in st.session_state:
 
 if st.session_state.banner != '':
     with st.expander("LLM Information"):
-        st.code('\n' + st.session_state.banner, language=None)
+        st.code(st.session_state.banner, language=None)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -32,5 +32,10 @@ if prompt := st.chat_input("What is up?"):
 
     with st.chat_message("assistant"):
         response = st.write_stream(st.session_state.llm_streamer.chat(prompt))
+        references = st.session_state.llm_streamer.llm.references
+        if len(references) > 0:
+            with st.expander("References"):
+                for r in references:
+                    st.caption(r)
 
     st.session_state.messages.append({"role": "assistant", "content": response})

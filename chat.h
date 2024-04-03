@@ -186,6 +186,11 @@ namespace chatllm
         virtual ~BaseStreamer() = default;
         virtual void put(const std::vector<int> &output_ids) = 0;
         virtual void putln(const std::string &line) = 0;
+        // used for RAG
+        virtual void put_reference(const std::string &line)
+        {
+            putln(line);
+        }
         virtual void end() = 0;
     };
 
@@ -451,7 +456,6 @@ namespace chatllm
         std::string get_additional_description(void) const override;
 
         AugmentedQueryComposer composer;
-        std::string reference_tag;
         bool    hide_reference;
         int     retrieve_top_n;
         int     rerank_top_n;

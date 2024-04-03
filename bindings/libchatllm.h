@@ -51,6 +51,10 @@ DLL_DECL struct chatllm_obj * API_CALL chatllm_create(void);
 // Append a command line option
 DLL_DECL void API_CALL chatllm_append_param(struct chatllm_obj *obj, const char *utf8_str);
 
+// Set print reference callback
+// Call this before `chatllm_start`
+DLL_DECL int API_CALL chatllm_set_print_reference(struct chatllm_obj *obj, f_chatllm_print f_print);
+
 // Start
 DLL_DECL int API_CALL chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_end f_end, void *user_data);
 

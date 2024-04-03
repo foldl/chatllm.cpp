@@ -579,7 +579,7 @@ namespace chatllm
         const std::string &embedding_model, const std::string &reranker_model)
         : Pipeline(path, args),
           composer(),
-          reference_tag("References:"), hide_reference(false),
+          hide_reference(false),
           retrieve_top_n(5), rerank_top_n(3),
           dump(false),
           rerank_score_threshold(0.5f),
@@ -716,11 +716,14 @@ namespace chatllm
         if (hide_reference || (metainfo.size() < 1)) return;
 
         std::set<std::string> merged;
-        merged.insert(metainfo.begin(), metainfo.end());
-        streamer->putln("");
-        streamer->putln(reference_tag);
-        for (auto s : merged)
-            streamer->putln("1. " + s);
+
+        for (auto &s : metainfo)
+        {
+            if (merged.find(s) != merged.end()) continue;
+
+            merged.insert(s);
+            streamer->put_reference(s);
+        }
     }
 
     AugmentedQueryComposer::AugmentedQueryComposer()

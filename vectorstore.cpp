@@ -221,6 +221,9 @@ void CVectorStore::LoadDB(const char *fn)
     size_t old_size = contents.size();
     FILE *f = fopen(fn, "rb");
     file_header header;
+
+    CHATLLM_CHECK(f != nullptr) << "can not open db file: " << fn;
+
     if (fread(&header, sizeof(header), 1, f) < 1)
         goto cleanup;
 

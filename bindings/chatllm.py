@@ -26,6 +26,7 @@ class LibChatLLM:
 
         self._chatllm_create = self._lib.chatllm_create
         self._chatllm_append_param = self._lib.chatllm_append_param
+        self._chatllm_set_print_reference = self._lib.chatllm_set_print_reference
         self._chatllm_start = self._lib.chatllm_start
         self._chatllm_user_input = self._lib.chatllm_user_input
         self._chatllm_abort_generation = self._lib.chatllm_abort_generation
@@ -36,6 +37,9 @@ class LibChatLLM:
         self._chatllm_append_param.restype = None
         self._chatllm_append_param.argtypes = [c_void_p, c_char_p]
 
+        self._chatllm_set_print_reference.restype = c_int
+        self._chatllm_set_print_reference.argtypes = [c_void_p, self._PRINTFUNC]
+
         self._chatllm_start.restype = c_int
         self._chatllm_start.argtypes = [c_void_p, self._PRINTFUNC, self._ENDFUNC, c_void_p]
 
@@ -45,13 +49,19 @@ class LibChatLLM:
         self._chatllm_abort_generation.restype = None
         self._chatllm_abort_generation.argtypes = [c_void_p]
 
+        self._cb_print_reference = self._PRINTFUNC(LibChatLLM.callback_print_reference)
         self._cb_print = self._PRINTFUNC(LibChatLLM.callback_print)
         self._cb_end = self._ENDFUNC(LibChatLLM.callback_end)
 
     @staticmethod
+    def callback_print_reference(user_data: int, s: bytes) -> None:
+        obj = LibChatLLM._id2obj[user_data]
+        obj.callback_print_reference(s.decode())
+
+    @staticmethod
     def callback_print(user_data: int, s: bytes) -> None:
         obj = LibChatLLM._id2obj[user_data]
-        obj.callback_print(s)
+        obj.callback_print(s.decode())
 
     @staticmethod
     def callback_end(user_data: int) -> None:
@@ -74,6 +84,7 @@ class LibChatLLM:
 
     def start(self, obj: c_void_p, callback_obj: Any) -> int:
         id = self.alloc_id_for_obj(callback_obj)
+        self._chatllm_set_print_reference(obj, self._cb_print_reference)
         return self._chatllm_start(obj, self._cb_print, self._cb_end, c_void_p(id))
 
     def chat(self, obj: c_void_p, user_input: str) -> int:
@@ -93,6 +104,7 @@ class ChatLLM:
         self.is_generating = False
         self.out_queue = None
         self.input_id = None
+        self.references = []
         if param is not None:
             self.append_param(param)
             if auto_start:
@@ -109,6 +121,7 @@ class ChatLLM:
     def chat(self, user_input: str, input_id = None) -> None:
         self.is_generating = True
         self.input_id = input_id
+        self.references = []
         r = self._lib.chat(self._chat, user_input)
         self.is_generating = False
         if r != 0:
@@ -117,11 +130,14 @@ class ChatLLM:
     def abort(self) -> None:
         self._lib.abort(self._chat)
 
-    def callback_print(self, s: bytes) -> None:
+    def callback_print_reference(self, s: str) -> None:
+        self.references.append(s)
+
+    def callback_print(self, s: str) -> None:
         if self.out_queue is None:
-            print(s.decode(), end="", flush=True)
+            print(s, end="", flush=True)
         else:
-            self.out_queue.put(s.decode())
+            self.out_queue.put(s)
 
     def callback_end(self) -> None:
         if self.out_queue is not None:
@@ -204,3 +220,4 @@ if __name__ == '__main__':
         s = input('You  > ')
         print('A.I. > ', end='', flush=True)
         llm.chat(s)
+        print(llm.references)
