@@ -329,8 +329,6 @@ namespace chatllm
             std::vector<int> output_ids;
             output_ids.reserve(gen_config.max_length);
             output_ids = input_ids;
-            if (streamer)
-                streamer->put(input_ids);
 
             if (!continuous) n_past = 0;
             completed = false;
@@ -338,7 +336,7 @@ namespace chatllm
             transformer.set_ctx((int)input_ids.size());
             int next_output_idx = (int)input_ids.size();
 
-            while (!aborted && !completed && (n_past < gen_config.max_length))
+            while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
             {
                 int next_token_id = generate_next_token(curr_input_ids, gen_config);
 //printf("\nnext = %d\n", next_token_id);
@@ -375,8 +373,6 @@ namespace chatllm
             if (aborted && !completed)
                 completed = true;
 
-            if (streamer)
-                streamer->end();
 //printf("\nn_past = %d\n", n_past);
             return output_ids;
         }

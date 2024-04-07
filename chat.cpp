@@ -515,6 +515,9 @@ namespace chatllm
             }
         }
 
+        if (streamer)
+            streamer->end();
+
         post_chat(history, gen_config, streamer);
         return r;
     }

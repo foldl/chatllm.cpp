@@ -588,11 +588,7 @@ void TextStreamer::put_reference(const std::string &line)
 void TextStreamer::put(const std::vector<int> &output_ids)
 {
     if (is_prompt)
-    {
-        // skip prompt
         is_prompt = false;
-        return;
-    }
 
     static const std::vector<char> puncts{',', '!', ':', ';', '?'};
 
@@ -806,11 +802,7 @@ public:
     void put(const std::vector<int> &output_ids) override
     {
         if (is_prompt)
-        {
-            // skip prompt
             is_prompt = false;
-            return;
-        }
 
         static const std::vector<char> puncts{',', '!', ':', ';', '?'};
 
