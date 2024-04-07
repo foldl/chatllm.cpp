@@ -113,7 +113,7 @@ public:
 
 public:
     static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 84ull * 1024 * 1024;
+    static constexpr size_t SCRATCH_SIZE = 484ull * 1024 * 1024;
 
     BaseConfig config;
 
