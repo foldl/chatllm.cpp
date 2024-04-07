@@ -626,8 +626,11 @@ void TextStreamer::put(const std::vector<int> &output_ids)
 
 void TextStreamer::end()
 {
-    std::string text = tokenizer->decode(token_cache);
-    cout << text.substr(print_len) << std::endl;
+    if (tokenizer)
+    {
+        std::string text = tokenizer->decode(token_cache);
+        cout << text.substr(print_len) << std::endl;
+    }
     is_prompt = true;
     token_cache.clear();
     print_len = 0;
@@ -862,8 +865,11 @@ public:
 
     void end() override
     {
-        std::string text = tokenizer->decode(token_cache);
-        putln(text.substr(print_len));
+        if (tokenizer)
+        {
+            std::string text = tokenizer->decode(token_cache);
+            putln(text.substr(print_len));
+        }
         is_prompt = true;
         token_cache.clear();
         print_len = 0;
