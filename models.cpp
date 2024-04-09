@@ -927,19 +927,70 @@ namespace chatllm
         int max_length;
     };
 
+    template <class Config>
+    void load_config(ModelLoader &loader, Config &config, const args &args)
+    {
+        if (0 == loader.offset_config)
+            loader.offset_config = loader.tell();
+        else
+            loader.seek(loader.offset_config, SEEK_SET);
+
+        // load config
+        config = loader.read_basic<Config>();
+        if (args.max_length > 0)
+            config.max_length = args.max_length;
+
+        loader.offset_tokenizer = loader.tell();
+    }
+
+    template <class Config, class Tokenizer>
+    Tokenizer *load_tokenizer(ModelLoader &loader, Config &config)
+    {
+        loader.seek(loader.offset_tokenizer, SEEK_SET);
+
+        // load tokenizer
+        Tokenizer *tokenizer = new Tokenizer(config);
+        size_t proto_size = tokenizer->load(loader.data + loader.tell(), config.vocab_size);
+
+        loader.seek(proto_size, SEEK_CUR);
+
+        loader.offset_tensors = loader.tell();
+
+        return tokenizer;
+    }
+
+    template <class Config, class ConditionalGeneration>
+    ConditionalGeneration *load_model(ModelLoader &loader, Config &config)
+    {
+        loader.seek(loader.offset_tensors, SEEK_SET);
+
+        // load model
+        ConditionalGeneration *model = new ConditionalGeneration(config);
+        model->load(loader);
+
+        return model;
+    }
+
+    template <class Config, class ConditionalGeneration>
+    ConditionalGeneration *load_model(ModelLoader &loader, const args &args)
+    {
+        Config config;
+
+        load_config<Config>(loader, config, args);
+
+        return load_model<Config, ConditionalGeneration>(loader, config);
+    }
+
     template <class Config, class Tokenizer, class ConditionalGeneration>
     bool load_model(ModelLoader &loader, ModelFactory::Result &result, const args &args)
     {
         // load config
-        Config config = loader.read_basic<Config>();
-        if (args.max_length > 0)
-            config.max_length = args.max_length;
+        Config config;
+
+        load_config<Config>(loader, config, args);
 
         // load tokenizer
-        result.tokenizer = std::make_unique<Tokenizer>(config);
-        size_t proto_size = result.tokenizer->load(loader.data + loader.tell(), config.vocab_size);
-
-        loader.seek(proto_size, SEEK_CUR);
+        result.tokenizer = std::unique_ptr<BaseTokenizer>(load_tokenizer<Config, Tokenizer>(loader, config));
 
 #if (0)
         // test tokenizer
@@ -952,10 +1003,8 @@ namespace chatllm
         exit(-1);
 #endif
         // load model
-        result.model = std::make_unique<ConditionalGeneration>(config);
-        result.model->load(loader);
+        result.model = std::unique_ptr<BaseModel>(load_model<Config, ConditionalGeneration>(loader, config));
 
-        result.model->terminate_token_id = result.tokenizer->get_terminate_token_id();
         result.model->set_tokenizer(result.tokenizer.get());
 
         return true;
@@ -964,12 +1013,105 @@ namespace chatllm
     bool ModelFactory::load(ModelLoader &loader, Result &result, int max_length)
     {
         // load magic
+        loader.seek(0, SEEK_SET);
         std::string magic = loader.read_string(4);
         CHATLLM_CHECK(magic == "ggml") << "model file is broken (bad magic)";
 
-        int model_type = loader.read_basic<int>();
-        int version = loader.read_basic<int>();
-        return ModelFactory::load(model_type, version, loader, result, max_length);
+        loader.model_type = loader.read_basic<int>();
+        loader.version = loader.read_basic<int>();
+        return ModelFactory::load(loader.model_type, loader.version, loader, result, max_length);
+    }
+
+    #define ALL_MODELS  \
+        CASE(CHATGLM,               glm::v1, 1)                 \
+        CASE(CHATGLM2,              glm::v2, 1)                 \
+        CASE(CHATGLM3,              glm::v3, 1)                 \
+        CASE(CODEGEEX2,             codegeex::v2, 1)            \
+        CASE(CHARACTERGLM,          characterglm, 1)            \
+                                                                \
+        CASE(INTERNLM,              internlm::v1, 1)            \
+        CASE(INTERNLM2,             internlm::v2, 1)            \
+        CASE(INTERNLM3,             internlm::v3, 1)            \
+                                                                \
+        CASE(LLAMA2,                llama, 1)                   \
+        CASE(CODELLAMA,             codellama, 1)               \
+                                                                \
+        CASE(DEEPSEEK,              deepseek, 1)                \
+        CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \
+        CASE(CODEFUSE_DEEPSEEK,     codefuse::deepseek, 1)      \
+                                                                \
+        CASE(BAICHUANLLAMA,         baichuan::_7b, 1)           \
+        CASE(BAICHUAN,              baichuan::larger, 1)        \
+                                                                \
+        CASE(YI,                    yi, 1)                      \
+                                                                \
+        CASE(PHI2,                  phi2::v1, 1)                \
+        CASE(PHI2_V2,               phi2::v2, 1)                \
+                                                                \
+        CASE(WIZARDCODER,           wizard::coder, 1)           \
+        CASE(WIZARDLM,              wizard::lm, 1)              \
+        CASE(WIZARDMATH,            wizard::math, 1)            \
+                                                                \
+        CASE(MISTRAL,               mistral, 1)                 \
+        CASE(OPENCHAT,              openchat, 1)                \
+        CASE(MIXTRAL,               mixtral, 1)                 \
+                                                                \
+        CASE(QWEN,                  qwen::v1, 2)                \
+        CASE(QWEN2,                 qwen::v2, 1)                \
+        CASE(QWEN2MoE,              qwen::v2_moe, 1)            \
+                                                                \
+        CASE(TIGERBOT,              tigerbot, 1)                \
+                                                                \
+        CASE(BLUELM,                bluelm, 1)                  \
+                                                                \
+        CASE(DOLPHINPHI2,           dolphinphi2::v1, 1)         \
+                                                                \
+        CASE(STABLELM,              stablelm, 1)                \
+                                                                \
+        CASE(NEURALBEAGLE,          neuralbeagle, 1)            \
+        CASE(STARLING,              starling, 1)                \
+                                                                \
+        CASE(ORION,                 orion, 1)                   \
+                                                                \
+        CASE(MINICPM,               minicpm, 1)                 \
+                                                                \
+        CASE(PERSIMMON,             adept::persimmon, 1)        \
+                                                                \
+        CASE(GEMMA,                 gemma, 1)                   \
+                                                                \
+        CASE(COHERE_COMMAND_R,      cohere::command_r, 1)       \
+                                                                \
+        CASE(GROK_1,                grok::v1, 1)                \
+                                                                \
+        CASE(BCE_Embedding,         bce::embedding, 1)          \
+        CASE(BCE_ReRanker,          bce::ranker, 1)             \
+        CASE(BGE_M3,                bge::embedding, 1)          \
+        CASE(BGE_ReRanker_M3,       bge::ranker, 1)             \
+
+
+    BaseModel *ModelFactory::load_model_again(ModelLoader &loader, int max_length)
+    {
+        struct args extra_args = { .max_length = max_length };
+        int model_type = loader.model_type;
+        int version = loader.version;
+
+        #define CASE(TYPE, ns, ver)         \
+            case MODEL_TYPE_ ##TYPE:        \
+            {                               \
+                CHATLLM_CHECK(version == ver) << "only support version " #ver " for now but got " << version;   \
+                return load_model<ns::Config,                                                                   \
+                                  ns::ConditionalGeneration>(loader, extra_args);                       \
+            }
+
+        switch ((ModelType)model_type)
+        {
+        ALL_MODELS
+        default:
+            CHATLLM_THROW << "invalid model type " << model_type;
+            return nullptr;
+        }
+
+        #undef CASE
     }
 
     bool ModelFactory::load(int model_type, int version, ModelLoader &loader, Result &result, int max_length)
@@ -987,75 +1129,13 @@ namespace chatllm
 
         switch ((ModelType)model_type)
         {
-        CASE(CHATGLM,               glm::v1, 1)
-        CASE(CHATGLM2,              glm::v2, 1)
-        CASE(CHATGLM3,              glm::v3, 1)
-        CASE(CODEGEEX2,             codegeex::v2, 1)
-        CASE(CHARACTERGLM,          characterglm, 1)
-
-        CASE(INTERNLM,              internlm::v1, 1)
-        CASE(INTERNLM2,             internlm::v2, 1)
-        CASE(INTERNLM3,             internlm::v3, 1)
-
-        CASE(LLAMA2,                llama, 1)
-        CASE(CODELLAMA,             codellama, 1)
-
-        CASE(DEEPSEEK,              deepseek, 1)
-        CASE(DEEPSEEK_CODER,        deepseek_coder, 1)
-        CASE(CODEFUSE_DEEPSEEK,     codefuse::deepseek, 1)
-
-        CASE(BAICHUANLLAMA,         baichuan::_7b, 1)
-        CASE(BAICHUAN,              baichuan::larger, 1)
-
-        CASE(YI,                    yi, 1)
-
-        CASE(PHI2,                  phi2::v1, 1)
-        CASE(PHI2_V2,               phi2::v2, 1)
-
-        CASE(WIZARDCODER,           wizard::coder, 1)
-        CASE(WIZARDLM,              wizard::lm, 1)
-        CASE(WIZARDMATH,            wizard::math, 1)
-
-        CASE(MISTRAL,               mistral, 1)
-        CASE(OPENCHAT,              openchat, 1)
-        CASE(MIXTRAL,               mixtral, 1)
-
-        CASE(QWEN,                  qwen::v1, 2)
-        CASE(QWEN2,                 qwen::v2, 1)
-        CASE(QWEN2MoE,              qwen::v2_moe, 1)
-
-        CASE(TIGERBOT,              tigerbot, 1)
-
-        CASE(BLUELM,                bluelm, 1)
-
-        CASE(DOLPHINPHI2,           dolphinphi2::v1, 1)
-
-        CASE(STABLELM,              stablelm, 1)
-
-        CASE(NEURALBEAGLE,          neuralbeagle, 1)
-        CASE(STARLING,              starling, 1)
-
-        CASE(ORION,                 orion, 1)
-
-        CASE(MINICPM,               minicpm, 1)
-
-        CASE(PERSIMMON,             adept::persimmon, 1)
-
-        CASE(GEMMA,                 gemma, 1)
-
-        CASE(COHERE_COMMAND_R,      cohere::command_r, 1)
-
-        CASE(GROK_1,                grok::v1, 1)
-
-        CASE(BCE_Embedding,         bce::embedding, 1)
-        CASE(BCE_ReRanker,          bce::ranker, 1)
-        CASE(BGE_M3,                bge::embedding, 1)
-        CASE(BGE_ReRanker_M3,       bge::ranker, 1)
-
+        ALL_MODELS
         default:
             CHATLLM_THROW << "invalid model type " << model_type;
             return false;
         }
+
+        #undef CASE
     }
 
 } // namespace chatllm

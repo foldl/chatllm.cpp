@@ -288,6 +288,8 @@ void CVectorStore::Query(const text_vector &vec, std::vector<int64_t> &indices, 
     std::vector<float> scores;
     const float *emb = embeddings.data();
 
+    CHATLLM_CHECK(vec.size() == (size_t)emb_len) << "embedding length must match: " << vec.size() << " vs " << emb_len;
+
     for (size_t i = 0; i < GetSize(); i++, emb += emb_len)
         scores.push_back(vector_measure(vec_cmp, vec.data(), emb, emb_len));
 

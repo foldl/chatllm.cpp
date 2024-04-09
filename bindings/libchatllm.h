@@ -55,6 +55,10 @@ DLL_DECL void API_CALL chatllm_append_param(struct chatllm_obj *obj, const char 
 // Call this before `chatllm_start`
 DLL_DECL int API_CALL chatllm_set_print_reference(struct chatllm_obj *obj, f_chatllm_print f_print);
 
+// Set print rewritten query for retrieving
+// Call this before `chatllm_start`
+DLL_DECL int API_CALL chatllm_set_print_rewritten_query(struct chatllm_obj *obj, f_chatllm_print f_print);
+
 // Start
 DLL_DECL int API_CALL chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_end f_end, void *user_data);
 

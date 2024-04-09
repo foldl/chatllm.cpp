@@ -31,6 +31,7 @@ struct Args
     std::string test_fn = "";
     std::string rag_template = "";
     std::string rag_context_sep = "";
+    std::string retrieve_rewrite_template = "";
     std::map<std::string, std::string> additional;
     int max_length = -1;
     int max_context_length = 512;
@@ -52,6 +53,7 @@ struct Args
     bool rag_dump = false;
     bool show_banner = true;
     bool show_help = false;
+    bool rerank_rewrite = false;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -89,10 +91,16 @@ void usage(const std::string &prog)
               << "  --distance_strategy DS  distance strategy (model dependent, default: MaxInnerProduct)\n"
               << "                          DS = EuclideanDistance | MaxInnerProduct | InnerProduct | CosineSimilarity\n"
               << "  --retrieve_top_n N      number of retrieved items using embedding model (default: 2)\n"
+              << "  --retrieve_rewrite_template ...\n"
+              << "                          prompt template to ask LLM to rewrite a query for retrieving (optional).\n"
+              << "                          (default: \"\", i.e. disabled, the original prompt is used for retrieving)\n"
+              << "                          macros: {question}. this may NOT WORK. Example:\n"
+              << "                          Extract keywords for querying: {question}\n"
               << "  --reranker_model PATH   reranker model path (optional)\n"
               << "  --rerank_score_thres    reranking score threshold (default: 0.35)\n"
               << "                          items with a lower score are discarded.\n"
               << "  --rerank_top_n N        number of selected items using reranker model (default: 1)\n"
+              << "   +rerank_rewrite        reranker use the rewritten query (default: OFF, i.e. use the original user input)"
               << "  --hide_reference        do not show references (default: false)\n"
               << "  --rag_template ...      prompt template for RAG (macros: {context}, {question}) (optional).\n"
               << "                          Support some C escape sequences (\\n). Example:\n"
@@ -112,7 +120,7 @@ void usage(const std::string &prog)
               << "  --test FILE             test against inputs from a file and exit\n"
               << "  --hide_banner           hide banner\n"
               << "Additional key-value args:\n"
-              << "  --kv                    start of additional args. following options are interpreted as k-v pairs\n"
+              << "  --kv                    start of additional args. all following options are interpreted as k-v pairs\n"
               << "  key value               a key-value pair of args\n"
               << std::endl;
 }
@@ -179,6 +187,10 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         {
             args.rag_dump = true;
         }
+        else if (strcmp(arg, "+rerank_rewrite") == 0)
+        {
+            args.rerank_rewrite = true;
+        }
         else if (strcmp(arg, "--format") == 0)
         {
             c++;
@@ -217,6 +229,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         handle_para0("--distance_strategy",           vc,                   ParseDistanceStrategy)
         handle_para0("--retrieve_top_n",              retrieve_top_n,       std::stoi)
         handle_para0("--reranker_model",              reranker_model_path,  std::string)
+        handle_para0("--retrieve_rewrite_template",   retrieve_rewrite_template,  std::string)
         handle_para0("--rerank_score_thres",          rerank_score_thres,   std::stof)
         handle_para0("--rerank_top_n",                rerank_top_n,         std::stoi)
         handle_para0("--rag_post_extending",          rag_post_extending,   std::stoi)
@@ -341,6 +354,7 @@ public:
     void put(const std::vector<int> &output_ids) override;
     void putln(const std::string &line) override;
     void put_reference(const std::string &line) override;
+    void put_rewritten_query(const std::string &line) override;
     void end() override;
 
 private:
@@ -585,6 +599,11 @@ void TextStreamer::put_reference(const std::string &line)
     cout << ref_count << ". " << line << std::endl << std::flush;
 }
 
+void TextStreamer::put_rewritten_query(const std::string &line)
+{
+    cout << "Searching " << line << " ..." << std::endl << std::flush;
+}
+
 void TextStreamer::put(const std::vector<int> &output_ids)
 {
     if (is_prompt)
@@ -738,8 +757,10 @@ int main(int argc, const char **argv)
             pipeline.dump           = args.rag_dump;
             pipeline.rerank_score_threshold = args.rerank_score_thres;
             pipeline.rag_post_extending     = args.rag_post_extending;
+            pipeline.rerank_rewrite         = args.rerank_rewrite;
             pipeline.composer.set_context_sep(args.rag_context_sep);
             pipeline.composer.set_prompt_template(args.rag_template);
+            pipeline.composer.set_rewrite_template(args.retrieve_rewrite_template);
             TextStreamer streamer(pipeline.tokenizer);
             chat(args, pipeline, streamer);
         }
@@ -770,7 +791,8 @@ class Chat
 public:
     Chat():
         streamer(nullptr), pipeline(nullptr),
-        f_print_ref(nullptr)
+        f_print_ref(nullptr),
+        f_print_query(nullptr)
     {
         append_param("...");
     }
@@ -787,6 +809,7 @@ public:
     chatllm::Pipeline *pipeline;
     chatllm::GenerationConfig gen_config;
     f_chatllm_print f_print_ref;
+    f_chatllm_print f_print_query;
 };
 
 class FFIStreamer : public chatllm::BaseStreamer
@@ -795,9 +818,10 @@ public:
     FFIStreamer(chatllm::BaseTokenizer *tokenizer,
         f_chatllm_print f_print,
         f_chatllm_print f_print_ref,
+        f_chatllm_print f_print_query,
         f_chatllm_end f_end, void *user_data) :
         tokenizer(tokenizer), is_prompt(true), print_len(0),
-        f_print(f_print), f_print_ref(f_print_ref), f_end(f_end), user_data(user_data),
+        f_print(f_print), f_print_ref(f_print_ref), f_print_query(f_print_query), f_end(f_end), user_data(user_data),
         ref_count(0)
     {
     }
@@ -863,6 +887,14 @@ public:
         }
     }
 
+    void put_rewritten_query(const std::string &line) override
+    {
+        if (f_print_query)
+        {
+            f_print_query(user_data, line.c_str());
+        }
+    }
+
     void end() override
     {
         if (tokenizer)
@@ -884,6 +916,7 @@ public:
     size_t print_len;
     f_chatllm_print f_print;
     f_chatllm_print f_print_ref;
+    f_chatllm_print f_print_query;
     f_chatllm_end f_end;
     void *user_data;
     int ref_count;
@@ -940,6 +973,13 @@ int chatllm_set_print_reference(struct chatllm_obj *obj, f_chatllm_print f_print
     return 0;
 }
 
+int chatllm_set_print_rewritten_query(struct chatllm_obj *obj, f_chatllm_print f_print)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    chat->f_print_query = f_print;
+    return 0;
+}
+
 int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_end f_end, void *user_data)
 {
     Chat *chat = reinterpret_cast<Chat *>(obj);
@@ -965,7 +1005,7 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
                 return -1;
 
             auto pipeline = new chatllm::Pipeline(args.model_path, pipe_args);
-            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, chat->f_print_ref, f_end, user_data);
+            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, nullptr, nullptr, f_end, user_data);
             return start_chat(chat, args, *pipeline, *streamer);
         }
         else
@@ -979,9 +1019,11 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
             pipeline->dump           = args.rag_dump;
             pipeline->rerank_score_threshold = args.rerank_score_thres;
             pipeline->rag_post_extending     = args.rag_post_extending;
+            pipeline->rerank_rewrite         = args.rerank_rewrite;
             pipeline->composer.set_context_sep(args.rag_context_sep);
             pipeline->composer.set_prompt_template(args.rag_template);
-            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, chat->f_print_ref, f_end, user_data);
+            pipeline->composer.set_rewrite_template(args.retrieve_rewrite_template);
+            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, chat->f_print_ref, chat->f_print_query, f_end, user_data);
             return start_chat(chat, args, *pipeline, *streamer);
         }
 

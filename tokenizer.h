@@ -77,6 +77,12 @@ public:
     std::string transform(const std::string &s) override;
 };
 
+class TextTrim : public TextPreprocessor
+{
+public:
+    std::string transform(const std::string &s) override;
+};
+
 class TextPrepDeleteMultiSpaces : public TextPreprocessor
 {
 public:

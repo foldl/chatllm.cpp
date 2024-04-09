@@ -182,3 +182,53 @@ A.I. >  Based on the given information, the color of the banana is red.
 References:
 1. {"file": "3.txt"}
 ```
+
+### Query rewriting
+
+Rewriting the query with LLM before retrieving is also supported. Two options are provided:
+
+* `--retrieve_rewrite_template TEMPLATE`
+
+    `TEMPLATE` example: "Extract keywords for querying: {question}".
+
+    When a valid template is given, this feature is enabled, a new instance of main LLM is created,
+    and prompted with "Extract keywords for querying: {question}", where `{question}` is replaced
+    by user's prompt. The output is parsed and converted to a new query which is passed to the embedding model.
+
+    Note that an LLM may not be able to rewrite queries.
+
+* `+rerank_rewrite`
+
+    This flag controls which query is passed to the re-ranking model. When this option is
+    not given, the original user input is used; when given, the one passed to the embedding model
+    is used.
+
+A test with Qwen-QAnything, noting that this LLM has extracted proper keywords for these two prompts:
+
+```
+./bin/main -i --temp 0 -m ../quantized/qwen-qany-7b.bin --embedding_model ../quantized/bce_em.bin --reranker_model ../quantized/bce_rank.bin --vector_store /path/to/fruits.dat.vsdb --rag_template "参考信息：\n{context}\n---\n我的问题或指令：\n{question}\n---\n请根据上述参考信息回答我的问题或回复我的指令。前面的参考信息可能有用，也可能没用，你需要从我给出的参考信息中选出与我的问题最相关的那些，来为你的回答提供依据。回答一定要忠于原文，简洁但不丢信息，不要胡乱编造。我的问题或指令是什么语种，你就用什么语种回复." --retrieve_rewrite_template "extract keywords for the question: {question}"
+    ________          __  __    __    __  ___ (通义千问)
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+You are served by QWen,                       /_/   /_/
+with 7721324544 (7.7B) parameters.
+Augmented by BCE-Embedding (0.2B) and BCE-ReRanker (0.2B).
+
+You  > what color is the banana?
+A.I. > Searching banana color ...
+the banana is red.
+
+Reference:
+1. {"file": "3.txt"}
+You  > write a quick sort function in python
+A.I. > Searching quick sort python function ...
+Sure, here's a quick sort function in Python:
+
+def quicksort(arr):
+    if len(arr) <= 1:
+        return arr
+    else:
+...
+```

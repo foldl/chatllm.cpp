@@ -27,6 +27,7 @@ class LibChatLLM:
         self._chatllm_create = self._lib.chatllm_create
         self._chatllm_append_param = self._lib.chatllm_append_param
         self._chatllm_set_print_reference = self._lib.chatllm_set_print_reference
+        self._chatllm_set_print_rewritten_query = self._lib.chatllm_set_print_rewritten_query
         self._chatllm_start = self._lib.chatllm_start
         self._chatllm_user_input = self._lib.chatllm_user_input
         self._chatllm_abort_generation = self._lib.chatllm_abort_generation
@@ -39,6 +40,8 @@ class LibChatLLM:
 
         self._chatllm_set_print_reference.restype = c_int
         self._chatllm_set_print_reference.argtypes = [c_void_p, self._PRINTFUNC]
+        self._chatllm_set_print_rewritten_query.restype = c_int
+        self._chatllm_set_print_rewritten_query.argtypes = [c_void_p, self._PRINTFUNC]
 
         self._chatllm_start.restype = c_int
         self._chatllm_start.argtypes = [c_void_p, self._PRINTFUNC, self._ENDFUNC, c_void_p]
@@ -50,6 +53,7 @@ class LibChatLLM:
         self._chatllm_abort_generation.argtypes = [c_void_p]
 
         self._cb_print_reference = self._PRINTFUNC(LibChatLLM.callback_print_reference)
+        self._cb_print_rewritten_query = self._PRINTFUNC(LibChatLLM.callback_print_rewritten_query)
         self._cb_print = self._PRINTFUNC(LibChatLLM.callback_print)
         self._cb_end = self._ENDFUNC(LibChatLLM.callback_end)
 
@@ -57,6 +61,11 @@ class LibChatLLM:
     def callback_print_reference(user_data: int, s: bytes) -> None:
         obj = LibChatLLM._id2obj[user_data]
         obj.callback_print_reference(s.decode())
+
+    @staticmethod
+    def callback_print_rewritten_query(user_data: int, s: bytes) -> None:
+        obj = LibChatLLM._id2obj[user_data]
+        obj.callback_print_rewritten_query(s.decode())
 
     @staticmethod
     def callback_print(user_data: int, s: bytes) -> None:
@@ -85,6 +94,7 @@ class LibChatLLM:
     def start(self, obj: c_void_p, callback_obj: Any) -> int:
         id = self.alloc_id_for_obj(callback_obj)
         self._chatllm_set_print_reference(obj, self._cb_print_reference)
+        self._chatllm_set_print_rewritten_query(obj, self._cb_print_rewritten_query)
         return self._chatllm_start(obj, self._cb_print, self._cb_end, c_void_p(id))
 
     def chat(self, obj: c_void_p, user_input: str) -> int:
@@ -105,6 +115,7 @@ class ChatLLM:
         self.out_queue = None
         self.input_id = None
         self.references = []
+        self.rewritten_query = ''
         if param is not None:
             self.append_param(param)
             if auto_start:
@@ -122,6 +133,7 @@ class ChatLLM:
         self.is_generating = True
         self.input_id = input_id
         self.references = []
+        self.rewritten_query = ''
         r = self._lib.chat(self._chat, user_input)
         self.is_generating = False
         if r != 0:
@@ -132,6 +144,9 @@ class ChatLLM:
 
     def callback_print_reference(self, s: str) -> None:
         self.references.append(s)
+
+    def callback_print_rewritten_query(self, s: str) -> None:
+        self.rewritten_query = s
 
     def callback_print(self, s: str) -> None:
         if self.out_queue is None:

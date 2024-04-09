@@ -191,6 +191,8 @@ namespace chatllm
         {
             putln(line);
         }
+        virtual void put_rewritten_query(const std::string &line)
+        {}
         virtual void end() = 0;
     };
 
@@ -232,7 +234,11 @@ namespace chatllm
     private:
         ModelLoader(MappedFile *mapped_file)
             : mapped_file(std::unique_ptr<MappedFile>(mapped_file)),
-              data(mapped_file->data), size(mapped_file->size), ptr(mapped_file->data)
+              data(mapped_file->data), size(mapped_file->size), ptr(mapped_file->data),
+              offset_config(0),
+              offset_tokenizer(0),
+              offset_tensors(0),
+              model_type(-1), version(-1)
         {
         }
 
@@ -242,6 +248,11 @@ namespace chatllm
         const char *const data;
         size_t size;
         const char *ptr;
+        size_t offset_config;
+        size_t offset_tokenizer;
+        size_t offset_tensors;
+        int model_type;
+        int version;
     };
 
     // ===== generation =====
@@ -313,6 +324,7 @@ namespace chatllm
         void set_tokenizer(BaseTokenizer *tokenizer)
         {
             this->tokenizer = tokenizer;
+            terminate_token_id = tokenizer->get_terminate_token_id();
         }
 
         virtual void set_ctx(int n_ctx) {}
@@ -360,6 +372,9 @@ namespace chatllm
         };
 
         static bool load(ModelLoader &loader, Result &result, int max_length);
+
+        static BaseModel *load_model_again(ModelLoader &loader, int max_length);
+
     private:
         static bool load(int model_type, int version, ModelLoader &loader, Result &result, int max_length);
     };
@@ -378,6 +393,8 @@ namespace chatllm
         ModelObject(const std::string &path, const extra_args &args);
 
         void text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result);
+
+        BaseModel *fork_model(const extra_args &args);
 
     public:
         std::unique_ptr<BaseTokenizer> tokenizer;
@@ -415,6 +432,8 @@ namespace chatllm
 
         bool is_loaded(void) const { return modelobj.loaded; }
 
+        void restart(void);
+
     public:
         BaseTokenizer *tokenizer;
         BaseModel *model;
@@ -438,12 +457,16 @@ namespace chatllm
     public:
         AugmentedQueryComposer();
         std::string compose_augmented_query(const std::string &query, const std::vector<std::string> augments) const;
-
+        std::string rewrite_query_for_retrieve(const std::string &query) const;
+        std::string parse_rewritten_query_result(const std::string &query) const;
+        bool is_rewritten_template_set(void) const;
         void set_prompt_template(const std::string &s);
         void set_context_sep(const std::string &s);
+        void set_rewrite_template(const std::string &s);
     protected:
         std::string prompt_template;
         std::string context_sep;
+        std::string query_rewritten_template;
     };
 
     class RAGPipeline : public Pipeline
@@ -462,6 +485,7 @@ namespace chatllm
         bool    dump;
         float   rerank_score_threshold;
         int     rag_post_extending;
+        bool    rerank_rewrite;
 
     protected:
         void before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer) override;
@@ -474,6 +498,8 @@ namespace chatllm
 
     private:
         void rerank(const std::string &query, std::vector<int64_t> &candidates, const GenerationConfig &gen_config, int top_n = 3);
+        std::string rewrite_query(const std::string &prompt, const GenerationConfig &gen_config);
+        BaseModel *rewrite_model;
     };
 
 } // namespace chatllm

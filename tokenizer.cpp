@@ -920,6 +920,23 @@ std::string TextPrepTrim::transform(const std::string &s)
     return s.substr(0, size);
 }
 
+std::string TextTrim::transform(const std::string &s0)
+{
+    std::string s(s0);
+    int size = (int)s.size();
+    while ((size >= 1) &&
+            ((s[size - 1] == ' ') || (s[size - 1] == '\t') || (s[size - 1] == '\r') || (s[size - 1] == '\n'))
+        )
+        size--;
+    s = s.substr(0, size);
+    size = 0;
+    while ((size < (int)s.size()) &&
+            ((s[size] == ' ') || (s[size] == '\t') || (s[size] == '\r') || (s[size] == '\n'))
+        )
+        size++;
+    return s.substr(size);
+}
+
 std::string TextPrepDeleteMultiSpaces::transform(const std::string &s)
 {
     const static std::regex r(R""( {2,})"");

@@ -414,6 +414,12 @@ namespace chatllm
         model->text_embedding(gen_config, input_ids, result);
     }
 
+    BaseModel *ModelObject::fork_model(const extra_args &args)
+    {
+        if (!loaded) return nullptr;
+        return ModelFactory::load_model_again(*loader, args.max_length);
+    }
+
     // ===== pipeline =====
 
     Pipeline::Pipeline(const std::string &path)
@@ -544,6 +550,11 @@ namespace chatllm
         return "";
     }
 
+    void Pipeline::restart(void)
+    {
+        initializing = true;
+    }
+
     float Pipeline::qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config)
     {
         if (!modelobj.loaded) return -1.0f;
@@ -587,9 +598,11 @@ namespace chatllm
           dump(false),
           rerank_score_threshold(0.5f),
           rag_post_extending(0),
+          rerank_rewrite(false),
           vs(vec_cmp, vector_stores),
           embedding(embedding_model),
-          reranker(nullptr)
+          reranker(nullptr),
+          rewrite_model(nullptr)
     {
         if (reranker_model.size() > 0)
             reranker = new ModelObject(reranker_model);
@@ -627,21 +640,54 @@ namespace chatllm
         candidates.insert(candidates.begin(), result.begin(), result.end());
     }
 
+    std::string RAGPipeline::rewrite_query(const std::string &prompt, const GenerationConfig &gen_config)
+    {
+        if (nullptr == rewrite_model)
+        {
+            rewrite_model = modelobj.fork_model(ModelObject::extra_args());
+            rewrite_model->set_tokenizer(tokenizer);
+        }
+
+        std::vector<std::string> history;
+        history.push_back(prompt);
+        bool completed = false;
+
+        std::vector<int> input_ids = tokenizer->encode_history(history, gen_config.max_context_length, false);
+        std::vector<int> output_ids = rewrite_model->generate(input_ids, gen_config, false, completed, nullptr);
+
+        if (!completed) return "";
+
+        std::vector<int> new_output_ids(output_ids.begin() + input_ids.size(), output_ids.end());
+        return tokenizer->decode(new_output_ids);
+    }
+
     void RAGPipeline::before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
     {
         size_t index = history.size() - 1;
         std::string query(history.back());
+        std::string rewritten_query(query);
         std::vector<float> query_emb;
         std::vector<int64_t> selected;
 
         metainfo.clear();
 
-        embedding.text_embedding(query, gen_config, query_emb);
+        if (modelobj.loaded && composer.is_rewritten_template_set())
+        {
+            std::string rewritten = composer.rewrite_query_for_retrieve(query);
+            rewritten_query = rewrite_query(rewritten, gen_config);
+            rewritten_query = composer.parse_rewritten_query_result(rewritten_query);
+            if (rewritten_query.size() > 0)
+                streamer->put_rewritten_query(rewritten_query);
+            else
+                rewritten_query = query;
+        }
+
+        embedding.text_embedding(rewritten_query, gen_config, query_emb);
 
         vs.Query(query_emb, selected, retrieve_top_n);
 
         if (reranker != nullptr)
-            rerank(query, selected, gen_config, rerank_top_n);
+            rerank(rerank_rewrite ? rewritten_query : query, selected, gen_config, rerank_top_n);
 
         std::vector<std::string> augments;
 
@@ -730,7 +776,7 @@ namespace chatllm
     }
 
     AugmentedQueryComposer::AugmentedQueryComposer()
-        : prompt_template("Answer the question based on given information: {question}\n```\n{context}"),
+        : prompt_template("Answer this question based on given information: {question}\n```\n{context}\n```"),
           context_sep("\n```\n")
     {}
 
@@ -776,11 +822,123 @@ namespace chatllm
         return s;
     }
 
+    bool AugmentedQueryComposer::is_rewritten_template_set(void) const
+    {
+        return query_rewritten_template.find("{question}", 0) != std::string::npos;
+    }
+
+    std::string AugmentedQueryComposer::rewrite_query_for_retrieve(const std::string &query) const
+    {
+        if (query_rewritten_template.size() < 1)
+            return query;
+
+        std::string s(query_rewritten_template);
+        replace_all(s, "{question}", query);
+        return s;
+    }
+
+    // TODO: this might not work because:
+    // 1. some LLM does not support this;
+    // 2. output format varies.
+    std::string AugmentedQueryComposer::parse_rewritten_query_result(const std::string &query) const
+    {
+        std::string r(query);
+        size_t pos = 0;
+        tokenizer::TextTrim t;
+        const char *delimiters[] = {":", "："};
+        bool found = false;
+
+        pos = r.find("\n");
+        if (pos != std::string::npos)
+        {
+            // xxx:
+            // ...
+            // ...
+            r = r.substr(pos + 1);
+            std::ostringstream oss;
+
+            while (r.size() > 0)
+            {
+                std::string part;
+                pos = r.find("\n");
+                if (pos != std::string::npos)
+                {
+                    part = r.substr(0, pos);
+                    r = r.substr(pos + 1);
+                }
+                else
+                {
+                    part = r;
+                    r = "";
+                }
+
+                pos = part.find(" ");
+                if (pos != std::string::npos)
+                    part = part.substr(pos + 1);
+
+                part = t.transform(part);
+
+                oss << part << " ";
+            }
+
+            r = oss.str();
+            r = t.transform(r);
+
+            goto final;
+        }
+
+        for (const char *delimiter : delimiters)
+        {
+            pos = r.find(delimiter);
+            if (pos != std::string::npos)
+            {
+                r = r.substr(pos + strlen(delimiter));
+                found = true;
+                break;
+            }
+        }
+
+        if (found)
+        {
+            replace_all(r, ",", " ");
+            replace_all(r, "，", " ");
+            replace_all(r, ".", " ");
+
+            r = t.transform(r);
+
+            goto final;
+        }
+
+        if ((pos = r.find(",")) != std::string::npos)
+        {
+            replace_all(r, ",", " ");
+            replace_all(r, "，", " ");
+            replace_all(r, ".", " ");
+
+            r = t.transform(r);
+
+            goto final;
+        }
+
+        return "";
+
+final:
+        tokenizer::TextPrepDeleteMultiSpaces del;
+        return del.transform(r);
+    }
+
     void AugmentedQueryComposer::set_prompt_template(const std::string &s)
     {
         if (s.size() < 1) return;
         prompt_template = s;
         unescape_c_sequences(prompt_template);
+    }
+
+    void AugmentedQueryComposer::set_rewrite_template(const std::string &s)
+    {
+        if (s.size() < 1) return;
+        query_rewritten_template = s;
+        unescape_c_sequences(query_rewritten_template);
     }
 
     void AugmentedQueryComposer::set_context_sep(const std::string &s)
