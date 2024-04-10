@@ -2264,10 +2264,12 @@ class GemmaConverter(BaseConverter):
     @staticmethod
     def dump_config(f, config, ggml_type):
         assert config.attention_bias == False, 'attention_bias == False'
-        assert config.hidden_act == 'gelu', "hidden_act == 'gelu'"
+        if config.hidden_activation is not None:
+            assert config.hidden_activation == 'gelu_pytorch_tanh', "hidden_activation == 'gelu_pytorch_tanh'"
         assert config.rope_theta > 0, "rope_theta must be positive"
         assert config.rope_scaling is None, "rope_scaling must be `null`"
 
+        # fake it for LlamaConverter
         config.hidden_act = 'silu'
         LlamaConverter.dump_config(f, config, ggml_type)
         config_values = [
