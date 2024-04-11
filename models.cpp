@@ -281,6 +281,212 @@ namespace chatllm
         }
     }
 
+    class Sampler
+    {
+    public:
+        static const int ABORT = -1;
+
+    public:
+        virtual void seed(int x)
+        {
+            gen.seed((unsigned int)x);
+        }
+
+        virtual void reset() {}
+
+        virtual int sampling(float *logits, const int vocab_size) = 0;
+    protected:
+        std::mt19937 gen;
+    };
+
+    class GreedySampler : public Sampler
+    {
+    public:
+        int sampling(float *logits, const int vocab_size) override
+        {
+            return (int)(std::max_element(logits, logits + vocab_size) - logits);
+        }
+    };
+
+    class NonGreedySampler: public Sampler
+    {
+    public:
+        NonGreedySampler(float temperature, float presence_penalty, int top_k)
+            : inv_temp(0.0f), inv_presence_penalty(0.0f), presence_penalty(presence_penalty), top_k(top_k)
+        {
+            temp_en = fabs(temperature - 1.0f) > 1e-5f;
+            if (temp_en) inv_temp = 1.f / temperature;
+
+            presence_penalty_en = fabs(presence_penalty - 1.0f) > 1e-5f;
+            if (presence_penalty_en) inv_presence_penalty = 1.0f / presence_penalty;
+        }
+
+        void reset() override
+        {
+            g.clear();
+        }
+
+        int sampling(float *logits, const int vocab_size) override
+        {
+            token_scores.reserve(vocab_size);
+            token_scores.resize(vocab_size);
+
+            if (temp_en)
+            {
+                for (int i = 0; i < vocab_size; i++)
+                    logits[i] *= inv_temp;
+            }
+
+            if (presence_penalty_en)
+            {
+                for (int i = 0; i < vocab_size; i++)
+                {
+                    if (g.find(i) != g.end())
+                        logits[i] *= logits[i] > 0 ? inv_presence_penalty : presence_penalty;
+                }
+            }
+
+            for (int i = 0; i < vocab_size; i++)
+            {
+                token_scores[i] = {.id = i, .score = logits[i]};
+            }
+
+            // top_k sampling
+            if (0 < top_k && top_k < (int)token_scores.size())
+            {
+                std::nth_element(token_scores.begin(), token_scores.begin() + top_k, token_scores.end(),
+                                std::greater<TokenIdScore>());
+                token_scores.resize(top_k);
+            }
+
+            int r = do_sampling(logits, vocab_size);
+            g.emplace(r);
+            return r;
+        }
+
+    protected:
+        struct TokenIdScore
+        {
+            int id;
+            float score;
+
+            bool operator<(const TokenIdScore &other) const { return score < other.score; }
+            bool operator>(const TokenIdScore &other) const { return score > other.score; }
+        };
+
+        void sampling_softmax_inplace(TokenIdScore *first, TokenIdScore *last)
+        {
+            float max_score = std::max_element(first, last)->score;
+            float sum = 0.f;
+            for (TokenIdScore *p = first; p != last; p++)
+            {
+                float s = std::exp(p->score - max_score);
+                p->score = s;
+                sum += s;
+            }
+            float inv_sum = 1.f / sum;
+            for (TokenIdScore *p = first; p != last; p++)
+            {
+                p->score *= inv_sum;
+            }
+        }
+
+        virtual int do_sampling(float *logits, const int vocab_size) = 0;
+        bool temp_en;
+        bool presence_penalty_en;
+        float inv_temp;
+        float inv_presence_penalty;
+        float presence_penalty;
+        int top_k;
+        std::vector<TokenIdScore> token_scores;
+        std::set<int> g;
+    };
+
+    class TopPSampler : public NonGreedySampler
+    {
+    public:
+        TopPSampler(float temperature, float presence_penalty, int top_k, float top_p)
+            : NonGreedySampler(temperature, presence_penalty, top_k), top_p(top_p)
+        {}
+
+    protected:
+        int do_sampling(float *next_token_logits, const int vocab_size) override
+        {
+            // top_p sampling
+            if (0.f < top_p && top_p < 1.f)
+            {
+                std::sort(token_scores.begin(), token_scores.end(), std::greater<TokenIdScore>()); // hot code!
+                sampling_softmax_inplace(token_scores.data(), token_scores.data() + token_scores.size());
+
+                float cumsum = 0.f;
+                for (size_t i = 0; i < token_scores.size(); i++)
+                {
+                    cumsum += token_scores[i].score;
+                    if (cumsum >= top_p)
+                    {
+                        token_scores.resize(i + 1);
+                        break;
+                    }
+                }
+            }
+
+            // sample next token
+            sampling_softmax_inplace(token_scores.data(), token_scores.data() + token_scores.size());
+            for (size_t i = 0; i < token_scores.size(); i++)
+            {
+                next_token_logits[i] = token_scores[i].score;
+            }
+
+            std::discrete_distribution<> dist(next_token_logits, next_token_logits + token_scores.size());
+            int next_token_id = token_scores[dist(gen)].id;
+
+            return next_token_id;
+        }
+
+    protected:
+        const float top_p;
+    };
+
+    class FreeTailSampler : public NonGreedySampler
+    {
+    public:
+        FreeTailSampler(float temperature, float presence_penalty, int top_k, float z)
+            : NonGreedySampler(temperature, presence_penalty, top_k), z(z)
+        {}
+
+    protected:
+
+        int do_sampling(float *next_token_logits, const int vocab_size) override
+        {
+            return ABORT;
+        }
+
+    protected:
+        const float z;
+    };
+
+    class SamplerFactory
+    {
+    public:
+        static Sampler *Create(const GenerationConfig &gen_config, int seed)
+        {
+            Sampler *r = nullptr;
+            if (gen_config.do_sample)
+            {
+                if (gen_config.sampling == "top_p")
+                    r = new TopPSampler(gen_config.temperature, gen_config.presence_penalty, gen_config.top_k, gen_config.top_p);
+                else if (gen_config.sampling != "greedy")
+                    CHATLLM_CHECK(false) << "unknown sampling algorithm: " << gen_config.sampling;
+            }
+
+            if (nullptr == r)
+                r = new GreedySampler();
+
+            r->seed(seed);
+            return r;
+        }
+    };
+
     template<class LM> class BaseModelForConditionalGeneration : public BaseModel
     {
     public:
@@ -322,6 +528,8 @@ namespace chatllm
                 << "requested max_length (" << gen_config.max_length << ") is larger than model's max_length ("
                 << config_.max_length << ")";
 
+            std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config, _seed));
+
             aborted = false;
 
             std::vector<int> curr_input_ids(input_ids);
@@ -338,8 +546,14 @@ namespace chatllm
 
             while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
             {
-                int next_token_id = generate_next_token(curr_input_ids, gen_config);
+                int next_token_id = generate_next_token(curr_input_ids, gen_config, sampler.get());
 //printf("\nnext = %d\n", next_token_id);
+
+                if (next_token_id == Sampler::ABORT)
+                {
+                    aborted = true;
+                    break;
+                }
 
 //#define DISABLE_CACHE
 #ifndef DISABLE_CACHE
@@ -397,7 +611,7 @@ namespace chatllm
             return *(float *)lm->data;
         }
 
-        int generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config)
+        int generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, Sampler *sampler)
         {
             ggml_tensor *lm_logits = nullptr;
 
@@ -415,74 +629,8 @@ namespace chatllm
             int vocab_size = (int)lm_logits->ne[0];
             float *next_token_logits = (float *)lm_logits->data;
 
-            int next_token_id;
-
-            if (!gen_config.do_sample)
-            {
-                // greedy search
-                return (int)(std::max_element(next_token_logits, next_token_logits + vocab_size) - next_token_logits);
-            }
-
-            // temperature sampling
-            float inv_temp = 1.f / gen_config.temperature;
-            for (int i = 0; i < vocab_size; i++)
-            {
-                next_token_logits[i] *= inv_temp;
-            }
-
-            std::vector<TokenIdScore> token_scores(vocab_size);
-            for (int i = 0; i < vocab_size; i++)
-            {
-                token_scores[i] = {.id = i, .score = next_token_logits[i]};
-            }
-
-            // top_k sampling
-            if (0 < gen_config.top_k && gen_config.top_k < (int)token_scores.size())
-            {
-                std::nth_element(token_scores.begin(), token_scores.begin() + gen_config.top_k, token_scores.end(),
-                                std::greater<TokenIdScore>());
-                token_scores.resize(gen_config.top_k);
-            }
-
-            // top_p sampling
-            if (0.f < gen_config.top_p && gen_config.top_p < 1.f)
-            {
-                std::sort(token_scores.begin(), token_scores.end(), std::greater<TokenIdScore>()); // hot code!
-                sampling_softmax_inplace(token_scores.data(), token_scores.data() + token_scores.size());
-
-                float cumsum = 0.f;
-                for (size_t i = 0; i < token_scores.size(); i++)
-                {
-                    cumsum += token_scores[i].score;
-                    if (cumsum >= gen_config.top_p)
-                    {
-                        token_scores.resize(i + 1);
-                        break;
-                    }
-                }
-            }
-
-            // sample next token
-            sampling_softmax_inplace(token_scores.data(), token_scores.data() + token_scores.size());
-            for (size_t i = 0; i < token_scores.size(); i++)
-            {
-                next_token_logits[i] = token_scores[i].score;
-            }
-
-            std::discrete_distribution<> dist(next_token_logits, next_token_logits + token_scores.size());
-            next_token_id = token_scores[dist(gen)].id;
-
-            return next_token_id;
+            return sampler->sampling(next_token_logits, vocab_size);
         }
-
-        struct TokenIdScore
-        {
-            int id;
-            float score;
-
-            bool operator<(const TokenIdScore &other) const { return score < other.score; }
-            bool operator>(const TokenIdScore &other) const { return score > other.score; }
-        };
 
     protected:
         virtual ggml_tensor *run_model(const std::vector<int> &input_ids,
@@ -553,24 +701,6 @@ namespace chatllm
                     return false;
             }
             return true;
-        }
-
-    private:
-        static void sampling_softmax_inplace(TokenIdScore *first, TokenIdScore *last)
-        {
-            float max_score = std::max_element(first, last)->score;
-            float sum = 0.f;
-            for (TokenIdScore *p = first; p != last; p++)
-            {
-                float s = std::exp(p->score - max_score);
-                p->score = s;
-                sum += s;
-            }
-            float inv_sum = 1.f / sum;
-            for (TokenIdScore *p = first; p != last; p++)
-            {
-                p->score *= inv_sum;
-            }
         }
 
     protected:

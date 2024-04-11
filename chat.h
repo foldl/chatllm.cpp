@@ -266,22 +266,25 @@ namespace chatllm
         float top_p;
         float temperature;
         int num_threads;
+        float presence_penalty;
+        std::string sampling;
 
         GenerationConfig()
         {
         }
 
         GenerationConfig(int max_length, int max_context_length, bool do_sample, int top_k,
-                         float top_p, float temperature, int num_threads)
+                         float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty)
             : max_length(max_length), max_context_length(max_context_length), do_sample(do_sample), top_k(top_k),
-              top_p(top_p), temperature(temperature), num_threads(num_threads) {}
+              top_p(top_p), temperature(temperature), num_threads(num_threads), presence_penalty(presence_penalty),
+              sampling(sampling) {}
     };
 
     class BaseModel
     {
     public:
         BaseModel(int type, std::string name, std::string native_name, ModelPurpose purpose) :
-            type_(type), name_(name), native_name_(native_name), gen(0x123), n_past(0),
+            type_(type), name_(name), native_name_(native_name), n_past(0),
             n_past_offset(0), tokenizer(nullptr),
             purpose(purpose), aborted(false), terminate_token_id(-1000)
         {}
@@ -329,7 +332,7 @@ namespace chatllm
 
         virtual void set_ctx(int n_ctx) {}
 
-        void seed(int x) { gen.seed((unsigned int)x); }
+        void seed(int x) { _seed = x; }
 
         virtual int get_max_length(void) = 0;
 
@@ -352,7 +355,7 @@ namespace chatllm
         int type_;
         std::string name_;
         std::string native_name_;
-        std::mt19937 gen;
+        int _seed;
         int n_past;
         int n_past_offset;
         BaseTokenizer *tokenizer;

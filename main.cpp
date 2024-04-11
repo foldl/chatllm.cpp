@@ -27,6 +27,7 @@ struct Args
     std::string vector_store_in = "";
     std::string system = "";
     std::string prompt = "你好";
+    std::string sampling = "top_p";
     std::string extending = "restart";
     std::string test_fn = "";
     std::string rag_template = "";
@@ -36,9 +37,11 @@ struct Args
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
-    int top_k = 0;
+    int top_k = 50;
     float top_p = 0.7f;
     float temp = 0.7f;
+    float tfs_z = 0.95f;
+    float presence_penalty = 1.0f;
     int num_threads = 0;
     bool multi_line = false;
     int seed;
@@ -81,9 +84,13 @@ void usage(const std::string &prog)
               << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n"
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
               << "Sampling options:\n"
-              << "  -t, --temp T            temperature (default: 0.7)\n"
-              << "  --top_k N               top-k sampling (default: 0)\n"
+              << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
+              << "                          where, tfs = Tail Free Sampling\n"
+              << "  -t, --temp T            temperature (default: 0.7) (Note: `-t 0` also sets sampling algorithm to greedy)\n"
+              << "  --top_k N               top-k sampling (default: 50)\n"
               << "  --top_p N               top-p sampling (default: 0.7)\n"
+//            << "  --tfs_z Z               Z param for TFS (default: 0.95)\n"
+              << "  --presence_penalty N    presence repetition penalty (default: 1.0, no penalty)\n"
               << "  --seed N                seed for random generator (default: random)\n"
               << "RAG options:\n"
               << "  --vector_store FILE     append a vector store file (when at lease one is specifed, RAG is enabled)\n"
@@ -100,7 +107,7 @@ void usage(const std::string &prog)
               << "  --rerank_score_thres    reranking score threshold (default: 0.35)\n"
               << "                          items with a lower score are discarded.\n"
               << "  --rerank_top_n N        number of selected items using reranker model (default: 1)\n"
-              << "   +rerank_rewrite        reranker use the rewritten query (default: OFF, i.e. use the original user input)"
+              << "   +rerank_rewrite        reranker use the rewritten query (default: OFF, i.e. use the original user input)\n"
               << "  --hide_reference        do not show references (default: false)\n"
               << "  --rag_template ...      prompt template for RAG (macros: {context}, {question}) (optional).\n"
               << "                          Support some C escape sequences (\\n). Example:\n"
@@ -221,6 +228,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         handle_param("--top_k",                 "-k", top_k,                std::stoi)
         handle_param("--top_p",                 "-q", top_p,                std::stof)
         handle_param("--temp",                  "-t", temp,                 std::stof)
+        handle_para0("--presence_penalty",            presence_penalty,     std::stof)
         handle_param("--threads",               "-n", num_threads,          std::stoi)
         handle_para0("--seed",                        seed,                 std::stoi)
         handle_para0("--test",                        test_fn,              std::string)
@@ -496,6 +504,9 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
     streamer.cout << "Bye\n";
 }
 
+#define DEF_GenerationConfig(gen_config, args) chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,    \
+                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty)
+
 void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 {
     if (args.system.size() > 0)
@@ -530,8 +541,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
     const std::string user_prompt = "You";
     const int prompt_len = 4;
 
-    chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,
-                                         args.top_p, args.temp, args.num_threads);
+    DEF_GenerationConfig(gen_config, args);
     std::vector<std::string> history;
 
     show_banner(pipeline, args.interactive && args.show_banner, &streamer);
@@ -673,8 +683,8 @@ static int init_vector_store(Args &args)
 {
     chatllm::Pipeline pipeline(args.embedding_model_path);
     args.max_length = pipeline.model->get_max_length();
-    chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,
-                                         args.top_p, args.temp, args.num_threads);
+
+    DEF_GenerationConfig(gen_config, args);
     std::vector<float> r;
 
     CVectorStore vs(args.vc, pipeline.get_text_embedding_dim(),
@@ -956,8 +966,7 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline, chatl
 
     pipeline.set_additional_args(args.additional);
 
-    chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,
-                                         args.top_p, args.temp, args.num_threads);
+    DEF_GenerationConfig(gen_config, args);
 
     chat->gen_config = gen_config;
 
