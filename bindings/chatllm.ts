@@ -6,6 +6,8 @@ const {
     symbols: {
         chatllm_create,
         chatllm_append_param,
+        chatllm_set_print_reference,
+        chatllm_set_print_rewritten_query,
         chatllm_start,
         chatllm_user_input,
         chatllm_abort_generation,
@@ -19,6 +21,14 @@ const {
         },
         chatllm_append_param: {
             args: [FFIType.ptr, FFIType.cstring],
+        },
+        chatllm_set_print_reference: {
+            args: [FFIType.ptr, FFIType.function],
+            returns: FFIType.i32
+        },
+        chatllm_set_print_rewritten_query: {
+            args: [FFIType.ptr, FFIType.function],
+            returns: FFIType.i32
         },
         chatllm_start: {
             args: [FFIType.ptr, FFIType.function, FFIType.function, FFIType.ptr],
@@ -35,7 +45,14 @@ const {
 );
 
 class ChatLLM {
-    constructor(params) {
+    references: string[];
+    obj: any;
+    callback_print: JSCallback
+    callback_print_reference: JSCallback
+    callback_print_rewritten_query: JSCallback
+    callback_end: JSCallback
+
+    constructor(params: string[]) {
         this.obj = chatllm_create();
         this.callback_print = new JSCallback(
             (p_obj, ptr) => process.stdout.write(new CString(ptr)),
@@ -43,13 +60,30 @@ class ChatLLM {
                 args: ["ptr", "ptr"],
             },
         );
+        this.callback_print_reference = new JSCallback(
+            (p_obj, ptr) => this.references.push(new CString(ptr)),
+            {
+                args: ["ptr", "ptr"],
+            },
+        );
+        this.callback_print_rewritten_query = new JSCallback(
+            (p_obj, ptr) => console.log(`Searching ${new CString(ptr)} ...`),
+            {
+                args: ["ptr", "ptr"],
+            },
+        );
         this.callback_end = new JSCallback(
-            (p_obj) => 0,
+            (p_obj) => {
+                if (this.references.length < 1) return;
+                console.log('References:');
+                for (let x of this.references) console.log(x);
+            },
             {
                 args: ["ptr"],
             },
         );
-        if (params.constructor === Array) {
+        if (params.length > 0) {
+            console.log(params);
             for (let param of params)
                 this.append_param(param);
             this.start();
@@ -62,20 +96,27 @@ class ChatLLM {
     }
 
     start() {
-        let r = chatllm_start(this.obj, this.callback_print, this.callback_end);
+        chatllm_set_print_reference(this.obj, this.callback_print_reference)
+        chatllm_set_print_rewritten_query(this.obj, this.callback_print_rewritten_query)
+        let r = chatllm_start(this.obj, this.callback_print, this.callback_end, 0);
         if (r != 0) {
             throw `ChatLLM::start error code ${r}`;
         }
     }
 
-    chat(s) {
+    chat(s: string) {
+        this.references = []
         let str = Buffer.from(s + '\0', "utf8")
         let r = chatllm_user_input(this.obj, ptr(str));
         if (r != 0) {
             throw `ChatLLM::chat error code ${r}`;
         }
     }
-}
+
+    abort() {
+        chatllm_abort_generation(this.obj);
+    }
+};
 
 let llm = new ChatLLM(Bun.argv.slice(2));
 

@@ -50,12 +50,12 @@ streamlit run chatllm_st.py -- -i -m path/to/model
 
 Note: "STOP" function is not implemented yet.
 
-## JavaScript
+## JavaScript/TypeScript
 
-Run [chatllm.js](../bindings/chatllm.js) with exactly the same command line options using [Bun](https://bun.sh/):
+Run [chatllm.ts](../bindings/chatllm.ts) with exactly the same command line options using [Bun](https://bun.sh/):
 
 ```shell
-bun chatllm.js -i -m path/to/model
+bun chatllm.ts -i -m path/to/model
 ```
 
 ## Other Languages
