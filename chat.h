@@ -267,6 +267,7 @@ namespace chatllm
         float temperature;
         int num_threads;
         float presence_penalty;
+        float tfs_z;
         std::string sampling;
 
         GenerationConfig()
@@ -274,9 +275,9 @@ namespace chatllm
         }
 
         GenerationConfig(int max_length, int max_context_length, bool do_sample, int top_k,
-                         float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty)
+                         float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty, float tfs_z)
             : max_length(max_length), max_context_length(max_context_length), do_sample(do_sample), top_k(top_k),
-              top_p(top_p), temperature(temperature), num_threads(num_threads), presence_penalty(presence_penalty),
+              top_p(top_p), temperature(temperature), num_threads(num_threads), presence_penalty(presence_penalty), tfs_z(tfs_z),
               sampling(sampling) {}
     };
 

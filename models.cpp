@@ -359,9 +359,22 @@ namespace chatllm
                 token_scores.resize(top_k);
             }
 
-            int r = do_sampling(logits, vocab_size);
-            g.emplace(r);
-            return r;
+            do_sampling(logits, vocab_size);
+
+            if (token_scores.size() < 1)
+                return ABORT;
+
+            // sample next token
+            for (size_t i = 0; i < token_scores.size(); i++)
+            {
+                logits[i] = token_scores[i].score;
+            }
+
+            std::discrete_distribution<> dist(logits, logits + token_scores.size());
+            int next_token_id = token_scores[dist(gen)].id;
+
+            g.emplace(next_token_id);
+            return next_token_id;
         }
 
     protected:
@@ -391,7 +404,7 @@ namespace chatllm
             }
         }
 
-        virtual int do_sampling(float *logits, const int vocab_size) = 0;
+        virtual void do_sampling(float *logits, const int vocab_size) = 0;
         bool temp_en;
         bool presence_penalty_en;
         float inv_temp;
@@ -410,7 +423,7 @@ namespace chatllm
         {}
 
     protected:
-        int do_sampling(float *next_token_logits, const int vocab_size) override
+        void do_sampling (float *next_token_logits, const int vocab_size) override
         {
             // top_p sampling
             if (0.f < top_p && top_p < 1.f)
@@ -430,23 +443,15 @@ namespace chatllm
                 }
             }
 
-            // sample next token
             sampling_softmax_inplace(token_scores.data(), token_scores.data() + token_scores.size());
-            for (size_t i = 0; i < token_scores.size(); i++)
-            {
-                next_token_logits[i] = token_scores[i].score;
-            }
-
-            std::discrete_distribution<> dist(next_token_logits, next_token_logits + token_scores.size());
-            int next_token_id = token_scores[dist(gen)].id;
-
-            return next_token_id;
         }
 
     protected:
         const float top_p;
     };
 
+    // Reference:
+    // https://www.trentonbricken.com/Tail-Free-Sampling/#tail-free-sampling-algorithm
     class FreeTailSampler : public NonGreedySampler
     {
     public:
@@ -456,13 +461,46 @@ namespace chatllm
 
     protected:
 
-        int do_sampling(float *next_token_logits, const int vocab_size) override
+        void do_sampling(float *next_token_logits, const int vocab_size) override
         {
-            return ABORT;
+            if (token_scores.size() < 3) return;
+
+            sampling_softmax_inplace(token_scores.data(), token_scores.data() + token_scores.size());
+            std::sort(token_scores.begin(), token_scores.end(), std::greater<TokenIdScore>()); // hot code!
+
+            snd_d.resize(token_scores.size() - 2);
+            for (size_t i = 0; i < snd_d.size(); i++)
+            {
+                snd_d[i] = token_scores[i].score + token_scores[i + 2].score - 2 * token_scores[i + 1].score;
+            }
+
+            // abs, then norm
+            float sum = 1e-6f;
+            for (size_t i = 0; i < snd_d.size(); i++)
+            {
+                snd_d[i] = fabs(snd_d[i]);
+                sum += snd_d[i];
+            }
+            for (size_t i = 0; i < snd_d.size(); i++)
+            {
+                snd_d[i] /= sum;
+            }
+
+            float cdf = 0.0;
+            for (size_t i = 0; i < snd_d.size(); i++)
+            {
+                cdf += snd_d[i];
+                if (cdf > z)
+                {
+                    token_scores.resize(i + 1);
+                    break;
+                }
+            }
         }
 
     protected:
         const float z;
+        std::vector<float> snd_d;
     };
 
     class SamplerFactory
@@ -475,6 +513,8 @@ namespace chatllm
             {
                 if (gen_config.sampling == "top_p")
                     r = new TopPSampler(gen_config.temperature, gen_config.presence_penalty, gen_config.top_k, gen_config.top_p);
+                else if (gen_config.sampling == "tfs")
+                    r = new FreeTailSampler(gen_config.temperature, gen_config.presence_penalty, gen_config.top_k, gen_config.tfs_z);
                 else if (gen_config.sampling != "greedy")
                     CHATLLM_CHECK(false) << "unknown sampling algorithm: " << gen_config.sampling;
             }
@@ -546,7 +586,10 @@ namespace chatllm
 
             while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
             {
-                int next_token_id = generate_next_token(curr_input_ids, gen_config, sampler.get());
+                ggml_tensor *lm_logits = generate_next_token(curr_input_ids, gen_config);
+
+                int next_token_id = sampler->sampling((float *)lm_logits->data, (int)lm_logits->ne[0]);
+
 //printf("\nnext = %d\n", next_token_id);
 
                 if (next_token_id == Sampler::ABORT)
@@ -611,7 +654,7 @@ namespace chatllm
             return *(float *)lm->data;
         }
 
-        int generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, Sampler *sampler)
+        ggml_tensor *generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config)
         {
             ggml_tensor *lm_logits = nullptr;
 
@@ -626,10 +669,7 @@ namespace chatllm
                     lm_logits = run_model({input_ids[i]}, gen_config, past);
             }
 
-            int vocab_size = (int)lm_logits->ne[0];
-            float *next_token_logits = (float *)lm_logits->data;
-
-            return sampler->sampling(next_token_logits, vocab_size);
+            return lm_logits;
         }
 
     protected:

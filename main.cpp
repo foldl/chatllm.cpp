@@ -37,7 +37,7 @@ struct Args
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
-    int top_k = 50;
+    int top_k = 0;
     float top_p = 0.7f;
     float temp = 0.7f;
     float tfs_z = 0.95f;
@@ -87,9 +87,9 @@ void usage(const std::string &prog)
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
               << "                          where, tfs = Tail Free Sampling\n"
               << "  -t, --temp T            temperature (default: 0.7) (Note: `-t 0` also sets sampling algorithm to greedy)\n"
-              << "  --top_k N               top-k sampling (default: 50)\n"
+              << "  --top_k N               top-k sampling (default: 0)\n"
               << "  --top_p N               top-p sampling (default: 0.7)\n"
-//            << "  --tfs_z Z               Z param for TFS (default: 0.95)\n"
+              << "  --tfs_z Z               Z param for TFS (default: 0.95)\n"
               << "  --presence_penalty N    presence repetition penalty (default: 1.0, no penalty)\n"
               << "  --seed N                seed for random generator (default: random)\n"
               << "RAG options:\n"
@@ -225,8 +225,10 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         handle_param("--max_length",            "-l", max_length,           std::stoi)
         handle_param("--max_context_length",    "-c", max_context_length,   std::stoi)
         handle_para0("--extending",                   extending,            std::string)
+        handle_para0("--sampling",                    sampling,             std::string)
         handle_param("--top_k",                 "-k", top_k,                std::stoi)
         handle_param("--top_p",                 "-q", top_p,                std::stof)
+        handle_para0("--tfs_z",                       tfs_z,                std::stof)
         handle_param("--temp",                  "-t", temp,                 std::stof)
         handle_para0("--presence_penalty",            presence_penalty,     std::stof)
         handle_param("--threads",               "-n", num_threads,          std::stoi)
@@ -505,7 +507,7 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
 }
 
 #define DEF_GenerationConfig(gen_config, args) chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,    \
-                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty)
+                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z)
 
 void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 {
