@@ -829,8 +829,8 @@ class LlamaConverter(BaseConverter):
     @staticmethod
     def dump_config(f, config, ggml_type):
         assert config.hidden_act == 'silu', "hidden_act must be silu"
-        if config.num_key_value_heads is not None:
-            assert config.num_key_value_heads == config.num_attention_heads, 'num_key_value_heads must equal to num_attention_heads'
+        if (config.num_key_value_heads is not None) and (config.num_key_value_heads != config.num_attention_heads):
+            print(f"warning: num_key_value_heads != num_attention_heads, make sure this is intended")
         if config.rope_scaling is not None:
             assert config.rope_scaling == 1.0, 'rope_scaling must equal to 1.0'
         if config.rope_theta is not None:

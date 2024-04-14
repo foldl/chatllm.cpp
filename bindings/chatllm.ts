@@ -44,46 +44,65 @@ const {
     },
 );
 
+class ChatLLMHandler {
+    references: string[]
+
+    constructor() {
+        this.references = []
+    }
+
+    print(s: string) {
+    }
+
+    print_reference(s: string) {
+        this.references.push(s);
+    }
+
+    print_rewritten_query(s: string) { }
+
+    start () {
+        this.references = [];
+    }
+
+    end() { }
+};
+
 class ChatLLM {
-    references: string[];
     obj: any;
     callback_print: JSCallback
     callback_print_reference: JSCallback
     callback_print_rewritten_query: JSCallback
     callback_end: JSCallback
+    handler: ChatLLMHandler
 
-    constructor(params: string[]) {
+    constructor(params: string[], handler: ChatLLMHandler) {
+        this.handler = handler;
         this.obj = chatllm_create();
         this.callback_print = new JSCallback(
-            (p_obj, ptr) => process.stdout.write(new CString(ptr)),
+            (p_obj, ptr) => this.handler.print(new CString(ptr)),
             {
                 args: ["ptr", "ptr"],
             },
         );
         this.callback_print_reference = new JSCallback(
-            (p_obj, ptr) => this.references.push(new CString(ptr)),
+            (p_obj, ptr) => this.handler.print_reference(new CString(ptr)),
             {
                 args: ["ptr", "ptr"],
             },
         );
         this.callback_print_rewritten_query = new JSCallback(
-            (p_obj, ptr) => console.log(`Searching ${new CString(ptr)} ...`),
+            (p_obj, ptr) => this.handler.print_rewritten_query(new CString(ptr)),
             {
                 args: ["ptr", "ptr"],
             },
         );
         this.callback_end = new JSCallback(
-            (p_obj) => {
-                if (this.references.length < 1) return;
-                console.log('References:');
-                for (let x of this.references) console.log(x);
-            },
+            (p_obj) => this.handler.end(),
             {
                 args: ["ptr"],
             },
         );
         if (params.length > 0) {
-            console.log(params);
             for (let param of params)
                 this.append_param(param);
             this.start();
@@ -118,7 +137,26 @@ class ChatLLM {
     }
 };
 
-let llm = new ChatLLM(Bun.argv.slice(2));
+class StdIOHandler extends ChatLLMHandler {
+
+    print(s: string) {
+        process.stdout.write(s);
+    }
+
+    print_rewritten_query(s: string) {
+        console.log(`Searching ${s} ...`)
+    }
+
+    end() {
+        if (this.references.length < 1) return;
+        console.log("\nReferences:")
+        for (let s of this.references)
+            console.log(s)
+    }
+
+};
+
+let llm = new ChatLLM(Bun.argv.slice(2), new StdIOHandler());
 
 const prompt = 'You  > ';
 const AI     = 'A.I. > ';

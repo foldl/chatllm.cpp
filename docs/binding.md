@@ -58,6 +58,8 @@ Run [chatllm.ts](../bindings/chatllm.ts) with exactly the same command line opti
 bun chatllm.ts -i -m path/to/model
 ```
 
+WARNING: Bun [looks buggy on Linux](https://github.com/oven-sh/bun/issues/10242).
+
 ## Other Languages
 
 `libchatllm` can be utilized by all languages that can call into dynamic libraries. Take C as an example:
