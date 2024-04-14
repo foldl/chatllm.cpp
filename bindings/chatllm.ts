@@ -69,11 +69,11 @@ class ChatLLMHandler {
 
 class ChatLLM {
     obj: any;
-    callback_print: JSCallback
-    callback_print_reference: JSCallback
-    callback_print_rewritten_query: JSCallback
-    callback_end: JSCallback
-    handler: ChatLLMHandler
+    callback_print: JSCallback;
+    callback_print_reference: JSCallback;
+    callback_print_rewritten_query: JSCallback;
+    callback_end: JSCallback;
+    handler: ChatLLMHandler;
 
     constructor(params: string[], handler: ChatLLMHandler) {
         this.handler = handler;
@@ -110,13 +110,13 @@ class ChatLLM {
     }
 
     append_param(s) {
-        let str = Buffer.from(s + '\0', "utf8")
+        let str = Buffer.from(s + '\0', "utf8");
         chatllm_append_param(this.obj, ptr(str));
     }
 
     start() {
-        chatllm_set_print_reference(this.obj, this.callback_print_reference)
-        chatllm_set_print_rewritten_query(this.obj, this.callback_print_rewritten_query)
+        chatllm_set_print_reference(this.obj, this.callback_print_reference);
+        chatllm_set_print_rewritten_query(this.obj, this.callback_print_rewritten_query);
         let r = chatllm_start(this.obj, this.callback_print, this.callback_end, 0);
         if (r != 0) {
             throw `ChatLLM::start error code ${r}`;
@@ -124,8 +124,7 @@ class ChatLLM {
     }
 
     chat(s: string) {
-        this.references = []
-        let str = Buffer.from(s + '\0', "utf8")
+        let str = Buffer.from(s + '\0', "utf8");
         let r = chatllm_user_input(this.obj, ptr(str));
         if (r != 0) {
             throw `ChatLLM::chat error code ${r}`;
@@ -134,6 +133,34 @@ class ChatLLM {
 
     abort() {
         chatllm_abort_generation(this.obj);
+    }
+};
+
+class WorkerHandler extends ChatLLMHandler {
+    id: string;
+
+    constructor(id: string) {
+        super();
+        this.id = id;
+    }
+
+    print(s: string) {
+        if (this.id == '') return;
+        postMessage({type: 'chunk', id: this.id, content: s});
+    }
+
+    print_rewritten_query(s: string) {
+        if (this.id == '') return;
+        postMessage({type: 'rewritten_query', id: this.id, content: s});
+    }
+
+    end() {
+        if (this.id == '') return;
+
+        if (this.references.length > 0)
+            postMessage({type: 'references', id: this.id, content: this.references});
+
+        postMessage({type: 'end', id: this.id});
     }
 };
 
@@ -156,14 +183,33 @@ class StdIOHandler extends ChatLLMHandler {
 
 };
 
-let llm = new ChatLLM(Bun.argv.slice(2), new StdIOHandler());
+if (Bun.argv.slice(2).length > 0)
+{
+    let llm = new ChatLLM(Bun.argv.slice(2), new StdIOHandler());
 
-const prompt = 'You  > ';
-const AI     = 'A.I. > ';
+    const prompt = 'You  > ';
+    const AI     = 'A.I. > ';
 
-process.stdout.write(prompt);
-for await (const line of console) {
-    process.stdout.write(AI);
-    llm.chat(line);
     process.stdout.write(prompt);
+    for await (const line of console) {
+        process.stdout.write(AI);
+        llm.chat(line);
+        process.stdout.write(prompt);
+    }
+}
+
+let llm: ChatLLM | null = null;
+
+onmessage = function(msg) {
+    console.log('Worker: ', msg.data);
+
+    if (msg.data.id == '#start') {
+        llm = new ChatLLM(msg.data.argv, new WorkerHandler(''));
+        return;
+    }
+
+    if (llm == null) return;
+
+    llm.handler = new WorkerHandler(msg.data.id);
+    llm.chat(msg.data.user);
 }

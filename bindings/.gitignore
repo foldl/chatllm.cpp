@@ -1,5 +1,7 @@
 *.obj
 
+node_modules/
+
 # linux
 *.out
 *.so
@@ -8,3 +10,6 @@
 *.dll
 *.lib
 *.exe
+
+bugs.*
+bun.*

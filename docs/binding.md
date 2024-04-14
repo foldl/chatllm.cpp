@@ -55,7 +55,7 @@ Note: "STOP" function is not implemented yet.
 Run [chatllm.ts](../bindings/chatllm.ts) with exactly the same command line options using [Bun](https://bun.sh/):
 
 ```shell
-bun chatllm.ts -i -m path/to/model
+bun run chatllm.ts -i -m path/to/model
 ```
 
 WARNING: Bun [looks buggy on Linux](https://github.com/oven-sh/bun/issues/10242).
