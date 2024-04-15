@@ -836,7 +836,8 @@ class LlamaConverter(BaseConverter):
         if config.rope_scaling is not None:
             assert config.rope_scaling == 1.0, 'rope_scaling must equal to 1.0'
         if config.rope_theta is not None:
-            assert config.rope_theta == 10000.0, 'rope_theta must be 10000.0'
+            if config.rope_theta != 10000.0:
+                print(f"warning: rope_theta != 10000.0, make sure this is intended")
 
         config_values = [
             ggml_type.value,
