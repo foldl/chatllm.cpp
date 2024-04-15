@@ -88,6 +88,8 @@ class ModelType(Enum):
     Orion       = 0x1000
 
     MiniCPM     = 0x1100
+    MiniCPM2    = 0x1101   # updated chat template, no tie_word_embeddings=False
+    MiniCPM_MoE = 0x1102
 
     Persimmon   = 0x1200
     Fuyu        = 0x1201
@@ -272,7 +274,7 @@ class SentencePieceVocab:
         self.sentencepiece_tokenizer = SentencePieceProcessor(str(fname_tokenizer))
         added_tokens: Dict[str, int]
         if fname_added_tokens is not None:
-            added_tokens = json.load(open(fname_added_tokens))
+            added_tokens = json.load(open(fname_added_tokens, encoding='utf-8'))
         else:
             added_tokens = {}
         vocab_size: int = self.sentencepiece_tokenizer.vocab_size()
@@ -985,8 +987,12 @@ class MiniCPMConverter(BaseConverter):
     def pp(cls, config, name: str, tensor):
         if name == 'model.embed_tokens.weight':
             return tensor * config.scale_emb
+        elif name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        elif name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
         else:
-            return LlamaConverter.pp(config, name, tensor)
+            return tensor
 
     @staticmethod
     def dump_config(f, config, ggml_type):
@@ -995,10 +1001,15 @@ class MiniCPMConverter(BaseConverter):
 
         assert config.hidden_act == 'silu', "hidden_act must be silu"
 
-        scaling = config.rope_scaling if config.rope_scaling is not None else 1.0
+        if config.rope_scaling is not None:
+            assert config.rope_scaling['type'] == 'dynamic', "rope_scaling['type'] != 'dynamic'"
+            scaling = 1.0
+            print("WARNING: we are not going to support NTK dynamic scaling for this model.")
+        else:
+            scaling = 1.0
+
         rope_theta = config.rope_theta if config.rope_theta is not None else 10000
 
-        assert config.hidden_act == 'silu', "hidden_act must be silu"
         config_values = [
             ggml_type.value,
             config.vocab_size,
@@ -1022,8 +1033,87 @@ class MiniCPMConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         r = LlamaConverter.get_weight_names(config)
-        r.remove('lm_head.weight')
+        if (config.tie_word_embeddings is None) or config.tie_word_embeddings:
+            r.remove('lm_head.weight')
         return r
+
+class MiniCPMMoEConverter(BaseConverter):
+    MODEL_TYPE = ModelType.MiniCPM_MoE
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name == 'model.embed_tokens.weight':
+            return tensor * config.scale_emb
+        elif name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        elif name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        else:
+            return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        _attn = config._attn_implementation if config._attn_implementation is not None else 'eager'
+        assert (_attn == 'eager') or (_attn == 'flash_attention_2'), '_attn_implementation must be eager or flash_attention_2'
+
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+
+        assert config.rope_scaling is None, "rope_scaling must be null"
+        scaling = 1.0
+        rope_theta = config.rope_theta if config.rope_theta is not None else 10000
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads,
+            config.num_experts,
+            config.num_experts_per_tok,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        f.write(struct.pack("<f", scaling))
+        f.write(struct.pack("<f", rope_theta))
+        f.write(struct.pack("<f", config.scale_depth / math.sqrt(config.num_hidden_layers)))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+            ]
+
+            for j in range(config.num_experts):
+                weight_names += [
+                    f"model.layers.{i}.mlp.experts.{j}.w1.weight",
+                    f"model.layers.{i}.mlp.experts.{j}.w2.weight",
+                    f"model.layers.{i}.mlp.experts.{j}.w3.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.mlp.gate.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        return weight_names
 
 class MistralConverter(BaseConverter):
     MODEL_TYPE = ModelType.Mistral
@@ -2749,7 +2839,12 @@ def main():
     elif arch == 'OrionForCausalLM':
         OrionConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MiniCPMForCausalLM':
-        MiniCPMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        if config.num_experts is None:
+            if (config.tie_word_embeddings is not None) and (not config.tie_word_embeddings):
+                MiniCPMConverter.MODEL_TYPE = ModelType.MiniCPM2
+            MiniCPMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        else:
+            MiniCPMMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'PersimmonForCausalLM':
         PersimmonConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'FuyuForCausalLM':

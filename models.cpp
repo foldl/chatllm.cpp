@@ -127,6 +127,8 @@ namespace chatllm
         MODEL_TYPE_ORION    = 0x1000,
 
         MODEL_TYPE_MINICPM  = 0x1100,
+        MODEL_TYPE_MINICPM2 = 0x1101,
+        MODEL_TYPE_MINICPM_MoE = 0x1102,
 
         MODEL_TYPE_PERSIMMON= 0x1200,
         MODEL_TYPE_FUYU     = 0x1201,
@@ -228,7 +230,10 @@ namespace chatllm
         case MODEL_TYPE_ORION:
             return "Orion";
         case MODEL_TYPE_MINICPM:
+        case MODEL_TYPE_MINICPM2:
             return "MiniCPM";
+        case MODEL_TYPE_MINICPM_MoE:
+            return "MiniCPM-MoE";
         case MODEL_TYPE_PERSIMMON:
             return "Persimmon";
         case MODEL_TYPE_FUYU:
@@ -1243,7 +1248,9 @@ namespace chatllm
                                                                 \
         CASE(ORION,                 orion, 1)                   \
                                                                 \
-        CASE(MINICPM,               minicpm, 1)                 \
+        CASE(MINICPM,               minicpm::v1, 1)             \
+        CASE(MINICPM2,              minicpm::v2, 1)             \
+        CASE(MINICPM_MoE,           minicpm::moe, 1)            \
                                                                 \
         CASE(PERSIMMON,             adept::persimmon, 1)        \
                                                                 \

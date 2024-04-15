@@ -1145,8 +1145,8 @@ namespace chatllm
     public:
         enum RoPEMode
         {
-            Interleaved = 0,        // II...IQQ...Q
-            Original = 2,           // IQIQ......IQ
+            Interleaved = 0,        // IQIQ......IQ
+            Original = 2,           // II...IQQ...Q
             GLM = 4,
         };
         BaseSelfAttention() : BaseAttention() {}
