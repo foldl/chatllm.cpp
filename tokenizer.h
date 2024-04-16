@@ -133,6 +133,8 @@ public:
 
     void RegisterPreprocessor(TextPreprocessor* prep);
 
+    void OverrideTokenDecoding(int id, const std::string &tok);
+
 protected:
     virtual int DoEncode(const std::string &input, std::vector<int> *ids) const = 0;
 
@@ -143,6 +145,7 @@ protected:
     std::string token_unk_id;
     bool ret_special_token;
     std::vector<std::unique_ptr<TextPreprocessor>> pp;
+    std::map<int, std::string> token_override;
 };
 
 class BPEProcessor1: public Processor

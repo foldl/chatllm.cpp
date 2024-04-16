@@ -139,6 +139,8 @@ namespace chatllm
 
         MODEL_TYPE_GROK_1           = 0x1500,
 
+        MODEL_TYPE_ZHINAO            = 0x1600,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -244,6 +246,8 @@ namespace chatllm
             return "Command-R";
         case MODEL_TYPE_GROK_1:
             return "Grok-1";
+        case MODEL_TYPE_ZHINAO:
+            return "Zhinao";
         case MODEL_TYPE_BCE_Embedding:
             return "BCE-Embedding";
         case MODEL_TYPE_BCE_ReRanker:
@@ -281,6 +285,10 @@ namespace chatllm
             return "蓝心";
         case MODEL_TYPE_NEURALBEAGLE:
             return "🐶";
+        case MODEL_TYPE_COHERE_COMMAND_R:
+            return "⌘-R";
+        case MODEL_TYPE_ZHINAO:
+            return "360智脑";
         default:
             return "";
         }
@@ -1097,6 +1105,11 @@ namespace chatllm
         #include "models/grok.cpp"
     }
 
+    namespace zhinao
+    {
+        #include "models/zhinao.cpp"
+    }
+
     struct args
     {
         int max_length;
@@ -1259,6 +1272,8 @@ namespace chatllm
         CASE(COHERE_COMMAND_R,      cohere::command_r, 1)       \
                                                                 \
         CASE(GROK_1,                grok::v1, 1)                \
+                                                                \
+        CASE(ZHINAO,                zhinao, 1)                  \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

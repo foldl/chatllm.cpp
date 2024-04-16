@@ -100,6 +100,8 @@ class ModelType(Enum):
 
     Grok1         = 0x1500
 
+    Zhinao        = 0x1600
+
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
     BGE_M3        = 0x10000102
@@ -534,11 +536,14 @@ class TikTokenizerVocab:
             parts = parts[:min_idx] + [parts[min_idx] + parts[min_idx + 1]] + parts[min_idx + 2:]
         return parts
 
-    def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
-
-        from transformers import AutoTokenizer  # type: ignore[attr-defined]
-        tokenizer = AutoTokenizer.from_pretrained(fname_tokenizer, trust_remote_code=True)
-        vocab_size = max(tokenizer.get_vocab().values()) + 1
+    def __init__(self, fname_tokenizer: Path | Any, fname_added_tokens: Optional[Path]) -> None:
+        if isinstance(fname_tokenizer, Path):
+            from transformers import AutoTokenizer  # type: ignore[attr-defined]
+            tokenizer = AutoTokenizer.from_pretrained(fname_tokenizer, trust_remote_code=True)
+            vocab_size = max(tokenizer.get_vocab().values()) + 1
+        else:
+            tokenizer = fname_tokenizer
+            vocab_size = len(tokenizer.mergeable_ranks)
 
         merges = []
         vocab = {}
@@ -548,7 +553,8 @@ class TikTokenizerVocab:
             if len(token) == 1:
                 continue
             merged = TikTokenizerVocab.bpe(mergeable_ranks, token, max_rank=rank)
-            assert len(merged) == 2
+            if len(merged) != 2:
+                continue
             merges.append(' '.join(map(self.token_bytes_to_string, merged)))
 
         reverse_vocab = {id_ : encoded_tok for encoded_tok, id_ in vocab.items()}
@@ -568,7 +574,7 @@ class TikTokenizerVocab:
         self.vocab_size: int = vocab_size
         self.merges = merges
         self.vocab_tokens = vocab_tokens
-
+        print(len(vocab_tokens))
         print("vocab_size ", self.vocab_size)
 
     def tokenizer_tokens(self) -> Iterable[Tuple[bytes, float]]:
@@ -819,6 +825,24 @@ class InternLM2Converter(BaseConverter):
         ]
         return weight_names
 
+def dump_llama_like_config(f, config, ggml_type):
+    assert config.hidden_act == 'silu', "hidden_act must be silu"
+
+    config_values = [
+        ggml_type.value,
+        config.vocab_size,
+        config.hidden_size,
+        config.num_attention_heads,
+        config.num_hidden_layers,
+        config.intermediate_size,
+        config.max_position_embeddings,
+        config.bos_token_id if config.bos_token_id is not None else -1,
+        config.eos_token_id if isinstance(config.eos_token_id, int) else -1,
+        config.pad_token_id if config.pad_token_id is not None else -1,
+        config.sep_token_id if config.sep_token_id is not None else -1,
+    ]
+    f.write(struct.pack("i" * len(config_values), *config_values))
+
 class LlamaConverter(BaseConverter):
     MODEL_TYPE = ModelType.LlaMA2
 
@@ -830,29 +854,14 @@ class LlamaConverter(BaseConverter):
 
     @staticmethod
     def dump_config(f, config, ggml_type):
-        assert config.hidden_act == 'silu', "hidden_act must be silu"
         if (config.num_key_value_heads is not None) and (config.num_key_value_heads != config.num_attention_heads):
             print(f"warning: num_key_value_heads != num_attention_heads, make sure this is intended")
         if config.rope_scaling is not None:
             assert config.rope_scaling == 1.0, 'rope_scaling must equal to 1.0'
         if config.rope_theta is not None:
-            if config.rope_theta != 10000.0:
-                print(f"warning: rope_theta != 10000.0, make sure this is intended")
+            assert config.rope_theta == 10000.0, f"rope_theta must equal to 10000.0"
 
-        config_values = [
-            ggml_type.value,
-            config.vocab_size,
-            config.hidden_size,
-            config.num_attention_heads,
-            config.num_hidden_layers,
-            config.intermediate_size,
-            config.max_position_embeddings,
-            config.bos_token_id if config.bos_token_id is not None else -1,
-            config.eos_token_id if isinstance(config.eos_token_id, int) else -1,
-            config.pad_token_id if config.pad_token_id is not None else -1,
-            config.sep_token_id if config.sep_token_id is not None else -1,
-        ]
-        f.write(struct.pack("i" * len(config_values), *config_values))
+        dump_llama_like_config(f, config, ggml_type)
 
     @staticmethod
     def get_weight_names(config):
@@ -1129,7 +1138,7 @@ class MistralConverter(BaseConverter):
 
     @staticmethod
     def dump_config(f, config, ggml_type):
-        LlamaConverter.dump_config(f, config, ggml_type)
+        dump_llama_like_config(f, config, ggml_type)
 
         config_values = [
             config.num_key_value_heads,
@@ -1387,7 +1396,7 @@ class YiConverter(BaseConverter):
         assert config.rope_theta > 0, "rope_theta must be positive"
         scaling = config.rope_scaling if config.rope_scaling is not None else 1.0
 
-        LlamaConverter.dump_config(f, config, ggml_type)
+        dump_llama_like_config(f, config, ggml_type)
 
         config_values = [
             config.num_key_value_heads,
@@ -1412,7 +1421,7 @@ class TigerBotConverter(BaseConverter):
         scaling = config.rope_scaling['factor'] if config.rope_scaling is not None else 1.0
         rope_theta = config.rope_theta if config.rope_theta is not None else 10000.0
 
-        LlamaConverter.dump_config(f, config, ggml_type)
+        dump_llama_like_config(f, config, ggml_type)
 
         config_values = [
             config.num_key_value_heads,
@@ -1520,7 +1529,7 @@ class CohereCommandConverter(BaseConverter):
 
     @staticmethod
     def dump_config(f, config, ggml_type):
-        LlamaConverter.dump_config(f, config, ggml_type)
+        dump_llama_like_config(f, config, ggml_type)
 
         config_values = [
             config.num_key_value_heads,
@@ -1566,7 +1575,7 @@ class StableLMConverter(BaseConverter):
         num_heads = config.num_attention_heads
         head_dim = config.hidden_size // num_heads
 
-        LlamaConverter.dump_config(f, config, ggml_type)
+        dump_llama_like_config(f, config, ggml_type)
 
         config_values = [
             config.num_key_value_heads,
@@ -1992,7 +2001,7 @@ class QWen2Converter(BaseConverter):
     @staticmethod
     def dump_config(f, config, ggml_type):
         assert config.use_sliding_window == False, "use_sliding_window must be False"
-        LlamaConverter.dump_config(f, config, ggml_type)
+        dump_llama_like_config(f, config, ggml_type)
 
         config_values = [
             config.num_key_value_heads,
@@ -2034,7 +2043,7 @@ class QWen2MoEConverter(BaseConverter):
     def dump_config(f, config, ggml_type):
         assert config.use_sliding_window == False, "use_sliding_window must be False"
         assert config.decoder_sparse_step == 1, "decoder_sparse_step must be 1"
-        LlamaConverter.dump_config(f, config, ggml_type)
+        dump_llama_like_config(f, config, ggml_type)
 
         config_values = [
             config.num_key_value_heads,
@@ -2369,7 +2378,7 @@ class GemmaConverter(BaseConverter):
 
         # fake it for LlamaConverter
         config.hidden_act = 'silu'
-        LlamaConverter.dump_config(f, config, ggml_type)
+        dump_llama_like_config(f, config, ggml_type)
         config_values = [
             config.num_key_value_heads,
             config.head_dim,
@@ -2448,7 +2457,7 @@ class Grok1Converter(BaseConverter):
         assert config.hidden_act == 'gelu', "hidden_act == 'gelu'"
 
         config.hidden_act = 'silu'
-        LlamaConverter.dump_config(f, config, ggml_type)
+        dump_llama_like_config(f, config, ggml_type)
         config_values = [
             config.num_key_value_heads,
             config.num_experts,
@@ -2583,6 +2592,63 @@ class Grok1Converter(BaseConverter):
 
         print(f"{Grok1Converter.MODEL_TYPE.name} GGML model saved to {save_path}")
 
+class ZhinaoConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Zhinao
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            if name.endswith('qkv_proj.weight'):
+
+                kv_groups = config.num_attention_heads // config.num_key_value_heads
+                head_dim = config.hidden_size // config.num_attention_heads
+                gs = 2 + kv_groups
+
+                v = tensor.view(config.num_key_value_heads, gs * head_dim, config.hidden_size)
+
+                wq, wk, wv = torch.split(v, [kv_groups * head_dim, head_dim, head_dim], dim=1)
+
+                new_dict[name.replace('qkv_proj.weight', 'q_proj.weight')] = wq.reshape(kv_groups * head_dim * config.num_key_value_heads, config.hidden_size)
+                new_dict[name.replace('qkv_proj.weight', 'k_proj.weight')] = wk.reshape(head_dim * config.num_key_value_heads, config.hidden_size)
+                new_dict[name.replace('qkv_proj.weight', 'v_proj.weight')] = wv.reshape(head_dim * config.num_key_value_heads, config.hidden_size)
+
+            if name.endswith('qkv_proj.bias'):
+                kv_groups = config.num_attention_heads // config.num_key_value_heads
+                head_dim = config.hidden_size // config.num_attention_heads
+                gs = 2 + kv_groups
+
+                v = tensor.view(config.num_key_value_heads, gs * head_dim)
+
+                bq, bk, bv = torch.split(v, [kv_groups * head_dim, head_dim, head_dim], dim=1)
+
+                new_dict[name.replace('qkv_proj.bias', 'q_proj.bias')] = bq.contiguous().view(kv_groups * head_dim * config.num_key_value_heads)
+                new_dict[name.replace('qkv_proj.bias', 'k_proj.bias')] = bk.contiguous().view(head_dim * config.num_key_value_heads)
+                new_dict[name.replace('qkv_proj.bias', 'v_proj.bias')] = bv.contiguous().view(head_dim * config.num_key_value_heads)
+            else:
+                new_dict[name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.rope_scaling is None, "rope_scaling['type'] must be null"
+
+        rope_theta = config.rope_theta
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        return QWen2Converter.get_weight_names(config)
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -2668,6 +2734,43 @@ def load_vocab(path: Path) -> Any:
              config = json.load(open(path6, encoding='utf-8'))
              if (config['tokenizer_class'] == 'GPT2Tokenizer') and path7.exists() and path8.exists():
                  return GenericBPETokenizerVocab(path7, path8)
+
+        path9 = path / 'vocab' / "360.tiktoken"
+        if path9.exists():
+            import base64
+            import tiktoken
+
+            PAT_STR = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
+
+            def _load_tiktoken_bpe(tiktoken_bpe_file: str):
+                with open(tiktoken_bpe_file, "rb") as f:
+                    contents = f.read()
+                return {
+                    base64.b64decode(token): int(rank)
+                    for token, rank in (line.split() for line in contents.splitlines() if line)
+                }
+
+            mergeable_ranks = _load_tiktoken_bpe(path9)
+
+            class TempTokenizer:
+                def __init__(self, mergeable_ranks) -> None:
+                    self.mergeable_ranks = mergeable_ranks
+                    self.special_tokens = {}
+
+            #encode = tiktoken.Encoding(
+                #"zhinao",
+                #pat_str=PAT_STR,
+                #mergeable_ranks=mergeable_ranks,
+                #special_tokens={}
+            #)
+
+            #decoder = {v: k for k, v in mergeable_ranks.items()}
+            #vocab = {decoder[i]: i for i in range(len(mergeable_ranks))}
+            ##vocab.update(self.added_tokens_encoder)
+            #print(vocab)
+
+            return TikTokenizerVocab(TempTokenizer(mergeable_ranks), fname_added_tokens = None)
+
 
     raise FileNotFoundError(
         f"Could not find tokenizer.model in {path} or its parent; "
@@ -2854,6 +2957,8 @@ def main():
         GemmaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'CohereForCausalLM':
         CohereCommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'ZhinaoForCausalLM':
+        ZhinaoConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

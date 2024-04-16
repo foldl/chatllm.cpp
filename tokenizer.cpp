@@ -241,8 +241,16 @@ int Processor::PieceToId(std::string_view piece) const
 
 const std::string Processor::IdToPiece(int id) const
 {
+    if (token_override.contains(id))
+        return token_override.find(id)->second;
+
     if (id < 0) return token_unk_id;
     return id < (int)vocab_.id_to_token.size() ? vocab_.id_to_token[id].tok : token_unk_id;
+}
+
+void Processor::OverrideTokenDecoding(int id, const std::string &tok)
+{
+    token_override.emplace(id, tok);
 }
 
 int Processor::Decode(const std::vector<int> &ids, std::string *detokenized) const
@@ -751,6 +759,9 @@ static std::string _decode_text(const std::string & text) {
 
 const std::string BPEProcessor2::IdToPiece(int id) const
 {
+    if (token_override.contains(id))
+        return token_override.find(id)->second;
+
     if (vocab_.is_normal_token(id))
     {
         std::string result = vocab_.id_to_token[id].tok;
