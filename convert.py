@@ -9,6 +9,7 @@ import struct
 import sys
 import io
 import pickle
+import re
 from pathlib import Path
 from enum import Enum
 from pathlib import Path
@@ -76,6 +77,7 @@ class ModelType(Enum):
     OpenChat = 0x602
     NeuralBeagle = 0x603
     Starling = 0x604
+    WizardLMMoE = 0x605
 
     QWen    = 0x700
     QWen2   = 0x710
@@ -1151,20 +1153,42 @@ class MistralConverter(BaseConverter):
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
 
+def make_experts_id_map(experts):
+    r = {}
+    for i in range(len(experts)):
+        r[experts[i]] = i
+    return r
+
 class MixtralConverter(BaseConverter):
     MODEL_TYPE = ModelType.Mixtral
 
     @classmethod
-    def pp(cls, config, name: str, tensor):
-        if name.endswith('k_proj.weight'):
-            return permute(tensor, config.num_key_value_heads)
-        elif name.endswith('q_proj.weight'):
-            return permute(tensor, config.num_attention_heads)
-        return tensor
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        experts_id_map = make_experts_id_map(config.experts)
+        for name in state_dict:
+            tensor = state_dict[name]
+            if name.endswith('k_proj.weight'):
+                new_dict[name] = permute(tensor, config.num_key_value_heads)
+            elif name.endswith('q_proj.weight'):
+                new_dict[name] = permute(tensor, config.num_attention_heads)
+            elif 'block_sparse_moe.experts' in name:
+                id = int(re.findall("block_sparse_moe\.experts\.([0-9]+)\.", name)[0])
+                if id in experts_id_map:
+                    new_name = name.replace(f"block_sparse_moe.experts.{id}.", f"block_sparse_moe.experts.{experts_id_map[id]}.")
+                    new_dict[new_name] = tensor
+            elif name.endswith('block_sparse_moe.gate.weight'):
+                indices = torch.tensor(config.experts)
+                new_dict[name] = torch.index_select(tensor, 0, indices)
+            else:
+                new_dict[name] = tensor
+
+        return new_dict
 
     @staticmethod
     def dump_config(f, config, ggml_type):
         assert config.output_router_logits == False, "output_router_logits must be False"
+        assert len(config.experts) >= config.num_experts_per_tok, f"must select at least {config.num_experts_per_tok} experts"
 
         MistralConverter.dump_config(f, config, ggml_type)
 
@@ -1176,9 +1200,10 @@ class MixtralConverter(BaseConverter):
 
     @staticmethod
     def get_weight_names(config):
+        experts = range(len(config.experts))
         weight_names = ["model.embed_tokens.weight"]
         for i in range(config.num_hidden_layers):
-            for j in range(config.num_local_experts):
+            for j in experts:
                 weight_names += [
                     f"model.layers.{i}.block_sparse_moe.experts.{j}.w1.weight",
                     f"model.layers.{i}.block_sparse_moe.experts.{j}.w2.weight",
@@ -2898,6 +2923,19 @@ def main():
     elif arch == 'MistralForCausalLM':
         MistralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MixtralForCausalLM':
+        if args.experts != '':
+            config.experts = sorted([int(x, 0) for x in args.experts.split(',')])
+            config.num_local_experts = len(config.experts)
+        else:
+            config.experts = range(config.num_local_experts)
+        MixtralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'wizardlm-2-moe':
+        MixtralConverter.MODEL_TYPE = ModelType.WizardLMMoE
+        if args.experts != '':
+            config.experts = sorted([int(x, 0) for x in args.experts.split(',')])
+            config.num_local_experts = len(config.experts)
+        else:
+            config.experts = range(config.num_local_experts)
         MixtralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'openchat':
         MistralConverter.MODEL_TYPE = ModelType.OpenChat

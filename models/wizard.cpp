@@ -146,3 +146,23 @@ namespace math
         }
     };
 }
+
+namespace moe
+{
+    typedef mixtral::Config Config;
+
+    class Tokenizer : public mixtral::Tokenizer
+    {
+    public:
+        Tokenizer(const Config &config)
+            : mixtral::Tokenizer(config, &lm::_chat_encoder)
+        {
+            sys_prompt = "A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions. ";
+        }
+    };
+
+const int NUM_EXPERTS                   =  8;
+const int EXPERTS_PER_TOK               =  2;
+
+typedef mixtral::_ConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, MODEL_TYPE_WIZARDLM2_MOE> ConditionalGeneration;
+}

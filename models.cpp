@@ -115,6 +115,7 @@ namespace chatllm
         MODEL_TYPE_OPENCHAT = 0x602,
         MODEL_TYPE_NEURALBEAGLE = 0x603,
         MODEL_TYPE_STARLING     = 0x604,
+        MODEL_TYPE_WIZARDLM2_MOE  = 0x605,
 
         MODEL_TYPE_QWEN     = 0x700,
         MODEL_TYPE_QWEN2    = 0x710,
@@ -217,6 +218,8 @@ namespace chatllm
             return "NeuralBeagle";
         case MODEL_TYPE_STARLING:
             return "Starling";
+        case MODEL_TYPE_WIZARDLM2_MOE:
+            return "WizardLM-2-MoE";
         case MODEL_TYPE_QWEN:
             return "QWen";
         case MODEL_TYPE_QWEN2:
@@ -1005,11 +1008,6 @@ namespace chatllm
         #include "models/mistral.cpp"
     }
 
-    namespace wizard
-    {
-        #include "models/wizard.cpp"
-    }
-
     namespace openchat
     {
         #include "models/openchat.cpp"
@@ -1023,6 +1021,11 @@ namespace chatllm
     namespace mixtral
     {
         #include "models/mixtral.cpp"
+    }
+
+    namespace wizard
+    {
+        #include "models/wizard.cpp"
     }
 
     namespace qwen
@@ -1258,6 +1261,7 @@ namespace chatllm
                                                                 \
         CASE(NEURALBEAGLE,          neuralbeagle, 1)            \
         CASE(STARLING,              starling, 1)                \
+        CASE(WIZARDLM2_MOE,         wizard::moe, 1)           \
                                                                 \
         CASE(ORION,                 orion, 1)                   \
                                                                 \

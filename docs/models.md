@@ -54,6 +54,11 @@
 
     * [x] NeuralBeagle14: [7B](https://huggingface.co/mlabonne/NeuralBeagle14-7B) (`-a NeuralBeagle`)
 
+    * [x] WizardLM-2: WizardLM-2-8x22B (official link is gone) (`-a WizardLM-2-MoE`)
+
+        Note: For `MixtralForCausalLM` models, `--experts ...` is supported to select a subset of experts when converting.
+        For example, `--experts 0,1,2,3` selects the first 4 experts.
+
 * Phi (`PhiForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4)
 
