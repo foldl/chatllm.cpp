@@ -422,7 +422,11 @@ class FastTokenizerVocab:
 
     def tokenizer_tokens(self) -> Iterable[Tuple[bytes, float]]:
         for tok, idx in self.vocal_tokens:
-            text: bytes = tok.encode('utf-8')
+            matches = re.findall('<0x([0-9a-fA-F]+)>', tok)
+            if len(matches) == 1:
+                text: bytes = bytes([int(matches[0], 16)])
+            else:
+                text: bytes = tok.replace("\u2581", " ").encode("utf-8")
             t = TokenType.NORMAL.value
             if tok in g_special_tokens:
                 t = TokenType.USER_DEFINED.value
@@ -2714,7 +2718,7 @@ def convert_grok_1_base(args, vocab, ggml_type):
     Grok1Converter.convert(AttributeDict(grok1_config), args.model_name_or_path, vocab, ggml_type, args.save_path)
     return
 
-def load_vocab(path: Path) -> Any:
+def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
 
     def load_spm(p: Path) -> Any:
         added_tokens_path = p.parent / "added_tokens.json"
@@ -2725,14 +2729,15 @@ def load_vocab(path: Path) -> Any:
     # a directory, it might be the model directory, and tokenizer.model might
     # be in the parent of that.
     if path.is_dir():
-        path2 = path / "tokenizer.model"
-        # Use `.parent` instead of /.. to handle the symlink case better.
-        path3 = path.parent / "tokenizer.model"
+        if not skip_def_model_file:
+            path2 = path / "tokenizer.model"
+            # Use `.parent` instead of /.. to handle the symlink case better.
+            path3 = path.parent / "tokenizer.model"
 
-        if path2.exists():
-            return load_spm(path2)
-        elif path3.exists():
-            return load_spm(path3)
+            if path2.exists():
+                return load_spm(path2)
+            elif path3.exists():
+                return load_spm(path3)
 
         # path20 = path / "sentencepiece.bpe.model"
 
@@ -2845,7 +2850,12 @@ def main():
 
     ggml_type = GGMLType[args.type.upper()]
 
-    vocab = load_vocab(Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir))
+    skip_def_vocab_model = False
+    if args.arch.lower() == 'codeqwen':
+        skip_def_vocab_model = True
+        args.arch = ''
+
+    vocab = load_vocab(Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir), skip_def_vocab_model)
 
     if args.arch.lower() == 'grok-1-base':
         convert_grok_1_base(args, vocab, ggml_type)

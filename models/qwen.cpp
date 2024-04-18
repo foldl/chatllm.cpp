@@ -78,6 +78,7 @@ namespace v1
     {
         tp = new tokenizer::BPEProcessor2();
         size_t size = tp->Load(buffer, n_vocab);
+        tp->EnableReturnSpecialToken(true);
 
         // for QAnything
         pad_token_id = eos_token_id = bos_token_id = tp->PieceToId("<|endoftext|>");
@@ -95,6 +96,10 @@ namespace v1
         std::vector<int> ids;
         tp->Encode("\n", &ids);
         nl_token_id = ids[0];
+
+            ids[0] = 32;
+std::string s; tp->Decode(ids, &s);
+        std::cout << "32: " << int(s[0]) << ":" <<  std::endl << s<< ":"<<  std::endl;
 
         return size;
     }

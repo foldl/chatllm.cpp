@@ -466,6 +466,12 @@ static std::unordered_map<std::string, uint8_t> unicode_to_bytes_map_bpe() {
 
 static uint8_t unicode_to_bytes_bpe(const std::string & utf8) {
     static std::unordered_map<std::string, uint8_t> map = unicode_to_bytes_map_bpe();
+    if (!map.contains(utf8))
+    {
+        if (utf8.size() == 1)
+            return *(const uint8_t *)utf8.data();
+        return ' ';
+    }
     return map.at(utf8);
 }
 
