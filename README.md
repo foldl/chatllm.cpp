@@ -6,7 +6,7 @@
 
 ![](./docs/demo.gif)
 
-Inference of a bunch of models from less than 3B to more than 45B, for real-time chatting with [RAG](./docs/rag.md) on your computer (CPU),
+Inference of a bunch of models from less than 3B to more than 300B, for real-time chatting with [RAG](./docs/rag.md) on your computer (CPU),
 pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml).
 
 | [Supported Models](./docs/models.md) | [Download Quantized Models](https://modelscope.cn/models/judd2024/chatllm_quantized_models) |

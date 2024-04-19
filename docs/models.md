@@ -43,7 +43,7 @@
 
     * [x] WizardLM: [Math 7B](https://huggingface.co/WizardLM/WizardMath-7B-V1.1) (`-a WizardMath`)
 
-    * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) 🔥
+    * [x] Mixtral: [Instruct-8x7B](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) 🔥, [Instruct-8x22B](https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1)
 
         Three implementations of sliding-window attention (see `SlidingWindowAttentionImpl`):
 
