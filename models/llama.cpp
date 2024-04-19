@@ -259,16 +259,16 @@ namespace v3
             flag = true;
             if (tok->get_system_prompt().size() > 0)
             {
-                tok->encode_header("system", ids);
                 ids.push_back(tok->bos_token_id);
+                tok->encode_header("system", ids);
                 tok->encode_content(tok->get_system_prompt(), ids);
                 flag = false;
             }
         }
 
-        tok->encode_header("user", ids);
         if (flag)
             ids.push_back(tok->bos_token_id);
+        tok->encode_header("user", ids);
         tok->encode_content(user, ids);
 
         tok->encode_header("assistant", ids);
