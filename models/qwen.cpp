@@ -97,10 +97,6 @@ namespace v1
         tp->Encode("\n", &ids);
         nl_token_id = ids[0];
 
-            ids[0] = 32;
-std::string s; tp->Decode(ids, &s);
-        std::cout << "32: " << int(s[0]) << ":" <<  std::endl << s<< ":"<<  std::endl;
-
         return size;
     }
 
