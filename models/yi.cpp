@@ -1,4 +1,4 @@
-struct Config : public llama::Config
+struct Config : public llama::v2::Config
 {
     int num_key_value_heads;
     float rope_scaling;
@@ -14,11 +14,11 @@ public:
 
 static ChatHistoryEncoder _chat_encoder;
 
-class Tokenizer : public llama::Tokenizer
+class Tokenizer : public llama::v2::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
-        : llama::Tokenizer::Tokenizer(config, &_chat_encoder)
+        : llama::v2::Tokenizer::Tokenizer(config, &_chat_encoder)
     {
         sys_prompt = "";
     }
@@ -99,7 +99,7 @@ void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std
 
 bool Tokenizer::is_special_id(int id) const
 {
-    return llama::Tokenizer::is_special_id(id)
+    return llama::v2::Tokenizer::is_special_id(id)
             || (id == bos_token_id)
             || (id == eos_token_id)
             || (id == im_start_token_id)

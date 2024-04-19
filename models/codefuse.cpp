@@ -1,6 +1,6 @@
 namespace deepseek
 {
-    struct Config : public llama::Config
+    struct Config : public llama::v2::Config
     {
         int num_key_value_heads;
         float rope_scaling;
@@ -28,7 +28,7 @@ namespace deepseek
         int get_terminate_token_id(void) const override { return bos_token_id; }
     };
 
-    class ConditionalGeneration : public llama::GenericConditionalGeneration<LlamaBlock>
+    class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<LlamaBlock>
     {
     public:
         ConditionalGeneration() = default;
@@ -38,7 +38,7 @@ namespace deepseek
 
         ConditionalGeneration(const Config &config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : llama::GenericConditionalGeneration<LlamaBlock>(config, type, num_key_value_heads, max_length),
+            : llama::v2::GenericConditionalGeneration<LlamaBlock>(config, type, num_key_value_heads, max_length),
               config(config)
         {
             for (int i = 0; i < config.num_hidden_layers; i++)

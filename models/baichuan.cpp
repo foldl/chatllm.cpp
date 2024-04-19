@@ -1,6 +1,6 @@
 namespace _7b
 {
-    struct Config : public llama::Config
+    struct Config : public llama::v2::Config
     {
         int user_token_id;
         int assistant_token_id;
@@ -15,11 +15,11 @@ namespace _7b
 
     static ChatHistoryEncoder _chat_encoder;
 
-    class Tokenizer : public llama::Tokenizer
+    class Tokenizer : public llama::v2::Tokenizer
     {
     public:
         Tokenizer(const Config &config)
-            : llama::Tokenizer::Tokenizer(config, &_chat_encoder),
+            : llama::v2::Tokenizer::Tokenizer(config, &_chat_encoder),
             user_token_id(config.user_token_id),
             assistant_token_id(config.assistant_token_id)
         {
@@ -34,12 +34,12 @@ namespace _7b
         int assistant_token_id;
     };
 
-    class ConditionalGeneration : public llama::ConditionalGeneration
+    class ConditionalGeneration : public llama::v2::ConditionalGeneration
     {
     public:
         ConditionalGeneration() = default;
         ConditionalGeneration(const Config &config)
-            : llama::ConditionalGeneration(config, MODEL_TYPE_BAICHUANLLAMA)
+            : llama::v2::ConditionalGeneration(config, MODEL_TYPE_BAICHUANLLAMA)
         {
         }
     };
@@ -87,7 +87,7 @@ namespace larger
     typedef _7b::Config Config;
     typedef _7b::Tokenizer Tokenizer;
 
-    class ConditionalGeneration : public llama::GenericConditionalGeneration<BaichuanBlock>
+    class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<BaichuanBlock>
     {
     public:
         ConditionalGeneration() = default;
@@ -97,7 +97,7 @@ namespace larger
 
         ConditionalGeneration(const Config &config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : llama::GenericConditionalGeneration<BaichuanBlock>(config, type, num_key_value_heads, max_length)
+            : llama::v2::GenericConditionalGeneration<BaichuanBlock>(config, type, num_key_value_heads, max_length)
         {}
     };
 }

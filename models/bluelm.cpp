@@ -1,4 +1,4 @@
-struct Config : public llama::Config
+struct Config : public llama::v2::Config
 {
     int num_key_value_heads;
     float rope_theta;
@@ -15,11 +15,11 @@ public:
 
 static ChatHistoryEncoder _chat_encoder;
 
-class Tokenizer : public llama::Tokenizer
+class Tokenizer : public llama::v2::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
-        : llama::Tokenizer::Tokenizer(config, &_chat_encoder)
+        : llama::v2::Tokenizer::Tokenizer(config, &_chat_encoder)
     {
     }
 
@@ -33,7 +33,7 @@ public:
     int human_token_id;
 };
 
-class ConditionalGeneration : public llama::GenericConditionalGeneration<BlueLMBlock>
+class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<BlueLMBlock>
 {
 public:
     ConditionalGeneration() = default;
@@ -43,7 +43,7 @@ public:
 
     ConditionalGeneration(const Config &config, ModelType type,
                           int num_key_value_heads, int max_length)
-        : llama::GenericConditionalGeneration<BlueLMBlock>(config, type, num_key_value_heads, max_length)
+        : llama::v2::GenericConditionalGeneration<BlueLMBlock>(config, type, num_key_value_heads, max_length)
     {
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

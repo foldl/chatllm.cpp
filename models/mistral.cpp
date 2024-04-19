@@ -1,4 +1,4 @@
-struct Config : public llama::Config
+struct Config : public llama::v2::Config
 {
     int num_key_value_heads;
     int sliding_window;
@@ -16,7 +16,7 @@ static ChatHistoryEncoder _chat_encoder;
 
 const int SLIDING_WINDOW_LEN            =  4096;
 
-class Tokenizer : public llama::Tokenizer
+class Tokenizer : public llama::v2::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
@@ -24,19 +24,19 @@ public:
     {}
 
     Tokenizer(const Config &config, BaseHistoryEncoder *encoder)
-        : llama::Tokenizer::Tokenizer(config, encoder)
+        : llama::v2::Tokenizer::Tokenizer(config, encoder)
     {
         sys_prompt = "";
     }
 };
 
-class ConditionalGeneration : public llama::GenericConditionalGeneration<MistralBlock<SLIDING_WINDOW_LEN>>
+class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<MistralBlock<SLIDING_WINDOW_LEN>>
 {
 public:
     ConditionalGeneration() = default;
 
     ConditionalGeneration(const Config &config, ModelType type)
-        : llama::GenericConditionalGeneration<MistralBlock<SLIDING_WINDOW_LEN>>(config, type,
+        : llama::v2::GenericConditionalGeneration<MistralBlock<SLIDING_WINDOW_LEN>>(config, type,
             config.num_key_value_heads, config.max_length, 13)
     {
         CHATLLM_CHECK((config.sliding_window <= 0) || (config.sliding_window == SLIDING_WINDOW_LEN))

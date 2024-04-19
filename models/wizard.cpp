@@ -1,6 +1,6 @@
 namespace lm
 {
-    struct Config : public llama::Config
+    struct Config : public llama::v2::Config
     {
     };
 
@@ -13,22 +13,22 @@ namespace lm
 
     static ChatHistoryEncoder _chat_encoder;
 
-    class Tokenizer : public llama::Tokenizer
+    class Tokenizer : public llama::v2::Tokenizer
     {
     public:
         Tokenizer(const Config &config)
-            : llama::Tokenizer::Tokenizer(config, &_chat_encoder)
+            : llama::v2::Tokenizer::Tokenizer(config, &_chat_encoder)
         {
             sys_prompt = "A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions. USER: Hi ASSISTANT: Hello.";
         }
     };
 
-    class ConditionalGeneration : public llama::ConditionalGeneration
+    class ConditionalGeneration : public llama::v2::ConditionalGeneration
     {
     public:
         ConditionalGeneration() = default;
         ConditionalGeneration(const Config &config)
-            : llama::ConditionalGeneration(config, MODEL_TYPE_WIZARDLM)
+            : llama::v2::ConditionalGeneration(config, MODEL_TYPE_WIZARDLM)
         {
         }
     };
@@ -70,11 +70,11 @@ namespace coder
 
     static ChatHistoryEncoder _chat_encoder;
 
-    class Tokenizer : public llama::Tokenizer
+    class Tokenizer : public llama::v2::Tokenizer
     {
     public:
-        Tokenizer(const llama::Config &config)
-            : llama::Tokenizer::Tokenizer(config, &_chat_encoder)
+        Tokenizer(const llama::v2::Config &config)
+            : llama::v2::Tokenizer::Tokenizer(config, &_chat_encoder)
         {
             sys_prompt = "Below is an instruction that describes a task. Write a response that appropriately completes the request.";
         }
@@ -132,7 +132,7 @@ namespace math
     class Tokenizer : public coder::Tokenizer
     {
     public:
-        Tokenizer(const llama::Config &config)
+        Tokenizer(const llama::v2::Config &config)
             : coder::Tokenizer(config)
         {}
     };

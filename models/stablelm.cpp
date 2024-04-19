@@ -1,4 +1,4 @@
-struct Config : public llama::Config
+struct Config : public llama::v2::Config
 {
     int num_key_value_heads;
     int rope_dim;

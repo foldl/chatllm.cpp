@@ -140,7 +140,9 @@ namespace chatllm
 
         MODEL_TYPE_GROK_1           = 0x1500,
 
-        MODEL_TYPE_ZHINAO            = 0x1600,
+        MODEL_TYPE_ZHINAO           = 0x1600,
+
+        MODEL_TYPE_LLAMA3           = 0x1700,
 
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
@@ -251,6 +253,8 @@ namespace chatllm
             return "Grok-1";
         case MODEL_TYPE_ZHINAO:
             return "Zhinao";
+        case MODEL_TYPE_LLAMA3:
+            return "LlaMa3";
         case MODEL_TYPE_BCE_Embedding:
             return "BCE-Embedding";
         case MODEL_TYPE_BCE_ReRanker:
@@ -1224,7 +1228,8 @@ namespace chatllm
         CASE(INTERNLM2,             internlm::v2, 1)            \
         CASE(INTERNLM3,             internlm::v3, 1)            \
                                                                 \
-        CASE(LLAMA2,                llama, 1)                   \
+        CASE(LLAMA2,                llama::v2, 1)               \
+        CASE(LLAMA3,                llama::v3, 1)               \
         CASE(CODELLAMA,             codellama, 1)               \
                                                                 \
         CASE(DEEPSEEK,              deepseek, 1)                \
@@ -1261,7 +1266,7 @@ namespace chatllm
                                                                 \
         CASE(NEURALBEAGLE,          neuralbeagle, 1)            \
         CASE(STARLING,              starling, 1)                \
-        CASE(WIZARDLM2_MOE,         wizard::moe, 1)           \
+        CASE(WIZARDLM2_MOE,         wizard::moe, 1)             \
                                                                 \
         CASE(ORION,                 orion, 1)                   \
                                                                 \

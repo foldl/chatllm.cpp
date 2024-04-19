@@ -104,6 +104,8 @@ class ModelType(Enum):
 
     Zhinao        = 0x1600
 
+    LlaMA3        = 0x1700
+
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
     BGE_M3        = 0x10000102
@@ -891,6 +893,34 @@ class LlamaConverter(BaseConverter):
         ]
 
         return weight_names
+
+class Llama3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.LlaMA3
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        elif name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        else:
+            return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        if config.rope_scaling is not None:
+            assert config.rope_scaling == 1.0, 'rope_scaling must equal to 1.0'
+
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
 
 class CodeLlamaConverter(BaseConverter):
     MODEL_TYPE = ModelType.CodeLlaMA
@@ -2900,7 +2930,10 @@ def main():
     elif arch == 'InternLM2ForCausalLM':
         InternLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'LlamaForCausalLM':
-        LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        if (config.num_key_value_heads is None) or (config.num_key_value_heads == config.num_attention_heads):
+            LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        else:
+            Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'codellama':
         CodeLlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek':

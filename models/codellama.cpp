@@ -1,19 +1,19 @@
-struct Config : public llama::Config
+struct Config : public llama::v2::Config
 {
     float rope_theta;
 };
 
-class Tokenizer : public llama::Tokenizer
+class Tokenizer : public llama::v2::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
-        : llama::Tokenizer::Tokenizer(config)
+        : llama::v2::Tokenizer::Tokenizer(config)
     {
         sys_prompt = "";
     }
 };
 
-class ConditionalGeneration : public llama::ConditionalGeneration
+class ConditionalGeneration : public llama::v2::ConditionalGeneration
 {
 public:
     ConditionalGeneration() = default;
@@ -24,7 +24,7 @@ public:
     }
 
     ConditionalGeneration(const Config &config, ModelType type)
-        : llama::ConditionalGeneration(config, type)
+        : llama::v2::ConditionalGeneration(config, type)
     {
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

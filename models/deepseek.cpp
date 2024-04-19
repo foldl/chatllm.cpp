@@ -1,4 +1,4 @@
-struct Config : public llama::Config
+struct Config : public llama::v2::Config
 {
 };
 
@@ -11,11 +11,11 @@ public:
 
 static ChatHistoryEncoder _chat_encoder;
 
-class Tokenizer : public llama::Tokenizer
+class Tokenizer : public llama::v2::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
-        : llama::Tokenizer::Tokenizer(config, &_chat_encoder)
+        : llama::v2::Tokenizer::Tokenizer(config, &_chat_encoder)
     {
     }
 
@@ -24,12 +24,12 @@ public:
     bool is_special_id(int id) const override;
 };
 
-class ConditionalGeneration : public llama::ConditionalGeneration
+class ConditionalGeneration : public llama::v2::ConditionalGeneration
 {
 public:
     ConditionalGeneration() = default;
     ConditionalGeneration(const Config &config)
-        : llama::ConditionalGeneration(config, MODEL_TYPE_DEEPSEEK)
+        : llama::v2::ConditionalGeneration(config, MODEL_TYPE_DEEPSEEK)
     {
     }
 };

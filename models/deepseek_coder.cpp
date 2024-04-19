@@ -1,4 +1,4 @@
-struct Config : public llama::Config
+struct Config : public llama::v2::Config
 {
     float rope_scaling;
     float rope_theta;
@@ -13,15 +13,15 @@ public:
 
 static ChatHistoryEncoder _chat_encoder;
 
-class Tokenizer : public llama::Tokenizer
+class Tokenizer : public llama::v2::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
         : Tokenizer(config, &_chat_encoder)
     {}
 
-    Tokenizer(const llama::Config &config, BaseHistoryEncoder *chat_encoder)
-        : llama::Tokenizer::Tokenizer(config, chat_encoder)
+    Tokenizer(const llama::v2::Config &config, BaseHistoryEncoder *chat_encoder)
+        : llama::v2::Tokenizer::Tokenizer(config, chat_encoder)
     {
         sys_prompt = "You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.";
     }
@@ -39,12 +39,12 @@ public:
     int eot_token_id;
 };
 
-class ConditionalGeneration : public llama::ConditionalGeneration
+class ConditionalGeneration : public llama::v2::ConditionalGeneration
 {
 public:
     ConditionalGeneration() = default;
     ConditionalGeneration(const Config &config)
-        : llama::ConditionalGeneration(config, MODEL_TYPE_DEEPSEEK_CODER),
+        : llama::v2::ConditionalGeneration(config, MODEL_TYPE_DEEPSEEK_CODER),
         config(config)
     {
     }
@@ -110,7 +110,7 @@ bool Tokenizer::is_special_id(int id) const
 
 void ConditionalGeneration::load(ModelLoader &loader)
 {
-    llama::ConditionalGeneration::load(loader);
+    llama::v2::ConditionalGeneration::load(loader);
 
     for (int i = 0; i < config.num_hidden_layers; i++)
     {

@@ -1,4 +1,4 @@
-struct Config : public llama::Config
+struct Config : public llama::v2::Config
 {
     int num_key_value_heads;
     float rope_scaling;
@@ -14,11 +14,11 @@ public:
 
 static ChatHistoryEncoder _chat_encoder;
 
-class Tokenizer : public llama::Tokenizer
+class Tokenizer : public llama::v2::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
-        : llama::Tokenizer::Tokenizer(config, &_chat_encoder)
+        : llama::v2::Tokenizer::Tokenizer(config, &_chat_encoder)
     {
         sys_prompt = "";
     }
@@ -32,12 +32,12 @@ public:
     int response_token_id;
 };
 
-class ConditionalGeneration : public llama::ConditionalGeneration
+class ConditionalGeneration : public llama::v2::ConditionalGeneration
 {
 public:
     ConditionalGeneration() = default;
     ConditionalGeneration(const Config &config)
-        : llama::ConditionalGeneration(config, MODEL_TYPE_TIGERBOT, config.num_key_value_heads, config.max_length)
+        : llama::v2::ConditionalGeneration(config, MODEL_TYPE_TIGERBOT, config.num_key_value_heads, config.max_length)
     {
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
@@ -50,7 +50,7 @@ public:
 
 size_t Tokenizer::load(const char *buffer, int n_vocab)
 {
-    size_t size = llama::Tokenizer::load(buffer, n_vocab);
+    size_t size = llama::v2::Tokenizer::load(buffer, n_vocab);
     response_token_id = pad_token_id - 1;
     instruct_token_id = pad_token_id - 2;
     return size;
@@ -76,7 +76,7 @@ void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std
 
 bool Tokenizer::is_special_id(int id) const
 {
-    return llama::Tokenizer::is_special_id(id)
+    return llama::v2::Tokenizer::is_special_id(id)
             || (id == bos_token_id)
             || (id == eos_token_id)
             || (id == instruct_token_id)
