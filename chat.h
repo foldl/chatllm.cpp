@@ -104,6 +104,7 @@ namespace chatllm
         BaseHistoryEncoder *chat_encoder;
         BaseHistoryEncoder *completion_encoder;
         BaseHistoryEncoder *qa_encoder;
+        bool auto_add_bos;
     };
 
     class BaseHistoryEncoder

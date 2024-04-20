@@ -67,7 +67,8 @@ namespace chatllm
         format(ChatFormat::CHAT),
         chat_encoder(chat_encoder),
         completion_encoder(completion_encoder),
-        qa_encoder(qa_encoder)
+        qa_encoder(qa_encoder),
+        auto_add_bos(true)
     {
         if (chat_encoder)
             chat_encoder->set_tokenizer(this);
@@ -170,8 +171,9 @@ namespace chatllm
         case ChatFormat::COMPLETION:
             if (completion_encoder)
                 return encode_history(completion_encoder, history, max_length, incremental);
-            else
-                return encode(history[history.size() - 1]);
+            else;
+            break;
+
         case ChatFormat::QA:
             if (qa_encoder)
                 return encode_history(qa_encoder, history, max_length, incremental);
@@ -181,14 +183,23 @@ namespace chatllm
                 copied.push_back(history[history.size() - 1]);
                 return encode_history(chat_encoder, copied, max_length, incremental);
             }
-            else
-                return encode(history[history.size() - 1]);
+            else;
+            break;
         default:
             if (chat_encoder)
                 return encode_history(chat_encoder, history, max_length, incremental);
-            else
-                return encode(history[history.size() - 1]);
+            else;
         }
+
+        std::vector<int> r = encode(history[history.size() - 1]);
+        if (auto_add_bos && (bos_token_id >= 0))
+        {
+            if ((r.size() > 0) && (r[0] != bos_token_id))
+                r.insert(r.begin(), bos_token_id);
+            else
+                r.push_back(bos_token_id);
+        }
+        return r;
     }
 
     static std::string shape_to_string(ggml_tensor *tensor)
