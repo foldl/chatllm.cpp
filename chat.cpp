@@ -450,7 +450,7 @@ namespace chatllm
     std::string Pipeline::chat_with_restart(const std::vector<std::string> &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer)
     {
-        bool continuous = true;
+        bool continuous = tokenizer->get_chat_format() == ChatFormat::CHAT;
         bool completed = false;
         std::vector<int> input_ids;
         if (initializing)
