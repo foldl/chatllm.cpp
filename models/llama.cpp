@@ -253,21 +253,16 @@ namespace v3
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss;
-        bool flag = false;
         if (round_idx == 0)
         {
-            flag = true;
+            ids.push_back(tok->bos_token_id);
             if (tok->get_system_prompt().size() > 0)
             {
-                ids.push_back(tok->bos_token_id);
                 tok->encode_header("system", ids);
                 tok->encode_content(tok->get_system_prompt(), ids);
-                flag = false;
             }
         }
 
-        if (flag)
-            ids.push_back(tok->bos_token_id);
         tok->encode_header("user", ids);
         tok->encode_content(user, ids);
 
