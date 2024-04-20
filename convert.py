@@ -424,14 +424,16 @@ class FastTokenizerVocab:
 
     def tokenizer_tokens(self) -> Iterable[Tuple[bytes, float]]:
         for tok, idx in self.vocal_tokens:
-            matches = re.findall('<0x([0-9a-fA-F]+)>', tok)
-            if len(matches) == 1:
-                text: bytes = bytes([int(matches[0], 16)])
-            else:
-                text: bytes = tok.replace("\u2581", " ").encode("utf-8")
             t = TokenType.NORMAL.value
             if tok in g_special_tokens:
                 t = TokenType.USER_DEFINED.value
+                text = tok.encode("utf-8")
+            else:
+                matches = re.findall('<0x([0-9a-fA-F]+)>', tok)
+                if len(matches) == 1:
+                    text: bytes = bytes([int(matches[0], 16)])
+                else:
+                    text: bytes = tok.replace("\u2581", " ").encode("utf-8")
 
             yield text, t
 
