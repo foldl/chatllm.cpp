@@ -107,6 +107,11 @@ class LLMChatDone:
     def __init__(self, id: Any) -> None:
         self.id = id
 
+class LLMChatChunk:
+    def __init__(self, id: Any, chunk: str) -> None:
+        self.id = id
+        self.chunk = chunk
+
 class ChatLLM:
     def __init__(self, lib: LibChatLLM, param: Union[None, str, List[str]], auto_start: bool = True) -> None:
         self._lib = lib
@@ -152,7 +157,7 @@ class ChatLLM:
         if self.out_queue is None:
             print(s, end="", flush=True)
         else:
-            self.out_queue.put(s)
+            self.out_queue.put(LLMChatChunk(self.input_id, s))
 
     def callback_end(self) -> None:
         if self.out_queue is not None:
@@ -174,6 +179,7 @@ class ChatLLMStreamer:
         self.thread = threading.Thread(target=lambda: self.thread_fun())
         self.thread.start()
         self.llm.start()
+        self.acc = ''
 
     def thread_fun(self) -> None:
         while self.run:
@@ -192,16 +198,25 @@ class ChatLLMStreamer:
         id = self.input_counter
         self.input_counter = self.input_counter + 1
         self.input_queue.put(LLMChatInput(user_input, id))
+        self.acc = ''
         while True:
             output = self.output_queue.get()
-            if not isinstance(output, LLMChatDone):
-                yield output
-                continue
-
-            if output.id == id:
-                break
+            if isinstance(output, LLMChatChunk):
+                if output.id == id:
+                    self.acc = self.acc + output.chunk
+                    yield output.chunk
+            elif isinstance(output, LLMChatDone):
+                if output.id == id:
+                    break
             else:
-                continue
+                print(output)
+                raise Exception(output)
+
+    def abort(self) -> None:
+        self.llm.abort()
+
+    def get_acc_resp(self) -> str:
+        return self.acc
 
     def terminate(self) -> None:
         self.run = False
