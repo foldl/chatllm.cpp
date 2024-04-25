@@ -39,15 +39,15 @@ If a question does not make any sense, or is not factually coherent, explain why
     };
 
     template <class LayerBlock> class GenericConditionalGeneration : public BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>>
+                                    Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>>
     {
     private:
         typedef BaseModelForConditionalGeneration<
-                    Model<Config, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>> Base;
+                    Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>> Base;
     public:
-        GenericConditionalGeneration(const Config &config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12)
+        GenericConditionalGeneration(const BaseConfig &config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12)
             : BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+                                    Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = 3 + config.num_hidden_layers * tensors_per_layer;
@@ -55,7 +55,7 @@ If a question does not make any sense, or is not factually coherent, explain why
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
 
-            Base::transformer = Model<Config, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>(&w_ctx_, config, false,
+            Base::transformer = Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>(&w_ctx_, config, false,
                                                                                     config.hidden_size, config.num_attention_heads,
                                                                                     config.intermediate_size, num_key_value_heads, max_length);
             Base::GRAPH_SIZE = 4096 * 2;

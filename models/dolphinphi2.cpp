@@ -71,7 +71,7 @@ static ChatHistoryEncoder _chat_encoder;
 
 namespace v1
 {
-    struct Config : public phi2::v1::Config
+    struct Config : public phi::v2::v1::Config
     {
     };
 
@@ -85,11 +85,11 @@ namespace v1
         }
     };
 
-    class ConditionalGeneration : public phi2::v1::ConditionalGeneration
+    class ConditionalGeneration : public phi::v2::v1::ConditionalGeneration
     {
     public:
         ConditionalGeneration(const Config &config)
-            : phi2::v1::ConditionalGeneration(config, MODEL_TYPE_DOLPHINPHI2)
+            : phi::v2::v1::ConditionalGeneration(config, MODEL_TYPE_DOLPHINPHI2)
         {}
     protected:
         bool is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output) override

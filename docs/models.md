@@ -60,12 +60,14 @@
         Note: For `MixtralForCausalLM` models, `--experts ...` is supported to select a subset of experts when converting.
         For example, `--experts 0,1,2,3` selects the first 4 experts.
 
-* Phi (`PhiForCausalLM`)
+* Phi (`PhiForCausalLM`, `Phi3ForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4)
 
         Tip: `--temp 0` is recommended. Don't forget to try `--format qa`.
 
     * [x] [Dolphin Phi-2](https://huggingface.co/cognitivecomputations/dolphin-2_6-phi-2/tree/a084bb141f99f67e8ff56a654e29ddd53a0b4d7a) (`-a DolphinPhi2`) 🐬
+
+    * [x] Phi-3 Mini: [Instruct-4k](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct)
 
 * QWen (`QWenLMHeadModel`, `Qwen2ForCausalLM`, `Qwen2MoeForCausalLM`)
     * [x] v1: [Chat-7B](https://huggingface.co/Qwen/Qwen-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen-14B-Chat), [QAnything-7B](https://huggingface.co/netease-youdao/Qwen-7B-QAnything)

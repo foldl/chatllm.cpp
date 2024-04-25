@@ -106,6 +106,8 @@ namespace chatllm
 
         MODEL_TYPE_PHI2     = 0x500,
         MODEL_TYPE_PHI2_V2  = 0x501,
+        MODEL_TYPE_PHI3     = 0x520,
+        MODEL_TYPE_PHI3_SU  = 0x521,
 
         MODEL_TYPE_DOLPHINPHI2      = 0x510,
         MODEL_TYPE_DOLPHINPHI2_V2   = 0x511,
@@ -201,6 +203,9 @@ namespace chatllm
         case MODEL_TYPE_PHI2:
         case MODEL_TYPE_PHI2_V2:
             return "Phi-2";
+        case MODEL_TYPE_PHI3:
+        case MODEL_TYPE_PHI3_SU:
+            return "Phi-3";
         case MODEL_TYPE_DOLPHINPHI2:
         case MODEL_TYPE_DOLPHINPHI2_V2:
             return "Dolphin Phi-2";
@@ -282,6 +287,8 @@ namespace chatllm
             return "百川";
         case MODEL_TYPE_PHI2:
         case MODEL_TYPE_PHI2_V2:
+        case MODEL_TYPE_PHI3:
+        case MODEL_TYPE_PHI3_SU:
             return "Φ";
         case MODEL_TYPE_QWEN:
         case MODEL_TYPE_QWEN2:
@@ -610,7 +617,7 @@ namespace chatllm
 
                 int next_token_id = sampler->sampling((float *)lm_logits->data, (int)lm_logits->ne[0]);
 
-//printf("\nnext = %d\n", next_token_id);
+// printf("\nnext = %d\n", next_token_id);
 
                 if (next_token_id == Sampler::ABORT)
                 {
@@ -1002,9 +1009,9 @@ namespace chatllm
     {
         #include "models/yi.cpp"
     }
-    namespace phi2
+    namespace phi
     {
-        #include "models/phi2.cpp"
+        #include "models/phi.cpp"
     }
 
     namespace mistral
@@ -1241,8 +1248,9 @@ namespace chatllm
                                                                 \
         CASE(YI,                    yi, 1)                      \
                                                                 \
-        CASE(PHI2,                  phi2::v1, 1)                \
-        CASE(PHI2_V2,               phi2::v2, 1)                \
+        CASE(PHI2,                  phi::v2::v1, 1)                \
+        CASE(PHI2_V2,               phi::v2::v2, 1)                \
+        CASE(PHI3,                  phi::v3, 1)                \
                                                                 \
         CASE(WIZARDCODER,           wizard::coder, 1)           \
         CASE(WIZARDLM,              wizard::lm, 1)              \

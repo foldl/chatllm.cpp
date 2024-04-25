@@ -270,7 +270,7 @@ static uint32_t try_codepoint_from_utf8(const std::string & utf8, size_t & offse
     }
     else if (!(utf8[offset + 0] & 0x20)) {
         if (offset + 1 >= utf8.size() || ! ((utf8[offset + 1] & 0xc0) == 0x80))
-            throw false;
+            return false;
         result = ((utf8[offset + 0] & 0x1f) << 6) | (utf8[offset + 1] & 0x3f);
         offset += 2;
         return true;
@@ -293,18 +293,13 @@ static uint32_t try_codepoint_from_utf8(const std::string & utf8, size_t & offse
     return false;
 }
 
-static uint32_t codepoint_from_utf8(const std::string & utf8, size_t & offset) {
-    uint32_t r = 0;
-    if (!try_codepoint_from_utf8(utf8, offset, r))
-        throw std::invalid_argument("invalid character");
-    return r;
-}
-
 static std::vector<uint32_t> codepoints_from_utf8(const std::string & utf8) {
     std::vector<uint32_t> result;
     size_t offset = 0;
+    uint32_t code = 0;
     while (offset < utf8.size()) {
-        result.push_back(codepoint_from_utf8(utf8, offset));
+        if (!try_codepoint_from_utf8(utf8, offset, code)) break;
+        result.push_back(code);
     }
     return result;
 }
@@ -408,7 +403,10 @@ static int codepoint_type(const std::string & utf8) {
     if (utf8.length() == 0)
         return CODEPOINT_TYPE_UNIDENTIFIED;
     size_t offset = 0;
-    return codepoint_type(codepoint_from_utf8(utf8, offset));
+    uint32_t code = 0;
+    if (!try_codepoint_from_utf8(utf8, offset, code))
+        return CODEPOINT_TYPE_UNIDENTIFIED;
+    return codepoint_type(code);
 }
 
 static std::unordered_map<uint8_t, std::string> bytes_to_unicode_map_bpe() {

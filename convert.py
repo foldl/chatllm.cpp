@@ -71,6 +71,8 @@ class ModelType(Enum):
     Phi2_v2             = 0x501
     DolphinPhi2         = 0x510
     DolphinPhi2_v2      = 0x511
+    Phi3                = 0x520
+    Phi3_ScalingSU      = 0x521
 
     Mistral = 0x600
     Mixtral = 0x601
@@ -1278,8 +1280,8 @@ class WizardMathConverter(BaseConverter):
     def get_weight_names(config):
         return MistralConverter.get_weight_names(config)
 
-def part(weights: torch.Tensor, n_part: int) -> torch.Tensor:
-    r = weights.shape[0] // 3
+def part(weights: torch.Tensor, n_part: int, part_no: int = 3) -> torch.Tensor:
+    r = weights.shape[0] // part_no
     return weights[r * n_part : r * n_part + r, ...]
 
 class BaiChuanConverter(BaseConverter):
@@ -1958,6 +1960,103 @@ class Phi2Converter(BaseConverter):
             return Phi2Converter.get_weight_names_v1(config)
         else:
             return Phi2Converter.get_weight_names_v2(config)
+
+def pad_to(l: list, to_len: int, fill = 0) -> list:
+    if len(l) < to_len:
+        return l + [fill] * (to_len - len(l))
+    else:
+        return l
+
+class Phi3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Phi3
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.endswith('mlp.gate_up_proj.weight'):
+
+                new_dict[name.replace('gate_up_proj.weight', 'gate_proj.weight')] = part(tensor, 0, 2)
+                new_dict[name.replace('gate_up_proj.weight', 'up_proj.weight')]   = part(tensor, 1, 2)
+            if name.endswith('.qkv_proj.weight'):
+
+                q_size = config.hidden_size
+                kv_size = config.hidden_size // config.num_attention_heads * config.num_key_value_heads
+
+                wq = tensor[: q_size, ...]
+                wk = tensor[q_size : q_size + kv_size, ...]
+                wv = tensor[q_size + kv_size :, ...]
+
+                new_dict[name.replace('qkv_proj.weight', 'q_proj.weight')] = permute(wq, config.num_attention_heads)
+                new_dict[name.replace('qkv_proj.weight', 'k_proj.weight')] = permute(wk, config.num_key_value_heads)
+                new_dict[name.replace('qkv_proj.weight', 'v_proj.weight')] = wv
+            else:
+                new_dict[name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+
+        assert config.rope_scaling is None, "rope_scaling must be null"
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.original_max_position_embeddings,
+            config.sliding_window,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        float_values = [
+            config.rope_theta,
+        ]
+        f.write(struct.pack("<" + "f" * len(float_values), *float_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
+
+class Phi3SUConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Phi3_ScalingSU
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        return Phi3Converter.state_dict_pp(config, state_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        MAX_FACTOR_LEN = 128
+
+        assert config.rope_scaling['type'] == "su", "rope_scaling must be null or `su`"
+        assert len(config.rope_scaling['long_factor']) <= MAX_FACTOR_LEN, "config.rope_scaling['long_factor']) must <= MAX_FACTOR_LEN"
+        rope_scaling = 1
+        factors = pad_to(config.rope_scaling['short_factor'], MAX_FACTOR_LEN) + pad_to(config.rope_scaling['long_factor'], MAX_FACTOR_LEN)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.original_max_position_embeddings,
+            config.sliding_window,
+            rope_scaling,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        float_values = [
+            config.rope_theta,
+        ] + factors
+        f.write(struct.pack("<" + "f" * len(float_values), *float_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return Phi3Converter.get_weight_names(config)
+
 class QWenConverter(BaseConverter):
     MODEL_TYPE = ModelType.QWen
     FILE_VERSION = 2
@@ -2880,12 +2979,25 @@ def main():
     parser.add_argument("--experts", type=str, default='')
     args = parser.parse_args()
 
+    arch = args.arch.lower()
+
     ggml_type = GGMLType[args.type.upper()]
 
     skip_def_vocab_model = False
     if args.arch.lower() == 'codeqwen':
         skip_def_vocab_model = True
         args.arch = ''
+
+    config = AttributeDict(load_config(Path(args.model_name_or_path)))
+
+    if len(config.architectures) != 1:
+        raise Exception(f'unknown architectures: {config.architectures}')
+
+    if arch == '':
+        arch = config.architectures[0]
+
+    if arch.startswith('Phi3'):
+        skip_def_vocab_model = True
 
     vocab = load_vocab(Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir), skip_def_vocab_model)
 
@@ -2900,15 +3012,6 @@ def main():
     #
     #    model = PeftModel.from_pretrained(model, args.lora_model_name_or_path)
     #    model = model.merge_and_unload()
-
-    config = AttributeDict(load_config(Path(args.model_name_or_path)))
-
-    if len(config.architectures) != 1:
-        raise Exception(f'unknown architectures: {config.architectures}')
-
-    arch = args.arch.lower()
-    if arch == '':
-        arch = config.architectures[0]
 
     if arch == 'ChatGLMModel':
         if hasattr(config, "multi_query_attention"):
@@ -2956,6 +3059,14 @@ def main():
         if config.hidden_act is not None:
             Phi2Converter.MODEL_TYPE = ModelType.Phi2_v2
         Phi2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Phi3ForCausalLM':
+        if config.rope_scaling is None:
+            Phi3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        else:
+            if config.rope_scaling['type'] == 'su':
+                Phi3SUConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            else:
+                raise Exception(config.rope_scaling['type'])
     elif arch == 'dolphinphi2':
         Phi2Converter.MODEL_TYPE = ModelType.DolphinPhi2_v2 if config.hidden_act is not None else ModelType.DolphinPhi2
         Phi2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
