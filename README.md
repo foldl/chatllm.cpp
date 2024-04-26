@@ -11,6 +11,10 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 | [Supported Models](./docs/models.md) | [Download Quantized Models](https://modelscope.cn/models/judd2024/chatllm_quantized_models) |
 
+**What's New:**
+
+* 2024-04-27: Phi3-mini 4k
+
 ## Features
 
 * [x] Accelerated memory-efficient CPU inference with int4/int8 quantization, optimized KV cache and parallel computing;

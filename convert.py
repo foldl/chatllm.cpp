@@ -2996,9 +2996,6 @@ def main():
     if arch == '':
         arch = config.architectures[0]
 
-    if arch.startswith('Phi3'):
-        skip_def_vocab_model = True
-
     vocab = load_vocab(Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir), skip_def_vocab_model)
 
     if args.arch.lower() == 'grok-1-base':

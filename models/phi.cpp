@@ -384,7 +384,7 @@ namespace v3
 
         size_t load(const char *buffer, int n_vocab) override
         {
-            tp = new tokenizer::BPEProcessor2();
+            tp = new tokenizer::BPEProcessor1();
             size_t size = tp->Load(buffer, n_vocab);
 
             system_token_id     = tp->PieceToId("<|system|>");
@@ -392,7 +392,6 @@ namespace v3
             assistant_token_id  = tp->PieceToId("<|assistant|>");
             end_token_id        = tp->PieceToId("<|end|>");
             nl_token_id         = tp->PieceToId("\n");
-            printf("%d,%d\n", system_token_id, nl_token_id);
 
             pad_token_id = eos_token_id;
 
