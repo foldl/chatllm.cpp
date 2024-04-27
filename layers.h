@@ -842,6 +842,8 @@ namespace chatllm
     protected:
         void before_forward(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen) override
         {
+            if (n_past == 0) cache_offset = 0;
+
             fill_pos_vector(pos, n_past, qlen);
 
             // shift cache
@@ -1032,6 +1034,8 @@ namespace chatllm
 
         void before_forward(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen) override
         {
+            if (n_past == 0) cache_offset = 0;
+
             fill_pos_vector(pos, n_past, qlen);
 
             // shift cache

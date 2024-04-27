@@ -356,7 +356,7 @@ namespace v3
     {
         int num_key_value_heads;
         int original_max_position_embeddings;
-        int sliding_window;     // TODO: to be confirmed.
+        int sliding_window;
         float rope_theta;
     };
 
@@ -409,7 +409,7 @@ namespace v3
             if (end_token_id >= 0)
             {
                 ids.push_back(end_token_id);
-                ids.push_back(nl_token_id);
+               // ids.push_back(nl_token_id);
             }
         }
 
@@ -428,7 +428,34 @@ namespace v3
 
     typedef Phi3Tokenizer Tokenizer;
 
-    class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<LlamaBlock>
+    // https://huggingface.co/microsoft/Phi-3-mini-4k-instruct/discussions/25
+    const int SLIDING_WINDOW_LEN            =  2048;
+
+    template <int sliding_window_len> class Phi3SelfAttention : public BaseSelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>
+    {
+    public:
+        Phi3SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+            : BaseSelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>(ctx, hidden_size, num_attention_heads, max_length, false, false) {}
+
+        Phi3SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : BaseSelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
+    };
+
+    template <int sliding_window_len> class Phi3Block : public LMBlock1<RMSNorm, Phi3SelfAttention<sliding_window_len>, RMSNorm, SiLUMLP>
+    {
+    public:
+        Phi3Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
+            : LMBlock1<RMSNorm, Phi3SelfAttention<sliding_window_len>, RMSNorm, SiLUMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
+        {}
+
+        Phi3Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1<RMSNorm, Phi3SelfAttention<sliding_window_len>, RMSNorm, SiLUMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
+    typedef Phi3Block<SLIDING_WINDOW_LEN> Phi3Block4k;
+
+    class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<Phi3Block4k>
     {
     public:
         ConditionalGeneration() = default;
@@ -438,13 +465,18 @@ namespace v3
 
         ConditionalGeneration(const Config &config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : llama::v2::GenericConditionalGeneration<LlamaBlock>(config, type, num_key_value_heads, max_length)
+            : llama::v2::GenericConditionalGeneration<Phi3Block4k>(config, type, num_key_value_heads, max_length, 13)
         {
+            CHATLLM_CHECK(config.sliding_window == SLIDING_WINDOW_LEN - 1)
+                << "sliding_window (" << config.sliding_window << ") must be " << SLIDING_WINDOW_LEN - 1;
+
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 auto &attention = transformer.layers[i].attention;
                 attention.freq_base = config.rope_theta;
             }
+
+            batch_input = false;
         }
     };
 
