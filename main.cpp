@@ -25,6 +25,7 @@ struct Args
     std::string reranker_model_path = "";
     std::vector<std::string> vector_store;
     std::string vector_store_in = "";
+    std::string merge_vs = "";
     std::string system = "";
     std::string prompt = "你好";
     std::string sampling = "top_p";
@@ -123,6 +124,7 @@ void usage(const std::string &prog)
               << "   +rag_dump              (debug) dump retrieved/re-ranking results\n"
               << "Misc:\n"
               << "  --init_vs FILE          init vector store file from input\n"
+              << "  --merge_vs FILE         merge multiple vector store files into a single one\n"
               << "  --tokenize              (debug) tokenize `prompt` and exit\n"
               << "  --test FILE             test against inputs from a file and exit\n"
               << "  --hide_banner           hide banner\n"
@@ -246,6 +248,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         handle_para0("--rag_template",                rag_template,         std::string)
         handle_para0("--rag_context_sep",             rag_context_sep,      std::string)
         handle_para0("--init_vs",                     vector_store_in,      std::string)
+        handle_para0("--merge_vs",                    merge_vs,             std::string)
         else
             break;
 
@@ -702,6 +705,14 @@ static int init_vector_store(Args &args)
     return 0;
 }
 
+static int merge_vector_store(Args &args)
+{
+    CVectorStore vs(args.vc, args.vector_store);
+    vs.ExportDB(args.merge_vs.c_str());
+    printf("Vector store saved to: %s\n", args.merge_vs.c_str());
+    return 0;
+}
+
 #if defined(_WIN32)
 int wmain(int argc, const wchar_t **wargv)
 {
@@ -748,6 +759,9 @@ int main(int argc, const char **argv)
 
     if (args.vector_store_in.size() > 0)
         return init_vector_store(args);
+
+    if (args.merge_vs.size() > 0)
+        return merge_vector_store(args);
 
     try
     {
