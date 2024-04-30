@@ -502,3 +502,58 @@ namespace v3
         tok->encode("", ids, tok->assistant_token_id, -1);
     }
 }
+
+namespace v3_su
+{
+    const int MAX_FACTOR_LEN = 128;
+
+    struct Config : public BaseConfig
+    {
+        int max_position_embeddings;
+        int num_key_value_heads;
+        int original_max_position_embeddings;
+        int sliding_window;
+        int rope_scaling;
+        float rope_theta;
+        float short_factor[MAX_FACTOR_LEN];
+        float long_factor[MAX_FACTOR_LEN];
+    };
+
+    typedef v3::Phi3Tokenizer Tokenizer;
+
+    class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<Phi3SUBlock>
+    {
+    public:
+        ConditionalGeneration() = default;
+        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_PHI3_SU)
+            : ConditionalGeneration(config, type, config.num_key_value_heads, config.max_length)
+        {};
+
+        ConditionalGeneration(const Config &config, ModelType type,
+                            int num_key_value_heads, int max_length)
+            : llama::v2::GenericConditionalGeneration<Phi3SUBlock>(config, type, num_key_value_heads, max_length, 12)
+        {
+            CHATLLM_CHECK(config.sliding_window >= config.max_length)
+                << "sliding_window (" << config.sliding_window << ") must >= " << config.max_length;
+
+            CHATLLM_CHECK(config.rope_scaling == 1)
+                << "rope_scaling (" << config.rope_scaling << ") must == " << 1;
+
+            float scaling_factor = (float)config.max_position_embeddings / config.original_max_position_embeddings;
+            if (scaling_factor <= 1.0f)
+                scaling_factor = 1.0f;
+            else
+                scaling_factor = sqrtf(1.0f + logf(scaling_factor) / logf((float)config.original_max_position_embeddings));
+
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto &attention = transformer.layers[i].attention;
+                attention.config(config.original_max_position_embeddings, config.rope_theta,
+                                 scaling_factor,
+                                 config.hidden_size / config.num_attention_heads / 2,
+                                 config.short_factor,
+                                 config.long_factor);
+            }
+        }
+    };
+}

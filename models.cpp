@@ -1248,9 +1248,10 @@ namespace chatllm
                                                                 \
         CASE(YI,                    yi, 1)                      \
                                                                 \
-        CASE(PHI2,                  phi::v2::v1, 1)                \
-        CASE(PHI2_V2,               phi::v2::v2, 1)                \
-        CASE(PHI3,                  phi::v3, 1)                \
+        CASE(PHI2,                  phi::v2::v1, 1)             \
+        CASE(PHI2_V2,               phi::v2::v2, 1)             \
+        CASE(PHI3,                  phi::v3, 1)                 \
+        CASE(PHI3_SU,               phi::v3_su, 1)              \
                                                                 \
         CASE(WIZARDCODER,           wizard::coder, 1)           \
         CASE(WIZARDLM,              wizard::lm, 1)              \

@@ -683,7 +683,7 @@ namespace chatllm
     class BaseAttention : public Block
     {
     public:
-        BaseAttention() : num_attention_heads(0) {}
+        BaseAttention() : num_attention_heads(0), num_kv_heads(0) {}
 
         BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length,
                       bool qkv_bias, bool o_bias,
@@ -779,8 +779,8 @@ namespace chatllm
                                               ggml_tensor *key_layer, ggml_tensor *query_layer, ggml_tensor *value_layer);
 
     public:
-        int num_attention_heads;
-        int num_kv_heads;
+        const int num_attention_heads;
+        const int num_kv_heads;
         Linear q_proj, k_proj, v_proj;
         Linear o_proj;
         ggml_tensor *k_cache;
@@ -2083,5 +2083,38 @@ namespace chatllm
     public:
         Linear vision_embed;
         int image_new_line_tok_id;
+    };
+
+    class Phi3SUSelfAttention : public BaseSelfAttention<BaseAttention>
+    {
+    public:
+        Phi3SUSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
+        {
+        }
+
+        void config(int original_max_position_embeddings,
+            float rope_theta, float scaling_factor, int factor_len, const float *short_factor, const float *long_factor);
+
+        const float *get_inv_freq(int pos);
+
+    protected:
+        // input & output: [qlen, heads, head_size]
+        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
+        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
+
+    public:
+        int original_max_position_embeddings;
+        float scaling_factor;
+        std::vector<float> inv_freq_short;
+        std::vector<float> inv_freq_long;
+    };
+
+    class Phi3SUBlock : public LMBlock1<RMSNorm, Phi3SUSelfAttention, RMSNorm, SiLUMLP>
+    {
+    public:
+        Phi3SUBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
     };
 } // namespace chatllm

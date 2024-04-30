@@ -2041,6 +2041,7 @@ class Phi3SUConverter(BaseConverter):
         factors = pad_to(config.rope_scaling['short_factor'], MAX_FACTOR_LEN) + pad_to(config.rope_scaling['long_factor'], MAX_FACTOR_LEN)
 
         config_values = [
+            config.max_position_embeddings,
             config.num_key_value_heads,
             config.original_max_position_embeddings,
             config.sliding_window,

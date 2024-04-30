@@ -676,4 +676,41 @@ namespace chatllm
         //ggml_get_rows
         return nullptr;
     }
+
+    static void build_inv_freq_from_factors(std::vector<float> &inv_freq, int dim, const float *factors, float base)
+    {
+        inv_freq.clear();
+        inv_freq.reserve(dim / 2);
+        for (int i = 0; i < dim; i += 2)
+        {
+            double v = 1.0 / (factors[i / 2] * pow(base, (double)i / dim));
+            inv_freq.push_back((float)v);
+        }
+    }
+
+    void Phi3SUSelfAttention::config(int original_max_position_embeddings, float rope_theta, float scaling_factor, int factor_len, const float *short_factor, const float *long_factor)
+    {
+        this->original_max_position_embeddings = original_max_position_embeddings;
+        this->freq_base = rope_theta;
+        this->scaling_factor = scaling_factor;
+        build_inv_freq_from_factors(this->inv_freq_short, factor_len * 2, short_factor, freq_base);
+        build_inv_freq_from_factors(this->inv_freq_long,  factor_len * 2, long_factor,  freq_base);
+    }
+
+    const float *Phi3SUSelfAttention::get_inv_freq(int pos)
+    {
+        // This does not work.
+        // pos > original_max_position_embeddings ? inv_freq_long.data() : inv_freq_short.data();
+        return max_length > original_max_position_embeddings ? inv_freq_long.data() : inv_freq_short.data();
+    }
+
+    ggml_tensor *Phi3SUSelfAttention::apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const
+    {
+        return ggml_map_custom2(ggctx, k, past, ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, const_cast<Phi3SUSelfAttention *>(this));
+    }
+
+    ggml_tensor *Phi3SUSelfAttention::apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const
+    {
+        return ggml_map_custom2(ggctx, q, past, ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, const_cast<Phi3SUSelfAttention *>(this));
+    }
 }
