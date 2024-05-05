@@ -16,7 +16,7 @@ Assume MSVC is used.
 
 1. Copy `libchatllm.dll`, `libchatllm.lib` and `ggml.dll` to `bindings`;
 
-### Linux:
+### Linux/MacOS:
 
 1. Build target `libchatllm`:
 

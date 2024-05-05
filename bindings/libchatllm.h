@@ -11,7 +11,8 @@
         #error unsupported target OS
     #endif
 #else
-    #error unsupported target OS
+    #define API_CALL
+    #warning OS not supported, maybe
 #endif
 
 #ifndef DLL_DECL
