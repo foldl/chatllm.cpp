@@ -126,3 +126,10 @@
 * QA Ranking (`XLMRobertaForSequenceClassification`)
     * [x] [BCE-ReRanker](https://huggingface.co/maidalun1020/bce-reranker-base_v1)
     * [x] [BGE-ReRanker-M3](https://huggingface.co/BAAI/bge-reranker-v2-m3) (`-a BGE-Reranker-M3`)
+
+
+## LoRA
+
+These LoRA models have been tested:
+
+* [Llama-3-Chinese-8B-Instruct](https://huggingface.co/hfl/llama-3-chinese-8b-instruct-lora)

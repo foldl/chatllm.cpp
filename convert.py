@@ -213,14 +213,77 @@ def load_model_file(path: Path) -> Dict:
     else:
         raise ValueError(f"unknown format: {path}")
 
+class AttributeDict(dict):
+    def __getattr__(self, key):
+        return self.__getitem__(key) if key in self else None
+
+    __setattr__ = dict.__setitem__
+
+def transpose(weight, fan_in_fan_out):
+    return weight.T if fan_in_fan_out else weight
+
+class LoRAState:
+    def __init__(self, path: Path, verbose: bool = False) -> None:
+        self.verbose = verbose
+
+        with open(path / 'adapter_config.json', 'r') as fp:
+            config = AttributeDict(json.load(fp))
+            assert config.peft_type == 'LORA', f"peft_type must be `LORA`"
+            self.scaling = config.lora_alpha / config.r
+            self.fan_in_fan_out = config.fan_in_fan_out
+
+        self.files = []
+        for glob in ["adapter_model.safetensors", "adapter_model.bin"]:
+            files = list(path.glob(glob))
+            if len(files) > 0:
+                files.sort()
+                self.files = files
+                break
+
+        if len(self.files) < 1:
+            raise Exception('can not find model files, or unsupported format.')
+
+        self.tensor_dict = {}
+        for f in self.files:
+            for k, v in load_model_file(f):
+                self.tensor_dict[k] = v
+
+        if self.verbose:
+            print(f"LoRA tensors: {self.tensor_dict.keys()}")
+
+    # based on: https://github.com/ymcui/Chinese-LLaMA-Alpaca-3/blob/main/scripts/merge_llama3_with_chinese_lora_low_mem.py
+    def merge_tensor(self, name: str, tensor: torch.Tensor) -> torch.Tensor:
+        saved_key = 'base_model.model.' + name
+        if saved_key in self.tensor_dict:
+            if self.verbose:
+                print(f"LoRA replacing: {name}")
+            return self.tensor_dict[saved_key]
+
+        lora_key_A = saved_key.replace('.weight','.lora_A.weight')
+        if lora_key_A in self.tensor_dict:
+            if self.verbose:
+                print(f"LoRA merging: {name}")
+
+            lora_key_B = saved_key.replace('.weight','.lora_B.weight')
+            return tensor.float() + (
+                        transpose(
+                            self.tensor_dict[lora_key_B].float()
+                          @ self.tensor_dict[lora_key_A].float(), self.fan_in_fan_out) * self.scaling
+                    )
+
+        return tensor
+
+g_lora: LoRAState = None
+
 def load_all_model_files(model_files) -> Dict:
+    global g_lora
     for f in model_files:
         r = {}
         data = load_model_file(f)
         for k, v in data:
             if k in r:
                 raise Exception(f"tensor {k} already loaded. maybe it is stored cross files?")
-            r[k] = v
+            r[k] = g_lora.merge_tensor(k, v) if g_lora is not None else v
         yield r
 
 def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_pp, loader_fun = None):
@@ -2962,18 +3025,13 @@ def load_some_model(path: Path) -> List[Path]:
     else:
         return [path]
 
-class AttributeDict(dict):
-    def __getattr__(self, key):
-        return self.__getitem__(key) if key in self else None
-
-    __setattr__ = dict.__setitem__
-
 def main():
+    global g_lora
+
     parser = argparse.ArgumentParser("chatllm-convert")
     parser.add_argument("-i", "--model_name_or_path", type=str)
     parser.add_argument("-a", "--arch", type=str, default='')
-    # TODO: LoRA
-    #parser.add_argument("-l", "--lora_model_name_or_path", type=str, default=None)
+    parser.add_argument("-l", "--lora_model_name_or_path", type=str, default=None)
     parser.add_argument("-o", "--save_path", type=Path)
     parser.add_argument("-t", "--type", type=str, default="q8_0", choices=["f32", "f16", "q8_0", "q4_0", "q4_1"])
     parser.add_argument("--vocab_dir", type=str, default='')
@@ -2981,6 +3039,9 @@ def main():
     args = parser.parse_args()
 
     arch = args.arch.lower()
+
+    if args.lora_model_name_or_path is not None:
+        g_lora = LoRAState(Path(args.lora_model_name_or_path), False)
 
     ggml_type = GGMLType[args.type.upper()]
 

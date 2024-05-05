@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-05-05: LoRA implemented
 * 2024-04-30: Phi3-mini 128k
 * 2024-04-27: Phi3-mini 4k
 
@@ -27,7 +28,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 * [x] Retrieval Augmented Generation (RAG) 🔥
 
-* [ ] LoRA;
+* [x] LoRA;
 * [x] Python/JavaScript/C [Bindings](./docs/binding.md), web demo, and more possibilities.
 
 ## Usage
