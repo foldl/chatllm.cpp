@@ -89,7 +89,7 @@ If a question does not make any sense, or is not factually coherent, explain why
         static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
         static constexpr size_t SCRATCH_SIZE = 844ull * 1024 * 1024;
 
-        Config config;
+        BaseConfig config;
 
     private:
         // hold ggml_context & kv_cache
