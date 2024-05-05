@@ -13,7 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
-* 2024-05-05: LoRA implemented
+* 2024-05-05: LoRA supported
 * 2024-04-30: Phi3-mini 128k
 * 2024-04-27: Phi3-mini 4k
 
@@ -66,6 +66,12 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
 # For some models such as CodeLlaMA, model type should be provided by `-a`
 # Find `-a ...` option for each model in `docs/models.md`.
 python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA
+```
+
+Use `-l` to specify the path of the LoRA model to be merged, such as:
+
+```sh
+python3 convert.py -i path/to/model -l path/to/lora/model -o quantized.bin
 ```
 
 Note: Appropriately, only HF format is supported; Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.
