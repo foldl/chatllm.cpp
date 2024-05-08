@@ -246,7 +246,7 @@ namespace v2
             loader.read_tensor("transformer.embd.wte.weight", transformer.word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                std::string layer_prefix = "transformer.h." + std::to_string(i) + '.';
+                std::string layer_prefix = "transformer.h." + std::to_string(layer_ids[i]) + '.';
 
                 loader.read_tensor(layer_prefix + "ln.bias",   transformer.layers[i].input_layernorm.bias);
                 loader.read_tensor(layer_prefix + "ln.weight", transformer.layers[i].input_layernorm.weight);
@@ -318,7 +318,7 @@ namespace v2
             loader.read_tensor("model.embed_tokens.weight", transformer.word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                std::string layer_prefix = "model.layers." + std::to_string(i) + '.';
+                std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
 
                 loader.read_tensor(layer_prefix + "input_layernorm.bias",   transformer.layers[i].input_layernorm.bias);
                 loader.read_tensor(layer_prefix + "input_layernorm.weight", transformer.layers[i].input_layernorm.weight);

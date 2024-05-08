@@ -35,7 +35,7 @@ public:
         loader.read_tensor("model.embed_tokens.weight", Base::transformer.word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            std::string layer_prefix = "model.layers." + std::to_string(i) + '.';
+            std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
             if (true)
                 loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", Base::transformer.layers[i].attention.q_proj.weight);
             if (bias)

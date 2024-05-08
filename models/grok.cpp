@@ -134,7 +134,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
     loader.read_tensor("model.embed_tokens.weight", transformer.word_embeddings.weight);
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
-        std::string layer_prefix = "model.layers." + std::to_string(i) + '.';
+        std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
 
         for (int j = 0; j < config.num_experts; j++)
         {

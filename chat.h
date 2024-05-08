@@ -4,6 +4,7 @@
 #include <memory>
 #include <sstream>
 #include <unordered_map>
+#include <map>
 #include <set>
 #include <vector>
 #include <random>
@@ -231,6 +232,7 @@ namespace chatllm
         std::string read_string(size_t length);
 
         void read_tensor(const std::string &name, ggml_tensor *tensor);
+        void load_all_tensors(void);
 
     private:
         ModelLoader(MappedFile *mapped_file)
@@ -254,6 +256,7 @@ namespace chatllm
         size_t offset_tensors;
         int model_type;
         int version;
+        std::map<std::string, int64_t> tensor_dict;
     };
 
     // ===== generation =====
@@ -367,31 +370,15 @@ namespace chatllm
         int terminate_token_id; // when LLM uses another token as end indicator
     };
 
-    class ModelFactory
-    {
-    public:
-        struct Result
-        {
-            std::unique_ptr<BaseTokenizer> tokenizer;
-            std::unique_ptr<BaseModel> model;
-        };
-
-        static bool load(ModelLoader &loader, Result &result, int max_length);
-
-        static BaseModel *load_model_again(ModelLoader &loader, int max_length);
-
-    private:
-        static bool load(int model_type, int version, ModelLoader &loader, Result &result, int max_length);
-    };
-
     class ModelObject
     {
     public:
         struct extra_args
         {
             int   max_length;
-            extra_args(int max_length) : max_length(max_length) {}
-            extra_args() : extra_args(-1) {}
+            std::string layer_spec;
+            extra_args(int max_length, const std::string &layer_spec) : max_length(max_length), layer_spec(layer_spec) {}
+            extra_args() : extra_args(-1, "") {}
         };
 
         ModelObject(const std::string &path);
@@ -406,6 +393,25 @@ namespace chatllm
         std::unique_ptr<BaseModel> model;
         std::unique_ptr<ModelLoader> loader;
         const bool loaded;
+    };
+
+    class ModelFactory
+    {
+    public:
+        struct Result
+        {
+            std::unique_ptr<BaseTokenizer> tokenizer;
+            std::unique_ptr<BaseModel> model;
+        };
+
+        static bool load(ModelLoader &loader, Result &result, const ModelObject::extra_args &args);
+
+        static BaseModel *load_model_again(ModelLoader &loader, const ModelObject::extra_args &args);
+
+        static std::string load_info(ModelLoader &loader);
+
+    private:
+        static bool load(int model_type, int version, ModelLoader &loader, Result &result, const ModelObject::extra_args &args);
     };
 
     class Pipeline

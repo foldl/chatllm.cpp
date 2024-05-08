@@ -89,7 +89,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
     loader.read_tensor("model.embed_tokens.weight", transformer.word_embeddings.weight);
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
-        std::string layer_prefix = "model.layers." + std::to_string(i) + '.';
+        std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
 
         loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer.layers[i].attention.k_proj.weight);
         loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   transformer.layers[i].attention.k_proj.bias);

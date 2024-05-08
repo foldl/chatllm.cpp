@@ -167,6 +167,22 @@ namespace chatllm
         }
     }
 
+    std::string to_string(ModelPurpose purpose)
+    {
+        switch (purpose)
+        {
+        case ModelPurpose::TextEmbedding:
+            return "Text Embedding";
+        case ModelPurpose::Ranker:
+            return "Ranker";
+        case ModelPurpose::Chat:
+            return "Chat";
+        default:
+            CHATLLM_THROW << "unknown model purpose: " << purpose;
+            return "???";
+        }
+    }
+
     std::string to_string(ModelType model_type)
     {
         switch (model_type)
@@ -564,9 +580,19 @@ namespace chatllm
               config_(config), mem_size_(mem_size), mem_buffer_(new char[mem_size]),
               scratch_size_(scratch_size), scratch_buffer_(new char[scratch_size])
         {
+            for (int i = 0; i < config.num_hidden_layers; i++)
+                layer_ids.push_back(i);
         }
 
         virtual ~BaseModelForConditionalGeneration() = default;
+
+        void set_layer_ids(const std::vector<int> &ids)
+        {
+            CHATLLM_CHECK((int)ids.size() == config_.num_hidden_layers) << "length(layer_ids) must be " << config_.num_hidden_layers;
+            layer_ids.clear();
+            for (auto x : ids)
+                layer_ids.push_back(x);
+        }
 
         int get_max_length(void) override
         {
@@ -775,6 +801,7 @@ namespace chatllm
         size_t GRAPH_SIZE;
         bool batch_input;
         float logit_scale;
+        std::vector<int> layer_ids;
     private:
         BaseConfig config_;
         size_t mem_size_;
@@ -1124,13 +1151,8 @@ namespace chatllm
         #include "models/zhinao.cpp"
     }
 
-    struct args
-    {
-        int max_length;
-    };
-
     template <class Config>
-    void load_config(ModelLoader &loader, Config &config, const args &args)
+    void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
         if (0 == loader.offset_config)
             loader.offset_config = loader.tell();
@@ -1156,35 +1178,106 @@ namespace chatllm
 
         loader.seek(proto_size, SEEK_CUR);
 
-        loader.offset_tensors = loader.tell();
+        if (0 == loader.offset_tensors)
+        {
+            loader.offset_tensors = loader.tell();
+            loader.load_all_tensors();
+        }
 
         return tokenizer;
     }
 
+    static void parse_slice(std::vector<int> &values, const std::string &s, int num_hidden_layers)
+    {
+        int spec[3] = {0, num_hidden_layers, 1};
+        int index = 0;
+        std::string t(s);
+        if (t.size() > 0) index = 1;
+
+        while ((t.size() > 0) && (index <= 3))
+        {
+            size_t pos = t.find_first_of(':');
+            std::string part = t.substr(0, pos);
+            if (part.size() > 0)
+                spec[index - 1] = atoi(part.c_str());
+            if (pos == std::string::npos) break;
+            index++;
+            t = t.substr(pos + 1);
+        }
+
+        if (index < 1) return;
+
+        if (index == 1)
+        {
+            values.push_back(spec[0]);
+            return;
+        }
+
+        if (spec[2] == 0) return;
+        if (spec[0] < 0) spec[0] += num_hidden_layers;
+        if (spec[1] < 0) spec[1] += num_hidden_layers;
+
+        if (spec[2] > 0)
+        {
+            for (int i = spec[0]; i < spec[1]; i += spec[2])
+            {
+                values.push_back(i);
+            }
+        }
+        else
+        {
+            for (int i = spec[0]; i > spec[1]; i += spec[2])
+                values.push_back(i);
+        }
+    }
+
+    static int parse_int_lists(std::vector<int> &values, const std::string &s, int num_hidden_layers)
+    {
+        const static std::regex r(R""([\r\n]+)"");
+        std::string t(s);
+        while (t.size() > 0)
+        {
+            size_t pos = t.find_first_of(',');
+            parse_slice(values, t.substr(0, pos), num_hidden_layers);
+            if (pos == std::string::npos) break;
+            t = t.substr(pos + 1);
+        }
+        return 0;
+    }
+
     template <class Config, class ConditionalGeneration>
-    ConditionalGeneration *load_model(ModelLoader &loader, Config &config)
+    ConditionalGeneration *load_model(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
         loader.seek(loader.offset_tensors, SEEK_SET);
 
+        std::vector<int> layers;
+        if (args.layer_spec.size() > 0)
+        {
+            parse_int_lists(layers, args.layer_spec, config.num_hidden_layers);
+            config.num_hidden_layers = (int)layers.size();
+        }
+
         // load model
         ConditionalGeneration *model = new ConditionalGeneration(config);
+        if (layers.size() > 0)
+            model->set_layer_ids(layers);
         model->load(loader);
 
         return model;
     }
 
     template <class Config, class ConditionalGeneration>
-    ConditionalGeneration *load_model(ModelLoader &loader, const args &args)
+    ConditionalGeneration *load_model(ModelLoader &loader, const ModelObject::extra_args &args)
     {
         Config config;
 
         load_config<Config>(loader, config, args);
 
-        return load_model<Config, ConditionalGeneration>(loader, config);
+        return load_model<Config, ConditionalGeneration>(loader, config, args);
     }
 
     template <class Config, class Tokenizer, class ConditionalGeneration>
-    bool load_model(ModelLoader &loader, ModelFactory::Result &result, const args &args)
+    bool load_model(ModelLoader &loader, ModelFactory::Result &result, const ModelObject::extra_args &args)
     {
         // load config
         Config config;
@@ -1205,14 +1298,14 @@ namespace chatllm
         exit(-1);
 #endif
         // load model
-        result.model = std::unique_ptr<BaseModel>(load_model<Config, ConditionalGeneration>(loader, config));
+        result.model = std::unique_ptr<BaseModel>(load_model<Config, ConditionalGeneration>(loader, config, args));
 
         result.model->set_tokenizer(result.tokenizer.get());
 
         return true;
     }
 
-    bool ModelFactory::load(ModelLoader &loader, Result &result, int max_length)
+    static void load_file_header(ModelLoader &loader)
     {
         // load magic
         loader.seek(0, SEEK_SET);
@@ -1221,7 +1314,30 @@ namespace chatllm
 
         loader.model_type = loader.read_basic<int>();
         loader.version = loader.read_basic<int>();
-        return ModelFactory::load(loader.model_type, loader.version, loader, result, max_length);
+    }
+
+    std::string ModelFactory::load_info(ModelLoader &loader)
+    {
+        load_file_header(loader);
+        BaseConfig config = loader.read_basic<BaseConfig>();
+        std::ostringstream oss;
+        oss << "Model name  : " << to_string((ModelType(loader.model_type))) << std::endl
+            << "Model type  : " << to_string(get_model_purpose((ModelType(loader.model_type)))) << std::endl
+            << "File version: " << loader.version << std::endl << std::endl
+
+            << "vocab_size          : " << config.vocab_size << std::endl
+            << "hidden_size         : " << config.hidden_size << std::endl
+            << "num_attention_heads : " << config.num_attention_heads << std::endl
+            << "num_hidden_layers   : " << config.num_hidden_layers << std::endl
+            << "intermediate_size   : " << config.intermediate_size << std::endl;
+
+        return oss.str();
+    }
+
+    bool ModelFactory::load(ModelLoader &loader, Result &result, const ModelObject::extra_args &args)
+    {
+        load_file_header(loader);
+        return ModelFactory::load(loader.model_type, loader.version, loader, result, args);
     }
 
     #define ALL_MODELS  \
@@ -1299,9 +1415,8 @@ namespace chatllm
         CASE(BGE_ReRanker_M3,       bge::ranker, 1)             \
 
 
-    BaseModel *ModelFactory::load_model_again(ModelLoader &loader, int max_length)
+    BaseModel *ModelFactory::load_model_again(ModelLoader &loader, const ModelObject::extra_args &args)
     {
-        struct args extra_args = { .max_length = max_length };
         int model_type = loader.model_type;
         int version = loader.version;
 
@@ -1310,7 +1425,7 @@ namespace chatllm
             {                               \
                 CHATLLM_CHECK(version == ver) << "only support version " #ver " for now but got " << version;   \
                 return load_model<ns::Config,                                                                   \
-                                  ns::ConditionalGeneration>(loader, extra_args);                       \
+                                  ns::ConditionalGeneration>(loader, args);                                     \
             }
 
         switch ((ModelType)model_type)
@@ -1324,17 +1439,15 @@ namespace chatllm
         #undef CASE
     }
 
-    bool ModelFactory::load(int model_type, int version, ModelLoader &loader, Result &result, int max_length)
+    bool ModelFactory::load(int model_type, int version, ModelLoader &loader, Result &result, const ModelObject::extra_args &args)
     {
-        struct args extra_args = { .max_length = max_length };
-
         #define CASE(TYPE, ns, ver)         \
             case MODEL_TYPE_ ##TYPE:        \
             {                               \
                 CHATLLM_CHECK(version == ver) << "only support version " #ver " for now but got " << version;   \
                 return load_model<ns::Config,                                                                   \
                                   ns::Tokenizer,                                                                \
-                                  ns::ConditionalGeneration>(loader, result, extra_args);                       \
+                                  ns::ConditionalGeneration>(loader, result, args);                             \
             }
 
         switch ((ModelType)model_type)

@@ -35,9 +35,11 @@ struct Args
     std::string rag_context_sep = "";
     std::string retrieve_rewrite_template = "";
     std::map<std::string, std::string> additional;
+    std::string layer_spec;
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
+    bool show = false;
     int top_k = 0;
     float top_p = 0.7f;
     float temp = 0.7f;
@@ -77,6 +79,12 @@ void usage(const std::string &prog)
               << "                          generally, this is used to reduce KV cache size.\n"
               << "                          for models that does not show its max context window in `config.json`,\n"
               << "                          use this to enlarge it (use with caution!).\n"
+              << "  --layer_spec LAYERS     select/redesign layers.\n"
+              << "                          LAYERS=S0,S1,.... where S0/S1/... are like slices of Python, `start:stop[:step]`,\n"
+              << "                          negative values in `start` and `stop` can be used referencing layers in reversed order,\n"
+              << "                          `step` is optional, e.g.\n"
+              << "                            --layer_spec 0:3,1:4 (3 + 3 = 6 layers are selected, layer #1/2 are used twice)\n"
+              << "                                                 layer structure: 0->1->2->1->2->3\n"
               << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
               << "  -c, --max_context_length N\n"
               << "                          max context length (default: 512)\n"
@@ -128,6 +136,7 @@ void usage(const std::string &prog)
               << "  --tokenize              (debug) tokenize `prompt` and exit\n"
               << "  --test FILE             test against inputs from a file and exit\n"
               << "  --hide_banner           hide banner\n"
+              << "  --show                  show model info\n"
               << "Additional key-value args:\n"
               << "  --kv                    start of additional args. all following options are interpreted as k-v pairs\n"
               << "  key value               a key-value pair of args\n"
@@ -192,6 +201,10 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         {
             args.show_banner = false;
         }
+        else if (strcmp(arg, "--show") == 0)
+        {
+            args.show = true;
+        }
         else if (strcmp(arg, "+rag_dump") == 0)
         {
             args.rag_dump = true;
@@ -249,6 +262,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         handle_para0("--rag_context_sep",             rag_context_sep,      std::string)
         handle_para0("--init_vs",                     vector_store_in,      std::string)
         handle_para0("--merge_vs",                    merge_vs,             std::string)
+        handle_para0("--layer_spec",                  layer_spec,           std::string)
         else
             break;
 
@@ -757,6 +771,13 @@ int main(int argc, const char **argv)
     if (args.num_threads <= 0)
         args.num_threads = get_num_physical_cores();
 
+    if (args.show)
+    {
+        chatllm::ModelLoader loader(args.model_path);
+        std::cout << chatllm::ModelFactory::load_info(loader) << std::endl;
+        return 0;
+    }
+
     if (args.vector_store_in.size() > 0)
         return init_vector_store(args);
 
@@ -765,7 +786,7 @@ int main(int argc, const char **argv)
 
     try
     {
-        chatllm::ModelObject::extra_args pipe_args(args.max_length);
+        chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec);
         if (args.embedding_model_path.size() < 1)
         {
             chatllm::Pipeline pipeline(args.model_path, pipe_args);

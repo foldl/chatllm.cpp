@@ -349,18 +349,111 @@ namespace chatllm
         return s;
     }
 
+    struct ggml_tensor * ggml_init_tensor(struct ggml_tensor *tensor,
+        enum   ggml_type      type,
+        int                   n_dims,
+        const int64_t       * ne)
+    {
+        struct ggml_tensor *result = tensor;
+
+        *result = ggml_tensor {
+            /*.type         =*/ type,
+            /*.backend      =*/ GGML_BACKEND_TYPE_CPU,
+            /*.buffer       =*/ NULL,
+            /*.ne           =*/ { 1, 1, 1, 1 },
+            /*.nb           =*/ { 0, 0, 0, 0 },
+            /*.op           =*/ GGML_OP_NONE,
+            /*.op_params    =*/ { 0 },
+            /*.flags        =*/ 0,
+            /*.grad         =*/ NULL,
+            /*.src          =*/ { NULL },
+            /*.perf_runs    =*/ 0,
+            /*.perf_cycles  =*/ 0,
+            /*.perf_time_us =*/ 0,
+            /*.view_src     =*/ NULL,
+            /*.view_offs    =*/ 0,
+            /*.data         =*/ NULL,
+            /*.name         =*/ { 0 },
+            /*.extra        =*/ NULL,
+            /*.padding      =*/ { 0 },
+        };
+
+        // TODO: this should not be needed as long as we don't rely on aligned SIMD loads
+        //ggml_assert_aligned(result->data);
+
+        for (int i = 0; i < n_dims; i++) {
+            result->ne[i] = ne[i];
+        }
+
+        result->nb[0] = ggml_type_size(type);
+        result->nb[1] = result->nb[0]*(result->ne[0]/ggml_blck_size(type));
+        for (int i = 2; i < GGML_MAX_DIMS; i++) {
+            result->nb[i] = result->nb[i - 1]*result->ne[i - 1];
+        }
+
+        return result;
+    }
+
+    void ModelLoader::load_all_tensors(void)
+    {
+        tensor_dict.clear(); //return;
+        struct ggml_tensor t;
+
+        while (tell() < (int64_t)size)
+        {
+            std::string weight_name;
+
+            // read and check tensor name
+            {
+                int name_size = read_basic<int>();
+                weight_name = read_string(name_size);
+            }
+
+            tensor_dict.emplace(weight_name, tell());
+
+            int64_t ne[4] = {1,1,1,1};
+
+            // read and check tensor shape
+            int ndim = read_basic<int>();
+            for (int i = ndim - 1; i >= 0; i--)
+            {
+                int dim_size = read_basic<int>();
+                ne[i] = dim_size;
+            }
+
+            // read and check tensor dtype
+            ggml_type dtype = (ggml_type)read_basic<int>();
+            ggml_init_tensor(&t, dtype, ndim, ne);
+
+            // map tensor data
+            {
+                constexpr int64_t MEM_ALIGNED = 16;
+                const int64_t data_offset = (tell() + (MEM_ALIGNED - 1)) & ~(MEM_ALIGNED - 1);
+                seek(data_offset + ggml_nbytes(&t), SEEK_SET);
+            }
+        }
+    }
+
     void ModelLoader::read_tensor(const std::string &name, ggml_tensor *tensor)
     {
-        // read and check tensor name
+        if (tensor_dict.size() > 0)
         {
+            auto search = tensor_dict.find(name);
+            CHATLLM_CHECK(search != tensor_dict.end()) << "tensor not exist: " << name;
+            seek(search->second, SEEK_SET);
+        }
+        else
+        {
+            // read and check tensor name
             int name_size = read_basic<int>();
             CHATLLM_CHECK(name_size == (int)name.size())
                 << "tensor " << name << " name size mismatch: expect " << name.size() << " but got " << name_size
                 << "(part of name: " << read_string(name.size()) << ")";
             std::string weight_name = read_string(name_size);
             CHATLLM_CHECK(weight_name == name) << "tensor name mismatch: expect " << name << " but got " << weight_name;
-            ggml_set_name(tensor, weight_name.c_str());
         }
+
+        ggml_set_name(tensor, name.c_str());
 
         // read and check tensor shape
         {
@@ -409,7 +502,7 @@ namespace chatllm
         if (path.size() > 0)
         {
             loader = std::unique_ptr<ModelLoader>(new ModelLoader(path));
-            if (!ModelFactory::load(*loader, result, args.max_length))
+            if (!ModelFactory::load(*loader, result, args))
                 CHATLLM_THROW << "ModelFactory::load() failed";
         }
 
@@ -428,7 +521,7 @@ namespace chatllm
     BaseModel *ModelObject::fork_model(const extra_args &args)
     {
         if (!loaded) return nullptr;
-        return ModelFactory::load_model_again(*loader, args.max_length);
+        return ModelFactory::load_model_again(*loader, args);
     }
 
     // ===== pipeline =====

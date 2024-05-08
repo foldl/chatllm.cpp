@@ -13,9 +13,9 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-05-08: [Layer shuffling](./docs/fun.md)
 * 2024-05-05: LoRA supported
 * 2024-04-30: Phi3-mini 128k
-* 2024-04-27: Phi3-mini 4k
 
 ## Features
 

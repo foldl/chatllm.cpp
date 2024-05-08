@@ -90,7 +90,7 @@ namespace embedding
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                std::string layer_prefix = "encoder.layer." + std::to_string(i) + '.';
+                std::string layer_prefix = "encoder.layer." + std::to_string(layer_ids[i]) + '.';
                 loader.read_tensor(layer_prefix + "attention.self.query.weight",    transformer.layers[i].attention.q_proj.weight);
                 loader.read_tensor(layer_prefix + "attention.self.query.bias",      transformer.layers[i].attention.q_proj.bias);
                 loader.read_tensor(layer_prefix + "attention.self.key.weight",      transformer.layers[i].attention.k_proj.weight);
@@ -211,7 +211,7 @@ namespace ranker
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                std::string layer_prefix = "encoder.layer." + std::to_string(i) + '.';
+                std::string layer_prefix = "encoder.layer." + std::to_string(layer_ids[i]) + '.';
                 loader.read_tensor(layer_prefix + "attention.self.query.weight",    transformer.layers[i].attention.q_proj.weight);
                 loader.read_tensor(layer_prefix + "attention.self.query.bias",      transformer.layers[i].attention.q_proj.bias);
                 loader.read_tensor(layer_prefix + "attention.self.key.weight",      transformer.layers[i].attention.k_proj.weight);

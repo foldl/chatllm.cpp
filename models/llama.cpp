@@ -66,7 +66,7 @@ If a question does not make any sense, or is not factually coherent, explain why
             loader.read_tensor("model.embed_tokens.weight", Base::transformer.word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                std::string layer_prefix = "model.layers." + std::to_string(i) + '.';
+                std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
                 loader.read_tensor(layer_prefix + "input_layernorm.weight", Base::transformer.layers[i].input_layernorm.weight);
                 loader.read_tensor(layer_prefix + "mlp.down_proj.weight", Base::transformer.layers[i].mlp.down_proj.weight);
                 loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", Base::transformer.layers[i].mlp.gate_proj.weight);
