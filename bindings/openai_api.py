@@ -190,7 +190,8 @@ class HttpHandler(BaseHTTPRequestHandler):
             self.send_error(404, 'BAD REQ')
             return
 
-        if (self.path != '/v1/completions') and (self.path != '/v1/chat/completions'):
+        if (self.path != '/v1/completions') and (self.path != '/v1/chat/completions') and \
+           (self.path != '/completions') and (self.path != '/chat/completions'):
             self.send_error(404, 'NOT FOUND')
             return
 

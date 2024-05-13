@@ -26,9 +26,9 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
     Two methods are available: _Restart_ and _Shift_. See `--extending` options.
 
-* [x] Retrieval Augmented Generation (RAG) 🔥
+* [x] [Retrieval Augmented Generation](./docs/rag.md) (RAG) 🔥
 
-* [x] LoRA;
+* [x] [LoRA](./docs/models.md#lora);
 * [x] Python/JavaScript/C [Bindings](./docs/binding.md), web demo, and more possibilities.
 
 ## Usage

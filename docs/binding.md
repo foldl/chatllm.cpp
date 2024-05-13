@@ -50,6 +50,13 @@ streamlit run chatllm_st.py -- -i -m path/to/model
 
 Note: "STOP" function is not implemented yet.
 
+### OpenAI Compatible API
+
+[Here](../bindings/openai_api.py) is a server providing OpenAI Compatible API. Note that most of
+the parameters are ignored. With this, one can start two servers one for chatting and one for
+code completion (a base model supporting fill-in-the-middle is required), and setup a local copilot in Visual Studio Code with the help of
+[twinny](https://github.com/rjmacarthy/twinny), etc.
+
 ## JavaScript/TypeScript
 
 Run [chatllm.ts](../bindings/chatllm.ts) with exactly the same command line options using [Bun](https://bun.sh/):
