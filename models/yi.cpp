@@ -27,8 +27,6 @@ public:
 
     bool is_special_id(int id) const override;
 
-    int get_terminate_token_id(void) const { return im_end_token_id; }
-
 public:
     int im_start_token_id;
     int im_end_token_id;
@@ -64,6 +62,7 @@ size_t Tokenizer::load(const char *buffer, int n_vocab)
     im_start_token_id = 6;
     im_end_token_id = 7;
     im_sep_token_id = 8;
+    terminate_ids.insert(im_end_token_id);
     return size;
 }
 

@@ -38,11 +38,6 @@ namespace v1
 
         bool is_special_id(int id) const override;
 
-        int get_terminate_token_id(void) const override
-        {
-            return im_end_token_id;
-        }
-
     public:
         void encode(const std::string &text, std::vector<int> &ids, bool add_eos) const;
 
@@ -96,6 +91,9 @@ namespace v1
         std::vector<int> ids;
         tp->Encode("\n", &ids);
         nl_token_id = ids[0];
+
+        if (im_end_token_id >= 0)
+            terminate_ids.insert(im_end_token_id);
 
         return size;
     }
@@ -231,6 +229,9 @@ namespace v2
             std::vector<int> ids;
             tp->Encode("\n", &ids);
             nl_token_id = ids[0];
+
+            if (im_end_token_id >= 0)
+                terminate_ids.insert(im_end_token_id);
 
             return r;
         }

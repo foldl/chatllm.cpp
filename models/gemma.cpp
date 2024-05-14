@@ -32,10 +32,19 @@ public:
         start_of_turn_token_id = tp->PieceToId("<start_of_turn>");
         end_of_turn_token_id   = tp->PieceToId("<end_of_turn>");
         nl_token_id = tp->PieceToId("\n");
+
+        const int first_added_id = tp->PieceToId("<unused0>");
+        for (int i = tp->PieceToId("</code>"); i >= first_added_id; i--)
+            tp->AddAddedToken(tp->IdToPiece(i), i);
+
+        terminate_ids.insert(end_of_turn_token_id);
+        terminate_ids.insert(tp->PieceToId("<|fim_prefix|>"));
+        terminate_ids.insert(tp->PieceToId("<|fim_suffix|>"));
+        terminate_ids.insert(tp->PieceToId("<|fim_middle|>"));
+        terminate_ids.insert(tp->PieceToId("<|file_separator|>"));
+
         return size;
     }
-
-    int get_terminate_token_id(void) const override { return end_of_turn_token_id; }
 
 public:
     void encode(const std::string &text, std::vector<int> &ids, bool add_start, bool add_end)

@@ -92,10 +92,10 @@ public:
 
         eoa_token_id = tp->PieceToId("<eoa>");
 
+        terminate_ids.insert(eoa_token_id);
+
         return size;
     }
-
-    int get_terminate_token_id(void) const override { return eoa_token_id; }
 
     bool is_special_id(int id) const override
     {
@@ -245,10 +245,10 @@ namespace v3
 
             newline_token_id = tp->PieceToId("\n");
 
+            terminate_ids.insert(im_end_token_id);
+
             return size;
         }
-
-        int get_terminate_token_id(void) const override { return im_end_token_id; }
 
         bool is_special_id(int id) const override
         {

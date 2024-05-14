@@ -14,6 +14,8 @@ public:
         im_start_token_id   = tp->GetPieceSize() - 1;
         im_end_token_id     = im_start_token_id - 1;
         eos_token_id        = im_end_token_id;
+        terminate_ids.insert(im_end_token_id);
+
         return size;
     }
 
@@ -21,8 +23,6 @@ public:
     {
         return (id == pad_token_id);
     }
-
-    int get_terminate_token_id(void) const override { return im_end_token_id; }
 
 public:
     void encode(const std::string &text, std::vector<int> &ids, bool add_start, bool add_end) const

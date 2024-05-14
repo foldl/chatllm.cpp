@@ -13,7 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
-* 2024-05-14: [OpenAI API](./docs/binding.md#openai-compatible-api)
+* 2024-05-14: [OpenAI API](./docs/binding.md#openai-compatible-api), CodeGemma Base & Instruct supported
 * 2024-05-13: Yi 1.5 Chat models
 * 2024-05-08: [Layer shuffling](./docs/fun.md)
 * 2024-05-05: LoRA supported

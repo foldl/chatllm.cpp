@@ -230,7 +230,38 @@ int Processor::Encode(const std::string &input, std::vector<int> *ids) const
     std::string s = input;
     for (auto & p : pp)
         s = p->transform(s);
-    return DoEncode(s, ids);
+
+    while (true)
+    {
+        size_t special_pos = std::string::npos;
+        int special_id = -1;
+        size_t special_tok_len = 0;
+
+        for (auto & tok : added_tokens)
+        {
+            size_t pos = s.find(tok.token);
+
+            if (pos < special_pos)
+            {
+                special_pos = pos;
+                special_id = tok.id;
+                special_tok_len = tok.token.size();
+            }
+        }
+
+        if (std::string::npos == special_pos)
+            break;
+
+        std::string part = s.substr(0, special_pos);
+        DoEncode(part, ids);
+
+        s = s.substr(special_pos + special_tok_len);
+        ids->push_back(special_id);
+    }
+
+    DoEncode(s, ids);
+
+    return 0;
 }
 
 int Processor::PieceToId(std::string_view piece) const
@@ -251,6 +282,11 @@ const std::string Processor::IdToPiece(int id) const
 void Processor::OverrideTokenDecoding(int id, const std::string &tok)
 {
     token_override.emplace(id, tok);
+}
+
+void Processor::AddAddedToken(const std::string &tok, int id)
+{
+    added_tokens.emplace_back(TokenId{tok, id});
 }
 
 int Processor::Decode(const std::vector<int> &ids, std::string *detokenized) const

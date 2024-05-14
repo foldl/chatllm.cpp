@@ -170,10 +170,11 @@ namespace v2
             im_start_token_id   = tp->PieceToId("<|im_start|>");
             _eot_token_id       = tp->PieceToId("▁<EOT>");
             _suf_token_id       = tp->PieceToId("▁<SUF>");
+
+            terminate_ids.insert(im_end_token_id);
+
             return size;
         }
-
-        int get_terminate_token_id(void) const override { return im_end_token_id; }
 
     public:
         void encode(const std::string &text, std::vector<int> &ids, bool add_start, bool add_end) const

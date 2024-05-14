@@ -763,12 +763,7 @@ namespace chatllm
 
             int last_tok_id = output_ids[output_ids.size() - 1];
 
-            if (last_tok_id == terminate_token_id)
-            {
-                pop_output = 1;
-                return true;
-            }
-            else if (last_tok_id == tokenizer->eos_token_id)
+            if (tokenizer->is_terminate_token_id(last_tok_id))
             {
                 pop_output = 1;
                 return true;

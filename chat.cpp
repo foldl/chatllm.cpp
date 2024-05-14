@@ -78,6 +78,14 @@ namespace chatllm
             qa_encoder->set_tokenizer(this);
     }
 
+    bool BaseTokenizer::is_terminate_token_id(int id) const
+    {
+        if (terminate_ids.size() < 1)
+            return id == eos_token_id;
+
+        return terminate_ids.find(id) != terminate_ids.end();
+    }
+
     std::string BaseTokenizer::preprocess(const std::string &text) const
     {
         return text;

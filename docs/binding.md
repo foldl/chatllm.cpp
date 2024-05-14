@@ -58,7 +58,7 @@ code completion (a base model supporting fill-in-the-middle is required), and se
 local copilot in Visual Studio Code with the help of tools like [twinny](https://github.com/rjmacarthy/twinny).
 
 `openai_api.py` takes two arguments specifying models for chatting and code completion respectively. For example, use
-DeepSeekCoder instructed for chatting, and base model for code completion:
+DeepSeekCoder instructed for chatting, and its base model for code completion:
 
 ```sh
 python openai_api.py path/to/deepseekcoder-1.3b.bin /path/to/deepseekcoder-1.3b-base.bin
@@ -70,6 +70,11 @@ either starting with `fim` or ending with `fim`; chatting model is selected for 
 ![](twinny_cfg.png)
 
 Note that, `openai_api.py` is tested to be compatible with provider `litellm`.
+
+Some models that can be used for code completion:
+
+* DeepSeekCoder: [Coder-Base-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-base)
+* CodeGemma v1.1: [Base-2B](https://huggingface.co/google/codegemma-1.1-2b), [Base-7B](https://huggingface.co/google/codegemma-1.1-7b)
 
 ## JavaScript/TypeScript
 

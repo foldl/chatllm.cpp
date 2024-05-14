@@ -411,11 +411,7 @@ namespace v3
                 ids.push_back(end_token_id);
                // ids.push_back(nl_token_id);
             }
-        }
-
-        int get_terminate_token_id(void) const override
-        {
-            return end_token_id;
+            terminate_ids.insert(end_token_id);
         }
 
     public:

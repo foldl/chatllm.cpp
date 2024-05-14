@@ -210,6 +210,8 @@ namespace v3
             tp->Encode("\n", &ids);
             nl_token_id = ids[0];
 
+            terminate_ids.insert(eot_id);
+
             return size;
         }
 
@@ -232,8 +234,6 @@ namespace v3
             encode(text, ids);
             ids.push_back(eot_id);
         }
-
-        int get_terminate_token_id(void) const override { return eot_id; }
 
     public:
         int start_header_id;

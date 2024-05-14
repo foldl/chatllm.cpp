@@ -21,8 +21,6 @@ public:
     {
         sys_prompt = "GPT4";
     }
-
-    int get_terminate_token_id(void) const override { return eos_token_id; }
 };
 
 class ConditionalGeneration : public mistral::ConditionalGeneration

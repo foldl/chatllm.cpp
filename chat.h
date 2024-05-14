@@ -78,7 +78,7 @@ namespace chatllm
         const std::string &get_system_prompt(void) { return sys_prompt; }
         virtual void set_additional_args(const std::map<std::string, std::string> &args) {}
 
-        virtual int get_terminate_token_id(void) const { return -1000; }
+        virtual bool is_terminate_token_id(int id) const;
         virtual bool is_special_id(int id) const { return false; }
 
         void set_chat_format(ChatFormat format) { this->format = format; }
@@ -106,6 +106,7 @@ namespace chatllm
         BaseHistoryEncoder *completion_encoder;
         BaseHistoryEncoder *qa_encoder;
         bool auto_add_bos;
+        std::set<int> terminate_ids;
     };
 
     class BaseHistoryEncoder
@@ -291,7 +292,7 @@ namespace chatllm
         BaseModel(int type, std::string name, std::string native_name, ModelPurpose purpose) :
             type_(type), name_(name), native_name_(native_name), n_past(0),
             n_past_offset(0), tokenizer(nullptr),
-            purpose(purpose), aborted(false), terminate_token_id(-1000)
+            purpose(purpose), aborted(false)
         {}
 
         virtual ~BaseModel()
@@ -332,7 +333,6 @@ namespace chatllm
         void set_tokenizer(BaseTokenizer *tokenizer)
         {
             this->tokenizer = tokenizer;
-            terminate_token_id = tokenizer->get_terminate_token_id();
         }
 
         virtual void set_ctx(int n_ctx) {}
@@ -366,8 +366,6 @@ namespace chatllm
         BaseTokenizer *tokenizer;
         ModelPurpose purpose;
         bool aborted;
-    public:
-        int terminate_token_id; // when LLM uses another token as end indicator
     };
 
     class ModelObject

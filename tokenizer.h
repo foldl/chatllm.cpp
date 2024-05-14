@@ -104,6 +104,12 @@ public:
 class Processor
 {
 public:
+    struct TokenId
+    {
+        std::string token;
+        int id;
+    };
+
     Processor() : piece_size(0), id_unk_token(-1), token_unk_id("<?>"), ret_special_token(false) {}
 
     virtual size_t Load(const char *buffer, int n_vocab) = 0;
@@ -135,6 +141,8 @@ public:
 
     void OverrideTokenDecoding(int id, const std::string &tok);
 
+    void AddAddedToken(const std::string &tok, int id);
+
 protected:
     virtual int DoEncode(const std::string &input, std::vector<int> *ids) const = 0;
 
@@ -146,6 +154,7 @@ protected:
     bool ret_special_token;
     std::vector<std::unique_ptr<TextPreprocessor>> pp;
     std::map<int, std::string> token_override;
+    std::vector<TokenId> added_tokens;
 };
 
 class BPEProcessor1: public Processor

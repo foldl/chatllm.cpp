@@ -52,7 +52,7 @@ class ChatCompletionSession {
 
     receive_chunk(id: string, chunk: string) {
         if (this.streaming) {
-            this.controller.enqueue(JSON.stringify(make_chat_completion_chunk_obj(id, chunk, this.created, this.model)) + '\n\n');
+            this.controller.enqueue('data: ' + JSON.stringify(make_chat_completion_chunk_obj(id, chunk, this.created, this.model)) + '\n\n');
         } else {
             this.acc = this.acc + chunk;
         }
@@ -60,9 +60,9 @@ class ChatCompletionSession {
 
     complete(id: string) {
         if (this.streaming) {
-            this.controller.enqueue(JSON.stringify(make_chat_completion_obj(id, this.created, this.model)) + '\n');
+            this.controller.enqueue('data: ' + JSON.stringify(make_chat_completion_obj(id, this.created, this.model)) + '\n\n');
         } else {
-            this.controller.enqueue(JSON.stringify(make_chat_completion_obj(id, this.created, this.model, this.acc)) + '\n');
+            this.controller.enqueue('data: ' + JSON.stringify(make_chat_completion_obj(id, this.created, this.model, this.acc)) + '\n\n');
         }
     }
 }
@@ -125,7 +125,7 @@ class LegacyChatCompletionSession {
         this.first_chunk = true;
     }
 
-    receive_chunk(id: string, chunk: string): string | null {
+    receive_chunk(id: string, chunk: string) {
         if (this.streaming) {
             if (this.first_chunk) {
                 this.first_chunk = false;
@@ -134,15 +134,14 @@ class LegacyChatCompletionSession {
             this.controller.enqueue('data: ' + chunk + '\n');
         } else {
             this.acc = this.acc + chunk;
-            return null;
         }
     }
 
-    complete(id: string): string | null {
+    complete(id: string) {
         if (this.streaming) {
             this.controller.enqueue('data: [DONE]\n');
         } else {
-            this.controller.enqueue(JSON.stringify(make_legacy_chat_complete_obj(id, this.created, this.model, this.acc)) + '\n');
+            this.controller.enqueue('data: ' + JSON.stringify(make_legacy_chat_complete_obj(id, this.created, this.model, this.acc)) + '\n\n');
         }
     }
 }

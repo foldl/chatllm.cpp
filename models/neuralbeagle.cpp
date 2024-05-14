@@ -28,8 +28,6 @@ public:
         return r;
     }
 
-    int get_terminate_token_id(void) const override { return eos_token_id; }
-
     void encode(const std::string &text, std::vector<int> &ids, bool add_bos, bool add_eos) const override
     {
         if (add_bos)

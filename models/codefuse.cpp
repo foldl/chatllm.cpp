@@ -23,9 +23,8 @@ namespace deepseek
             : deepseek_coder::Tokenizer::Tokenizer(config, &_chat_encoder)
         {
             sys_prompt = "";
+            terminate_ids.emplace(bos_token_id);
         }
-
-        int get_terminate_token_id(void) const override { return bos_token_id; }
     };
 
     class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<LlamaBlock>

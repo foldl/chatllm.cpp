@@ -39,10 +39,9 @@ public:
         user_token_id           = tp->PieceToId("<|USER_TOKEN|>");
         chatbot_token_id        = tp->PieceToId("<|CHATBOT_TOKEN|>");
         system_token_id         = tp->PieceToId("<|SYSTEM_TOKEN|>");
+        terminate_ids.insert(end_of_turn_token_id);
         return size;
     }
-
-    int get_terminate_token_id(void) const override { return end_of_turn_token_id; }
 
 public:
     void encode(const std::string &text, std::vector<int> &ids, bool add_start, int start_token, bool add_end)

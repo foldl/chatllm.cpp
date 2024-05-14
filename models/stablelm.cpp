@@ -27,8 +27,6 @@ public:
         tp->EnableReturnSpecialToken(true);
         return size;
     }
-
-    int get_terminate_token_id(void) const { return eos_token_id; }
 };
 
 class ConditionalGeneration : public BaseModelForConditionalGeneration<
