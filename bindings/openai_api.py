@@ -209,12 +209,16 @@ class HttpHandler(BaseHTTPRequestHandler):
         timestamp = int(time.time())
         prompt = ''
         stream = False
+        restart = False
         if 'stream' in obj:
             stream = obj['stream']
         if 'messages' in obj:
+            counter = 0
             for x in obj['messages']:
                 if x['role'] == 'user':
+                    counter = counter + 1
                     prompt = x['content']
+            restart = counter < 2
 
             responder_cls = ChatCompletionStreamResponder if stream else ChatCompletionNonStreamResponder
 
@@ -235,6 +239,8 @@ class HttpHandler(BaseHTTPRequestHandler):
         streamer = get_streamer(model)
         if streamer is not None:
             try:
+                if restart: streamer.restart()
+
                 for x in streamer.chat(prompt):
                     responder.recv_chunk(x)
             except:

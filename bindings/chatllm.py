@@ -233,6 +233,9 @@ class ChatLLMStreamer:
     def abort(self) -> None:
         self.llm.abort()
 
+    def restart(self) -> None:
+        self.llm.restart()
+
     def get_acc_resp(self) -> str:
         return self.acc
 
