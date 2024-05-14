@@ -1,8 +1,16 @@
 from ctypes import *
+from enum import IntEnum
 import os, sys, signal, queue
 import threading
 from typing import Any, Iterable, List, Union
 
+
+class PrintType(IntEnum):
+    PRINT_CHAT_CHUNK        = 0,
+    PRINTLN_META            = 1,    # print a whole line: general information
+    PRINTLN_ERROR           = 2,    # print a whole line: error message
+    PRINTLN_REF             = 3,    # print a whole line: reference
+    PRINTLN_REWRITTEN_QUERY = 4,    # print a whole line: rewritten query
 
 class LibChatLLM:
 
@@ -13,35 +21,35 @@ class LibChatLLM:
 
         if lib == '':
             this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-            lib = os.path.join(this_dir, 'libchatllm.') + ('dll' if sys.platform == 'win32' else 'so')
+            lib = os.path.join(this_dir, 'libchatllm.')
+            if sys.platform == 'win32':
+                lib = lib + 'dll'
+            elif sys.platform == 'darwin':
+                lib = lib + 'dylib'
+            else:
+                lib = lib + 'so'
 
         if sys.platform == 'win32':
             self._lib = windll.LoadLibrary(lib)
-            self._PRINTFUNC = WINFUNCTYPE(None, c_void_p, c_char_p)
+            self._PRINTFUNC = WINFUNCTYPE(None, c_void_p, c_int, c_char_p)
             self._ENDFUNC = WINFUNCTYPE(None, c_void_p)
         else:
             self._lib = cdll.LoadLibrary(lib)
-            self._PRINTFUNC = CFUNCTYPE(None, c_void_p, c_char_p)
+            self._PRINTFUNC = CFUNCTYPE(None, c_void_p, c_int, c_char_p)
             self._ENDFUNC = CFUNCTYPE(None, c_void_p)
 
         self._chatllm_create = self._lib.chatllm_create
         self._chatllm_append_param = self._lib.chatllm_append_param
-        self._chatllm_set_print_reference = self._lib.chatllm_set_print_reference
-        self._chatllm_set_print_rewritten_query = self._lib.chatllm_set_print_rewritten_query
         self._chatllm_start = self._lib.chatllm_start
         self._chatllm_user_input = self._lib.chatllm_user_input
         self._chatllm_abort_generation = self._lib.chatllm_abort_generation
+        self._chatllm_restart = self._lib.chatllm_restart
 
         self._chatllm_create.restype = c_void_p
         self._chatllm_create.argtypes = []
 
         self._chatllm_append_param.restype = None
         self._chatllm_append_param.argtypes = [c_void_p, c_char_p]
-
-        self._chatllm_set_print_reference.restype = c_int
-        self._chatllm_set_print_reference.argtypes = [c_void_p, self._PRINTFUNC]
-        self._chatllm_set_print_rewritten_query.restype = c_int
-        self._chatllm_set_print_rewritten_query.argtypes = [c_void_p, self._PRINTFUNC]
 
         self._chatllm_start.restype = c_int
         self._chatllm_start.argtypes = [c_void_p, self._PRINTFUNC, self._ENDFUNC, c_void_p]
@@ -52,25 +60,28 @@ class LibChatLLM:
         self._chatllm_abort_generation.restype = None
         self._chatllm_abort_generation.argtypes = [c_void_p]
 
-        self._cb_print_reference = self._PRINTFUNC(LibChatLLM.callback_print_reference)
-        self._cb_print_rewritten_query = self._PRINTFUNC(LibChatLLM.callback_print_rewritten_query)
+        self._chatllm_restart.restype = None
+        self._chatllm_restart.argtypes = [c_void_p]
+
         self._cb_print = self._PRINTFUNC(LibChatLLM.callback_print)
         self._cb_end = self._ENDFUNC(LibChatLLM.callback_end)
 
     @staticmethod
-    def callback_print_reference(user_data: int, s: bytes) -> None:
+    def callback_print(user_data: int, print_type: c_int, s: bytes) -> None:
         obj = LibChatLLM._id2obj[user_data]
-        obj.callback_print_reference(s.decode())
-
-    @staticmethod
-    def callback_print_rewritten_query(user_data: int, s: bytes) -> None:
-        obj = LibChatLLM._id2obj[user_data]
-        obj.callback_print_rewritten_query(s.decode())
-
-    @staticmethod
-    def callback_print(user_data: int, s: bytes) -> None:
-        obj = LibChatLLM._id2obj[user_data]
-        obj.callback_print(s.decode())
+        txt = s.decode()
+        if print_type == PrintType.PRINT_CHAT_CHUNK.value:
+            obj.callback_print(txt)
+        elif print_type == PrintType.PRINTLN_META.value:
+            obj.callback_print(txt + '\n')
+        elif print_type == PrintType.PRINTLN_REF.value:
+            obj.callback_print_reference(txt)
+        elif print_type == PrintType.PRINTLN_REWRITTEN_QUERY.value:
+            obj.callback_print_rewritten_query(txt)
+        elif print_type == PrintType.PRINTLN_ERROR.value:
+            raise Exception(txt)
+        else:
+            raise Exception(f"unhandled print_type({print_type}): {txt}")
 
     @staticmethod
     def callback_end(user_data: int) -> None:
@@ -93,8 +104,6 @@ class LibChatLLM:
 
     def start(self, obj: c_void_p, callback_obj: Any) -> int:
         id = self.alloc_id_for_obj(callback_obj)
-        self._chatllm_set_print_reference(obj, self._cb_print_reference)
-        self._chatllm_set_print_rewritten_query(obj, self._cb_print_rewritten_query)
         return self._chatllm_start(obj, self._cb_print, self._cb_end, c_void_p(id))
 
     def chat(self, obj: c_void_p, user_input: str) -> int:
@@ -102,6 +111,9 @@ class LibChatLLM:
 
     def abort(self, obj: c_void_p) -> None:
         self._chatllm_abort_generation(obj)
+
+    def restart(self, obj: c_void_p) -> None:
+        self._chatllm_restart(obj)
 
 class LLMChatDone:
     def __init__(self, id: Any) -> None:
@@ -147,6 +159,9 @@ class ChatLLM:
     def abort(self) -> None:
         self._lib.abort(self._chat)
 
+    def restart(self) -> None:
+        self._lib.restart(self._chat)
+
     def callback_print_reference(self, s: str) -> None:
         self.references.append(s)
 
@@ -180,10 +195,13 @@ class ChatLLMStreamer:
         self.thread.start()
         self.llm.start()
         self.acc = ''
+        self.auto_restart = False
 
     def thread_fun(self) -> None:
         while self.run:
             input: LLMChatInput = self.input_queue.get()
+            if self.auto_restart:
+                self.llm.restart()
             self.llm.chat(input.input, input.id)
 
     def flush_output(self) -> str:
@@ -250,4 +268,5 @@ if __name__ == '__main__':
         s = input('You  > ')
         print('A.I. > ', end='', flush=True)
         llm.chat(s)
-        print(llm.references)
+        if len(llm.references) > 0:
+            print(llm.references)

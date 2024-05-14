@@ -54,10 +54,26 @@ Note: "STOP" function is not implemented yet.
 
 [Here](../bindings/openai_api.py) is a server providing OpenAI Compatible API. Note that most of
 the parameters are ignored. With this, one can start two servers one for chatting and one for
-code completion (a base model supporting fill-in-the-middle is required), and setup a local copilot in Visual Studio Code with the help of
-[twinny](https://github.com/rjmacarthy/twinny), etc.
+code completion (a base model supporting fill-in-the-middle is required), and setup a fully functional
+local copilot in Visual Studio Code with the help of tools like [twinny](https://github.com/rjmacarthy/twinny).
+
+`openai_api.py` takes two arguments specifying models for chatting and code completion respectively. For example, use
+DeepSeekCoder instructed for chatting, and base model for code completion:
+
+```sh
+python openai_api.py path/to/deepseekcoder-1.3b.bin /path/to/deepseekcoder-1.3b-base.bin
+```
+
+`openai_api.py` uses `model` to select chatting or completion models: for code completion, set `Model name` to something
+either starting with `fim` or ending with `fim`; chatting model is selected for all other `Model name`s. Here is a reference configuration in `twinny`:
+
+![](twinny_cfg.png)
+
+Note that, `openai_api.py` is tested to be compatible with provider `litellm`.
 
 ## JavaScript/TypeScript
+
+### Command line
 
 Run [chatllm.ts](../bindings/chatllm.ts) with exactly the same command line options using [Bun](https://bun.sh/):
 
@@ -66,6 +82,10 @@ bun run chatllm.ts -i -m path/to/model
 ```
 
 WARNING: Bun [looks buggy on Linux](https://github.com/oven-sh/bun/issues/10242).
+
+### OpenAI Compatible API
+
+[Here](../bindings/openai_api.ts) is a work in progress.
 
 ## Other Languages
 

@@ -837,9 +837,7 @@ class Chat
 {
 public:
     Chat():
-        streamer(nullptr), pipeline(nullptr),
-        f_print_ref(nullptr),
-        f_print_query(nullptr)
+        streamer(nullptr), pipeline(nullptr)
     {
         append_param("...");
     }
@@ -855,8 +853,6 @@ public:
     chatllm::BaseStreamer *streamer;
     chatllm::Pipeline *pipeline;
     chatllm::GenerationConfig gen_config;
-    f_chatllm_print f_print_ref;
-    f_chatllm_print f_print_query;
 };
 
 class FFIStreamer : public chatllm::BaseStreamer
@@ -864,11 +860,9 @@ class FFIStreamer : public chatllm::BaseStreamer
 public:
     FFIStreamer(chatllm::BaseTokenizer *tokenizer,
         f_chatllm_print f_print,
-        f_chatllm_print f_print_ref,
-        f_chatllm_print f_print_query,
         f_chatllm_end f_end, void *user_data) :
         tokenizer(tokenizer), is_prompt(true), print_len(0),
-        f_print(f_print), f_print_ref(f_print_ref), f_print_query(f_print_query), f_end(f_end), user_data(user_data),
+        f_print(f_print), f_end(f_end), user_data(user_data),
         ref_count(0)
     {
     }
@@ -906,40 +900,22 @@ public:
         }
 
         if (printable_text.size() > 0)
-            f_print(user_data, printable_text.c_str());
+            f_print(user_data, PRINT_CHAT_CHUNK, printable_text.c_str());
     }
 
     void putln(const std::string &line) override
     {
-        f_print(user_data, line.c_str());
-        f_print(user_data, "\n");
+        f_print(user_data, PRINTLN_META, line.c_str());
     }
 
     void put_reference(const std::string &line) override
     {
-        if (f_print_ref)
-        {
-            f_print_ref(user_data, line.c_str());
-        }
-        else
-        {
-            std::ostringstream oss;
-            ref_count++;
-            if (1 == ref_count)
-            {
-                oss << "\nReference:\n";
-            }
-            oss << ref_count << ". " << line;
-            putln(oss.str());
-        }
+        f_print(user_data, PRINTLN_REF, line.c_str());
     }
 
     void put_rewritten_query(const std::string &line) override
     {
-        if (f_print_query)
-        {
-            f_print_query(user_data, line.c_str());
-        }
+        f_print(user_data, PRINTLN_REWRITTEN_QUERY, line.c_str());
     }
 
     void end() override
@@ -962,8 +938,6 @@ public:
     std::vector<int> token_cache;
     size_t print_len;
     f_chatllm_print f_print;
-    f_chatllm_print f_print_ref;
-    f_chatllm_print f_print_query;
     f_chatllm_end f_end;
     void *user_data;
     int ref_count;
@@ -1012,20 +986,6 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline, chatl
     return 0;
 }
 
-int chatllm_set_print_reference(struct chatllm_obj *obj, f_chatllm_print f_print)
-{
-    Chat *chat = reinterpret_cast<Chat *>(obj);
-    chat->f_print_ref = f_print;
-    return 0;
-}
-
-int chatllm_set_print_rewritten_query(struct chatllm_obj *obj, f_chatllm_print f_print)
-{
-    Chat *chat = reinterpret_cast<Chat *>(obj);
-    chat->f_print_query = f_print;
-    return 0;
-}
-
 int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_end f_end, void *user_data)
 {
     Chat *chat = reinterpret_cast<Chat *>(obj);
@@ -1051,7 +1011,7 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
                 return -1;
 
             auto pipeline = new chatllm::Pipeline(args.model_path, pipe_args);
-            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, nullptr, nullptr, f_end, user_data);
+            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, f_end, user_data);
             return start_chat(chat, args, *pipeline, *streamer);
         }
         else
@@ -1069,14 +1029,14 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
             pipeline->composer.set_context_sep(args.rag_context_sep);
             pipeline->composer.set_prompt_template(args.rag_template);
             pipeline->composer.set_rewrite_template(args.retrieve_rewrite_template);
-            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, chat->f_print_ref, chat->f_print_query, f_end, user_data);
+            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, f_end, user_data);
             return start_chat(chat, args, *pipeline, *streamer);
         }
 
     }
     catch (std::exception &e)
     {
-        f_print(user_data, e.what());
+        f_print(user_data, PRINTLN_ERROR, e.what());
         return EXIT_FAILURE;
     }
 }
@@ -1091,6 +1051,16 @@ int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
     std::string output = chat->pipeline->chat(chat->history, chat->gen_config, streamer);
     chat->history.emplace_back(std::move(output));
     return 0;
+}
+
+void chatllm_restart(struct chatllm_obj *obj)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    if (!streamer->is_prompt) return;
+
+    chat->history.clear();
+    chat->pipeline->restart();
 }
 
 void chatllm_abort_generation(struct chatllm_obj *obj)

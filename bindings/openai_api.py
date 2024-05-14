@@ -1,11 +1,7 @@
-import threading
-from typing import Any, Iterable, List, Union
-import os, sys, signal, queue, time
+import sys, signal, time
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from chatllm import LibChatLLM, ChatLLM, LLMChatInput, LLMChatDone, LLMChatChunk, ChatLLMStreamer
+from chatllm import LibChatLLM, ChatLLM, ChatLLMStreamer
 import json
-
-MODEL = 'chatllm-variant'
 
 class HttpResponder:
     def __init__(self, req: BaseHTTPRequestHandler, id: str, timestamp: int, model: str) -> None:
@@ -174,9 +170,22 @@ class SessionManager:
         return '_chatllm_' + str(self._id)
 
 session_man: SessionManager = SessionManager()
-llm_streamer: ChatLLMStreamer = None
+chat_streamer: ChatLLMStreamer = None
+fim_streamer: ChatLLMStreamer = None
+http_server: HTTPServer = None
+
+def get_streamer(model: str) -> ChatLLMStreamer | None:
+    if model.endswith('fim') or model.startswith('fim'):
+        return fim_streamer
+    else:
+        return chat_streamer
+
+def handler(signal_received, frame):
+    http_server.shutdown()
+    sys.exit(0)
 
 class HttpHandler(BaseHTTPRequestHandler):
+
     def do_GET(self):
         self.send_response(404, 'POST')
 
@@ -190,8 +199,7 @@ class HttpHandler(BaseHTTPRequestHandler):
             self.send_error(404, 'BAD REQ')
             return
 
-        if (self.path != '/v1/completions') and (self.path != '/v1/chat/completions') and \
-           (self.path != '/completions') and (self.path != '/chat/completions'):
+        if not self.path.endswith('/completions'):
             self.send_error(404, 'NOT FOUND')
             return
 
@@ -222,24 +230,36 @@ class HttpHandler(BaseHTTPRequestHandler):
 
         self.end_headers()
 
-        responder = responder_cls(self, id, timestamp, MODEL)
-        for x in llm_streamer.chat(prompt):
-            #print(x)
+        model = obj['model'] if 'model' in obj else 'chat'
+        responder = responder_cls(self, id, timestamp, model)
+        streamer = get_streamer(model)
+        if streamer is not None:
             try:
-                responder.recv_chunk(x)
+                for x in streamer.chat(prompt):
+                    responder.recv_chunk(x)
             except:
-                llm_streamer.abort()
+                streamer.abort()
+        else:
+            responder.recv_chunk('FIM model not loaded!')
 
         responder.done()
-
-def handler(signal_received, frame):
-    sys.exit(0)
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, handler)
 
     args = sys.argv[1:]
-    llm = ChatLLM(LibChatLLM(), args, False)
-    llm_streamer = ChatLLMStreamer(llm)
-    httpd = HTTPServer(('localhost', 3000), HttpHandler)
-    httpd.serve_forever()
+    if len(args) < 1:
+        print("usage: python openai_api.py path/to/chat/model path/to/fim/model ...additional-args")
+        exit(-1)
+
+    additional_args = args[2:]
+
+    basic_args = ['-i', '-m']
+    chat_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(), basic_args + [args[0]] + additional_args, False))
+
+    if len(args) >= 2:
+        fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(), basic_args + [args[1], '--format', 'completion'] + additional_args, False))
+        fim_streamer.auto_restart = True
+
+    http_server = HTTPServer(('localhost', 3000), HttpHandler)
+    http_server.serve_forever()

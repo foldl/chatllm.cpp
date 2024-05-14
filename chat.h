@@ -443,7 +443,7 @@ namespace chatllm
 
         bool is_loaded(void) const { return modelobj.loaded; }
 
-        void restart(void);
+        virtual void restart(void);
 
     public:
         BaseTokenizer *tokenizer;

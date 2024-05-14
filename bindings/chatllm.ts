@@ -2,15 +2,22 @@ import { dlopen, FFIType, suffix, JSCallback, ptr, CString } from "bun:ffi";
 
 const path = `libchatllm.${suffix}`;
 
+enum PrintType {
+    PRINT_CHAT_CHUNK        = 0,
+    PRINTLN_META            = 1,    // print a whole line: general information
+    PRINTLN_ERROR           = 2,    // print a whole line: error message
+    PRINTLN_REF             = 3,    // print a whole line: reference
+    PRINTLN_REWRITTEN_QUERY = 4,    // print a whole line: rewritten query
+}
+
 const {
     symbols: {
         chatllm_create,
         chatllm_append_param,
-        chatllm_set_print_reference,
-        chatllm_set_print_rewritten_query,
         chatllm_start,
         chatllm_user_input,
         chatllm_abort_generation,
+        chatllm_restart,
     },
 } = dlopen(
     path,
@@ -22,14 +29,6 @@ const {
         chatllm_append_param: {
             args: [FFIType.ptr, FFIType.cstring],
         },
-        chatllm_set_print_reference: {
-            args: [FFIType.ptr, FFIType.function],
-            returns: FFIType.i32
-        },
-        chatllm_set_print_rewritten_query: {
-            args: [FFIType.ptr, FFIType.function],
-            returns: FFIType.i32
-        },
         chatllm_start: {
             args: [FFIType.ptr, FFIType.function, FFIType.function, FFIType.ptr],
             returns: FFIType.i32
@@ -39,6 +38,9 @@ const {
             returns: FFIType.i32
         },
         chatllm_abort_generation: {
+            args: [FFIType.ptr]
+        },
+        chatllm_restart: {
             args: [FFIType.ptr]
         },
     },
@@ -52,6 +54,10 @@ class ChatLLMHandler {
     }
 
     print(s: string) {
+    }
+
+    print_error(s: string) {
+        throw s;
     }
 
     print_reference(s: string) {
@@ -79,21 +85,30 @@ class ChatLLM {
         this.handler = handler;
         this.obj = chatllm_create();
         this.callback_print = new JSCallback(
-            (p_obj, ptr) => this.handler.print(new CString(ptr)),
-            {
-                args: ["ptr", "ptr"],
+            (p_obj, print_type, ptr) => {
+                let txt = new CString(ptr);
+                switch (print_type) {
+                    case PrintType.PRINT_CHAT_CHUNK:
+                        this.handler.print(txt);
+                        break;
+                    case PrintType.PRINTLN_META:
+                        this.handler.print(txt + '\n');
+                        break;
+                    case PrintType.PRINTLN_REF:
+                        this.handler.print_reference(txt);
+                        break;
+                    case PrintType.PRINTLN_REWRITTEN_QUERY:
+                        this.handler.print_rewritten_query(txt);
+                        break;
+                    case PrintType.PRINTLN_ERROR:
+                        this.handler.print_error(txt);
+                        break;
+                    default:
+                        throw print_type;
+                }
             },
-        );
-        this.callback_print_reference = new JSCallback(
-            (p_obj, ptr) => this.handler.print_reference(new CString(ptr)),
             {
-                args: ["ptr", "ptr"],
-            },
-        );
-        this.callback_print_rewritten_query = new JSCallback(
-            (p_obj, ptr) => this.handler.print_rewritten_query(new CString(ptr)),
-            {
-                args: ["ptr", "ptr"],
+                args: ["ptr", "i32", "ptr"],
             },
         );
         this.callback_end = new JSCallback(
@@ -115,8 +130,6 @@ class ChatLLM {
     }
 
     start() {
-        chatllm_set_print_reference(this.obj, this.callback_print_reference);
-        chatllm_set_print_rewritten_query(this.obj, this.callback_print_rewritten_query);
         let r = chatllm_start(this.obj, this.callback_print, this.callback_end, 0);
         if (r != 0) {
             throw `ChatLLM::start error code ${r}`;
@@ -133,6 +146,10 @@ class ChatLLM {
 
     abort() {
         chatllm_abort_generation(this.obj);
+    }
+
+    restart() {
+        chatllm_restart(this.obj);
     }
 };
 
