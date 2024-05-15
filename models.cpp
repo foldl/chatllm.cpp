@@ -146,6 +146,8 @@ namespace chatllm
 
         MODEL_TYPE_LLAMA3           = 0x1700,
 
+        MODEL_TYPE_STARCODER2       = 0x1800,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -284,6 +286,8 @@ namespace chatllm
             return "BGE-M3";
         case MODEL_TYPE_BGE_ReRanker_M3:
             return "BGE-ReRanker-M3";
+        case MODEL_TYPE_STARCODER2:
+            return "StarCoder2";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1146,6 +1150,11 @@ namespace chatllm
         #include "models/zhinao.cpp"
     }
 
+    namespace starcoder
+    {
+        #include "models/starcoder.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1403,6 +1412,8 @@ namespace chatllm
         CASE(GROK_1,                grok::v1, 1)                \
                                                                 \
         CASE(ZHINAO,                zhinao, 1)                  \
+                                                                \
+        CASE(STARCODER2,            starcoder::v2, 1)           \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

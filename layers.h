@@ -2117,4 +2117,31 @@ namespace chatllm
             : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };
+
+    template <int sliding_window_len, bool qvk_bias, bool o_bias> class StarCoder2SelfAttention : public BaseSelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>
+    {
+    public:
+        StarCoder2SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : BaseSelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qvk_bias, o_bias)
+        {
+            BaseSelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>::rope_mode = BaseSelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>::RoPEMode::Original;
+        }
+    };
+
+    class StarCoder2MLP : public TheMLP
+    {
+    public:
+        StarCoder2MLP(InitContext *ctx, int hidden_size, int intermediate_size)
+            : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true)
+        {
+        }
+    };
+
+    template <int sliding_window_len, bool qvk_bias = true, bool o_bias = true> class StarCoder2Block : public LMBlock1<LayerNorm, StarCoder2SelfAttention<sliding_window_len, qvk_bias, o_bias>, LayerNorm, StarCoder2MLP>
+    {
+    public:
+        StarCoder2Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1<LayerNorm, StarCoder2SelfAttention<sliding_window_len, qvk_bias, o_bias>, LayerNorm, StarCoder2MLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
 } // namespace chatllm

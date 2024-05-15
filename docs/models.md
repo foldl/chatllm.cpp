@@ -1,11 +1,13 @@
 # Supported Models
 
+## Chat/Instruct Models
+
 * LlaMA-like (`LlamaForCausalLM`):
     * [x] All LlaMA-1 models
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
     * [x] LlaMA-3: [Instruct-8B](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct), [Instruct-70B](https://huggingface.co/meta-llama/Meta-Llama-3-70B-Instruct), other derivations such as [Llama3-8B-Chinese-Chat](https://huggingface.co/shenzhi-wang/Llama3-8B-Chinese-Chat)
     * [x] CodeLlaMA: [Instruct-7B](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf) (`-a CodeLlaMA`)
-    * [x] DeepSeek: [Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat) (`-a DeepSeek`) , [Coder-6.7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct) (`-a DeepSeekCoder`), [Coder-Instruct-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-instruct) (`-a DeepSeekCoder`), [Coder-Base-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-base) (`-a DeepSeekCoder`), [Coder-Base-6.7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-base) (`-a DeepSeekCoder`) 🔥
+    * [x] DeepSeek: [Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat) (`-a DeepSeek`) , [Coder-6.7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct) (`-a DeepSeekCoder`), [Coder-Instruct-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-instruct) (`-a DeepSeekCoder`) 🔥
     * [x] Yi: [Chat-6B](https://huggingface.co/01-ai/Yi-6B-Chat), [Chat-34B](https://huggingface.co/01-ai/Yi-34B-Chat), [v1.5 Chat-6B](https://huggingface.co/01-ai/Yi-1.5-6B-Chat), [v1.5 Chat-9B](https://huggingface.co/01-ai/Yi-1.5-9B-Chat), [Chat-34B](https://huggingface.co/01-ai/Yi-1.5-34B-Chat) (`-a Yi`)
     * [x] WizardLM: [LM 7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0) (`-a WizardLM`), [LM 13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2) (`-a WizardLM`), [Coder Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0) (`-a WizardCoder`)
     * [x] TigerBot: [Chat-7B](https://huggingface.co/TigerResearch/tigerbot-7b-chat), [Chat-13B](https://huggingface.co/TigerResearch/tigerbot-13b-chat-v5) (`-a TigerBot`)
@@ -105,18 +107,31 @@
 * Gemma (`GemmaForCausalLM`)
     * [x] v1.0 [Instruct-2B](https://huggingface.co/google/gemma-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-7b-it)
     * [x] v1.1 [Instruct-2B](https://huggingface.co/google/gemma-1.1-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-1.1-7b-it)
-    * [x] CodeGemma v1.1: [Base-2B](https://huggingface.co/google/codegemma-1.1-2b), [Base-7B](https://huggingface.co/google/codegemma-1.1-7b), [Instruct-7B](https://huggingface.co/google/codegemma-1.1-7b-it)
+    * [x] CodeGemma v1.1: [Instruct-7B](https://huggingface.co/google/codegemma-1.1-7b-it)
 
 * Cohere (`CohereForCausalLM`)
     * [x] [C4AI Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
+
+* Zhinao (`ZhinaoForCausalLM`)
+    * [x] [Chat-7B-4K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-4K), [Chat-7B-32K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-32K), [Chat-7B-360K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-360K)
+
+## Base Models
+
+* LlaMA-like (`LlamaForCausalLM`):
+    * [x] DeepSeek: [Coder-Base-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-base) (`-a DeepSeekCoder`), [Coder-Base-6.7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-base) (`-a DeepSeekCoder`)
+
+* Gemma (`GemmaForCausalLM`)
+    * [x] CodeGemma v1.1: [Base-2B](https://huggingface.co/google/codegemma-1.1-2b), [Base-7B](https://huggingface.co/google/codegemma-1.1-7b)
 
 * Grok-1
     * [x] [Base](https://huggingface.co/xai-org/grok-1)
 
         About [Grok-1](./docs/grok.md).
 
-* Zhinao (`ZhinaoForCausalLM`)
-    * [x] [Chat-7B-4K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-4K), [Chat-7B-32K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-32K), [Chat-7B-360K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-360K)
+* StarCoder (`Starcoder2ForCausalLM`)
+    * [x] [Base-3B](https://huggingface.co/bigcode/starcoder2-7b), [Base-7B](https://huggingface.co/bigcode/starcoder2-7b), [Base-15B](https://huggingface.co/bigcode/starcoder2-15b)
+
+## RAG Models
 
 * Text Embedding (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
@@ -129,7 +144,7 @@
     * [x] [BGE-ReRanker-M3](https://huggingface.co/BAAI/bge-reranker-v2-m3) (`-a BGE-Reranker-M3`)
 
 
-## LoRA
+## LoRA Models
 
 These LoRA models have been tested:
 
