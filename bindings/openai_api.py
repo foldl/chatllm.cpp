@@ -199,7 +199,13 @@ class HttpHandler(BaseHTTPRequestHandler):
             self.send_error(404, 'BAD REQ')
             return
 
-        if not self.path.endswith('/completions'):
+        model = obj['model'] if 'model' in obj else 'chat'
+
+        if self.path.endswith('/completions'):
+            pass
+        elif self.path.endswith('/generate'):
+            model = 'fim'
+        else:
             self.send_error(404, 'NOT FOUND')
             return
 
@@ -234,7 +240,6 @@ class HttpHandler(BaseHTTPRequestHandler):
 
         self.end_headers()
 
-        model = obj['model'] if 'model' in obj else 'chat'
         responder = responder_cls(self, id, timestamp, model)
         streamer = get_streamer(model)
         if streamer is not None:
@@ -267,5 +272,5 @@ if __name__ == '__main__':
         fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(), basic_args + [args[1], '--format', 'completion'] + additional_args, False))
         fim_streamer.auto_restart = True
 
-    http_server = HTTPServer(('localhost', 3000), HttpHandler)
+    http_server = HTTPServer(('0.0.0.0', 3000), HttpHandler)
     http_server.serve_forever()

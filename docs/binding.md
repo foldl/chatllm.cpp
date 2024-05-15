@@ -64,8 +64,9 @@ DeepSeekCoder instructed for chatting, and its base model for code completion:
 python openai_api.py path/to/deepseekcoder-1.3b.bin /path/to/deepseekcoder-1.3b-base.bin
 ```
 
-`openai_api.py` uses `model` to select chatting or completion models: for code completion, set `Model name` to something
-either starting with `fim` or ending with `fim`; chatting model is selected for all other `Model name`s. Here is a reference configuration in `twinny`:
+`openai_api.py` uses `model` and API path to select chatting or completion models: when `Model name` to something
+either starting with `fim` or ending with `fim`, or API path is ending with `/generate`, code completion model is selected;
+otherwise, chatting model is selected. Here is a reference configuration in `twinny`:
 
 ![](twinny_cfg.png)
 
