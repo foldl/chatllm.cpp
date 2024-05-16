@@ -69,17 +69,37 @@ python3 convert.py -i path/to/model -l path/to/lora/model -o quantized.bin
 
 说明：大体上，仅支持 HF 格式；生成的 `.bin` 文件格式不同于当前 `llama.cpp` 项目所使用的 GGUF。
 
-### 构建与运行
+### 编译
 
-使用 CMake 编译项目：
+你可以使用以下几种方式编译本项目。
 
-```sh
-cmake -B build
-# 在 Linux 或 WSL 上：
-cmake --build build -j
-# 在 Windows 上使用 MSVC：
-cmake --build build -j --config Release
-```
+- 使用 `make`:
+
+  Windows 使用 `make` 需要的准备工作:
+
+  1. 下载最新版本的 [w64devkit](https://github.com/skeeto/w64devkit/releases)；
+  2. 将 `w64devkit` 解压；
+  3. 运行 `w64devkit.exe`，然后 `cd` 到 `chatllm.cpp` 所在目录。
+
+  ```sh
+  make
+  ```
+
+  可执行程序为 `./obj/main`。
+
+- 使用 `CMake` 编译项目:
+
+  ```sh
+  cmake -B build
+  # 在 Linux 或 WSL 上：
+  cmake --build build -j
+  # 在 Windows 上使用 MSVC：
+  cmake --build build -j --config Release
+  ```
+
+  可执行程序为 `./build/obj/main`。
+
+### 运行
 
 现在，您可以通过以下方式与量化模型进行对话：
 

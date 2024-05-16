@@ -77,17 +77,37 @@ python3 convert.py -i path/to/model -l path/to/lora/model -o quantized.bin
 
 Note: Appropriately, only HF format is supported; Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.
 
-### Build & Run
+### Build
 
-Compile the project using CMake:
+In order to build this project you have several different options.
 
-```sh
-cmake -B build
-# On Linux, WSL:
-cmake --build build -j
-# On Windows with MSVC:
-cmake --build build -j --config Release
-```
+- Using `make`:
+
+  Prepare for using `make` on Windows:
+
+  1. Download the latest fortran version of [w64devkit](https://github.com/skeeto/w64devkit/releases).
+  2. Extract `w64devkit` on your pc.
+  3. Run `w64devkit.exe`, then `cd` to the `chatllm.cpp` folder.
+
+  ```sh
+  make
+  ```
+
+  The executable is `./obj/main`.
+
+- Using `CMake`:
+
+  ```sh
+  cmake -B build
+  # On Linux, WSL:
+  cmake --build build -j
+  # On Windows with MSVC:
+  cmake --build build -j --config Release
+  ```
+
+  The executable is `./build/obj/main`.
+
+### Run
 
 Now you may chat with a quantized model by running:
 
