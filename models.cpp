@@ -619,7 +619,8 @@ namespace chatllm
         std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                   const bool continuous,
                                   bool &completed,
-                                  BaseStreamer *streamer = nullptr)
+                                  BaseStreamer *streamer = nullptr,
+                                  ModelPerfInfo *performance = nullptr)
         {
             CHATLLM_CHECK(gen_config.max_length <= config_.max_length)
                 << "requested max_length (" << gen_config.max_length << ") is larger than model's max_length ("
@@ -641,9 +642,20 @@ namespace chatllm
             transformer.set_ctx((int)input_ids.size());
             int next_output_idx = (int)input_ids.size();
 
+            if (performance)
+                performance->Reset();
+
+            bool first_call = true;
+
             while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
             {
                 ggml_tensor *lm_logits = generate_next_token(curr_input_ids, gen_config);
+                if (first_call)
+                {
+                    if (performance)
+                        performance->Accumulate(ModelPerfInfo::Type::Prompt, curr_input_ids.size());
+                    first_call = false;
+                }
 
                 int next_token_id = sampler->sampling((float *)lm_logits->data, (int)lm_logits->ne[0]);
 
@@ -686,6 +698,9 @@ namespace chatllm
 
             if (aborted && !completed)
                 completed = true;
+
+            if (performance)
+                performance->Accumulate(ModelPerfInfo::Type::Generation, output_ids.size() - curr_input_ids.size());
 
 //printf("\nn_past = %d\n", n_past);
             return output_ids;

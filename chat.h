@@ -8,6 +8,7 @@
 #include <set>
 #include <vector>
 #include <random>
+#include <chrono>
 #include "basics.h"
 #include "tokenizer.h"
 #include "vectorstore.h"
@@ -286,6 +287,38 @@ namespace chatllm
               sampling(sampling) {}
     };
 
+    class ModelPerfInfo
+    {
+    public:
+        enum Type
+        {
+            Prompt = 0,
+            Generation,
+            NUM
+        };
+
+        struct Performance
+        {
+            size_t tok_count;
+            double duration_ms;
+        };
+
+        ModelPerfInfo();
+
+        void Reset(void);
+        double Elapsed(void);
+
+        void Accumulate(Type type, size_t tok_count);
+
+        Performance timings[Type::NUM];
+
+    private:
+        using Clock = std::chrono::steady_clock;
+        using MilliSecond = std::chrono::duration<double, std::ratio<1, 1000>>;
+
+        std::chrono::time_point<Clock> m_beg { Clock::now() };
+    };
+
     class BaseModel
     {
     public:
@@ -301,7 +334,8 @@ namespace chatllm
         virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,
                                             bool &completed,
-                                            BaseStreamer *streamer = nullptr)
+                                            BaseStreamer *streamer = nullptr,
+                                            ModelPerfInfo *performance = nullptr)
         {
             std::vector<int> r;
             return r;
@@ -446,6 +480,7 @@ namespace chatllm
     public:
         BaseTokenizer *tokenizer;
         BaseModel *model;
+        ModelPerfInfo performance;
 
     protected:
         bool initializing;

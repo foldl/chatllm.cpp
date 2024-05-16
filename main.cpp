@@ -395,6 +395,31 @@ public:
     int ref_count;
 };
 
+static void print_timing(char *str, const char *prefix, size_t tok_number, double duration_sec)
+{
+    sprintf(str, "%s = %12.2f ms / %5zd tokens ( %8.2f ms per token, %8.2f tokens per second)", prefix, duration_sec, tok_number,
+            duration_sec / tok_number,
+            tok_number / duration_sec * 1000);
+}
+
+static void show_stat(Args &args, chatllm::Pipeline &pipeline, chatllm::BaseStreamer &streamer)
+{
+    streamer.putln("");
+
+    chatllm::ModelPerfInfo *perf = &pipeline.performance;
+    char str[1024];
+    print_timing(str, "timings: prompt eval time", perf->timings[chatllm::ModelPerfInfo::Type::Prompt].tok_count, perf->timings[chatllm::ModelPerfInfo::Type::Prompt].duration_ms);
+    streamer.putln(str);
+
+    print_timing(str, "timings:        eval time", perf->timings[chatllm::ModelPerfInfo::Type::Generation].tok_count, perf->timings[chatllm::ModelPerfInfo::Type::Generation].duration_ms);
+    streamer.putln(str);
+
+    sprintf(str,      "timings:       total time = %12.2f ms / %5zd tokens",
+        (perf->timings[chatllm::ModelPerfInfo::Type::Generation].duration_ms + perf->timings[chatllm::ModelPerfInfo::Type::Prompt].duration_ms),
+        perf->timings[chatllm::ModelPerfInfo::Type::Generation].tok_count    + perf->timings[chatllm::ModelPerfInfo::Type::Prompt].tok_count);
+    streamer.putln(str);
+}
+
 static void run_file(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
     std::vector<std::string> history;
@@ -417,6 +442,8 @@ static void run_file(Args &args, chatllm::Pipeline &pipeline, TextStreamer &stre
 
     f.close();
     streamer.cout << std::endl << pipeline.model->get_n_past() << " tokens are processed/generated. Bye" << std::endl;
+
+    show_stat(args, pipeline, streamer);
 }
 
 static void show_banner(chatllm::Pipeline &pipeline, bool show, chatllm::BaseStreamer *streamer)
@@ -590,6 +617,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
     {
         history.push_back(args.prompt);
         pipeline.chat(history, gen_config, &streamer);
+        show_stat(args, pipeline, streamer);
         return;
     }
 

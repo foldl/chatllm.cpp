@@ -563,14 +563,14 @@ namespace chatllm
 
         input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous);
 
-        std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, streamer);
+        std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, streamer, &performance);
         if (!completed)
         {
             if (continuous)
             {
                 streamer->putln("\nRUN OUT OF CONTEXT. Let me forget something and try again ...\n");
                 input_ids = tokenizer->encode_history(history, gen_config.max_context_length);
-                output_ids = model->generate(input_ids, gen_config, false, completed, streamer);
+                output_ids = model->generate(input_ids, gen_config, false, completed, streamer, &performance);
             }
             else
                 streamer->putln("\nRUN OUT OF CONTEXT. I have to stop now.\n");
@@ -594,7 +594,7 @@ namespace chatllm
         else;
 
         std::vector<int> input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous);
-        std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, streamer);
+        std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, streamer, &performance);
 
         while (!completed)
         {
@@ -605,7 +605,7 @@ namespace chatllm
             else
                 input_ids.clear();
 
-            auto ids = model->generate(input_ids, gen_config, true, completed, streamer);
+            auto ids = model->generate(input_ids, gen_config, true, completed, streamer, &performance);
             output_ids.insert(output_ids.end(), ids.begin(), ids.end());
         }
 
@@ -765,7 +765,7 @@ namespace chatllm
         bool completed = false;
 
         std::vector<int> input_ids = tokenizer->encode_history(history, gen_config.max_context_length, false);
-        std::vector<int> output_ids = rewrite_model->generate(input_ids, gen_config, false, completed, nullptr);
+        std::vector<int> output_ids = rewrite_model->generate(input_ids, gen_config, false, completed, nullptr, &performance);
 
         if (!completed) return "";
 
@@ -1058,6 +1058,29 @@ final:
         if (s.size() < 1) return;
         context_sep = s;
         unescape_c_sequences(context_sep);
+    }
+
+    ModelPerfInfo::ModelPerfInfo()
+    {
+        memset(&timings, 0, sizeof(timings));
+    }
+
+    void ModelPerfInfo::Accumulate(Type type, size_t tok_count)
+    {
+        timings[type].tok_count += tok_count;
+        timings[type].duration_ms += Elapsed();
+    }
+
+    void ModelPerfInfo::Reset(void)
+    {
+        m_beg = Clock::now();
+    }
+
+    double ModelPerfInfo::Elapsed(void)
+    {
+        double r = std::chrono::duration_cast<MilliSecond>(Clock::now() - m_beg).count();
+        Reset();
+        return r;
     }
 
 } // namespace chatllm
