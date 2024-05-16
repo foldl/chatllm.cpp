@@ -876,7 +876,7 @@ namespace chatllm
         {
             for (auto &layer : layers)
                 layer.set_ctx(n_ctx);
-        };
+        }
 
         void shift_cache(int shift, int total) override
         {
@@ -956,7 +956,7 @@ namespace chatllm
         {
             for (auto &layer : layers)
                 layer.set_ctx(n_ctx);
-        };
+        }
 
         void shift_cache(int shift, int total) override
         {

@@ -170,10 +170,11 @@ ifdef CHATLLM_DISABLE_LOGS
 endif # CHATLLM_DISABLE_LOGS
 
 # warnings
-WARN_FLAGS    = -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-unused-parameter
-MK_CFLAGS    += $(WARN_FLAGS) -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int \
+WARN_FLAGS    = -Wall -Wextra -Wpedantic -Wno-unused-function -Wno-unused-parameter -Wno-missing-declarations -Wno-empty-body \
+               -Wno-calloc-transposed-args
+MK_CFLAGS    += $(WARN_FLAGS) -Wshadow -Wpointer-arith -Werror=implicit-int \
 				-Werror=implicit-function-declaration
-MK_CXXFLAGS  += $(WARN_FLAGS) -Wmissing-declarations -Wmissing-noreturn
+MK_CXXFLAGS  += $(WARN_FLAGS) -Wmissing-noreturn -Wno-overloaded-virtual
 
 ifeq ($(CHATLLM_FATAL_WARNINGS),1)
 	MK_CFLAGS   += -Werror

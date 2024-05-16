@@ -11,6 +11,7 @@
 
 namespace chatllm
 {
+    [[ noreturn ]]
     void inspect_tensor(ggml_tensor *tensor, const char *msg,
         ggml_tensor *temp1 = nullptr, ggml_tensor *temp2 = nullptr, ggml_tensor *temp3 = nullptr, ggml_tensor *temp4 = nullptr, ggml_tensor *temp5 = nullptr);
 
@@ -309,7 +310,7 @@ namespace chatllm
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
 
-        void set_ctx(int n_ctx) override { this->n_ctx = n_ctx; };
+        void set_ctx(int n_ctx) override { this->n_ctx = n_ctx; }
         void shift_cache(int shift, int total) override
         {
             shift_pending = ShiftPending(shift, total);
@@ -349,7 +350,7 @@ namespace chatllm
         using Block::forward;
         virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
 
-        void set_ctx(int n_ctx) override { attention.set_ctx(n_ctx); };
+        void set_ctx(int n_ctx) override { attention.set_ctx(n_ctx); }
 
         int64_t get_param_num(bool effective_only) const override
         {
@@ -751,8 +752,8 @@ namespace chatllm
 
     protected:
         // input & output: [qlen, heads, head_size]
-        virtual ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const { return k; };
-        virtual ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const { return q; };
+        virtual ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const { return k; }
+        virtual ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const { return q; }
 
         //
         virtual ggml_tensor *apply_pos_embedding_kq(ForwardContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const { return kq; }

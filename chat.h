@@ -113,9 +113,9 @@ namespace chatllm
     class BaseHistoryEncoder
     {
     public:
-        BaseHistoryEncoder() : tokenizer(nullptr) {};
+        BaseHistoryEncoder() : tokenizer(nullptr) {}
 
-        virtual void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const {};
+        virtual void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const {}
         virtual void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
         {
             tokenizer->encode(user, ids);
@@ -339,7 +339,7 @@ namespace chatllm
         {
             std::vector<int> r;
             return r;
-        };
+        }
 
         virtual void abort_generation(void)
         {

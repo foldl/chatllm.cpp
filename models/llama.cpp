@@ -102,7 +102,7 @@ If a question does not make any sense, or is not factually coherent, explain why
         ConditionalGeneration() = default;
         ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_LLAMA2)
             : ConditionalGeneration(config, type, config.num_attention_heads, config.max_length)
-        {};
+        {}
 
         ConditionalGeneration(const Config &config, ModelType type,
                             int num_key_value_heads, int max_length)
@@ -276,7 +276,7 @@ namespace v3
         ConditionalGeneration() = default;
         ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_LLAMA3)
             : ConditionalGeneration(config, type, config.num_key_value_heads, config.max_length)
-        {};
+        {}
 
         ConditionalGeneration(const Config &config, ModelType type,
                             int num_key_value_heads, int max_length)

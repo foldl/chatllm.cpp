@@ -493,7 +493,7 @@ namespace chatllm
         {
             constexpr int64_t MEM_ALIGNED = 16;
             const int64_t data_offset = (tell() + (MEM_ALIGNED - 1)) & ~(MEM_ALIGNED - 1);
-            tensor->data = const_cast<char *const>(data) + data_offset;
+            tensor->data = const_cast<char *>(data) + data_offset;
             seek(data_offset + ggml_nbytes(tensor), SEEK_SET);
         }
     }

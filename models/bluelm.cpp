@@ -39,7 +39,7 @@ public:
     ConditionalGeneration() = default;
     ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_BLUELM)
         : ConditionalGeneration(config, type, config.num_attention_heads, config.max_length)
-    {};
+    {}
 
     ConditionalGeneration(const Config &config, ModelType type,
                           int num_key_value_heads, int max_length)

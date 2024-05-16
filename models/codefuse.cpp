@@ -33,7 +33,7 @@ namespace deepseek
         ConditionalGeneration() = default;
         ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_CODEFUSE_DEEPSEEK)
             : ConditionalGeneration(config, type, config.num_key_value_heads, config.max_length)
-        {};
+        {}
 
         ConditionalGeneration(const Config &config, ModelType type,
                             int num_key_value_heads, int max_length)

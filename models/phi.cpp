@@ -457,7 +457,7 @@ namespace v3
         ConditionalGeneration() = default;
         ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_PHI3)
             : ConditionalGeneration(config, type, config.num_key_value_heads, config.max_length)
-        {};
+        {}
 
         ConditionalGeneration(const Config &config, ModelType type,
                             int num_key_value_heads, int max_length)
@@ -523,7 +523,7 @@ namespace v3_su
         ConditionalGeneration() = default;
         ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_PHI3_SU)
             : ConditionalGeneration(config, type, config.num_key_value_heads, config.max_length)
-        {};
+        {}
 
         ConditionalGeneration(const Config &config, ModelType type,
                             int num_key_value_heads, int max_length)

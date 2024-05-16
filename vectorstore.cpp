@@ -266,6 +266,7 @@ void CVectorStore::ExportDB(const char *fn)
 
     file_header header =
     {
+        .magic = 0,
         .emb_len = (size_t)emb_len,
         .size = GetSize(),
     };
