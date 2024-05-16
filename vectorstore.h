@@ -4,6 +4,7 @@
 #include <string>
 #include <functional>
 #include <algorithm>
+#include <cstdint>
 
 typedef std::vector<float> text_vector;
 
