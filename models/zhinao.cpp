@@ -38,6 +38,8 @@ public:
         tp->Encode("\n", &ids);
         nl_token_id = ids[0];
 
+        terminate_ids.insert(im_end_token_id);
+
         return r;
     }
 };
