@@ -402,7 +402,7 @@ static void print_timing(char *str, const char *prefix, size_t tok_number, doubl
             tok_number / duration_sec * 1000);
 }
 
-static void show_stat(Args &args, chatllm::Pipeline &pipeline, chatllm::BaseStreamer &streamer)
+static void show_stat(chatllm::Pipeline &pipeline, chatllm::BaseStreamer &streamer)
 {
     streamer.putln("");
 
@@ -443,7 +443,7 @@ static void run_file(Args &args, chatllm::Pipeline &pipeline, TextStreamer &stre
     f.close();
     streamer.cout << std::endl << pipeline.model->get_n_past() << " tokens are processed/generated. Bye" << std::endl;
 
-    show_stat(args, pipeline, streamer);
+    show_stat(pipeline, streamer);
 }
 
 static void show_banner(chatllm::Pipeline &pipeline, bool show, chatllm::BaseStreamer *streamer)
@@ -617,7 +617,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
     {
         history.push_back(args.prompt);
         pipeline.chat(history, gen_config, &streamer);
-        show_stat(args, pipeline, streamer);
+        show_stat(pipeline, streamer);
         return;
     }
 
@@ -1096,6 +1096,18 @@ void chatllm_abort_generation(struct chatllm_obj *obj)
     Chat *chat = reinterpret_cast<Chat *>(obj);
     if (chat->pipeline)
         chat->pipeline->abort_generation();
+}
+
+void chatllm_set_gen_max_tokens(struct chatllm_obj *obj, int gen_max_tokens)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    chat->pipeline->gen_max_tokens = gen_max_tokens;
+}
+
+void chatllm_show_statistics(struct chatllm_obj *obj)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    show_stat(*(chat->pipeline), *(chat->streamer));
 }
 
 #endif

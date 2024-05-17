@@ -201,6 +201,8 @@ class HttpHandler(BaseHTTPRequestHandler):
 
         model = obj['model'] if 'model' in obj else 'chat'
 
+        max_tokens = obj['max_tokens'] if 'max_tokens' in obj else -1
+
         if self.path.endswith('/completions'):
             pass
         elif self.path.endswith('/generate'):
@@ -242,6 +244,8 @@ class HttpHandler(BaseHTTPRequestHandler):
 
         responder = responder_cls(self, id, timestamp, model)
         streamer = get_streamer(model)
+        streamer.set_max_gen_tokens(max_tokens)
+
         if streamer is not None:
             try:
                 if restart: streamer.restart()
@@ -258,18 +262,25 @@ class HttpHandler(BaseHTTPRequestHandler):
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, handler)
 
+    ARG_SEP = '---'
+
     args = sys.argv[1:]
     if len(args) < 1:
-        print("usage: python openai_api.py path/to/chat/model path/to/fim/model ...additional-args")
+        print(f"usage: python openai_api.py path/to/chat/model path/to/fim/model [more args for chat model {ARG_SEP} more args for fim model]")
         exit(-1)
 
-    additional_args = args[2:]
+    chat_args = args[2:]
+    fim_args = []
+    if ARG_SEP in chat_args:
+        i = chat_args.index(ARG_SEP)
+        fim_args = chat_args[i + 1:]
+        chat_args = chat_args[:i]
 
     basic_args = ['-i', '-m']
-    chat_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(), basic_args + [args[0]] + additional_args, False))
+    chat_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(), basic_args + [args[0]] + chat_args, False))
 
     if len(args) >= 2:
-        fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(), basic_args + [args[1], '--format', 'completion'] + additional_args, False))
+        fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(), basic_args + [args[1], '--format', 'completion'] + fim_args, False))
         fim_streamer.auto_restart = True
 
     http_server = HTTPServer(('0.0.0.0', 3000), HttpHandler)

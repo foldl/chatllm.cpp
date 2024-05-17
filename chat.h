@@ -334,8 +334,9 @@ namespace chatllm
         virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,
                                             bool &completed,
-                                            BaseStreamer *streamer = nullptr,
-                                            ModelPerfInfo *performance = nullptr)
+                                            ModelPerfInfo *performance,
+                                            int gen_max_tokens,
+                                            BaseStreamer *streamer = nullptr)
         {
             std::vector<int> r;
             return r;
@@ -481,6 +482,7 @@ namespace chatllm
         BaseTokenizer *tokenizer;
         BaseModel *model;
         ModelPerfInfo performance;
+        int gen_max_tokens;
 
     protected:
         bool initializing;

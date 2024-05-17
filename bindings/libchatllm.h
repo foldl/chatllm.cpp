@@ -64,6 +64,9 @@ DLL_DECL void API_CALL chatllm_append_param(struct chatllm_obj *obj, const char 
 // Start
 DLL_DECL int API_CALL chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_end f_end, void *user_data);
 
+// Max number of generated tokens in a new round of conversation (-1 for as many as possible)
+DLL_DECL void API_CALL chatllm_set_gen_max_tokens(struct chatllm_obj *obj, int gen_max_tokens);
+
 // Restart (i.e. discard history)
 DLL_DECL void API_CALL chatllm_restart(struct chatllm_obj *obj);
 
@@ -72,6 +75,9 @@ DLL_DECL int API_CALL chatllm_user_input(struct chatllm_obj *obj, const char *ut
 
 // Abort generation
 DLL_DECL void API_CALL chatllm_abort_generation(struct chatllm_obj *obj);
+
+// Show timing statistics
+DLL_DECL void API_CALL chatllm_show_statistics(struct chatllm_obj *obj);
 
 #ifdef __cplusplus
 }

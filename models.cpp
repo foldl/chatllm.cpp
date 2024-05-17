@@ -619,8 +619,9 @@ namespace chatllm
         std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                   const bool continuous,
                                   bool &completed,
-                                  BaseStreamer *streamer = nullptr,
-                                  ModelPerfInfo *performance = nullptr)
+                                  ModelPerfInfo *performance,
+                                  int gen_max_tokens,
+                                  BaseStreamer *streamer = nullptr)
         {
             CHATLLM_CHECK(gen_config.max_length <= config_.max_length)
                 << "requested max_length (" << gen_config.max_length << ") is larger than model's max_length ("
@@ -634,18 +635,20 @@ namespace chatllm
 
             std::vector<int> output_ids;
             output_ids.reserve(gen_config.max_length);
-            output_ids = input_ids;
 
             if (!continuous) n_past = 0;
             completed = false;
 
             transformer.set_ctx((int)input_ids.size());
-            int next_output_idx = (int)input_ids.size();
+            int next_output_idx = 0;
+
+            if (gen_max_tokens > 0)
+                gen_max_tokens = n_past + (int)curr_input_ids.size() + gen_max_tokens;
+
+            bool first_call = true;
 
             if (performance)
                 performance->Reset();
-
-            bool first_call = true;
 
             while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
             {
@@ -693,6 +696,12 @@ namespace chatllm
                         keep_idx = (int)output_ids.size();
                     for (; next_output_idx < keep_idx; next_output_idx++)
                         streamer->put({output_ids[next_output_idx]});
+                }
+
+                if ((gen_max_tokens > 0) && ((n_past + (int)curr_input_ids.size() >= gen_max_tokens)))
+                {
+                    aborted = true;
+                    break;
                 }
             }
 

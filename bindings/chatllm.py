@@ -44,6 +44,8 @@ class LibChatLLM:
         self._chatllm_user_input = self._lib.chatllm_user_input
         self._chatllm_abort_generation = self._lib.chatllm_abort_generation
         self._chatllm_restart = self._lib.chatllm_restart
+        self._chatllm_set_gen_max_tokens = self._lib.chatllm_set_gen_max_tokens
+        self._chatllm_show_statistics = self._lib.chatllm_show_statistics
 
         self._chatllm_create.restype = c_void_p
         self._chatllm_create.argtypes = []
@@ -62,6 +64,12 @@ class LibChatLLM:
 
         self._chatllm_restart.restype = None
         self._chatllm_restart.argtypes = [c_void_p]
+
+        self._chatllm_set_gen_max_tokens.restype = None
+        self._chatllm_set_gen_max_tokens.argtypes = [c_void_p, c_int]
+
+        self._chatllm_show_statistics.restype = None
+        self._chatllm_show_statistics.argtypes = [c_void_p]
 
         self._cb_print = self._PRINTFUNC(LibChatLLM.callback_print)
         self._cb_end = self._ENDFUNC(LibChatLLM.callback_end)
@@ -115,6 +123,12 @@ class LibChatLLM:
     def restart(self, obj: c_void_p) -> None:
         self._chatllm_restart(obj)
 
+    def set_max_gen_tokens(self, obj: c_void_p, max_gen: int) -> None:
+        self._chatllm_set_gen_max_tokens(obj, max_gen)
+
+    def show_statistics(self, obj: c_void_p) -> None:
+        self._chatllm_show_statistics(obj)
+
 class LLMChatDone:
     def __init__(self, id: Any) -> None:
         self.id = id
@@ -161,6 +175,12 @@ class ChatLLM:
 
     def restart(self) -> None:
         self._lib.restart(self._chat)
+
+    def set_max_gen_tokens(self, max_gen: int) -> None:
+        self._lib.set_max_gen_tokens(self._chat, max_gen)
+
+    def show_statistics(self) -> None:
+        self._lib.show_statistics(self._chat)
 
     def callback_print_reference(self, s: str) -> None:
         self.references.append(s)
@@ -236,6 +256,12 @@ class ChatLLMStreamer:
     def restart(self) -> None:
         self.llm.restart()
 
+    def set_max_gen_tokens(self, max_gen: int) -> None:
+        self.llm.set_max_gen_tokens(max_gen)
+
+    def show_statistics(self) -> None:
+        self.llm.show_statistics()
+
     def get_acc_resp(self) -> str:
         return self.acc
 
@@ -249,6 +275,7 @@ def handler(signal_received, frame):
         print('\naborting...')
         llm.abort()
     else:
+        llm.show_statistics()
         sys.exit(0)
 
 def demo_streamer():
