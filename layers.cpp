@@ -374,6 +374,37 @@ namespace chatllm
         return output;
     }
 
+    ggml_tensor *CoreAttention::calc_attn_scores(ForwardContext *ctx, int hidden_size, const int n_past, const int qlen,
+        ggml_tensor *key_layer, ggml_tensor *query_layer, ggml_tensor *value_layer)
+    {
+        const int head_size = hidden_size / num_attention_heads;
+
+        // note auto-broadcasting in ggml_mul_mat for `repeat > 1`
+        ggml_tensor *attn_scores = ggml_mul_mat(ctx->gctx.get(), key_layer, query_layer); // [heads, qlen, klen]
+
+        ggml_mul_mat_set_prec(attn_scores, prec);
+
+        if (attn_scaling)
+            attn_scores = ggml_scale_inplace(ctx->gctx.get(), attn_scores, 1.f / sqrtf((float)head_size));
+
+        attn_scores = apply_pos_embedding_kq(ctx, attn_scores, hidden_size, qlen, pos);
+
+        // attn_masked = mask_past(attn_scores)
+        struct ggml_tensor * attn_masked = causal ? ggml_diag_mask_inf_inplace(ctx->gctx.get(), attn_scores, n_past)
+                                                  : attn_scores;
+
+        // attn_probs = soft_max(attn_masked)
+        struct ggml_tensor * attn_probs = ggml_soft_max_inplace(ctx->gctx.get(), attn_masked);
+
+        ggml_tensor *context_layer = ggml_mul_mat(ctx->gctx.get(), value_layer, attn_probs); // [heads, qlen, head_size]
+        context_layer = ggml_reshape_2d(
+            ctx->gctx.get(),
+            ggml_cont(ctx->gctx.get(), ggml_permute(ctx->gctx.get(), context_layer, 0, 2, 1, 3)),
+            hidden_size, qlen);
+
+        return context_layer;
+    }
+
     void BaseAttention::before_forward(ForwardContext *ctx, const int kv_hidden_size, const int n_past, const int qlen)
     {
         fill_pos_vector(pos, n_past, qlen);
@@ -420,37 +451,6 @@ namespace chatllm
         // important: storing RoPE-ed version of K in the KV cache!
         ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_view, k_cache_view));
         ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), Vcur, v_cache_view));
-    }
-
-    ggml_tensor *BaseAttention::calc_attn_scores(ForwardContext *ctx, int hidden_size, const int n_past, const int qlen,
-        ggml_tensor *key_layer, ggml_tensor *query_layer, ggml_tensor *value_layer)
-    {
-        const int head_size = hidden_size / num_attention_heads;
-
-        // note auto-broadcasting in ggml_mul_mat for `repeat > 1`
-        ggml_tensor *attn_scores = ggml_mul_mat(ctx->gctx.get(), key_layer, query_layer); // [heads, qlen, klen]
-
-        ggml_mul_mat_set_prec(attn_scores, prec);
-
-        if (attn_scaling)
-            attn_scores = ggml_scale_inplace(ctx->gctx.get(), attn_scores, 1.f / sqrtf((float)head_size));
-
-        attn_scores = apply_pos_embedding_kq(ctx, attn_scores, hidden_size, qlen, pos);
-
-        // attn_masked = mask_past(attn_scores)
-        struct ggml_tensor * attn_masked = causal ? ggml_diag_mask_inf_inplace(ctx->gctx.get(), attn_scores, n_past)
-                                                  : attn_scores;
-
-        // attn_probs = soft_max(attn_masked)
-        struct ggml_tensor * attn_probs = ggml_soft_max_inplace(ctx->gctx.get(), attn_masked);
-
-        ggml_tensor *context_layer = ggml_mul_mat(ctx->gctx.get(), value_layer, attn_probs); // [heads, qlen, head_size]
-        context_layer = ggml_reshape_2d(
-            ctx->gctx.get(),
-            ggml_cont(ctx->gctx.get(), ggml_permute(ctx->gctx.get(), context_layer, 0, 2, 1, 3)),
-            hidden_size, qlen);
-
-        return context_layer;
     }
 
     ggml_tensor *BaseAttention::cross_attention(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,

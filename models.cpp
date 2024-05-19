@@ -101,6 +101,7 @@ namespace chatllm
         MODEL_TYPE_DEEPSEEK = 0x300,
         MODEL_TYPE_DEEPSEEK_CODER   = 0x301,
         MODEL_TYPE_CODEFUSE_DEEPSEEK = 0x302,
+        MODEL_TYPE_DEEPSEEK_V2       = 0x320,
 
         MODEL_TYPE_YI       = 0x400,
 
@@ -216,6 +217,8 @@ namespace chatllm
             return "DeepSeek-Coder";
         case MODEL_TYPE_CODEFUSE_DEEPSEEK:
             return "CodeFuse-DeepSeek";
+        case MODEL_TYPE_DEEPSEEK_V2:
+            return "DeepSeek-V2";
         case MODEL_TYPE_YI:
             return "Yi";
         case MODEL_TYPE_PHI2:
@@ -847,15 +850,16 @@ namespace chatllm
         return oss.str();
     }
 
-    template <class Config, class Embedding, class FinalNorm, class LayerBlock, typename... _Types> class Model : public Block
+    template <class Config, class Embedding, class FinalNorm> class HeterogeneousModel : public Block
     {
     public:
-        Model() = default;
-        Model(InitContext *ctx, const Config &config, bool lm_head_bias, _Types... layer_args)
-            : Model(ctx, config, new Linear(ctx, config.hidden_size, config.vocab_size, lm_head_bias), std::forward<_Types>(layer_args)...)
+        HeterogeneousModel() = default;
+
+        HeterogeneousModel(InitContext *ctx, const Config &config, bool lm_head_bias, std::function<Block *(InitContext *, int)> create_layer)
+                : HeterogeneousModel(ctx, config, new Linear(ctx, config.hidden_size, config.vocab_size, lm_head_bias), create_layer)
         {}
 
-        Model(InitContext *ctx, const Config &config, Block *lm_head, _Types... layer_args)
+        HeterogeneousModel(InitContext *ctx, const Config &config, Block *lm_head, std::function<Block *(InitContext *, int)> create_layer)
         : config(config),
           word_embeddings(ctx, config.vocab_size, config.hidden_size),
           final_layernorm(ctx, config.hidden_size),
@@ -864,8 +868,8 @@ namespace chatllm
             layers.reserve(config.num_hidden_layers);
             for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
             {
-                layers.emplace_back(ctx, std::forward<_Types>(layer_args)...);
-                layers[layer_id].set_id(layer_id);
+                layers.emplace_back(create_layer(ctx, layer_id));
+                layers[layer_id]->set_id(layer_id);
             }
         }
 
@@ -875,7 +879,7 @@ namespace chatllm
             for (auto &layer : layers)
             {
                 ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
-                hidden_states = layer.forward(ctx, hidden_states, n_past);
+                hidden_states = layer->forward(ctx, hidden_states, n_past);
             }
 
             return final_steps(ctx, input_ids, hidden_states);
@@ -884,21 +888,21 @@ namespace chatllm
         void set_ctx(int n_ctx) override
         {
             for (auto &layer : layers)
-                layer.set_ctx(n_ctx);
+                layer->set_ctx(n_ctx);
         }
 
         void shift_cache(int shift, int total) override
         {
             for (auto &layer : layers)
-                layer.shift_cache(shift, total);
+                layer->shift_cache(shift, total);
         }
 
         int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
             r += word_embeddings.get_param_num(effective_only);
-            if (layers.size() > 0)
-                r += layers[0].get_param_num(effective_only) * layers.size();
+            for (auto &layer : layers)
+                r += layer->get_param_num(effective_only);
             r += final_layernorm.get_param_num(effective_only);
             if (lm_head)
                 r += lm_head->get_param_num(effective_only);
@@ -924,12 +928,72 @@ namespace chatllm
                                              : word_embeddings.forward(ctx, transformer_outputs);
             return lm_logits;
         }
+
+        Block *get_layer(int index)
+        {
+            return layers[index];
+        }
     public:
         Config config;
         Embedding word_embeddings;
-        std::vector<LayerBlock> layers;
         FinalNorm final_layernorm;
         Block *lm_head;
+    protected:
+        // std::vector<std::unique_ptr<Block>> layers;
+        std::vector<Block *> layers;
+    };
+
+    template <class Config, class Embedding, class FinalNorm, class LayerBlock, typename... _Types> class Model :
+        public HeterogeneousModel<Config, Embedding, FinalNorm>
+    {
+    private:
+        typedef HeterogeneousModel<Config, Embedding, FinalNorm> Base;
+    protected:
+        class Accessor
+        {
+        friend Model;
+        protected:
+            Accessor() : m(nullptr) {}
+        public:
+            LayerBlock & operator[](int index)
+            {
+                if (nullptr == m)
+                {
+                    uintptr_t offset = (uintptr_t)&(((Model *)(nullptr))->layers);
+                    m = (Model *)(uintptr_t(this) - offset);
+                }
+                return *(dynamic_cast<LayerBlock *>((m->Base::layers)[index])); // .get()));
+            }
+        private:
+            Model *m;
+        };
+    public:
+        Model() = default;
+        Model(InitContext *ctx, const Config &config, bool lm_head_bias, _Types... layer_args)
+            : Model(ctx, config, new Linear(ctx, config.hidden_size, config.vocab_size, lm_head_bias), std::forward<_Types>(layer_args)...)
+        {}
+
+        Model(InitContext *ctx, const Config &config, Block *lm_head, _Types... layer_args)
+        : HeterogeneousModel<Config, Embedding, FinalNorm>(ctx, config, lm_head,
+                            [&](InitContext *ctx, int layer_index) {
+                                return new LayerBlock(ctx, std::forward<_Types>(layer_args)...);
+                            })
+        {
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += Base::word_embeddings.get_param_num(effective_only);
+            if (Base::layers.size() > 0)
+                r += Base::layers[0]->get_param_num(effective_only) * Base::layers.size();
+            r += Base::final_layernorm.get_param_num(effective_only);
+            if (Base::lm_head)
+                r += Base::lm_head->get_param_num(effective_only);
+            return r;
+        }
+    public:
+        Accessor layers;
     };
 
     template <class Config, class Embedding, class LayerBlock, class FinalBlock, typename... _Types> class EmbeddingModel : public Block
@@ -1383,7 +1447,7 @@ namespace chatllm
         CASE(LLAMA3,                llama::v3, 1)               \
         CASE(CODELLAMA,             codellama, 1)               \
                                                                 \
-        CASE(DEEPSEEK,              deepseek, 1)                \
+        CASE(DEEPSEEK,              deepseek::v1, 1)            \
         CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \
         CASE(CODEFUSE_DEEPSEEK,     codefuse::deepseek, 1)      \
                                                                 \
