@@ -27,8 +27,8 @@ namespace chatllm
 
     void print_tensor(ggml_tensor *tensor, int offset = 0)
     {
-        printf("\n%s: [%zd, %zd, %zd] [%zd, %zd, %zd]\n", tensor->name, tensor->ne[0], tensor->ne[1], tensor->ne[2],
-                                                                        tensor->nb[0], tensor->nb[1], tensor->nb[2]);
+        printf("\n%s (%p): [%zd, %zd, %zd] [%zd, %zd, %zd]\n", tensor->name, tensor->data, tensor->ne[0], tensor->ne[1], tensor->ne[2],
+                                                                             tensor->nb[0], tensor->nb[1], tensor->nb[2]);
         switch (tensor->type)
         {
         case GGML_TYPE_F32:
@@ -582,6 +582,7 @@ namespace chatllm
     public:
         BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, size_t mem_size, size_t scratch_size)
             : BaseModel(model_type, to_string(model_type), to_native_string(model_type), get_model_purpose(model_type)),
+              transformer(nullptr),
               GRAPH_SIZE(GGML_DEFAULT_GRAPH_SIZE),
               batch_input(true), logit_scale(-1.0f),
               config_(config), mem_size_(mem_size), mem_buffer_(new char[mem_size]),
@@ -610,13 +611,13 @@ namespace chatllm
         {
             if (keep >= n_past) return;
 
-            transformer.shift_cache(n_past - keep, n_past);
+            transformer->shift_cache(n_past - keep, n_past);
             BaseModel::shift_memory(keep);
         }
 
         int64_t get_param_num(bool effective_only) const override
         {
-            return transformer.get_param_num(effective_only);
+            return transformer->get_param_num(effective_only);
         }
 
         std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
@@ -642,7 +643,7 @@ namespace chatllm
             if (!continuous) n_past = 0;
             completed = false;
 
-            transformer.set_ctx((int)input_ids.size());
+            transformer->set_ctx((int)input_ids.size());
             int next_output_idx = 0;
 
             if (gen_max_tokens > 0)
@@ -772,7 +773,7 @@ namespace chatllm
             ggml_tensor *input_ids_tensor = ggml_new_tensor_1d(ctx.gctx.get(), GGML_TYPE_I32, input_ids.size());
             memcpy(input_ids_tensor->data, input_ids.data(), ggml_nbytes(input_ids_tensor));
 
-            ggml_tensor *r = transformer.forward(&ctx, input_ids_tensor, past);
+            ggml_tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
 
             if (logit_scale > 0)
                 r = ggml_scale_inplace(ctx.gctx.get(), r, logit_scale);
@@ -823,7 +824,7 @@ namespace chatllm
         }
 
     protected:
-        LM transformer;
+        LM *transformer;
         size_t GRAPH_SIZE;
         bool batch_input;
         float logit_scale;
@@ -909,6 +910,11 @@ namespace chatllm
             return r;
         }
 
+        Block *get_layer(int index)
+        {
+            return layers[index];
+        }
+
     protected:
         ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
@@ -927,11 +933,6 @@ namespace chatllm
             ggml_tensor *lm_logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
                                              : word_embeddings.forward(ctx, transformer_outputs);
             return lm_logits;
-        }
-
-        Block *get_layer(int index)
-        {
-            return layers[index];
         }
     public:
         Config config;
@@ -1450,6 +1451,7 @@ namespace chatllm
         CASE(DEEPSEEK,              deepseek::v1, 1)            \
         CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \
         CASE(CODEFUSE_DEEPSEEK,     codefuse::deepseek, 1)      \
+        CASE(DEEPSEEK_V2,           deepseek::v2_light, 1)      \
                                                                 \
         CASE(BAICHUANLLAMA,         baichuan::_7b, 1)           \
         CASE(BAICHUAN,              baichuan::larger, 1)        \

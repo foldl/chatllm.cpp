@@ -95,11 +95,6 @@
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
 
-* Stable-LM (`StableLMEpochModel`)
-    * [x] [Code-3B](https://huggingface.co/stabilityai/stable-code-3b)
-
-        Note: This model is an autocompletion model, not a chat/instruction model, so please use `--format completion`.
-
 * Orion (`OrionForCausalLM`)
     * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
 
@@ -123,7 +118,16 @@
 * Zhinao (`ZhinaoForCausalLM`)
     * [x] [Chat-7B-4K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-4K), [Chat-7B-32K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-32K), [Chat-7B-360K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-360K)
 
+* DeepSeek (`DeepseekV2ForCausalLM`)
+    * [x] [V2-Lite-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite-Chat)
+
+    Note: To run this model on CPU, some _customization_ on `ggml` is needed:
+    - Update `GGML_MAX_SRC` (see above)
+    - Fix this [issue](https://github.com/ggerganov/ggml/issues/835)
+
 ## Base Models
+
+Please use `--format completion` for these models.
 
 * LlaMA-like (`LlamaForCausalLM`):
     * [x] DeepSeek: [Coder-Base-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-base) (`-a DeepSeekCoder`), [Coder-Base-6.7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-base) (`-a DeepSeekCoder`)
@@ -141,6 +145,9 @@
 
 * StarCoder (`Starcoder2ForCausalLM`)
     * [x] [Base-3B](https://huggingface.co/bigcode/starcoder2-7b), [Base-7B](https://huggingface.co/bigcode/starcoder2-7b), [Base-15B](https://huggingface.co/bigcode/starcoder2-15b)
+
+* Stable-LM (`StableLMEpochModel`)
+    * [x] [Code-3B](https://huggingface.co/stabilityai/stable-code-3b)
 
 ## RAG Models
 

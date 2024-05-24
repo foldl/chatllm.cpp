@@ -114,42 +114,42 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     const size_t ctx_size = num_tensors * tensor_ovhd;
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;
-    transformer = Model<Config, Embedding, RMSNorm, LlamaBlock, int, int, int, int, int>(&w_ctx_, config, false,
+    transformer = new Model<Config, Embedding, RMSNorm, LlamaBlock, int, int, int, int, int>(&w_ctx_, config, false,
                                                                             config.hidden_size, config.num_attention_heads,
                                                                             config.intermediate_size, config.num_key_value_heads, config.max_length);
 
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
-        auto &attention = transformer.layers[i].attention;
+        auto &attention = transformer->layers[i].attention;
         attention.freq_base = config.rope_theta;
         attention.freq_scale = 1 / config.rope_scaling;
     }
 
-    if (transformer.get_param_num(false) > 20000000)
+    if (transformer->get_param_num(false) > 20000000)
         GRAPH_SIZE = 4096;
 }
 
 void ConditionalGeneration::load(ModelLoader &loader)
 {
-    loader.read_tensor("model.embed_tokens.weight", transformer.word_embeddings.weight);
+    loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
         std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
         loader.read_tensor(layer_prefix + "input_layernorm.weight",
-                           transformer.layers[i].input_layernorm.weight);
-        loader.read_tensor(layer_prefix + "mlp.down_proj.weight", transformer.layers[i].mlp.down_proj.weight);
-        loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer.layers[i].mlp.gate_proj.weight);
-        loader.read_tensor(layer_prefix + "mlp.up_proj.weight", transformer.layers[i].mlp.up_proj.weight);
+                           transformer->layers[i].input_layernorm.weight);
+        loader.read_tensor(layer_prefix + "mlp.down_proj.weight", transformer->layers[i].mlp.down_proj.weight);
+        loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer->layers[i].mlp.gate_proj.weight);
+        loader.read_tensor(layer_prefix + "mlp.up_proj.weight", transformer->layers[i].mlp.up_proj.weight);
         loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",
-                           transformer.layers[i].post_attention_layernorm.weight);
+                           transformer->layers[i].post_attention_layernorm.weight);
 
-        loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer.layers[i].attention.k_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer.layers[i].attention.o_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer.layers[i].attention.q_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer.layers[i].attention.v_proj.weight);
+        loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
+        loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
+        loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
+        loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
     }
-    loader.read_tensor("model.norm.weight", transformer.final_layernorm.weight);
-    loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer.lm_head)->weight);
+    loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+    loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
     CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
         << "corrupted model weights";

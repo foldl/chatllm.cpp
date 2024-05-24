@@ -52,7 +52,7 @@ public:
 
         Base::GRAPH_SIZE = 4096 * 2;
 
-        Base::transformer = Model<Config, Embedding, RMSNorm, MixtralBlock<_NUM_EXPERTS, _EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int>(
+        Base::transformer = new Model<Config, Embedding, RMSNorm, MixtralBlock<_NUM_EXPERTS, _EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int>(
                             &w_ctx_, config, false,
                             config.hidden_size, config.num_attention_heads,
                             config.intermediate_size, config.num_key_value_heads, config.max_length);
@@ -62,7 +62,7 @@ public:
 
     void load(ModelLoader &loader) override
     {
-        loader.read_tensor("model.embed_tokens.weight", Base::transformer.word_embeddings.weight);
+        loader.read_tensor("model.embed_tokens.weight", Base::transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
@@ -70,27 +70,27 @@ public:
             for (int j = 0; j < _NUM_EXPERTS; j++)
             {
                 std::string prefix = layer_prefix + "block_sparse_moe.experts." + std::to_string(j) + '.';
-                loader.read_tensor(prefix + "w1.weight", Base::transformer.layers[i].mlp.experts[j].gate_proj.weight);
-                loader.read_tensor(prefix + "w2.weight", Base::transformer.layers[i].mlp.experts[j].down_proj.weight);
-                loader.read_tensor(prefix + "w3.weight", Base::transformer.layers[i].mlp.experts[j].up_proj.weight);
+                loader.read_tensor(prefix + "w1.weight", Base::transformer->layers[i].mlp.experts[j].gate_proj.weight);
+                loader.read_tensor(prefix + "w2.weight", Base::transformer->layers[i].mlp.experts[j].down_proj.weight);
+                loader.read_tensor(prefix + "w3.weight", Base::transformer->layers[i].mlp.experts[j].up_proj.weight);
             }
 
             loader.read_tensor(layer_prefix + "block_sparse_moe.gate.weight",
-                            Base::transformer.layers[i].mlp.gate.weight);
+                            Base::transformer->layers[i].mlp.gate.weight);
 
             loader.read_tensor(layer_prefix + "input_layernorm.weight",
-                            Base::transformer.layers[i].input_layernorm.weight);
+                            Base::transformer->layers[i].input_layernorm.weight);
 
             loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",
-                            Base::transformer.layers[i].post_attention_layernorm.weight);
+                            Base::transformer->layers[i].post_attention_layernorm.weight);
 
-            loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", Base::transformer.layers[i].attention.k_proj.weight);
-            loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", Base::transformer.layers[i].attention.o_proj.weight);
-            loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", Base::transformer.layers[i].attention.q_proj.weight);
-            loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", Base::transformer.layers[i].attention.v_proj.weight);
+            loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", Base::transformer->layers[i].attention.k_proj.weight);
+            loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", Base::transformer->layers[i].attention.o_proj.weight);
+            loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", Base::transformer->layers[i].attention.q_proj.weight);
+            loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", Base::transformer->layers[i].attention.v_proj.weight);
         }
-        loader.read_tensor("model.norm.weight", Base::transformer.final_layernorm.weight);
-        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(Base::transformer.lm_head)->weight);
+        loader.read_tensor("model.norm.weight", Base::transformer->final_layernorm.weight);
+        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(Base::transformer->lm_head)->weight);
 
         CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
             << "corrupted model weights";

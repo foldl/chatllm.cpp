@@ -156,7 +156,7 @@ namespace v1
         w_ctx_.dtype = config.dtype;
 
         // TODO: support of `use_dynamic_ntk`
-        transformer = Model<Config, Embedding, RMSNorm, QWenBlock, int, int, int, int>(&w_ctx_, config, false,
+        transformer = new Model<Config, Embedding, RMSNorm, QWenBlock, int, int, int, int>(&w_ctx_, config, false,
                                                                                 config.hidden_size, config.num_attention_heads,
                                                                                 config.intermediate_size, config.max_length);
 
@@ -165,7 +165,7 @@ namespace v1
 
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            auto &layer = transformer.layers[i];
+            auto &layer = transformer->layers[i];
             auto att = dynamic_cast<QWenSelfAttention *>(&layer.attention);
             att->config(config.rope_dim, config.rotary_emb_base, config.seq_length,
                         use_dynamic_ntk, use_logn_attn);
@@ -174,28 +174,28 @@ namespace v1
 
     void ConditionalGeneration::load(ModelLoader &loader)
     {
-        loader.read_tensor("transformer.wte.weight", transformer.word_embeddings.weight);
+        loader.read_tensor("transformer.wte.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             std::string layer_prefix = "transformer.h." + std::to_string(layer_ids[i]) + '.';
 
-            loader.read_tensor(layer_prefix + "attn.k_proj.weight", transformer.layers[i].attention.k_proj.weight);
-            loader.read_tensor(layer_prefix + "attn.k_proj.bias",   transformer.layers[i].attention.k_proj.bias);
-            loader.read_tensor(layer_prefix + "attn.q_proj.weight", transformer.layers[i].attention.q_proj.weight);
-            loader.read_tensor(layer_prefix + "attn.q_proj.bias",   transformer.layers[i].attention.q_proj.bias);
-            loader.read_tensor(layer_prefix + "attn.v_proj.weight", transformer.layers[i].attention.v_proj.weight);
-            loader.read_tensor(layer_prefix + "attn.v_proj.bias",   transformer.layers[i].attention.v_proj.bias);
-            loader.read_tensor(layer_prefix + "attn.c_proj.weight", transformer.layers[i].attention.o_proj.weight);
+            loader.read_tensor(layer_prefix + "attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
+            loader.read_tensor(layer_prefix + "attn.k_proj.bias",   transformer->layers[i].attention.k_proj.bias);
+            loader.read_tensor(layer_prefix + "attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
+            loader.read_tensor(layer_prefix + "attn.q_proj.bias",   transformer->layers[i].attention.q_proj.bias);
+            loader.read_tensor(layer_prefix + "attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
+            loader.read_tensor(layer_prefix + "attn.v_proj.bias",   transformer->layers[i].attention.v_proj.bias);
+            loader.read_tensor(layer_prefix + "attn.c_proj.weight", transformer->layers[i].attention.o_proj.weight);
 
-            loader.read_tensor(layer_prefix + "ln_1.weight",        transformer.layers[i].input_layernorm.weight);
-            loader.read_tensor(layer_prefix + "ln_2.weight",        transformer.layers[i].post_attention_layernorm.weight);
+            loader.read_tensor(layer_prefix + "ln_1.weight",        transformer->layers[i].input_layernorm.weight);
+            loader.read_tensor(layer_prefix + "ln_2.weight",        transformer->layers[i].post_attention_layernorm.weight);
 
-            loader.read_tensor(layer_prefix + "mlp.c_proj.weight", transformer.layers[i].mlp.down_proj.weight);
-            loader.read_tensor(layer_prefix + "mlp.w1.weight",   transformer.layers[i].mlp.up_proj.weight);
-            loader.read_tensor(layer_prefix + "mlp.w2.weight", transformer.layers[i].mlp.gate_proj.weight);
+            loader.read_tensor(layer_prefix + "mlp.c_proj.weight", transformer->layers[i].mlp.down_proj.weight);
+            loader.read_tensor(layer_prefix + "mlp.w1.weight",   transformer->layers[i].mlp.up_proj.weight);
+            loader.read_tensor(layer_prefix + "mlp.w2.weight", transformer->layers[i].mlp.gate_proj.weight);
         }
-        loader.read_tensor("transformer.ln_f.weight", transformer.final_layernorm.weight);
-        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer.lm_head)->weight);
+        loader.read_tensor("transformer.ln_f.weight", transformer->final_layernorm.weight);
+        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
         CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
             << "corrupted model weights";
@@ -266,42 +266,42 @@ namespace v2
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        transformer = Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int>(&w_ctx_, config, false,
+        transformer = new Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int>(&w_ctx_, config, false,
                                                                                 config.hidden_size, config.num_attention_heads,
                                                                                 config.intermediate_size, config.num_key_value_heads,
                                                                                 config.max_length);
 
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            auto &layer = transformer.layers[i];
+            auto &layer = transformer->layers[i];
             layer.attention.freq_base = config.rope_theta;
         }
     }
 
     void ConditionalGeneration::load(ModelLoader &loader)
     {
-        loader.read_tensor("model.embed_tokens.weight", transformer.word_embeddings.weight);
+        loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
 
-            loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer.layers[i].attention.k_proj.weight);
-            loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   transformer.layers[i].attention.k_proj.bias);
-            loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer.layers[i].attention.q_proj.weight);
-            loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   transformer.layers[i].attention.q_proj.bias);
-            loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer.layers[i].attention.v_proj.weight);
-            loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer.layers[i].attention.v_proj.bias);
-            loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer.layers[i].attention.o_proj.weight);
+            loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
+            loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   transformer->layers[i].attention.k_proj.bias);
+            loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
+            loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   transformer->layers[i].attention.q_proj.bias);
+            loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
+            loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer->layers[i].attention.v_proj.bias);
+            loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
 
-            loader.read_tensor(layer_prefix + "input_layernorm.weight",          transformer.layers[i].input_layernorm.weight);
-            loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer.layers[i].post_attention_layernorm.weight);
+            loader.read_tensor(layer_prefix + "input_layernorm.weight",          transformer->layers[i].input_layernorm.weight);
+            loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
 
-            loader.read_tensor(layer_prefix + "mlp.down_proj.weight", transformer.layers[i].mlp.down_proj.weight);
-            loader.read_tensor(layer_prefix + "mlp.up_proj.weight",   transformer.layers[i].mlp.up_proj.weight);
-            loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer.layers[i].mlp.gate_proj.weight);
+            loader.read_tensor(layer_prefix + "mlp.down_proj.weight", transformer->layers[i].mlp.down_proj.weight);
+            loader.read_tensor(layer_prefix + "mlp.up_proj.weight",   transformer->layers[i].mlp.up_proj.weight);
+            loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer->layers[i].mlp.gate_proj.weight);
         }
-        loader.read_tensor("model.norm.weight", transformer.final_layernorm.weight);
-        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer.lm_head)->weight);
+        loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
         CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
             << "corrupted model weights";
@@ -368,7 +368,7 @@ namespace v2_moe
             CHATLLM_CHECK((NUM_EXPERTS == config.num_experts) && (EXPERTS_PER_TOK == config.num_experts_per_tok))
                 << "unsupported MoE param";
 
-            transformer = Model<Config, Embedding, RMSNorm, QWen2MoEBlock, int, int, int, int, int, int, int, int>(
+            transformer = new Model<Config, Embedding, RMSNorm, QWen2MoEBlock, int, int, int, int, int, int, int, int>(
                 &w_ctx_, config, false,
                 config.hidden_size, config.num_attention_heads,
                 config.intermediate_size, config.moe_intermediate_size, config.shared_expert_intermediate_size,
@@ -377,7 +377,7 @@ namespace v2_moe
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                auto &layer = transformer.layers[i];
+                auto &layer = transformer->layers[i];
                 layer.attention.freq_base = config.rope_theta;
                 layer.mlp.mlp1.norm_topk_prob = config.norm_topk_prob != 0;
             }
@@ -387,40 +387,40 @@ namespace v2_moe
 
         void load(ModelLoader &loader) override
         {
-            loader.read_tensor("model.embed_tokens.weight", transformer.word_embeddings.weight);
+            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
 
-                loader.read_tensor(layer_prefix + "input_layernorm.weight",          transformer.layers[i].input_layernorm.weight);
+                loader.read_tensor(layer_prefix + "input_layernorm.weight",          transformer->layers[i].input_layernorm.weight);
 
                 for (int j = 0; j < config.num_experts; j++)
                 {
                     std::string prefix = layer_prefix + "mlp.experts." + std::to_string(j) + '.';
-                    loader.read_tensor(prefix + "down_proj.weight", transformer.layers[i].mlp.mlp1.experts[j].down_proj.weight);
-                    loader.read_tensor(prefix + "gate_proj.weight", transformer.layers[i].mlp.mlp1.experts[j].gate_proj.weight);
-                    loader.read_tensor(prefix + "up_proj.weight", transformer.layers[i].mlp.mlp1.experts[j].up_proj.weight);
+                    loader.read_tensor(prefix + "down_proj.weight", transformer->layers[i].mlp.mlp1.experts[j].down_proj.weight);
+                    loader.read_tensor(prefix + "gate_proj.weight", transformer->layers[i].mlp.mlp1.experts[j].gate_proj.weight);
+                    loader.read_tensor(prefix + "up_proj.weight", transformer->layers[i].mlp.mlp1.experts[j].up_proj.weight);
                 }
 
-                loader.read_tensor(layer_prefix + "mlp.gate.weight", transformer.layers[i].mlp.mlp1.gate.weight);
+                loader.read_tensor(layer_prefix + "mlp.gate.weight", transformer->layers[i].mlp.mlp1.gate.weight);
 
-                loader.read_tensor(layer_prefix + "mlp.shared_expert.down_proj.weight", transformer.layers[i].mlp.mlp2.down_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.shared_expert.gate_proj.weight", transformer.layers[i].mlp.mlp2.gate_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.shared_expert.up_proj.weight",   transformer.layers[i].mlp.mlp2.up_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.shared_expert_gate.weight",   transformer.layers[i].mlp.mlp2.gate.weight);
+                loader.read_tensor(layer_prefix + "mlp.shared_expert.down_proj.weight", transformer->layers[i].mlp.mlp2.down_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.shared_expert.gate_proj.weight", transformer->layers[i].mlp.mlp2.gate_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.shared_expert.up_proj.weight",   transformer->layers[i].mlp.mlp2.up_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.shared_expert_gate.weight",   transformer->layers[i].mlp.mlp2.gate.weight);
 
-                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer.layers[i].post_attention_layernorm.weight);
+                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
 
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer.layers[i].attention.k_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   transformer.layers[i].attention.k_proj.bias);
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer.layers[i].attention.q_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   transformer.layers[i].attention.q_proj.bias);
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer.layers[i].attention.v_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer.layers[i].attention.v_proj.bias);
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer.layers[i].attention.o_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   transformer->layers[i].attention.k_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   transformer->layers[i].attention.q_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer->layers[i].attention.v_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
             }
-            loader.read_tensor("model.norm.weight", transformer.final_layernorm.weight);
-            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer.lm_head)->weight);
+            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
             CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
                 << "corrupted model weights";

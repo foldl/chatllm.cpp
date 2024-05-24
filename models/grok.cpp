@@ -49,11 +49,11 @@ protected:
     }
 };
 
-class GrokSelfAttention : public BaseSelfAttention<GrokBaseAttention>
+class GrokSelfAttention : public RoPESelfAttention<GrokBaseAttention>
 {
 public:
     GrokSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-        : BaseSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length, false, false) {}
+        : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length, false, false) {}
 };
 
 template<int num_local_experts, int num_experts_per_tok> class GrokBlock : public LMBlock4<RMSNorm,
@@ -117,21 +117,21 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
 
     GRAPH_SIZE = 4096 * 2;
 
-    transformer = Model<Config, Embedding, RMSNorm, GrokBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, int, int, int, int, int>(
+    transformer = new Model<Config, Embedding, RMSNorm, GrokBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, int, int, int, int, int>(
                         &w_ctx_, config, nullptr,
                         config.hidden_size, config.num_attention_heads,
                         config.intermediate_size, config.num_key_value_heads, config.max_length);
 
     for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            auto &attention = transformer.layers[i].attention;
+            auto &attention = transformer->layers[i].attention;
             attention.freq_base = config.rope_theta;
         }
 }
 
 void ConditionalGeneration::load(ModelLoader &loader)
 {
-    loader.read_tensor("model.embed_tokens.weight", transformer.word_embeddings.weight);
+    loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
         std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
@@ -139,31 +139,31 @@ void ConditionalGeneration::load(ModelLoader &loader)
         for (int j = 0; j < config.num_experts; j++)
         {
             std::string prefix = layer_prefix + "experts." + std::to_string(j) + '.';
-            loader.read_tensor(prefix + "w1.weight", transformer.layers[i].mlp.experts[j].gate_proj.weight);
-            loader.read_tensor(prefix + "w2.weight", transformer.layers[i].mlp.experts[j].down_proj.weight);
-            loader.read_tensor(prefix + "w3.weight", transformer.layers[i].mlp.experts[j].up_proj.weight);
+            loader.read_tensor(prefix + "w1.weight", transformer->layers[i].mlp.experts[j].gate_proj.weight);
+            loader.read_tensor(prefix + "w2.weight", transformer->layers[i].mlp.experts[j].down_proj.weight);
+            loader.read_tensor(prefix + "w3.weight", transformer->layers[i].mlp.experts[j].up_proj.weight);
         }
 
-        loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer.layers[i].attention.k_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer.layers[i].attention.o_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer.layers[i].attention.q_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer.layers[i].attention.v_proj.weight);
+        loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
+        loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
+        loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
+        loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
 
         loader.read_tensor(layer_prefix + "rms_norm.weight",
-                           transformer.layers[i].pre_attention_layernorm.weight);
+                           transformer->layers[i].pre_attention_layernorm.weight);
         loader.read_tensor(layer_prefix + "rms_norm_1.weight",
-                           transformer.layers[i].post_attention_layernorm.weight);
+                           transformer->layers[i].post_attention_layernorm.weight);
 
         loader.read_tensor(layer_prefix + "rms_norm_2.weight",
-                           transformer.layers[i].pre_mlp_layernorm.weight);
+                           transformer->layers[i].pre_mlp_layernorm.weight);
         loader.read_tensor(layer_prefix + "rms_norm_3.weight",
-                           transformer.layers[i].post_mlp_layernorm.weight);
+                           transformer->layers[i].post_mlp_layernorm.weight);
 
         loader.read_tensor(layer_prefix + "router.weight",
-                           transformer.layers[i].mlp.gate.weight);
+                           transformer->layers[i].mlp.gate.weight);
     }
 
-    loader.read_tensor("model.norm.weight", transformer.final_layernorm.weight);
+    loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
 
     CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
         << "corrupted model weights";

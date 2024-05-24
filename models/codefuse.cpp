@@ -42,12 +42,12 @@ namespace deepseek
         {
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                auto &attention = transformer.layers[i].attention;
+                auto &attention = transformer->layers[i].attention;
                 attention.freq_base = config.rope_theta;
                 attention.freq_scale = 1 / config.rope_scaling;
             }
 
-            if (transformer.get_param_num(false) > 20000000)
+            if (transformer->get_param_num(false) > 20000000)
                 GRAPH_SIZE = 4096;
         }
 

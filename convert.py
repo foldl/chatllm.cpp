@@ -61,9 +61,10 @@ class ModelType(Enum):
     BaiChuanLlama = 0x200
     BaiChuan = 0x201
 
-    DeepSeek = 0x300
-    DeepSeekCoder = 0x301
-    CodeFuseDeepSeek = 0x302
+    DeepSeek            = 0x300
+    DeepSeekCoder       = 0x301
+    CodeFuseDeepSeek    = 0x302
+    DeepSeekV2          = 0x320
 
     Yi = 0x400
 
@@ -613,7 +614,7 @@ class TikTokenizerVocab:
             parts = parts[:min_idx] + [parts[min_idx] + parts[min_idx + 1]] + parts[min_idx + 2:]
         return parts
 
-    def __init__(self, fname_tokenizer: Path | Any, fname_added_tokens: Optional[Path]) -> None:
+    def __init__(self, fname_tokenizer: Any, fname_added_tokens: Optional[Path]) -> None:
         if isinstance(fname_tokenizer, Path):
             from transformers import AutoTokenizer  # type: ignore[attr-defined]
             tokenizer = AutoTokenizer.from_pretrained(fname_tokenizer, trust_remote_code=True)
@@ -714,6 +715,11 @@ class BaseConverter:
 
 def permute(weights: torch.Tensor, n_head: int) -> torch.Tensor:
     return (weights.reshape(n_head, 2, weights.shape[0] // n_head // 2, *weights.shape[1:])
+                   .swapaxes(1, 2)
+                   .reshape(weights.shape))
+
+def permute_pair(weights: torch.Tensor, n_head: int) -> torch.Tensor:
+    return (weights.reshape(n_head, weights.shape[0] // n_head // 2, 2, *weights.shape[1:])
                    .swapaxes(1, 2)
                    .reshape(weights.shape))
 
@@ -2334,6 +2340,17 @@ def permute2(weights: torch.Tensor, n_head: int, partial_rotary_factor: float) -
     combined = torch.concat((rot, other), dim = 1)
     return combined.reshape(weights.shape)
 
+def permute_pair_3(weights: torch.Tensor, n_head: int, nope_dim: int) -> torch.Tensor:
+    hidden_size = weights.shape[0]
+    head_dim = hidden_size // n_head
+    rope_dim = head_dim - nope_dim
+    reshaped = weights.reshape(n_head, head_dim, *weights.shape[1:])
+    rot = reshaped[:, nope_dim:, ...]
+    other = reshaped[:, :nope_dim, ...]
+    rot = rot.reshape(n_head, rope_dim // 2, 2, *weights.shape[1:]).swapaxes(1, 2).reshape(rot.shape)
+    combined = torch.concat((other, rot), dim = 1)
+    return combined.reshape(weights.shape)
+
 class PersimmonConverter(BaseConverter):
     MODEL_TYPE = ModelType.Persimmon
 
@@ -2933,6 +2950,137 @@ class StarCoder2Converter(BaseConverter):
 
         return weight_names
 
+class DeepSeekV2Converter(BaseConverter):
+    MODEL_TYPE = ModelType.DeepSeekV2
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.endswith('kv_a_proj_with_mqa.weight'):
+
+                w_d_kv, w_k_pe = torch.split(
+                    tensor, [config.kv_lora_rank, config.qk_rope_head_dim])
+
+                new_dict[name.replace('kv_a_proj_with_mqa.weight', 'd_kv_proj.weight')] = w_d_kv
+                new_dict[name.replace('kv_a_proj_with_mqa.weight', 'k_pe_proj.weight')] = permute_pair(w_k_pe, 1)
+            elif name.endswith('kv_a_layernorm.weight'):
+                new_dict[name.replace('kv_a_layernorm.weight', 'kv_norm.weight')] = tensor
+            elif name.endswith('kv_b_proj.weight'):
+
+                v = tensor.reshape(config.num_attention_heads, config.qk_nope_head_dim + config.v_head_dim, config.kv_lora_rank)
+                u_k_nope_proj = v[:, :config.qk_nope_head_dim, :].reshape(config.num_attention_heads * config.qk_nope_head_dim, config.kv_lora_rank)
+                u_v_proj = v[:, config.qk_nope_head_dim:, :].reshape(config.num_attention_heads * config.v_head_dim, config.kv_lora_rank)
+
+                new_dict[name.replace('kv_b_proj.weight', 'u_k_nope_proj.weight')] = u_k_nope_proj
+                new_dict[name.replace('kv_b_proj.weight', 'u_v_proj.weight')] = u_v_proj
+            elif name.endswith('q_proj.weight'):
+                new_dict[name] = permute_pair_3(tensor, config.num_attention_heads, config.qk_nope_head_dim)
+            else:
+                new_dict[name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        assert config.attention_bias == False, "attention_bias must be False"
+        assert config.rope_scaling['type'] == 'yarn', "rope_scaling['type'] must be 'yarn'"
+        assert config.q_lora_rank is None, "q_lora_rank must be null"
+        assert config.scoring_func == 'softmax', "scoring_func must be 'softmax'"
+        assert config.topk_method == 'greedy', "topk_method must be 'greedy'"
+        assert config.n_routed_experts is not None, "n_routed_experts must not be null"
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads,
+            config.first_k_dense_replace,
+            config.kv_lora_rank,
+            config.moe_intermediate_size,
+            config.moe_layer_freq,
+            config.n_group,
+            config.n_routed_experts,
+            config.n_shared_experts,
+            1 if config.norm_topk_prob else 0,
+            config.num_experts_per_tok,
+            config.qk_nope_head_dim,
+            config.qk_rope_head_dim,
+            config.rope_scaling['original_max_position_embeddings'],
+            config.v_head_dim,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_scaling['beta_fast'],
+            config.rope_scaling['beta_slow'],
+            config.rope_scaling['factor'],
+            config.rope_scaling['mscale'],
+            config.rope_scaling['mscale_all_dim'],
+            config.rope_theta,
+            config.routed_scaling_factor,
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight",
+                        "model.norm.weight",
+                        "lm_head.weight"]
+        for i in range(config.num_hidden_layers):
+
+            weight_names += [
+                f"model.layers.{i}.self_attn.q_proj.weight",
+
+                f"model.layers.{i}.self_attn.d_kv_proj.weight",
+                f"model.layers.{i}.self_attn.k_pe_proj.weight",
+                f"model.layers.{i}.self_attn.kv_norm.weight",
+                f"model.layers.{i}.self_attn.u_k_nope_proj.weight",
+                f"model.layers.{i}.self_attn.u_v_proj.weight",
+
+                f"model.layers.{i}.self_attn.o_proj.weight",
+            ]
+
+            if (config.n_routed_experts is not None
+                and (i >= config.first_k_dense_replace)
+                and (i % config.moe_layer_freq == 0)):
+                weight_names += [
+                    f"model.layers.{i}.mlp.gate.weight",
+                    f"model.layers.{i}.mlp.shared_experts.gate_proj.weight",
+                    f"model.layers.{i}.mlp.shared_experts.up_proj.weight",
+                    f"model.layers.{i}.mlp.shared_experts.down_proj.weight",
+                ]
+                for j in range(config.n_routed_experts):
+                    weight_names += [
+                        f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                    ]
+            else:
+                weight_names += [
+                    f"model.layers.{i}.mlp.gate_proj.weight",
+                    f"model.layers.{i}.mlp.up_proj.weight",
+                    f"model.layers.{i}.mlp.down_proj.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+            ]
+
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -3274,6 +3422,8 @@ def main():
         ZhinaoConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Starcoder2ForCausalLM':
         StarCoder2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'DeepseekV2ForCausalLM':
+        DeepSeekV2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

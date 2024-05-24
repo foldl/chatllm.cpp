@@ -49,25 +49,25 @@ namespace v1
 
             if (tie_word_embeddings)
             {
-                transformer = Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>(&w_ctx_, config, nullptr,
+                transformer = new Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>(&w_ctx_, config, nullptr,
                                                                                     config.hidden_size, config.num_attention_heads,
                                                                                     config.intermediate_size, config.num_key_value_heads, config.max_length);
             }
             else
             {
-                transformer = Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>(&w_ctx_, config, false,
+                transformer = new Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>(&w_ctx_, config, false,
                                                                                     config.hidden_size, config.num_attention_heads,
                                                                                     config.intermediate_size, config.num_key_value_heads, config.max_length);
             }
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                auto &attention = transformer.layers[i].attention;
+                auto &attention = transformer->layers[i].attention;
                 attention.freq_base = config.rope_theta;
                 attention.freq_scale = 1 / config.rope_scaling;
                 attention.set_prec(ggml_prec::GGML_PREC_F32);
 
-                transformer.layers[i].hidden_scaling = config.scale_depth;
+                transformer->layers[i].hidden_scaling = config.scale_depth;
             }
 
             GRAPH_SIZE = 4096;
@@ -75,25 +75,25 @@ namespace v1
 
         void load(ModelLoader &loader) override
         {
-            loader.read_tensor("model.embed_tokens.weight", transformer.word_embeddings.weight);
+            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
-                loader.read_tensor(layer_prefix + "input_layernorm.weight", transformer.layers[i].input_layernorm.weight);
-                loader.read_tensor(layer_prefix + "mlp.down_proj.weight",   transformer.layers[i].mlp.down_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.gate_proj.weight",   transformer.layers[i].mlp.gate_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.up_proj.weight",     transformer.layers[i].mlp.up_proj.weight);
-                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer.layers[i].post_attention_layernorm.weight);
+                loader.read_tensor(layer_prefix + "input_layernorm.weight", transformer->layers[i].input_layernorm.weight);
+                loader.read_tensor(layer_prefix + "mlp.down_proj.weight",   transformer->layers[i].mlp.down_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.gate_proj.weight",   transformer->layers[i].mlp.gate_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.up_proj.weight",     transformer->layers[i].mlp.up_proj.weight);
+                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
 
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer.layers[i].attention.k_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer.layers[i].attention.o_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer.layers[i].attention.q_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer.layers[i].attention.v_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
             }
-            loader.read_tensor("model.norm.weight", transformer.final_layernorm.weight);
+            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
 
-            if (transformer.lm_head)
-                loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer.lm_head)->weight);
+            if (transformer->lm_head)
+                loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
             CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
                 << "corrupted model weights";
@@ -278,47 +278,47 @@ namespace moe
             CHATLLM_CHECK((NUM_EXPERTS == config.num_experts) && (EXPERTS_PER_TOK == config.num_experts_per_tok))
                 << "unsupported MoE param";
 
-            transformer = Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>(&w_ctx_, config, nullptr,
+            transformer = new Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>(&w_ctx_, config, nullptr,
                                                                                 config.hidden_size, config.num_attention_heads,
                                                                                 config.intermediate_size, config.num_key_value_heads, config.max_length);
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                auto &attention = transformer.layers[i].attention;
+                auto &attention = transformer->layers[i].attention;
                 attention.freq_base = config.rope_theta;
                 attention.freq_scale = 1 / config.rope_scaling;
                 attention.set_prec(ggml_prec::GGML_PREC_F32);
 
-                transformer.layers[i].hidden_scaling = config.scale_depth;
+                transformer->layers[i].hidden_scaling = config.scale_depth;
             }
             GRAPH_SIZE = 4096;
         }
 
         void load(ModelLoader &loader) override
         {
-            loader.read_tensor("model.embed_tokens.weight", transformer.word_embeddings.weight);
+            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
-                loader.read_tensor(layer_prefix + "input_layernorm.weight", transformer.layers[i].input_layernorm.weight);
+                loader.read_tensor(layer_prefix + "input_layernorm.weight", transformer->layers[i].input_layernorm.weight);
 
                 for (int j = 0; j < config.num_experts; j++)
                 {
                     std::string prefix = layer_prefix + "mlp.experts." + std::to_string(j) + '.';
-                    loader.read_tensor(prefix + "w1.weight", transformer.layers[i].mlp.experts[j].gate_proj.weight);
-                    loader.read_tensor(prefix + "w2.weight", transformer.layers[i].mlp.experts[j].down_proj.weight);
-                    loader.read_tensor(prefix + "w3.weight", transformer.layers[i].mlp.experts[j].up_proj.weight);
+                    loader.read_tensor(prefix + "w1.weight", transformer->layers[i].mlp.experts[j].gate_proj.weight);
+                    loader.read_tensor(prefix + "w2.weight", transformer->layers[i].mlp.experts[j].down_proj.weight);
+                    loader.read_tensor(prefix + "w3.weight", transformer->layers[i].mlp.experts[j].up_proj.weight);
                 }
 
-                loader.read_tensor(layer_prefix + "mlp.gate.weight",     transformer.layers[i].mlp.gate.weight);
-                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer.layers[i].post_attention_layernorm.weight);
+                loader.read_tensor(layer_prefix + "mlp.gate.weight",     transformer->layers[i].mlp.gate.weight);
+                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
 
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer.layers[i].attention.k_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer.layers[i].attention.o_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer.layers[i].attention.q_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer.layers[i].attention.v_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
             }
-            loader.read_tensor("model.norm.weight", transformer.final_layernorm.weight);
+            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
 
             CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
                 << "corrupted model weights";
