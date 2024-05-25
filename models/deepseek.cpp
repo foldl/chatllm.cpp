@@ -298,9 +298,6 @@ namespace v2_light
 
     typedef v1::Tokenizer Tokenizer;
 
-    // make it easy to test with different number of experts.
-    const int EFFECTIVE_EXPERTS_PER_TOK = 6;
-
     typedef LMBlock1<RMSNorm, SpeedMLAttention, RMSNorm, SiLUMLP> DeepSeek2Block;
 
     static float yarn_get_mscale(float scale = 1.0f, float mscale = 1.0f)
@@ -310,11 +307,11 @@ namespace v2_light
         return 0.1f * mscale * logf(scale) + 1.0f;
     }
 
-    template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class ConditionalGeneration0 : public BaseModelForConditionalGeneration<
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK, int EFFECTIVE_EXPERTS_PER_TOK> class ConditionalGeneration0 : public BaseModelForConditionalGeneration<
                                     HeterogeneousModel<Config, Embedding, RMSNorm>>
     {
     public:
-        typedef SparseMoE<SiLUMLP, NUM_EXPERTS, EXPERTS_PER_TOK> DeepSeekSparseMoE;
+        typedef SparseMoE<SiLUMLP, NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK> DeepSeekSparseMoE;
         typedef CombinedMLP<DeepSeekSparseMoE, SiLUMLP> DeepSeekMoEMLP;
         typedef LMBlock1<RMSNorm, SpeedMLAttention, RMSNorm, DeepSeekMoEMLP> DeepSeek2MoEBlock;
         typedef BaseModelForConditionalGeneration<HeterogeneousModel<Config, Embedding, RMSNorm>> Base;
@@ -486,7 +483,7 @@ namespace v2_light
 
     const int NUM_EXPERTS                   =  64;
     const int EXPERTS_PER_TOK               =  6;
-    typedef ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK> ConditionalGeneration;
+    typedef ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK, EXPERTS_PER_TOK> ConditionalGeneration;
 }
 
 namespace v2
@@ -502,13 +499,13 @@ namespace v2
     const int NUM_EXPERTS                   =  160;
     const int EXPERTS_PER_TOK               =  6;
 
-    class ConditionalGeneration : public v2_light::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK>
+    class ConditionalGeneration : public v2_light::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK, EXPERTS_PER_TOK>
     {
     public:
         ConditionalGeneration() = default;
 
         ConditionalGeneration(const Config &config)
-            : v2_light::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK>(config, MODEL_TYPE_DEEPSEEK_V2, config.q_lora_rank)
+            : v2_light::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK, EXPERTS_PER_TOK>(config, MODEL_TYPE_DEEPSEEK_V2, config.q_lora_rank)
         {
         }
     };

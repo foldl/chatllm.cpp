@@ -2984,7 +2984,7 @@ class DeepSeekV2Converter(BaseConverter):
             elif name.endswith('q_a_layernorm.weight'):
                 new_dict[name.replace('q_a_layernorm.weight', 'q_norm.weight')] = tensor
             elif name.endswith('q_b_proj.weight'):
-                new_dict[name.replace('q_b_proj.weight', 'u_q_proj.weight')] = tensor
+                new_dict[name.replace('q_b_proj.weight', 'u_q_proj.weight')] = permute_pair_3(tensor, config.num_attention_heads, config.qk_nope_head_dim)
             else:
                 new_dict[name] = tensor
 
