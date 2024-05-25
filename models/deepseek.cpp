@@ -139,6 +139,10 @@ namespace v2_light
         Linear *q_proj;
     };
 
+    // for opt_speed == false:
+    //      k_pe    -> K cache;
+    //      kv_lora -> V cache.
+    //      GGML_TYPE_F32 is used because GGML complains
     template <bool opt_speed> class BaseMLAttention : public KVCacheAttention
     {
     public:
@@ -154,9 +158,10 @@ namespace v2_light
                       bool use_bias,
                       ggml_type cache_type, int cache_length)
             : KVCacheAttention(ctx, num_attention_heads, num_kv_heads,
-                               (qk_nope_head_dim + rope_dim) * num_kv_heads, v_head_dim * num_kv_heads,
+                               opt_speed ? (qk_nope_head_dim + rope_dim) * num_kv_heads : rope_dim * 1,
+                               opt_speed ? v_head_dim * num_kv_heads : kv_lora_rank,
                                max_length,
-                               cache_type, cache_length),
+                               opt_speed ? cache_type : GGML_TYPE_F32, cache_length),
               d_kv_proj(ctx, hidden_size, kv_lora_rank, nullptr, use_bias),
               k_pe_proj(ctx, hidden_size, rope_dim, nullptr, use_bias),
               u_k_nope_proj(ctx, kv_lora_rank, qk_nope_head_dim * num_kv_heads, nullptr, false),
@@ -196,6 +201,15 @@ namespace v2_light
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
         {
+            if (opt_speed)
+                return forward_speed(ctx, hidden_states, n_past);
+            else
+                return forward_memory(ctx, hidden_states, n_past);
+        }
+
+    protected:
+        ggml_tensor *forward_speed(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
+        {
             const int hidden_size = o_proj.in_features();
             const int qlen = (int)hidden_states->ne[1];
 
@@ -211,14 +225,14 @@ namespace v2_light
 
             ggml_tensor *tmpq = q_proj.forward(ctx, hidden_states);
 
-            ggml_tensor *scores = cross_attention(ctx, hidden_size, n_past, qlen, tmpq, k_nope, k_pe, tmpv);
+            ggml_tensor *scores = cross_attention_speed(ctx, hidden_size, n_past, qlen, tmpq, k_nope, k_pe, tmpv);
 
             ggml_tensor *attn_output = o_proj.forward(ctx, scores);
 
             return attn_output;
         }
 
-        ggml_tensor *cross_attention(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
+        ggml_tensor *cross_attention_speed(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
                                              ggml_tensor *q, ggml_tensor *k_nope, ggml_tensor *k_pe, ggml_tensor *v)
         {
             // [qlen, heads, head_size]
@@ -254,6 +268,141 @@ namespace v2_light
 
             ggml_tensor *attn_scores = cross_attention_after_pe(ctx, hidden_size, n_past, qlen, query_layer, key_layer, v);
 
+            return attn_scores;
+        }
+
+        ggml_tensor *forward_memory(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
+        {
+            const int hidden_size = o_proj.in_features();
+            const int qlen = (int)hidden_states->ne[1];
+
+            KVCacheAttention::before_forward(ctx, n_past, qlen);
+
+            ggml_tensor *kv_lora = d_kv_proj.forward(ctx, hidden_states);
+            kv_lora = kv_norm.forward(ctx, kv_lora);
+
+            ggml_tensor *k_pe = k_pe_proj.forward(ctx, hidden_states);
+
+            ggml_tensor *tmpq = q_proj.forward(ctx, hidden_states);
+
+            ggml_tensor *scores = cross_attention_memory(ctx, hidden_size, n_past, qlen, tmpq, k_pe, kv_lora);
+
+            ggml_tensor *attn_output = o_proj.forward(ctx, scores);
+
+            return attn_output;
+        }
+
+        ggml_tensor *cross_attention_memory(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
+                                             ggml_tensor *q, ggml_tensor *k_pe, ggml_tensor *kv_lora)
+        {
+            // [qlen, heads, head_size]
+            k_pe = ggml_reshape_3d(ctx->gctx.get(), k_pe, rope_dim, 1, qlen);
+            k_pe = apply_pos_embedding_k(ctx, k_pe, rope_dim * 1, qlen, pos);
+            k_pe = ggml_reshape_1d(ctx->gctx.get(), k_pe, rope_dim * 1 * qlen);
+
+            // [qlen, heads, head_size]
+            ggml_tensor * query_layer = ggml_reshape_3d(ctx->gctx.get(), q, qk_nope_head_dim + rope_dim, num_attention_heads, qlen);
+            ggml_tensor * q_pe = ggml_view_3d(ctx->gctx.get(), query_layer,
+                         rope_dim, num_attention_heads, qlen,
+                         query_layer->nb[1], query_layer->nb[2],
+                         qk_nope_head_dim * ggml_element_size(query_layer));
+            q_pe = apply_pos_embedding_q(ctx, q_pe, rope_dim * num_attention_heads, qlen, pos);
+            ggml_build_forward_expand(ctx->gf, q_pe);
+
+            ggml_tensor *attn_scores = cross_attention_after_pe_memory(ctx, hidden_size, n_past, qlen, query_layer, k_pe, kv_lora);
+
+            return attn_scores;
+        }
+
+        ggml_tensor *get_k_pe_from_cache(ForwardContext *ctx, const int n_past, const int qlen)
+        {
+            ggml_tensor *k_pe = nullptr;
+
+            k_pe = ggml_view_2d(ctx->gctx.get(), k_cache, k_hidden_size, n_past + qlen,
+                                k_hidden_size * ggml_element_size(k_cache),
+                                0);
+
+            return k_pe;
+        }
+
+        ggml_tensor *get_kv_lora_from_cache(ForwardContext *ctx, const int n_past, const int qlen)
+        {
+            ggml_tensor *kv_lora = nullptr;
+
+            kv_lora = ggml_view_2d(ctx->gctx.get(), v_cache, v_hidden_size, n_past + qlen,
+                                   v_hidden_size * ggml_element_size(v_cache),
+                                   0);
+
+            return kv_lora;
+        }
+
+        void save_lora_to_cache(ForwardContext *ctx, const int n_past, const int qlen,
+            ggml_tensor *k_pe, ggml_tensor *kv_lora)
+        {
+            struct ggml_tensor * pe_cache_view = ggml_view_1d(ctx->gctx.get(), k_cache, qlen * k_hidden_size,
+                                        ggml_element_size(k_cache) * k_hidden_size * n_past);
+
+            struct ggml_tensor * kv_cache_view = ggml_view_1d(ctx->gctx.get(), v_cache, qlen * v_hidden_size,
+                                        ggml_element_size(v_cache) * v_hidden_size * n_past);
+
+            struct ggml_tensor * pe_view = ggml_view_1d(ctx->gctx.get(), k_pe,    qlen * k_hidden_size, 0);
+            struct ggml_tensor * kv_view = ggml_view_1d(ctx->gctx.get(), kv_lora, qlen * v_hidden_size, 0);
+
+            // important: storing RoPE-ed version of K in the KV cache!
+            ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), pe_view, pe_cache_view));
+            ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), kv_view, kv_cache_view));
+        }
+
+        ggml_tensor *cross_attention_after_pe_memory(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen0,
+                                             ggml_tensor *query_layer, ggml_tensor *k_pe, ggml_tensor *kv_lora)
+        {
+            const int head_size = qk_nope_head_dim + rope_dim;
+
+            if (!attn_scaling)
+                query_layer = ggml_scale(ctx->gctx.get(), query_layer, 1.f / sqrtf((float)head_size));
+
+            query_layer = ggml_permute(ctx->gctx.get(), query_layer, 0, 2, 1, 3);                     // [heads, qlen, head_size]
+
+            // store key and value to memory
+            save_lora_to_cache(ctx, n_past, qlen0, k_pe, kv_lora);
+
+            ggml_tensor *k_pe_all       = get_k_pe_from_cache(ctx, n_past, qlen0);
+            ggml_tensor *kv_lora_all    = get_kv_lora_from_cache(ctx, n_past, qlen0);
+
+            const int qlen = n_past + qlen0;
+
+            ggml_tensor *k_nope = u_k_nope_proj.forward(ctx, kv_lora_all);
+
+            ggml_tensor *key_layer = ggml_new_tensor_3d(ctx->gctx.get(), k_nope->type,
+                qk_nope_head_dim + rope_dim, num_kv_heads, qlen); // [qlen, heads, head_size]
+
+            key_layer = ggml_map_custom1_inplace(ctx->gctx.get(), key_layer, ggml_compute_forward_zero, 1, nullptr);
+
+            ggml_tensor * k_nope_dst = ggml_view_3d(ctx->gctx.get(), key_layer,
+                         qk_nope_head_dim, num_kv_heads, qlen,
+                         key_layer->nb[1], key_layer->nb[2],
+                         0);
+            ggml_tensor * k_pe_dst = ggml_view_3d(ctx->gctx.get(), key_layer,
+                         rope_dim, num_kv_heads, qlen,
+                         key_layer->nb[1], key_layer->nb[2],
+                         qk_nope_head_dim * ggml_element_size(key_layer));
+            k_nope   = ggml_reshape_3d(ctx->gctx.get(), k_nope,     qk_nope_head_dim, num_kv_heads, qlen);
+            k_pe_all = ggml_reshape_3d(ctx->gctx.get(), k_pe_all,   rope_dim,         1,            qlen);
+            ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_nope, k_nope_dst));
+            ggml_build_forward_expand(ctx->gf, ggml_add_inplace(ctx->gctx.get(), k_pe_dst, k_pe_all));  // auto-broadcasting
+
+            ggml_tensor *value_layer = u_v_proj.forward(ctx, kv_lora_all);
+            value_layer = ggml_view_3d(ctx->gctx.get(), value_layer,
+                        v_head_dim, num_kv_heads, qlen,
+                        v_head_dim * ggml_element_size(v_cache),
+                        v_head_dim * num_kv_heads * ggml_element_size(v_cache),
+                        0); // [qlen, heads, head_size]
+
+            key_layer   = ggml_permute(ctx->gctx.get(), key_layer,   0, 2, 1, 3); // [qlen, heads, head_size] -> [heads, qlen, head_size]
+            value_layer = ggml_permute(ctx->gctx.get(), value_layer, 1, 2, 0, 3); // [qlen, heads, head_size] -> [heads, head_size, qlen]
+            value_layer = ggml_cont(ctx->gctx.get(), value_layer);
+
+            ggml_tensor *attn_scores = calc_attn_scores(ctx, hidden_size, n_past, qlen0, key_layer, query_layer, value_layer);
             return attn_scores;
         }
 

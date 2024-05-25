@@ -121,6 +121,8 @@
 * DeepSeek (`DeepseekV2ForCausalLM`)
     * [x] [V2-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Chat) (💣 not tested), [V2-Lite-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite-Chat)
 
+    Two optimization modes are defined: speed (default) and memory.
+
     Note: To run this model on CPU, some _customization_ on `ggml` is needed:
     - Update `GGML_MAX_SRC` to values like 70 for V2-Lite-Chat, 170 for V2-Chat (see above)
     - Fix this [issue](https://github.com/ggerganov/ggml/issues/835)
