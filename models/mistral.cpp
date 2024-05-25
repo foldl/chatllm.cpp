@@ -28,6 +28,23 @@ public:
     {
         sys_prompt = "";
     }
+
+    size_t load(const char *buffer, int n_vocab) override
+    {
+        size_t r = llama::v2::Tokenizer::load(buffer, n_vocab);
+        if (tp->GetPieceSize() == 32768)
+        {
+            // Mistral v0.3
+            tp->AddAddedToken("[INST]",  3);
+            tp->AddAddedToken("[/INST]", 4);
+            tp->AddAddedToken("[TOOL_CALLS]",  5);
+            tp->AddAddedToken("[AVAILABLE_TOOLS]", 6);
+            tp->AddAddedToken("[/AVAILABLE_TOOLS]",  7);
+            tp->AddAddedToken("[TOOL_RESULTS]", 8);
+            tp->AddAddedToken("[/TOOL_RESULTS]",  9);
+        }
+        return r;
+    }
 };
 
 class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<MistralBlock<SLIDING_WINDOW_LEN>>
