@@ -64,7 +64,8 @@ class ModelType(Enum):
     DeepSeek            = 0x300
     DeepSeekCoder       = 0x301
     CodeFuseDeepSeek    = 0x302
-    DeepSeekV2          = 0x320
+    DeepSeekV2Light     = 0x320
+    DeepSeekV2          = 0x321
 
     Yi = 0x400
 
@@ -2951,7 +2952,7 @@ class StarCoder2Converter(BaseConverter):
         return weight_names
 
 class DeepSeekV2Converter(BaseConverter):
-    MODEL_TYPE = ModelType.DeepSeekV2
+    MODEL_TYPE = ModelType.DeepSeekV2Light
 
     @classmethod
     def state_dict_pp(cls, config, state_dict):
@@ -2978,6 +2979,12 @@ class DeepSeekV2Converter(BaseConverter):
                 new_dict[name.replace('kv_b_proj.weight', 'u_v_proj.weight')] = u_v_proj
             elif name.endswith('q_proj.weight'):
                 new_dict[name] = permute_pair_3(tensor, config.num_attention_heads, config.qk_nope_head_dim)
+            elif name.endswith('q_a_proj.weight'):
+                new_dict[name.replace('q_a_proj.weight', 'd_q_proj.weight')] = tensor
+            elif name.endswith('q_a_layernorm.weight'):
+                new_dict[name.replace('q_a_layernorm.weight', 'q_norm.weight')] = tensor
+            elif name.endswith('q_b_proj.weight'):
+                new_dict[name.replace('q_b_proj.weight', 'u_q_proj.weight')] = tensor
             else:
                 new_dict[name] = tensor
 
@@ -2988,9 +2995,11 @@ class DeepSeekV2Converter(BaseConverter):
         assert config.hidden_act == 'silu', "hidden_act must be silu"
         assert config.attention_bias == False, "attention_bias must be False"
         assert config.rope_scaling['type'] == 'yarn', "rope_scaling['type'] must be 'yarn'"
-        assert config.q_lora_rank is None, "q_lora_rank must be null"
         assert config.scoring_func == 'softmax', "scoring_func must be 'softmax'"
-        assert config.topk_method == 'greedy', "topk_method must be 'greedy'"
+        if config.q_lora_rank is None:
+            assert config.topk_method == 'greedy', "topk_method must be 'greedy'"
+        else:
+            assert config.topk_method == 'group_limited_greedy', "topk_method must be 'group_limited_greedy'"
         assert config.n_routed_experts is not None, "n_routed_experts must not be null"
 
         config_values = [
@@ -3033,6 +3042,13 @@ class DeepSeekV2Converter(BaseConverter):
         ]
         f.write(struct.pack("<" + "f" * len(config_values), *config_values))
 
+        if config.q_lora_rank is not None:
+            config_values = [
+                config.q_lora_rank,
+                config.topk_group if config.topk_group is not None else 1,
+            ]
+            f.write(struct.pack("i" * len(config_values), *config_values))
+
     @staticmethod
     def get_weight_names(config):
         weight_names = ["model.embed_tokens.weight",
@@ -3040,9 +3056,18 @@ class DeepSeekV2Converter(BaseConverter):
                         "lm_head.weight"]
         for i in range(config.num_hidden_layers):
 
-            weight_names += [
-                f"model.layers.{i}.self_attn.q_proj.weight",
+            if config.q_lora_rank is None:
+                weight_names += [
+                    f"model.layers.{i}.self_attn.q_proj.weight",
+                ]
+            else:
+                weight_names += [
+                    f"model.layers.{i}.self_attn.d_q_proj.weight",
+                    f"model.layers.{i}.self_attn.q_norm.weight",
+                    f"model.layers.{i}.self_attn.u_q_proj.weight",
+                ]
 
+            weight_names += [
                 f"model.layers.{i}.self_attn.d_kv_proj.weight",
                 f"model.layers.{i}.self_attn.k_pe_proj.weight",
                 f"model.layers.{i}.self_attn.kv_norm.weight",
@@ -3423,6 +3448,9 @@ def main():
     elif arch == 'Starcoder2ForCausalLM':
         StarCoder2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'DeepseekV2ForCausalLM':
+        if config.q_lora_rank is not None:
+            DeepSeekV2Converter.MODEL_TYPE = ModelType.DeepSeekV2
+            print("DeelseekV2 is not fully supported yet!!!!")
         DeepSeekV2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')

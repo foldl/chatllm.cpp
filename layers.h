@@ -482,22 +482,22 @@ namespace chatllm
         LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
                   int mlp_intermediate_size1, int mlp_intermediate_size2,
                   int num_kv_heads, int max_length,
-                  int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
+                  int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
                   bool use_bias)
             : input_layernorm(ctx, hidden_size),
               attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length,
-                        kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
+                        q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
                         use_bias),
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, mlp_intermediate_size1, mlp_intermediate_size2) {}
 
         LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
                   int num_kv_heads, int max_length,
-                  int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
+                  int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
                   bool use_bias)
             : input_layernorm(ctx, hidden_size),
               attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length,
-                        kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
+                        q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
                         use_bias),
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}
@@ -1261,9 +1261,9 @@ namespace chatllm
         }
 
         RoPESelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length,
-                      int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
+                      int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
                       bool use_bias)
-            : BaseAttn(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
+            : BaseAttn(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
                       use_bias),
               freq_base(10000.0f),
               freq_scale(1.0f),

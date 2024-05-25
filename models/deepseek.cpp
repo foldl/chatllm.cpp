@@ -80,14 +80,64 @@ namespace v1
     }
 }
 
-#if (1)
 namespace v2_light
 {
-
     extern "C" void ggml_compute_forward_zero(struct ggml_tensor * dst , const struct ggml_tensor * a, int ith, int nth, void * userdata)
     {
         memset(dst->data, 0, ggml_nbytes(dst));
     }
+
+    class QProj : public Block
+    {
+    public:
+        QProj(InitContext *ctx, int hidden_size, int num_attention_heads,
+            int q_lora_rank, int rope_dim, int qk_nope_head_dim, bool use_bias)
+            : d_q_proj(q_lora_rank > 0 ? new Linear(ctx, hidden_size, q_lora_rank, use_bias) : nullptr),
+              u_q_proj(q_lora_rank > 0 ? new Linear(ctx, q_lora_rank, (qk_nope_head_dim + rope_dim) * num_attention_heads, false) : nullptr),
+              norm(q_lora_rank > 0 ? new RMSNorm(ctx, q_lora_rank) : nullptr),
+              q_proj(q_lora_rank <= 0 ? new Linear(ctx, hidden_size, (qk_nope_head_dim + rope_dim) * num_attention_heads, use_bias) : nullptr)
+        {}
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            if (q_proj)
+            {
+                r += q_proj->get_param_num(effective_only);
+            }
+            else
+            {
+                r += d_q_proj->get_param_num(effective_only);
+                r += u_q_proj->get_param_num(effective_only);
+                r += norm->get_param_num(effective_only);
+            }
+            return r;
+        }
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override
+        {
+            ggml_tensor *tmpq = nullptr;
+
+            if (q_proj)
+            {
+                tmpq = q_proj->forward(ctx, hidden_states);
+            }
+            else
+            {
+                ggml_tensor *q_lora = d_q_proj->forward(ctx, hidden_states);
+                q_lora = norm->forward(ctx, q_lora);
+                tmpq = u_q_proj->forward(ctx, q_lora);
+            }
+
+            return tmpq;
+        }
+
+    public:
+        Linear *d_q_proj, *u_q_proj;
+        RMSNorm *norm;
+        Linear *q_proj;
+    };
 
     template <bool opt_speed> class BaseMLAttention : public KVCacheAttention
     {
@@ -100,7 +150,7 @@ namespace v2_light
             v_head_dim(0) {}
 
         BaseMLAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length,
-                      int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
+                      int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
                       bool use_bias,
                       ggml_type cache_type, int cache_length)
             : KVCacheAttention(ctx, num_attention_heads, num_kv_heads,
@@ -111,7 +161,7 @@ namespace v2_light
               k_pe_proj(ctx, hidden_size, rope_dim, nullptr, use_bias),
               u_k_nope_proj(ctx, kv_lora_rank, qk_nope_head_dim * num_kv_heads, nullptr, false),
               u_v_proj(ctx, kv_lora_rank, v_head_dim * num_kv_heads, nullptr, false),
-              q_proj(ctx, hidden_size, (qk_nope_head_dim + rope_dim) * num_attention_heads, nullptr, false),
+              q_proj(ctx, hidden_size, num_attention_heads, q_lora_rank, rope_dim, qk_nope_head_dim, use_bias),
               o_proj(ctx, v_head_dim * num_attention_heads, hidden_size, use_bias),
               kv_norm(ctx, kv_lora_rank),
               kv_lora_rank(kv_lora_rank),
@@ -122,10 +172,10 @@ namespace v2_light
         }
 
         BaseMLAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length,
-                      int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
+                      int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
                       bool use_bias)
             : BaseMLAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length,
-                              kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
+                              q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
                               use_bias,
                               GGML_TYPE_F16, max_length)
         {}
@@ -209,7 +259,7 @@ namespace v2_light
 
     public:
         Linear d_kv_proj, k_pe_proj, u_k_nope_proj, u_v_proj;
-        Linear q_proj;
+        QProj q_proj;
         Linear o_proj;
         RMSNorm kv_norm;
         const int kv_lora_rank;
@@ -248,17 +298,9 @@ namespace v2_light
 
     typedef v1::Tokenizer Tokenizer;
 
-    const int NUM_EXPERTS                   =  64;
-    const int EXPERTS_PER_TOK               =  6;
-
     // make it easy to test with different number of experts.
-    #define EFFECTIVE_EXPERTS_PER_TOK       EXPERTS_PER_TOK
+    const int EFFECTIVE_EXPERTS_PER_TOK = 6;
 
-    typedef SparseMoE<SiLUMLP, NUM_EXPERTS, EXPERTS_PER_TOK> DeepSeekSparseMoE;
-
-    typedef CombinedMLP<DeepSeekSparseMoE, SiLUMLP> DeepSeekMoEMLP;
-
-    typedef LMBlock1<RMSNorm, SpeedMLAttention, RMSNorm, DeepSeekMoEMLP> DeepSeek2MoEBlock;
     typedef LMBlock1<RMSNorm, SpeedMLAttention, RMSNorm, SiLUMLP> DeepSeek2Block;
 
     static float yarn_get_mscale(float scale = 1.0f, float mscale = 1.0f)
@@ -268,16 +310,24 @@ namespace v2_light
         return 0.1f * mscale * logf(scale) + 1.0f;
     }
 
-    class ConditionalGeneration : public BaseModelForConditionalGeneration<
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class ConditionalGeneration0 : public BaseModelForConditionalGeneration<
                                     HeterogeneousModel<Config, Embedding, RMSNorm>>
     {
     public:
-        ConditionalGeneration() = default;
+        typedef SparseMoE<SiLUMLP, NUM_EXPERTS, EXPERTS_PER_TOK> DeepSeekSparseMoE;
+        typedef CombinedMLP<DeepSeekSparseMoE, SiLUMLP> DeepSeekMoEMLP;
+        typedef LMBlock1<RMSNorm, SpeedMLAttention, RMSNorm, DeepSeekMoEMLP> DeepSeek2MoEBlock;
+        typedef BaseModelForConditionalGeneration<HeterogeneousModel<Config, Embedding, RMSNorm>> Base;
+    public:
+        ConditionalGeneration0() = default;
 
-        ConditionalGeneration(const Config &config)
+        ConditionalGeneration0(const Config &config) : ConditionalGeneration0(config, MODEL_TYPE_DEEPSEEK_V2_LIGHT, -1)
+        {}
+
+        ConditionalGeneration0(const Config &config, ModelType type, int q_lora_rank)
             : BaseModelForConditionalGeneration<
                                         HeterogeneousModel<Config, Embedding, RMSNorm>>(
-                                            MODEL_TYPE_DEEPSEEK_V2, config, MEM_SIZE, SCRATCH_SIZE),
+                                            type, config, MEM_SIZE, SCRATCH_SIZE),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -286,7 +336,9 @@ namespace v2_light
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
 
-            CHATLLM_CHECK((NUM_EXPERTS == config.n_routed_experts) && (EXPERTS_PER_TOK == config.num_experts_per_tok))
+            CHATLLM_CHECK((NUM_EXPERTS == config.n_routed_experts)
+                            && (EXPERTS_PER_TOK == config.num_experts_per_tok)
+                            && (EFFECTIVE_EXPERTS_PER_TOK <= EXPERTS_PER_TOK))
                 << "unsupported MoE param";
 
             auto create_layer = [&](InitContext *ctx, int layer_index) -> Block * {
@@ -295,19 +347,19 @@ namespace v2_light
                     return new DeepSeek2MoEBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
                                                 config.moe_intermediate_size, config.moe_intermediate_size * config.n_shared_experts,
                                                 config.num_key_value_heads, config.max_length,
-                                                config.kv_lora_rank, config.qk_rope_head_dim, config.qk_nope_head_dim, config.v_head_dim,
+                                                q_lora_rank, config.kv_lora_rank, config.qk_rope_head_dim, config.qk_nope_head_dim, config.v_head_dim,
                                                 false);
                 }
                 else
                 {
                     return new DeepSeek2Block(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
                                                 config.num_key_value_heads, config.max_length,
-                                                config.kv_lora_rank, config.qk_rope_head_dim, config.qk_nope_head_dim, config.v_head_dim,
+                                                q_lora_rank, config.kv_lora_rank, config.qk_rope_head_dim, config.qk_nope_head_dim, config.v_head_dim,
                                                 false);
                 }
             };
 
-            transformer = new HeterogeneousModel<Config, Embedding, RMSNorm>(
+            Base::transformer = new HeterogeneousModel<Config, Embedding, RMSNorm>(
                 &w_ctx_, config, false, create_layer);
 
             float m = yarn_get_mscale(config.factor, config.mscale) / yarn_get_mscale(config.factor, config.mscale_all_dim);
@@ -317,36 +369,30 @@ namespace v2_light
 
             m /= 1.0f + 0.1f * logf(config.factor);
 
+            #define config_rope(attention)     do { \
+                    attention.rope_mode      = RoPEMode::Original;                          \
+                    attention.n_ctx          = config.max_length;                           \
+                    attention.n_original_ctx = config.original_max_position_embeddings;     \
+                    attention.freq_base      = config.rope_theta;                           \
+                    attention.freq_scale     = 1 / config.factor;                           \
+                    attention.beta_fast      = config.beta_fast;                            \
+                    attention.beta_slow      = config.beta_slow;                            \
+                    attention.ext_factor               = 1.0f;                              \
+                    attention.attn_factor              = m;                                 \
+                    attention.attn_scaling_factor      = attn_scaling_factor; } while (false)
+
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 if (is_layer_moe(i))
                 {
                     DeepSeek2MoEBlock *layer = dynamic_cast<DeepSeek2MoEBlock *>(transformer->get_layer(i));
-                    layer->attention.rope_mode      = RoPEMode::Original;
-                    layer->attention.n_ctx          = config.max_length;
-                    layer->attention.n_original_ctx = config.original_max_position_embeddings;
-                    layer->attention.freq_base      = config.rope_theta;
-                    layer->attention.freq_scale     = 1 / config.factor;
-                    layer->attention.beta_fast      = config.beta_fast;
-                    layer->attention.beta_slow      = config.beta_slow;
-                    layer->attention.ext_factor               = 1.0f;
-                    layer->attention.attn_factor              = m;
-                    layer->attention.attn_scaling_factor      = attn_scaling_factor;
+                    config_rope(layer->attention);
                     layer->mlp.mlp1.norm_topk_prob = config.norm_topk_prob != 0;
                 }
                 else
                 {
                     DeepSeek2Block *layer = dynamic_cast<DeepSeek2Block *>(transformer->get_layer(i));
-                    layer->attention.rope_mode      = RoPEMode::Original;
-                    layer->attention.n_ctx          = config.max_length;
-                    layer->attention.n_original_ctx = config.original_max_position_embeddings;
-                    layer->attention.freq_base      = config.rope_theta;
-                    layer->attention.freq_scale     = 1 / config.factor;
-                    layer->attention.beta_fast      = config.beta_fast;
-                    layer->attention.beta_slow      = config.beta_slow;
-                    layer->attention.ext_factor               = 1.0f;
-                    layer->attention.attn_factor              = m;
-                    layer->attention.attn_scaling_factor      = attn_scaling_factor;
+                    config_rope(layer->attention);
                 }
             }
 
@@ -400,7 +446,17 @@ namespace v2_light
                     loader.read_tensor(layer_prefix + "mlp.up_proj.weight",   layer->mlp.up_proj.weight);
                 }
 
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight",            attention->q_proj.weight);
+                if (attention->q_proj.q_proj)
+                {
+                    loader.read_tensor(layer_prefix + "self_attn.q_proj.weight",                attention->q_proj.q_proj->weight);
+                }
+                else
+                {
+                    loader.read_tensor(layer_prefix + "self_attn.d_q_proj.weight",              attention->q_proj.d_q_proj->weight);
+                    loader.read_tensor(layer_prefix + "self_attn.q_norm.weight",                attention->q_proj.norm->weight);
+                    loader.read_tensor(layer_prefix + "self_attn.u_q_proj.weight",              attention->q_proj.u_q_proj->weight);
+                }
+
                 loader.read_tensor(layer_prefix + "self_attn.d_kv_proj.weight",         attention->d_kv_proj.weight);
                 loader.read_tensor(layer_prefix + "self_attn.k_pe_proj.weight",         attention->k_pe_proj.weight);
                 loader.read_tensor(layer_prefix + "self_attn.kv_norm.weight",           attention->kv_norm.weight);
@@ -427,5 +483,33 @@ namespace v2_light
         // hold ggml_context & kv_cache
         InitContext w_ctx_; // weight context
     };
+
+    const int NUM_EXPERTS                   =  64;
+    const int EXPERTS_PER_TOK               =  6;
+    typedef ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK> ConditionalGeneration;
 }
-#endif
+
+namespace v2
+{
+    struct Config : public v2_light::Config
+    {
+        int q_lora_rank;
+        int topk_group;     // TODO: group_limited_greedy
+    };
+
+    typedef v1::Tokenizer Tokenizer;
+
+    const int NUM_EXPERTS                   =  160;
+    const int EXPERTS_PER_TOK               =  6;
+
+    class ConditionalGeneration : public v2_light::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK>
+    {
+    public:
+        ConditionalGeneration() = default;
+
+        ConditionalGeneration(const Config &config)
+            : v2_light::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK>(config, MODEL_TYPE_DEEPSEEK_V2, config.q_lora_rank)
+        {
+        }
+    };
+}
