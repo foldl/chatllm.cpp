@@ -873,6 +873,14 @@ class InternLM2Converter(BaseConverter):
         rope_theta = config.rope_theta
         num_key_value_heads = config.num_key_value_heads
 
+        if config.eos_token_id is None:
+            eos_token_id = -1
+        elif isinstance(config.eos_token_id, list):
+            eos_token_id = config.eos_token_id[0]
+        else:
+            eos_token_id = config.eos_token_id
+
+
         config_values = [
             ggml_type.value,
             config.vocab_size,
@@ -882,7 +890,7 @@ class InternLM2Converter(BaseConverter):
             config.intermediate_size,
             config.max_position_embeddings,
             config.bos_token_id if config.bos_token_id is not None else -1,
-            config.eos_token_id if config.eos_token_id is not None else -1,
+            eos_token_id,
             config.pad_token_id if config.pad_token_id is not None else -1,
             config.sep_token_id if config.sep_token_id is not None else -1,
             num_key_value_heads,
