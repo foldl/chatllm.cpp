@@ -864,10 +864,13 @@ class InternLM2Converter(BaseConverter):
     def dump_config(f, config, ggml_type):
         assert config.hidden_act == 'silu', "hidden_act must be silu"
         assert config.bias == False, "bias must be False"
-        assert config.rope_scaling['type'] == 'dynamic', "rope_scaling['type'] must be dynamic"
+        if config.rope_scaling is not None:
+            assert config.rope_scaling['type'] == 'dynamic', "rope_scaling['type'] must be dynamic"
+            rope_scaling = config.rope_scaling.get("scaling_factor", 1.0)
+        else:
+            rope_scaling = 1.0
 
         rope_theta = config.rope_theta
-        rope_scaling = config.rope_scaling.get("scaling_factor", 1.0)
         num_key_value_heads = config.num_key_value_heads
 
         config_values = [
