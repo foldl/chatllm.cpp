@@ -114,6 +114,7 @@
 
 * Cohere (`CohereForCausalLM`)
     * [x] [C4AI Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
+    * [x] [Aya-23-8B](https://huggingface.co/CohereForAI/aya-23-8B), [Aya-23-35B](https://huggingface.co/CohereForAI/aya-23-35B) (`-a Aya-23`, fully compatible with Command-R)
 
 * Zhinao (`ZhinaoForCausalLM`)
     * [x] [Chat-7B-4K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-4K), [Chat-7B-32K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-32K), [Chat-7B-360K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-360K)

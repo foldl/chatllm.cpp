@@ -157,3 +157,16 @@ void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std
 }
 
 }
+
+namespace aya_23
+{
+typedef command_r::Config Config;
+
+typedef command_r::Tokenizer Tokenizer;
+
+class ConditionalGeneration : public command_r::ConditionalGeneration
+{
+public:
+    ConditionalGeneration(const Config &config) : command_r::ConditionalGeneration(config, MODEL_TYPE_COHERE_AYA_23) {}
+};
+}

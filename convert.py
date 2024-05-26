@@ -103,6 +103,7 @@ class ModelType(Enum):
     Gemma       = 0x1300
 
     CohereCommand = 0x1400
+    CohereAya23   = 0x1401
 
     Grok1         = 0x1500
 
@@ -3442,6 +3443,9 @@ def main():
     elif arch == 'GemmaForCausalLM':
         GemmaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'CohereForCausalLM':
+        CohereCommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'aya-23':
+        CohereCommandConverter.MODEL_TYPE = ModelType.CohereAya23
         CohereCommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'ZhinaoForCausalLM':
         ZhinaoConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
