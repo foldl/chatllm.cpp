@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-05-29: [ggml](https://github.com/ggerganov/ggml) is forked instead of submodule
 * 2024-05-26: Aya-23 from Cohere
 * 2024-05-24: DeepSeek-V2 Light
 * 2024-05-23: Mistral v0.3

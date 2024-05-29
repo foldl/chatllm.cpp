@@ -23,8 +23,8 @@ if (NOT CMAKE_BUILD_TYPE)
 endif ()
 
 # third-party libraries
-include_directories(third_party/ggml/include/ggml third_party/ggml/src)
-add_subdirectory(third_party/ggml)
+include_directories(ggml/include/ggml ggml/src)
+add_subdirectory(ggml)
 
 #if (GGML_CUBLAS)
 #    add_compile_definitions(GGML_USE_CUBLAS)
