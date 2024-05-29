@@ -84,14 +84,6 @@
     * [x] v1.5: [Chat-0.5B](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat), [Chat-1.8B](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat), [Chat-4B](https://huggingface.co/Qwen/Qwen1.5-4B-Chat), [Chat-7B](https://huggingface.co/Qwen/Qwen1.5-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen1.5-14B-Chat), [CodeQwen-Chat-7B](https://huggingface.co/Qwen/CodeQwen1.5-7B-Chat) (-a `CodeQwen`)
     * [x] v1.5 MoE: [Chat-A2.7B](https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B-Chat)
 
-        Note: At present, to run this MoE model, manual update of `GGML_MAX_SRC` in `ggml.h` to a value >= 62 is required:
-
-        ```
-        #define GGML_MAX_SRC            62
-        ```
-
-        [Here is why](https://github.com/ggerganov/llama.cpp/pull/6074#issuecomment-2027419314).
-
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
 
@@ -122,11 +114,7 @@
 * DeepSeek (`DeepseekV2ForCausalLM`)
     * [x] [V2-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Chat) (💣 not tested), [V2-Lite-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite-Chat)
 
-    Two optimization modes are defined: speed (default) and memory.
-
-    Note: To run this model on CPU, some _customization_ on `ggml` is needed:
-    - Update `GGML_MAX_SRC` to values like 70 for V2-Lite-Chat, 170 for V2-Chat (see above)
-    - Fix this [issue](https://github.com/ggerganov/ggml/issues/835)
+    Two optimization modes are defined: speed (default) and memory. See `BaseMLAttention`.
 
 ## Base Models
 
