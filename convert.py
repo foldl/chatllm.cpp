@@ -68,6 +68,7 @@ class ModelType(Enum):
     DeepSeekV2          = 0x321
 
     Yi = 0x400
+    MAP_Neo = 0x401
 
     Phi2                = 0x500
     Phi2_v2             = 0x501
@@ -3358,6 +3359,9 @@ def main():
             config.max_position_embeddings = config.model_max_length
             BaiChuanConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'yi':
+        YiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'map-neo':
+        YiConverter.MODEL_TYPE = ModelType.MAP_Neo
         YiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'PhiForCausalLM':
         if config.hidden_act is not None:

@@ -105,6 +105,7 @@ namespace chatllm
         MODEL_TYPE_DEEPSEEK_V2       = 0x321,
 
         MODEL_TYPE_YI       = 0x400,
+        MODEL_TYPE_MAP_NEO  = 0x401,
 
         MODEL_TYPE_PHI2     = 0x500,
         MODEL_TYPE_PHI2_V2  = 0x501,
@@ -224,6 +225,8 @@ namespace chatllm
             return "DeepSeek-V2";
         case MODEL_TYPE_YI:
             return "Yi";
+        case MODEL_TYPE_MAP_NEO:
+            return "MAP-Neo";
         case MODEL_TYPE_PHI2:
         case MODEL_TYPE_PHI2_V2:
             return "Phi-2";
@@ -1249,6 +1252,11 @@ namespace chatllm
         #include "models/starcoder.cpp"
     }
 
+    namespace m_a_p
+    {
+        #include "models/m_a_p.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1463,6 +1471,7 @@ namespace chatllm
         CASE(BAICHUAN,              baichuan::larger, 1)        \
                                                                 \
         CASE(YI,                    yi, 1)                      \
+        CASE(MAP_NEO,               m_a_p::neo, 1)              \
                                                                 \
         CASE(PHI2,                  phi::v2::v1, 1)             \
         CASE(PHI2_V2,               phi::v2::v2, 1)             \
