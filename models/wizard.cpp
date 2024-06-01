@@ -125,7 +125,7 @@ namespace coder
 
 namespace math
 {
-    struct Config : public mistral::Config
+    struct Config : public mistral::mistral::Config
     {
     };
 
@@ -137,11 +137,11 @@ namespace math
         {}
     };
 
-    class ConditionalGeneration : public mistral::ConditionalGeneration
+    class ConditionalGeneration : public mistral::mistral::ConditionalGeneration
     {
     public:
         ConditionalGeneration(const Config &config)
-            : mistral::ConditionalGeneration(config, MODEL_TYPE_WIZARDMATH)
+            : mistral::mistral::ConditionalGeneration(config, MODEL_TYPE_WIZARDMATH)
         {
         }
     };
@@ -149,13 +149,13 @@ namespace math
 
 namespace moe
 {
-    typedef mixtral::Config Config;
+    typedef mistral::mixtral::Config Config;
 
-    class Tokenizer : public mixtral::Tokenizer
+    class Tokenizer : public mistral::mixtral::Tokenizer
     {
     public:
         Tokenizer(const Config &config)
-            : mixtral::Tokenizer(config, &lm::_chat_encoder)
+            : mistral::mixtral::Tokenizer(config, &lm::_chat_encoder)
         {
             sys_prompt = "A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions. ";
         }
@@ -164,5 +164,5 @@ namespace moe
 const int NUM_EXPERTS                   =  8;
 const int EXPERTS_PER_TOK               =  2;
 
-typedef mixtral::_ConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, MODEL_TYPE_WIZARDLM2_MOE> ConditionalGeneration;
+typedef mistral::mixtral::_ConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, MODEL_TYPE_WIZARDLM2_MOE> ConditionalGeneration;
 }

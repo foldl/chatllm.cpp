@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-06-01: Codestral (?)
 * 2024-05-30: MAP-Neo
 * 2024-05-29: [ggml](https://github.com/ggerganov/ggml) is forked instead of submodule
 * 2024-05-26: Aya-23 from Cohere
@@ -81,7 +82,7 @@ Use `-l` to specify the path of the LoRA model to be merged, such as:
 python3 convert.py -i path/to/model -l path/to/lora/model -o quantized.bin
 ```
 
-Note: Appropriately, only HF format is supported; Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.
+Note: Appropriately, only HF format is supported (with a few exceptions); Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.
 
 ### Build
 

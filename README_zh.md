@@ -67,7 +67,7 @@ python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA
 python3 convert.py -i path/to/model -l path/to/lora/model -o quantized.bin
 ```
 
-说明：大体上，仅支持 HF 格式；生成的 `.bin` 文件格式不同于当前 `llama.cpp` 项目所使用的 GGUF。
+说明：大体上，仅支持 HF 格式（存在少量几种例外）；生成的 `.bin` 文件格式不同于当前 `llama.cpp` 项目所使用的 GGUF。
 
 ### 编译
 

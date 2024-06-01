@@ -1,4 +1,4 @@
-typedef  mistral::Config Config;
+typedef  mistral::mistral::Config Config;
 
 class ChatHistoryEncoder : public BaseHistoryEncoder
 {
@@ -9,7 +9,7 @@ public:
 
 static ChatHistoryEncoder _chat_encoder;
 
-class Tokenizer : public mistral::Tokenizer
+class Tokenizer : public mistral::mistral::Tokenizer
 {
 public:
     Tokenizer(const Config &config)
@@ -17,13 +17,13 @@ public:
     {}
 
     Tokenizer(const Config &config, BaseHistoryEncoder *encoder)
-        : mistral::Tokenizer(config, encoder)
+        : mistral::mistral::Tokenizer(config, encoder)
     {
         sys_prompt = "GPT4";
     }
 };
 
-class ConditionalGeneration : public mistral::ConditionalGeneration
+class ConditionalGeneration : public mistral::mistral::ConditionalGeneration
 {
 public:
     ConditionalGeneration(const Config &config)
@@ -32,7 +32,7 @@ public:
     }
 
     ConditionalGeneration(const Config &config, ModelType type)
-        : mistral::ConditionalGeneration(config, type)
+        : mistral::mistral::ConditionalGeneration(config, type)
     {
     }
 };

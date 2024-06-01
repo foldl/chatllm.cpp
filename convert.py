@@ -83,6 +83,7 @@ class ModelType(Enum):
     NeuralBeagle = 0x603
     Starling = 0x604
     WizardLMMoE = 0x605
+    Codestral = 0x606
 
     QWen    = 0x700
     QWen2   = 0x710
@@ -3119,6 +3120,67 @@ class DeepSeekV2Converter(BaseConverter):
 
         return weight_names
 
+class CodestralConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Codestral
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        elif name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        return tensor
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            new_name: str = name
+
+            if new_name.startswith('layers.'):
+                new_name = 'model.' + new_name
+
+                mapping = {
+                    'attention.wk.weight': 'self_attn.k_proj.weight',
+                    'attention.wo.weight': 'self_attn.o_proj.weight',
+                    'attention.wq.weight': 'self_attn.q_proj.weight',
+                    'attention.wv.weight': 'self_attn.v_proj.weight',
+                    'attention_norm.weight': 'input_layernorm.weight',
+                    'feed_forward.w1.weight': 'mlp.gate_proj.weight',
+                    'feed_forward.w2.weight': 'mlp.down_proj.weight',
+                    'feed_forward.w3.weight': 'mlp.up_proj.weight',
+                    'ffn_norm.weight': 'post_attention_layernorm.weight',
+                }
+
+                for k in mapping.keys():
+                    if new_name.endswith(k):
+                        new_name = new_name.replace(k, mapping[k])
+                        break
+
+                new_dict[new_name] = MistralConverter.pp(config, new_name, tensor)
+
+            else:
+                mapping = {
+                    'tok_embeddings.weight': 'model.embed_tokens.weight',
+                    'norm.weight': 'model.norm.weight',
+                    'output.weight': 'lm_head.weight',
+                }
+
+                new_name = mapping[new_name]
+                new_dict[new_name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MistralConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -3172,6 +3234,7 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
     if path.is_dir():
         if not skip_def_model_file:
             path2 = path / "tokenizer.model"
+            path20 = path / "tokenizer.model.v3"
             # Use `.parent` instead of /.. to handle the symlink case better.
             path3 = path.parent / "tokenizer.model"
 
@@ -3179,6 +3242,8 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
                 return load_spm(path2)
             elif path3.exists():
                 return load_spm(path3)
+            elif path20.exists():
+                return load_spm(path20)
 
         # path20 = path / "sentencepiece.bpe.model"
 
@@ -3261,7 +3326,8 @@ def load_some_model(path: Path) -> List[Path]:
     '''Load a model of any supported format.'''
     # Be extra-friendly and accept either a file or a directory:
     if path.is_dir():
-        globs = ["model-*-of-*.safetensors", "consolidated.*.pth", "pytorch_model-*-of-*.bin", "pytorch_model.bin", "model.safetensors", "*.pt"]
+        globs = ["model-*-of-*.safetensors", "consolidated.*.pth", "pytorch_model-*-of-*.bin",
+                 "pytorch_model.bin", "model.safetensors", "*.pt", "consolidated.safetensors"]
         for glob in globs:
             files = list(path.glob(glob))
             if len(files) > 0:
@@ -3296,15 +3362,37 @@ def main():
         skip_def_vocab_model = True
         args.arch = ''
 
-    config = AttributeDict(load_config(Path(args.model_name_or_path)))
+    vocab = load_vocab(Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir), skip_def_vocab_model)
+
+    if args.arch.lower() == 'codestral':
+        with open(Path(args.model_name_or_path) / 'params.json', 'r') as fp:
+             param = AttributeDict(json.load(fp))
+        config = {
+            "architectures": ['MistralForCausalLM'],
+            "hidden_act": 'silu',
+            "vocab_size": param.vocab_size,
+            "hidden_size": param.dim,
+            "num_attention_heads": param.n_heads,
+            "num_hidden_layers": param.n_layers,
+            "intermediate_size": param.hidden_dim,
+            "max_position_embeddings": 8192,
+            "bos_token_id": 1,
+            "eos_token_id": 2,
+            "pad_token_id": -1,
+            "sep_token_id": -1,
+            "num_key_value_heads": param.n_kv_heads,
+            "sliding_window": -1,
+            "rope_theta": param.rope_theta,
+        }
+        config = AttributeDict(config)
+    else:
+        config = AttributeDict(load_config(Path(args.model_name_or_path)))
 
     if len(config.architectures) != 1:
         raise Exception(f'unknown architectures: {config.architectures}')
 
     if arch == '':
         arch = config.architectures[0]
-
-    vocab = load_vocab(Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir), skip_def_vocab_model)
 
     if args.arch.lower() == 'grok-1-base':
         convert_grok_1_base(args, vocab, ggml_type)
@@ -3442,6 +3530,8 @@ def main():
     elif arch == 'neuralbeagle':
         MistralConverter.MODEL_TYPE = ModelType.NeuralBeagle
         MistralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'codestral':
+        CodestralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OrionForCausalLM':
         OrionConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MiniCPMForCausalLM':
