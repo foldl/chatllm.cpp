@@ -121,7 +121,6 @@ namespace chatllm
         MODEL_TYPE_NEURALBEAGLE = 0x603,
         MODEL_TYPE_STARLING     = 0x604,
         MODEL_TYPE_WIZARDLM2_MOE  = 0x605,
-        MODEL_TYPE_CODESTRAL      = 0x606,
 
         MODEL_TYPE_QWEN     = 0x700,
         MODEL_TYPE_QWEN2    = 0x710,
@@ -1481,7 +1480,6 @@ namespace chatllm
         CASE(MISTRAL,               mistral::mistral, 1)        \
         CASE(OPENCHAT,              openchat, 1)                \
         CASE(MIXTRAL,               mistral::mixtral, 1)        \
-        CASE(CODESTRAL,             mistral::mistral, 1)        \
                                                                 \
         CASE(QWEN,                  qwen::v1, 2)                \
         CASE(QWEN2,                 qwen::v2, 1)                \

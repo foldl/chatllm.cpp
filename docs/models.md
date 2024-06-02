@@ -69,9 +69,8 @@
         Note: For `MixtralForCausalLM` models, `--experts ...` is supported to select a subset of experts when converting.
         For example, `--experts 0,1,2,3` selects the first 4 experts.
 
-    * [x] Codestral: [22B-v0.1](https://huggingface.co/mistralai/Codestral-22B-v0.1) (`-a Codestral`)
+    * [x] Codestral: [22B-v0.1](https://huggingface.co/mistralai/Codestral-22B-v0.1)
 
-        Warn: Generated text looks bad. 💣
 
 * Phi (`PhiForCausalLM`, `Phi3ForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4)
