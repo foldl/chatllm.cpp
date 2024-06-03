@@ -114,6 +114,8 @@ class ModelType(Enum):
 
     StarCoder2    = 0x1800
 
+    XVERSE        = 0x1900
+
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
     BGE_M3        = 0x10000102
@@ -3345,6 +3347,9 @@ def main():
             LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'XverseForCausalLM':
+        LlamaConverter.MODEL_TYPE = ModelType.XVERSE
+        LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'codellama':
         CodeLlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek':

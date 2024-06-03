@@ -734,6 +734,16 @@ int BPEProcessor2::DoEncode2(const std::string &input,
     return 0;
 }
 
+int BPEProcessor3::DoEncode2(const std::string &input,
+        std::vector<int> *ids) const
+{
+    if (input.size() < 1) return 0;
+
+    llama_sp_tokenizer tokenizer(vocab_);
+    tokenizer.tokenize(input, *ids);
+    return 0;
+}
+
 static std::string search_first_special_token(std::string &input, const _vocab &vocab, int &sp_tok_id)
 {
     sp_tok_id = -1;

@@ -120,6 +120,11 @@
 
     Two optimization modes are defined: speed (default) and memory. See `BaseMLAttention`.
 
+* XVERSE (`XverseForCausalLM`)
+    * [x] [Chat-7B](https://huggingface.co/xverse/XVERSE-7B-Chat), [Chat-13B](https://huggingface.co/xverse/XVERSE-13B-Chat), [Chat-65B](https://huggingface.co/xverse/XVERSE-65B-Chat)
+
+    Note: Tokenizer's behavior is not 100% identical.
+
 ## Base Models
 
 Please use `--format completion` for these models.

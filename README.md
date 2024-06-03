@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-06-03: XVERSE
 * 2024-06-01: Codestral
 * 2024-05-30: MAP-Neo
 * 2024-05-29: [ggml](https://github.com/ggerganov/ggml) is forked instead of submodule

@@ -152,6 +152,8 @@ namespace chatllm
 
         MODEL_TYPE_STARCODER2       = 0x1800,
 
+        MODEL_TYPE_XVERSE           = 0x1900,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -299,6 +301,8 @@ namespace chatllm
             return "BGE-ReRanker-M3";
         case MODEL_TYPE_STARCODER2:
             return "StarCoder2";
+        case MODEL_TYPE_XVERSE:
+            return "XVERSE";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -334,6 +338,8 @@ namespace chatllm
             return "⌘-R";
         case MODEL_TYPE_ZHINAO:
             return "360智脑";
+        case MODEL_TYPE_XVERSE:
+            return "元象";
         default:
             return "";
         }
@@ -1252,6 +1258,11 @@ namespace chatllm
         #include "models/m_a_p.cpp"
     }
 
+    namespace xverse
+    {
+        #include "models/xverse.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1515,6 +1526,8 @@ namespace chatllm
         CASE(ZHINAO,                zhinao, 1)                  \
                                                                 \
         CASE(STARCODER2,            starcoder::v2, 1)           \
+                                                                \
+        CASE(XVERSE,                xverse::dense, 1)           \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \
