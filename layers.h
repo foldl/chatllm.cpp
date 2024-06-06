@@ -383,6 +383,8 @@ namespace chatllm
               v_cache(ggml_new_tensor_3d(ctx->gctx.get(), GGML_TYPE_F32, max_length, hidden_size / num_attention_heads,
                                          num_kv_heads)),
               pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
+              rope_theta(10000.0f),
+              rope_scaling(1.0f),
               shift_pending()
         {
             k_cache->data = new char[ggml_nbytes(k_cache)]();
@@ -414,6 +416,8 @@ namespace chatllm
         ggml_tensor *k_cache; // [mqa_n_head, maxlen, head_size]
         ggml_tensor *v_cache; // [mqa_n_head, head_size, maxlen]
         ggml_tensor *pos;
+        float rope_theta;
+        float rope_scaling;
     private:
         ShiftPending shift_pending;
     };

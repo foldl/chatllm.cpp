@@ -289,7 +289,8 @@ namespace chatllm
         ggml_tensor *query_layer =
             ggml_view_3d(ctx->gctx.get(), qkv, head_size, num_attention_heads, qlen, head_size * ggml_element_size(qkv),
                          qkv->nb[1], 0); // [qlen, heads, head_size]
-        query_layer = ggml_rope_inplace(ctx->gctx.get(), query_layer, pos, rope_dim, 0, 0);
+        query_layer = ggml_rope_custom_inplace(ctx->gctx.get(), query_layer, pos, rope_dim, 0, 0, 0,
+            rope_theta, rope_scaling, 0.0f, 1.0f, 0.0f, 0.0f);
         query_layer = ggml_view_4d(ctx->gctx.get(), query_layer, head_size, mqa_scale, num_kv_heads, qlen,
                                    query_layer->nb[1], query_layer->nb[1] * mqa_scale, query_layer->nb[2],
                                    0);                                        // [qlen, kv_heads, mqa_scale, head_size]
@@ -298,7 +299,8 @@ namespace chatllm
         ggml_tensor *key_layer =
             ggml_view_3d(ctx->gctx.get(), qkv, head_size, num_kv_heads, qlen, head_size * ggml_element_size(qkv),
                          qkv->nb[1], hidden_size * ggml_element_size(qkv)); // [qlen, kv_heads, head_size]
-        key_layer = ggml_rope_inplace(ctx->gctx.get(), key_layer, pos, rope_dim, 0, 0);
+        key_layer = ggml_rope_custom_inplace(ctx->gctx.get(), key_layer, pos, rope_dim, 0, 0, 0,
+            rope_theta, rope_scaling, 0.0f, 1.0f, 0.0f, 0.0f);
         key_layer = ggml_permute(ctx->gctx.get(), key_layer, 0, 2, 1, 3); // [kv_heads, qlen, head_size]
 
         ggml_tensor *value_layer = ggml_view_3d(

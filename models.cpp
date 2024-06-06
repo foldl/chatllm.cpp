@@ -83,6 +83,7 @@ namespace chatllm
         MODEL_TYPE_CHATGLM3 = 3,
         MODEL_TYPE_CODEGEEX2 = 4,
         MODEL_TYPE_CHARACTERGLM = 5,
+        MODEL_TYPE_GLM4 = 6,
 
         MODEL_TYPE_INTERNLM = 0x100,
         MODEL_TYPE_INTERNLM2= 0x101, // extended model, supporting 7B & 20B
@@ -201,6 +202,8 @@ namespace chatllm
             return "ChatGLM2";
         case MODEL_TYPE_CHATGLM3:
             return "ChatGLM3";
+        case MODEL_TYPE_GLM4:
+            return "GLM-4";
         case MODEL_TYPE_CODEGEEX2:
             return "CodeGeeX2";
         case MODEL_TYPE_CHARACTERGLM:
@@ -645,6 +648,10 @@ namespace chatllm
                 << "requested max_length (" << gen_config.max_length << ") is larger than model's max_length ("
                 << config_.max_length << ")";
 
+            //for (int i = 0; i < (int)input_ids.size(); i++)
+            //    printf("%d, ", input_ids[i]);
+            //printf("\n");
+
             std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config, _seed));
 
             aborted = false;
@@ -1080,20 +1087,7 @@ namespace chatllm
 
     namespace glm
     {
-        namespace v1
-        {
-            #include "models/chatglm_v1.cpp"
-        }
-
-        namespace v2
-        {
-            #include "models/chatglm_v2.cpp"
-        }
-
-        namespace v3
-        {
-            #include "models/chatglm_v3.cpp"
-        }
+        #include "models/chatglm.cpp"
     }
 
     namespace codegeex
@@ -1458,6 +1452,7 @@ namespace chatllm
         CASE(CHATGLM3,              glm::v3, 1)                 \
         CASE(CODEGEEX2,             codegeex::v2, 1)            \
         CASE(CHARACTERGLM,          characterglm, 1)            \
+        CASE(GLM4,                  glm::v4, 1)                 \
                                                                 \
         CASE(INTERNLM,              internlm::v1, 1)            \
         CASE(INTERNLM2,             internlm::v2, 1)            \
