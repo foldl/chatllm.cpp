@@ -3295,7 +3295,7 @@ def main():
 
     vocab_dir = Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir)
 
-    if config._name_or_path == 'THUDM/glm-4-9b-chat':
+    if (config._name_or_path == 'THUDM/glm-4-9b-chat') or (config._name_or_path == 'THUDM/glm4-9b-chat'):
         vocab = load_vocab_from_tiktok_mergeable_ranks(vocab_dir / 'tokenizer.model')
     else:
         vocab = load_vocab(vocab_dir, skip_def_vocab_model)
