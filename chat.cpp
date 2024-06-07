@@ -526,7 +526,7 @@ namespace chatllm
         model->text_embedding(gen_config, input_ids, result);
     }
 
-    BaseModel *ModelObject::fork_model(const extra_args &args)
+    AbstractModel *ModelObject::fork_model(const extra_args &args)
     {
         if (!loaded) return nullptr;
         return ModelFactory::load_model_again(*loader, args);

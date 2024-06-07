@@ -125,6 +125,7 @@ namespace chatllm
 
         MODEL_TYPE_QWEN     = 0x700,
         MODEL_TYPE_QWEN2    = 0x710,
+        MODEL_TYPE_QWEN2TIE = 0x711,
         MODEL_TYPE_QWEN2MoE = 0x750,
 
         MODEL_TYPE_BLUELM   = 0x800,
@@ -262,6 +263,7 @@ namespace chatllm
         case MODEL_TYPE_QWEN:
             return "QWen";
         case MODEL_TYPE_QWEN2:
+        case MODEL_TYPE_QWEN2TIE:
             return "QWen2";
         case MODEL_TYPE_QWEN2MoE:
             return "QWen2-MoE";
@@ -330,6 +332,8 @@ namespace chatllm
             return "Φ";
         case MODEL_TYPE_QWEN:
         case MODEL_TYPE_QWEN2:
+        case MODEL_TYPE_QWEN2TIE:
+        case MODEL_TYPE_QWEN2MoE:
             return "通义千问";
         case MODEL_TYPE_TIGERBOT:
             return "虎博";
@@ -611,7 +615,7 @@ namespace chatllm
 
         virtual ~BaseModelForConditionalGeneration() = default;
 
-        void set_layer_ids(const std::vector<int> &ids)
+        void set_layer_ids(const std::vector<int> &ids) override
         {
             CHATLLM_CHECK((int)ids.size() == config_.num_hidden_layers) << "length(layer_ids) must be " << config_.num_hidden_layers;
             layer_ids.clear();
@@ -1404,7 +1408,7 @@ namespace chatllm
         exit(-1);
 #endif
         // load model
-        result.model = std::unique_ptr<BaseModel>(load_model<Config, ConditionalGeneration>(loader, config, args));
+        result.model = std::unique_ptr<AbstractModel>(load_model<Config, ConditionalGeneration>(loader, config, args));
 
         result.model->set_tokenizer(result.tokenizer.get());
 
@@ -1490,6 +1494,7 @@ namespace chatllm
         CASE(QWEN,                  qwen::v1, 2)                \
         CASE(QWEN2,                 qwen::v2, 1)                \
         CASE(QWEN2MoE,              qwen::v2_moe, 1)            \
+        CASE(QWEN2TIE,              qwen::v2_tie, 1)            \
                                                                 \
         CASE(TIGERBOT,              tigerbot, 1)                \
                                                                 \
@@ -1530,7 +1535,7 @@ namespace chatllm
         CASE(BGE_ReRanker_M3,       bge::ranker, 1)             \
 
 
-    BaseModel *ModelFactory::load_model_again(ModelLoader &loader, const ModelObject::extra_args &args)
+    AbstractModel *ModelFactory::load_model_again(ModelLoader &loader, const ModelObject::extra_args &args)
     {
         int model_type = loader.model_type;
         int version = loader.version;

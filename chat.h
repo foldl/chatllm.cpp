@@ -319,7 +319,112 @@ namespace chatllm
         std::chrono::time_point<Clock> m_beg { Clock::now() };
     };
 
-    class BaseModel
+    class AbstractModel
+    {
+    public:
+        virtual ~AbstractModel()
+        {}
+
+        virtual void set_layer_ids(const std::vector<int> &ids) = 0;
+
+        virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                                            const bool continuous,
+                                            bool &completed,
+                                            ModelPerfInfo *performance,
+                                            int gen_max_tokens,
+                                            BaseStreamer *streamer = nullptr) = 0;
+
+        virtual void abort_generation(void) = 0;
+
+        virtual void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+                                    std::vector<float> &embedding) = 0;
+
+        virtual float qa_rank(const GenerationConfig &gen_config,
+                              const std::vector<int> &input_ids) = 0;
+
+        virtual int get_text_embedding_dim(void) const = 0;
+
+        virtual std::string type_name() const = 0;
+        virtual std::string native_name() const = 0;
+        virtual ModelPurpose get_purpose() const = 0;
+
+        virtual void load(ModelLoader &loader) = 0;
+
+        virtual void set_tokenizer(BaseTokenizer *tokenizer) = 0;
+
+        virtual void set_ctx(int n_ctx)= 0;
+
+        virtual void seed(int x) = 0;
+
+        virtual int get_max_length(void) = 0;
+
+        virtual int get_n_past(void) = 0;
+
+        virtual void shift_memory(int keep) = 0;
+
+        virtual int64_t get_param_num(bool effective_only) const = 0;
+    };
+
+    class ModelProxy : public AbstractModel
+    {
+    public:
+        ModelProxy() : model(nullptr) {}
+
+        virtual ~ModelProxy()
+        {
+            delete model;
+        }
+
+        void set_layer_ids(const std::vector<int> &ids) override { return model->set_layer_ids(ids); }
+
+        std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                                            const bool continuous,
+                                            bool &completed,
+                                            ModelPerfInfo *performance,
+                                            int gen_max_tokens,
+                                            BaseStreamer *streamer = nullptr) override
+        {
+            return model->generate(input_ids, gen_config, continuous, completed, performance, gen_max_tokens, streamer);
+        }
+
+        void abort_generation(void) override { model->abort_generation(); }
+
+        void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+                                    std::vector<float> &embedding) override
+        {
+            model->text_embedding(gen_config, input_ids, embedding);
+        }
+
+        float qa_rank(const GenerationConfig &gen_config,
+                              const std::vector<int> &input_ids) override { return model->qa_rank(gen_config, input_ids); }
+
+        int get_text_embedding_dim(void) const override { return model->get_text_embedding_dim(); }
+
+        std::string type_name() const  override { return model->type_name(); }
+        std::string native_name() const  override { return model->native_name(); }
+        ModelPurpose get_purpose() const  override { return model->get_purpose(); }
+
+        void load(ModelLoader &loader) override { return model->load(loader); }
+
+        void set_tokenizer(BaseTokenizer *tokenizer) override { model->set_tokenizer(tokenizer); }
+
+        void set_ctx(int n_ctx) override { model->set_ctx(n_ctx); }
+
+        void seed(int x) override { model->seed(x); }
+
+        int get_max_length(void) override { return model->get_max_length(); }
+
+        int get_n_past(void) override { return model->get_n_past(); }
+
+        void shift_memory(int keep) override { model->shift_memory(keep); }
+
+        int64_t get_param_num(bool effective_only) const override { return model->get_param_num(effective_only); }
+    protected:
+        AbstractModel *model;
+        void set_proxy_model(AbstractModel *model) { this->model = model; }
+    };
+
+    class BaseModel : public AbstractModel
     {
     public:
         BaseModel(int type, std::string name, std::string native_name, ModelPurpose purpose) :
@@ -331,54 +436,50 @@ namespace chatllm
         virtual ~BaseModel()
         {}
 
-        virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+        std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,
                                             bool &completed,
                                             ModelPerfInfo *performance,
                                             int gen_max_tokens,
-                                            BaseStreamer *streamer = nullptr)
+                                            BaseStreamer *streamer = nullptr) override
         {
             std::vector<int> r;
             return r;
         }
 
-        virtual void abort_generation(void)
+        void abort_generation(void) override
         {
             aborted = true;
         }
 
-        virtual void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
-                                    std::vector<float> &embedding)
+        void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+                                    std::vector<float> &embedding) override
         {}
 
-        virtual float qa_rank(const GenerationConfig &gen_config,
-                              const std::vector<int> &input_ids)
+        float qa_rank(const GenerationConfig &gen_config,
+                              const std::vector<int> &input_ids) override
         {
             return 0.0f;
         }
 
-        virtual int get_text_embedding_dim(void) const { return -1; }
+        int get_text_embedding_dim(void) const override { return -1; }
 
-        std::string type_name() const { return name_; }
-        std::string native_name() const { return native_name_; }
-        ModelPurpose get_purpose() const { return purpose; }
+        std::string type_name() const override { return name_; }
+        std::string native_name() const override { return native_name_; }
+        ModelPurpose get_purpose() const override { return purpose; }
 
-        virtual void load(ModelLoader &loader) = 0;
-
-        void set_tokenizer(BaseTokenizer *tokenizer)
+        void set_tokenizer(BaseTokenizer *tokenizer) override
         {
             this->tokenizer = tokenizer;
         }
 
-        virtual void set_ctx(int n_ctx) {}
+        void set_ctx(int n_ctx) override {}
 
-        void seed(int x) { _seed = x; }
+        void seed(int x) override { _seed = x; }
 
-        virtual int get_max_length(void) = 0;
+        int get_n_past(void) override { return n_past; }
 
-        int get_n_past(void) { return n_past; }
-
-        virtual void shift_memory(int keep)
+        void shift_memory(int keep) override
         {
             CHATLLM_CHECK(n_past >= keep) << "length of kept should not exceeds history";
 
@@ -386,7 +487,7 @@ namespace chatllm
             n_past = keep;
         }
 
-        virtual int64_t get_param_num(bool effective_only) const
+        int64_t get_param_num(bool effective_only) const override
         {
             return 0;
         }
@@ -419,11 +520,11 @@ namespace chatllm
 
         void text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result);
 
-        BaseModel *fork_model(const extra_args &args);
+        AbstractModel *fork_model(const extra_args &args);
 
     public:
         std::unique_ptr<BaseTokenizer> tokenizer;
-        std::unique_ptr<BaseModel> model;
+        std::unique_ptr<AbstractModel> model;
         std::unique_ptr<ModelLoader> loader;
         const bool loaded;
     };
@@ -434,12 +535,12 @@ namespace chatllm
         struct Result
         {
             std::unique_ptr<BaseTokenizer> tokenizer;
-            std::unique_ptr<BaseModel> model;
+            std::unique_ptr<AbstractModel> model;
         };
 
         static bool load(ModelLoader &loader, Result &result, const ModelObject::extra_args &args);
 
-        static BaseModel *load_model_again(ModelLoader &loader, const ModelObject::extra_args &args);
+        static AbstractModel *load_model_again(ModelLoader &loader, const ModelObject::extra_args &args);
 
         static std::string load_info(ModelLoader &loader);
 
@@ -480,7 +581,7 @@ namespace chatllm
 
     public:
         BaseTokenizer *tokenizer;
-        BaseModel *model;
+        AbstractModel *model;
         ModelPerfInfo performance;
         int gen_max_tokens;
 
@@ -545,7 +646,7 @@ namespace chatllm
     private:
         void rerank(const std::string &query, std::vector<int64_t> &candidates, const GenerationConfig &gen_config, int top_n = 3);
         std::string rewrite_query(const std::string &prompt, const GenerationConfig &gen_config);
-        BaseModel *rewrite_model;
+        AbstractModel *rewrite_model;
     };
 
 } // namespace chatllm

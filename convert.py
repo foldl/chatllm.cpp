@@ -87,6 +87,7 @@ class ModelType(Enum):
 
     QWen    = 0x700
     QWen2   = 0x710
+    QWen2Tie = 0x711
     QWen2MoE = 0x750
 
     BlueLM  = 0x800
@@ -2297,8 +2298,12 @@ class QWen2Converter(BaseConverter):
 
         weight_names += [
             "model.norm.weight",
-            "lm_head.weight"
         ]
+
+        if (config.tie_word_embeddings is None) or (not config.tie_word_embeddings):
+            weight_names += [
+                "lm_head.weight"
+            ]
 
         return weight_names
 
@@ -3418,6 +3423,8 @@ def main():
             config.intermediate_size = config.ffn_hidden_size
         QWenConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2ForCausalLM':
+        if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
+            QWen2Converter.MODEL_TYPE = ModelType.QWen2Tie
         QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2MoeForCausalLM':
         QWen2MoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
