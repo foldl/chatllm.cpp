@@ -74,6 +74,7 @@ void usage(const std::string &prog)
               << "  -m, --model PATH        model path\n"
               << "  -p, --prompt PROMPT     prompt to start generation with (default: 你好)\n"
               << "  -s, --system SYSTEM     system prompt (instruction) (default: model specific)\n"
+              << "      --sys_file FN       system prompt (instruction) from file\n"
               << "  -i, --interactive       run in interactive mode\n"
               << "  -l, --max_length N      max total length including prompt and output (default: model specific)\n"
               << "                          generally, this is used to reduce KV cache size.\n"
@@ -141,6 +142,19 @@ void usage(const std::string &prog)
               << "  --kv                    start of additional args. all following options are interpreted as k-v pairs\n"
               << "  key value               a key-value pair of args\n"
               << std::endl;
+}
+
+static std::string load_txt(const std::string &fn)
+{
+    std::ifstream f(fn);
+    std::ostringstream sstr;
+
+    if (f.is_open())
+    {
+        sstr << f.rdbuf();
+        f.close();
+    }
+    return sstr.str();
 }
 
 static size_t parse_args(Args &args, const std::vector<std::string> &argv)
@@ -225,6 +239,12 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                 else
                     args.format = chatllm::ChatFormat::CHAT;
             }
+        }
+        else if (strcmp(arg, "--sys_file") == 0)
+        {
+            c++;
+            if (c < argc)
+                args.system = load_txt(argv[c]);
         }
         else if (strcmp(arg, "--kv") == 0)
         {
