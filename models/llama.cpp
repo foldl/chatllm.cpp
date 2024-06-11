@@ -7,8 +7,9 @@ namespace v2
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
         void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -136,24 +137,24 @@ If a question does not make any sense, or is not factually coherent, explain why
     void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        std::ostringstream oss_prompt;
-
-        if (round_idx == 0)
-            oss_prompt << "<<SYS>>\n" << tok->get_system_prompt() << "\n<</SYS>>\n\n";
-
-        oss_prompt << "[INST] " + user << "[/INST] " << ai;
-
-        auto text = oss_prompt.str();
-        tok->encode(text, ids, true, true);
+        append_user(round_idx, user, ids);
+        tok->encode(ai, ids, false, true);
     }
 
-    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss_prompt;
 
-        if (round_idx == 0)
-            oss_prompt << "<<SYS>>\n" << tok->get_system_prompt() << "\n<</SYS>>\n\n";
+        oss_prompt << "<<SYS>>\n" << tok->get_system_prompt() << "\n<</SYS>>\n\n";
+        auto text = oss_prompt.str();
+        tok->encode(text, ids, true, false);
+    }
+
+    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::ostringstream oss_prompt;
 
         oss_prompt << "[INST] " + user << "[/INST] ";
 
@@ -178,8 +179,9 @@ namespace v3
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
         void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -250,19 +252,22 @@ namespace v3
         ids.push_back(tok->eot_id);
     }
 
-    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        ids.push_back(tok->bos_token_id);
+        if (tok->get_system_prompt().size() > 0)
+        {
+            tok->encode_header("system", ids);
+            tok->encode_content(tok->get_system_prompt(), ids);
+        }
+    }
+
+    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss;
-        if (round_idx == 0)
-        {
-            ids.push_back(tok->bos_token_id);
-            if (tok->get_system_prompt().size() > 0)
-            {
-                tok->encode_header("system", ids);
-                tok->encode_content(tok->get_system_prompt(), ids);
-            }
-        }
 
         tok->encode_header("user", ids);
         tok->encode_content(user, ids);

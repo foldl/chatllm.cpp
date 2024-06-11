@@ -74,6 +74,7 @@ namespace chatllm
 
         virtual std::vector<int> encode_history(const std::vector<std::string> &history, int max_length, const bool incremental = false);
         virtual std::vector<int> encode_history(BaseHistoryEncoder *encoder, const std::vector<std::string> &history, int max_length, const bool incremental = false);
+        virtual std::vector<int> encode_sys_prompt(void);
 
         void set_system_prompt(const std::string &prompt) { sys_prompt = prompt; }
         const std::string &get_system_prompt(void) { return sys_prompt; }
@@ -84,6 +85,8 @@ namespace chatllm
 
         void set_chat_format(ChatFormat format) { this->format = format; }
         ChatFormat get_chat_format(void) const { return format; }
+
+        virtual void set_skip_sys_prompt(bool skip);
 
         int bos_token_id;
         int eos_token_id;
@@ -113,18 +116,20 @@ namespace chatllm
     class BaseHistoryEncoder
     {
     public:
-        BaseHistoryEncoder() : tokenizer(nullptr) {}
+        BaseHistoryEncoder() : tokenizer(nullptr), skip_sys_prompt(false) {}
 
-        virtual void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const {}
-        virtual void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
-        {
-            tokenizer->encode(user, ids);
-        }
+        virtual void append_sys_prompt(std::vector<int> &ids) const;
+
+        virtual void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const;
+        virtual void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const;
+        virtual void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const;
 
         void set_tokenizer(BaseTokenizer *tokenizer)
         {
             this->tokenizer = tokenizer;
         }
+    public:
+        bool skip_sys_prompt;
     protected:
         BaseTokenizer *tokenizer;
     };
@@ -362,6 +367,9 @@ namespace chatllm
 
         virtual void shift_memory(int keep) = 0;
 
+        virtual int save_session(FILE *f) const = 0;
+        virtual int load_session(FILE *f) = 0;
+
         virtual int64_t get_param_num(bool effective_only) const = 0;
     };
 
@@ -417,6 +425,9 @@ namespace chatllm
         int get_n_past(void) override { return model->get_n_past(); }
 
         void shift_memory(int keep) override { model->shift_memory(keep); }
+
+        int save_session(FILE *f) const { return model->save_session(f); }
+        int load_session(FILE *f) override { return model->load_session(f); }
 
         int64_t get_param_num(bool effective_only) const override { return model->get_param_num(effective_only); }
     protected:
@@ -492,8 +503,32 @@ namespace chatllm
             return 0;
         }
 
+        int save_session(FILE *f) const
+        {
+            struct state state = {.type = type_, .n_past = n_past, .n_past_offset = n_past_offset};
+            if (fwrite(&state, sizeof(state), 1, f) != 1)
+                return -1;
+            return 0;
+        }
+
+        int load_session(FILE *f) override
+        {
+            struct state state = {0};
+            fread(&state, sizeof(state), 1, f);
+            if (state.type != type_) return -1;
+            n_past = state.n_past;
+            n_past_offset = state.n_past_offset;
+            return 0;
+        }
+    private:
+        struct state
+        {
+            int type;
+            int n_past;
+            int n_past_offset;
+        };
     protected:
-        int type_;
+        const int type_;
         std::string name_;
         std::string native_name_;
         int _seed;
@@ -563,6 +598,7 @@ namespace chatllm
         std::string chat(std::vector<std::string> &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);
         virtual void abort_generation(void);
+        virtual void eval_sys_prompt(const GenerationConfig &gen_config);
 
         void set_system_prompt(const std::string &prompt);
         void set_extending_method(ExtendingMethod method);
@@ -578,6 +614,17 @@ namespace chatllm
         bool is_loaded(void) const { return modelobj.loaded; }
 
         virtual void restart(void);
+
+        virtual int save_session(const std::vector<std::string> &history, const std::string &file_name);
+        virtual int load_session(std::vector<std::string> &history, const std::string &file_name);
+    protected:
+        const char head_magic[16] = "CHATLLM-SESSION";
+
+        struct file_header
+        {
+            char magic[16];
+            size_t history_len;
+        };
 
     public:
         BaseTokenizer *tokenizer;

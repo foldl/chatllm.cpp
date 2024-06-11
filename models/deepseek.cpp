@@ -7,8 +7,9 @@ namespace v1
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
         void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -47,31 +48,33 @@ namespace v1
     void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        std::ostringstream oss_prompt;
-
-        if ((round_idx == 0) && (tok->get_system_prompt().size() > 0))
-            oss_prompt << tok->get_system_prompt() << "\n\n";
-
-        oss_prompt << "User: " << user << "\n\n"
-                << "Assistant: " << ai;
-
-        auto text = oss_prompt.str();
-        tok->encode(text, ids, true, true);
+        append_user(round_idx, user, ids);
+        tok->encode(ai, ids, false, true);
     }
 
-    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(tok->bos_token_id);
+        if (tok->get_system_prompt().size() > 0)
+        {
+            std::ostringstream oss_prompt;
+            oss_prompt << tok->get_system_prompt() << "\n\n";
+            auto text = oss_prompt.str();
+            tok->encode(text, ids, false, false);
+        }
+    }
+
+    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss_prompt;
-
-        if ((round_idx == 0) && (tok->get_system_prompt().size() > 0))
-            oss_prompt << tok->get_system_prompt() << "\n\n";
 
         oss_prompt << "User: " << user << "\n\n"
                 << "Assistant: ";
 
         auto text = oss_prompt.str();
-        tok->encode(text, ids, true, false);
+        tok->encode(text, ids, false, false);
     }
 
     bool Tokenizer::is_special_id(int id) const

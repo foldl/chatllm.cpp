@@ -36,6 +36,8 @@ struct Args
     std::string retrieve_rewrite_template = "";
     std::map<std::string, std::string> additional;
     std::string layer_spec;
+    std::string load_session;
+    std::string save_session;
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -60,6 +62,7 @@ struct Args
     bool show_banner = true;
     bool show_help = false;
     bool rerank_rewrite = false;
+    int save_session_rounds = -1;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -131,13 +134,17 @@ void usage(const std::string &prog)
               << "  --rag_post_extending N  extend selected items with pre & post N chunks with same metadata. (default: 0)\n"
               << "                          this may be useful when context length of embedding/reranker models is limited.\n"
               << "   +rag_dump              (debug) dump retrieved/re-ranking results\n"
+              << "Session:\n"
+              << "  --save_session N FILE   save session to FILE after N round(s) of chatting (N >= 0) and quit\n"
+              << "                          when N = 0, system prompt is evaluated.\n"
+              << "  --load_session FILE     load session from FILE\n"
               << "Misc:\n"
               << "  --init_vs FILE          init vector store file from input\n"
               << "  --merge_vs FILE         merge multiple vector store files into a single one\n"
               << "  --tokenize              (debug) tokenize `prompt` and exit\n"
               << "  --test FILE             test against inputs from a file and exit\n"
               << "  --hide_banner           hide banner\n"
-              << "  --show                  show model info\n"
+              << "  --show                  show model info and quit\n"
               << "Additional key-value args:\n"
               << "  --kv                    start of additional args. all following options are interpreted as k-v pairs\n"
               << "  key value               a key-value pair of args\n"
@@ -246,6 +253,16 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             if (c < argc)
                 args.system = load_txt(argv[c]);
         }
+        else if (strcmp(arg, "--save_session") == 0)
+        {
+            c++;
+            if (c + 1 < argc)
+            {
+                args.save_session_rounds = std::stoi(argv[c]);
+                args.save_session        = argv[c + 1];
+                c++;
+            }
+        }
         else if (strcmp(arg, "--kv") == 0)
         {
             while (c + 2 < argc)
@@ -283,6 +300,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         handle_para0("--init_vs",                     vector_store_in,      std::string)
         handle_para0("--merge_vs",                    merge_vs,             std::string)
         handle_para0("--layer_spec",                  layer_spec,           std::string)
+        handle_para0("--load_session",                load_session,         std::string)
         else
             break;
 
@@ -641,8 +659,42 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
         return;
     }
 
+    if (0 == args.save_session_rounds)
+    {
+        std::cout << std::endl << "evaluating system prompt... ";
+        pipeline.eval_sys_prompt(gen_config);
+        std::cout << "saving session..." << std::endl;
+        pipeline.save_session(history, args.save_session);
+        return;
+    }
+
+    if (args.load_session.size() > 0)
+    {
+        CHATLLM_CHECK(pipeline.load_session(history, args.load_session) == 0) << "failed to load session file";
+
+        for (size_t i = 0; i < history.size(); i++)
+        {
+            streamer.cout << std::setw(prompt_len) << std::left
+                          << ((i % 2) == 0 ? user_prompt : ai_prompt)
+                          << " > "
+                          << history[i] << std::endl << std::flush;
+        }
+        if ((history.size() % 2) == 1)
+        {
+            std::string output = pipeline.chat(history, gen_config, &streamer);
+            history.emplace_back(std::move(output));
+        }
+    }
+
     while (1)
     {
+        if ((args.save_session_rounds > 0) && (history.size() / 2 == args.save_session_rounds))
+        {
+            std::cout << std::endl << "saving session..." << std::endl;
+            pipeline.save_session(history, args.save_session);
+            break;
+        }
+
         streamer.cout << std::setw(prompt_len) << std::left << user_prompt << " > " << std::flush;
         std::string input;
         if (!get_utf8_line(input, args.multi_line))

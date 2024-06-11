@@ -6,7 +6,7 @@
 
 ![](./docs/demo.gif)
 
-在计算机（CPU）上实时聊天，可 [检索增强生成](./docs/rag.md) 。支持从不到 3B 到超过 300B 的一系列模型的推理。基于 [@ggerganov](https://github.com/ggerganov) 的 [ggml](https://github.com/ggerganov/ggml)，纯 C++ 实现。
+在计算机（CPU）上实时聊天，可 [检索增强生成](./docs/rag.md) 。支持从不到 1B 到超过 300B 的一系列模型的推理。基于 [@ggerganov](https://github.com/ggerganov) 的 [ggml](https://github.com/ggerganov/ggml)，纯 C++ 实现。
 
 | [支持的模型](./docs/models.md) | [下载量化模型](https://modelscope.cn/models/judd2024/chatllm_quantized_models) |
 

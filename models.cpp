@@ -654,7 +654,7 @@ namespace chatllm
 
             //for (int i = 0; i < (int)input_ids.size(); i++)
             //    printf("%d, ", input_ids[i]);
-            //printf("\n");
+            //printf("\nn_past = %d, %d\n\n", n_past, continuous);
 
             std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config, _seed));
 
@@ -782,6 +782,21 @@ namespace chatllm
             return lm_logits;
         }
 
+        int save_session(FILE *f) const
+        {
+            int r = BaseModel::save_session(f);
+            if (r != 0)
+                return r;
+            return transformer->save_session(f);
+        }
+
+        int load_session(FILE *f) override
+        {
+            int r = BaseModel::load_session(f);
+            if (r != 0) return r;
+            return transformer->load_session(f);
+        }
+
     protected:
         virtual ggml_tensor *run_model(const std::vector<int> &input_ids,
                                        const GenerationConfig &gen_config,
@@ -887,16 +902,23 @@ namespace chatllm
 
         HeterogeneousModel(InitContext *ctx, const Config &config, Block *lm_head, std::function<Block *(InitContext *, int)> create_layer)
         : config(config),
-          word_embeddings(ctx, config.vocab_size, config.hidden_size),
+          word_embeddings(ctx, config.vocab_size, config.hidden_size, config.max_length),
           final_layernorm(ctx, config.hidden_size),
-          lm_head(lm_head)
+          lm_head(lm_head),
+          cache_size(0)
         {
             layers.reserve(config.num_hidden_layers);
             for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
             {
-                layers.emplace_back(create_layer(ctx, layer_id));
-                layers[layer_id]->set_id(layer_id);
+                auto layer = create_layer(ctx, layer_id);
+                layers.emplace_back(layer);
+                layer->set_id(layer_id);
+                cache_size += layer->get_cache_size();
             }
+            cache_buffer = new char[cache_size];
+            void *buffer = cache_buffer;
+            for (auto layer: layers)
+                buffer = layer->set_cache_buffer(buffer);
         }
 
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
@@ -940,6 +962,32 @@ namespace chatllm
             return layers[index];
         }
 
+        int save_session(FILE *f)
+        {
+            struct state state = {.cache_size = cache_size };
+            if (fwrite(&state, sizeof(state), 1, f) != 1)
+                return -1;
+            if (fwrite(cache_buffer, 1, cache_size, f) != cache_size)
+                return -3;
+            return 0;
+        }
+
+        int load_session(FILE *f)
+        {
+            struct state state = {0};
+            fread(&state, sizeof(state), 1, f);
+            if (state.cache_size != cache_size)
+                return -1;
+            if (fread(cache_buffer, 1, cache_size, f) != cache_size)
+                return -2;
+            return 0;
+        }
+
+    private:
+        struct state
+        {
+            size_t cache_size;
+        };
     protected:
         ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
@@ -967,6 +1015,8 @@ namespace chatllm
     protected:
         // std::vector<std::unique_ptr<Block>> layers;
         std::vector<Block *> layers;
+        void *cache_buffer;
+        size_t cache_size;
     };
 
     template <class Config, class Embedding, class FinalNorm, class LayerBlock, typename... _Types> class Model :
@@ -1022,55 +1072,29 @@ namespace chatllm
         Accessor layers;
     };
 
-    template <class Config, class Embedding, class LayerBlock, class FinalBlock, typename... _Types> class EmbeddingModel : public Block
+    template <class Config, class Embedding, class LayerBlock, class FinalBlock, typename... _Types> class EmbeddingModel : public Model
+        <Config, Embedding, FinalBlock, LayerBlock, _Types...>
     {
     public:
+        typedef Model<Config, Embedding, FinalBlock, LayerBlock, _Types...> Base;
+        typedef HeterogeneousModel<Config, Embedding, FinalBlock> BaseBase;
+
         EmbeddingModel() = default;
 
         EmbeddingModel(InitContext *ctx, const Config &config, _Types... layer_args)
-        : config(config),
-          word_embeddings(ctx, config.vocab_size, config.hidden_size, config.max_length),
-          final(ctx, config.hidden_size)
+        : Base(ctx, config, nullptr, std::forward<_Types>(layer_args)...)
         {
-            layers.reserve(config.num_hidden_layers);
-            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
-            {
-                layers.emplace_back(ctx, std::forward<_Types>(layer_args)...);
-                layers[layer_id].set_id(layer_id);
-            }
         }
 
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
         {
-            ggml_tensor *hidden_states = word_embeddings.forward(ctx, input_ids, n_past);
-            for (auto &layer : layers)
+            ggml_tensor *hidden_states = Base::word_embeddings.forward(ctx, input_ids, n_past);
+            for (auto &layer : BaseBase::layers)
             {
                 ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
-                hidden_states = layer.forward(ctx, hidden_states, n_past);
+                hidden_states = layer->forward(ctx, hidden_states, n_past);
             }
             return final_steps(ctx, input_ids, hidden_states);
-        }
-
-        void set_ctx(int n_ctx) override
-        {
-            for (auto &layer : layers)
-                layer.set_ctx(n_ctx);
-        }
-
-        void shift_cache(int shift, int total) override
-        {
-            for (auto &layer : layers)
-                layer.shift_cache(shift, total);
-        }
-
-        int64_t get_param_num(bool effective_only) const override
-        {
-            int64_t r = 0;
-            r += word_embeddings.get_param_num(effective_only);
-            if (layers.size() > 0)
-                r += layers[0].get_param_num(effective_only) * layers.size();
-            r += final.get_param_num(effective_only);
-            return r;
         }
 
     protected:
@@ -1078,15 +1102,10 @@ namespace chatllm
         {
             ggml_set_scratch(ctx->gctx.get(), {.offs = 0, .size = 0, .data = nullptr});
 
-            ggml_tensor *transformer_outputs = final.forward(ctx, hidden_states);
+            ggml_tensor *transformer_outputs = Base::final_layernorm.forward(ctx, hidden_states);
 
             return transformer_outputs;
         }
-    public:
-        Config config;
-        Embedding word_embeddings;
-        std::vector<LayerBlock> layers;
-        FinalBlock final;
     };
 
     namespace glm

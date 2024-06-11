@@ -128,6 +128,40 @@ namespace base64
             return 0;
     }
 
+    std::string encode(const void *raw_data, int data_len, bool for_url)
+    {
+        const uint8_t *data = (const uint8_t *)raw_data;
+        int len = (data_len + 2) / 3 * 4;
+        int i, j;
+        const char padding = for_url ? '.' : '=';
+        std::string r;
+        r.resize(len);
+        char *res = r.data();
+
+        const char *base64_table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+        for(i = 0, j = 0; i < len - 2; j += 3, i += 4)
+        {
+            res[i + 0] = base64_table[data[j] >> 2];
+            res[i + 1] = base64_table[(data[j] & 0x3) << 4 | (data[j + 1] >> 4)];
+            res[i + 2] = base64_table[(data[j + 1] & 0xf) << 2 | (data[j + 2] >> 6)];
+            res[i + 3] = base64_table[data[j + 2] & 0x3f];
+        }
+
+        switch (data_len % 3)
+        {
+            case 1:
+                res[i - 2] = padding;
+                res[i - 1] = padding;
+                break;
+            case 2:
+                res[i - 1] = padding;
+                break;
+        }
+
+        return r;
+    }
+
     std::vector<uint8_t> decode(const char *encoded_string) {
         std::vector<uint8_t> ret;
         size_t length_of_string = strlen(encoded_string);
@@ -169,6 +203,11 @@ namespace base64
         std::vector<uint8_t> content = base64::decode(encoded_string);
         s.resize(content.size());
         memcpy(s.data(), content.data(), s.size());
+    }
+
+    std::string encode_utf8(const std::string &s)
+    {
+        return encode(s.c_str(), (int)s.size(), false);
     }
 }
 

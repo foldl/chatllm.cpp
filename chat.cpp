@@ -172,6 +172,40 @@ namespace chatllm
         return input_ids;
     }
 
+    std::vector<int> BaseTokenizer::encode_sys_prompt(void)
+    {
+        std::vector<int> ids;
+        switch (format)
+        {
+        case ChatFormat::COMPLETION:
+            if (completion_encoder)
+                completion_encoder->append_sys_prompt(ids);
+            else;
+            break;
+
+        case ChatFormat::QA:
+            if (qa_encoder)
+                qa_encoder->append_sys_prompt(ids);
+            else if (chat_encoder)
+            {
+                chat_encoder->append_sys_prompt(ids);
+            }
+            else;
+            break;
+        default:
+            if (chat_encoder)
+                chat_encoder->append_sys_prompt(ids);
+            else;
+        }
+
+        if (auto_add_bos && (bos_token_id >= 0))
+        {
+            if ((ids.size() > 0) && (ids[0] != bos_token_id))
+                ids.insert(ids.begin(), bos_token_id);
+        }
+        return ids;
+    }
+
     std::vector<int> BaseTokenizer::encode_history(const std::vector<std::string> &history, int max_length, const bool incremental)
     {
         switch (format)
@@ -208,6 +242,39 @@ namespace chatllm
                 r.push_back(bos_token_id);
         }
         return r;
+    }
+
+    void BaseTokenizer::set_skip_sys_prompt(bool skip)
+    {
+        if (chat_encoder)
+            chat_encoder->skip_sys_prompt = skip;
+        if (completion_encoder)
+            completion_encoder->skip_sys_prompt = skip;
+        if (qa_encoder)
+            qa_encoder->skip_sys_prompt = skip;
+    }
+
+    void BaseHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+    }
+
+    void BaseHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    {
+    }
+
+    void BaseHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        if (round_idx == 0)
+        {
+            if (!skip_sys_prompt)
+                append_sys_prompt(ids);
+        }
+        do_append_user(round_idx, user, ids);
+    }
+
+    void BaseHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        tokenizer->encode(user, ids);
     }
 
     static std::string shape_to_string(ggml_tensor *tensor)
@@ -613,6 +680,15 @@ namespace chatllm
         return output;
     }
 
+    void Pipeline::eval_sys_prompt(const GenerationConfig &gen_config)
+    {
+        bool completed = false;
+        std::vector<int> input_ids = tokenizer->encode_sys_prompt();
+
+        model->generate(input_ids, gen_config, false, completed, &performance, 1, nullptr);
+        return;
+    }
+
     std::string Pipeline::chat(std::vector<std::string> &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer)
     {
@@ -664,6 +740,64 @@ namespace chatllm
     void Pipeline::restart(void)
     {
         initializing = true;
+    }
+
+    int Pipeline::save_session(const std::vector<std::string> &history, const std::string &file_name)
+    {
+        FILE *f = fopen(file_name.c_str(), "wb");
+        file_header header = {0};
+        memcpy(header.magic, head_magic, sizeof(header.magic));
+        header.history_len = history.size();
+
+        if (fwrite(&header, sizeof(header), 1, f) != 1)
+            return -1;
+
+        for (auto &s : history)
+        {
+            size_t len = s.size();
+            fwrite(&len, sizeof(len), 1, f);
+            fwrite(s.data(), 1, len, f);
+        }
+
+        model->save_session(f);
+
+        fclose(f);
+        return 0;
+    }
+
+    int Pipeline::load_session(std::vector<std::string> &history, const std::string &file_name)
+    {
+        int r = -1;
+        FILE *f = fopen(file_name.c_str(), "rb");
+        file_header header = {0};
+        fread(&header, 1, sizeof(header), f);
+
+        if (memcmp(header.magic, head_magic, sizeof(header.magic)) == 0)
+        {
+            for (size_t i = 0; i < header.history_len; i++)
+            {
+                std::string s;
+                size_t len;
+                if (fread(&len, sizeof(len), 1, f) != 1)
+                    return -2;
+
+                s.resize(len);
+                if (fread(s.data(), 1, len, f) != len)
+                    return -3;
+                history.push_back(s);
+            }
+
+            r = model->load_session(f);
+            if (r != 0) goto exit;
+        }
+    exit:
+        fclose(f);
+        if (r == 0)
+        {
+            initializing = false;
+            tokenizer->set_skip_sys_prompt(true);
+        }
+        return r;
     }
 
     float Pipeline::qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config)

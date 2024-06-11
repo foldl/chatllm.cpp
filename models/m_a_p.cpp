@@ -14,15 +14,20 @@ namespace neo
             ids.push_back(tok->eos_token_id);
         }
 
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
+        void append_sys_prompt(std::vector<int> &ids) const override
         {
             auto *tok = tokenizer;
-            if ((round_idx == 0) && (tok->get_system_prompt().size() > 0))
+            if (tok->get_system_prompt().size() > 0)
             {
                 std::ostringstream oss;
                 oss << "<<SYS>>\n" << tok->get_system_prompt() << "\n<</SYS>>";
                 tok->encode(oss.str(), ids);
             }
+        }
+
+        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
+        {
+            auto *tok = tokenizer;
 
             std::ostringstream oss;
             oss << "[INST] " << user << " [/INST]";

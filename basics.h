@@ -34,3 +34,11 @@ namespace chatllm
         });
     }
 }
+
+namespace base64
+{
+    std::string encode(const void *raw_data, int data_len, bool for_url);
+    std::vector<uint8_t> decode(const char *encoded_string);
+    void decode_to_utf8(const char *encoded_string, std::string &s);
+    std::string encode_utf8(const std::string &s);
+}

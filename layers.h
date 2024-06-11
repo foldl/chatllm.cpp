@@ -57,6 +57,9 @@ namespace chatllm
         {
             return 0;
         }
+
+        virtual size_t get_cache_size(void) const { return 0; }
+        virtual void  *set_cache_buffer(void *buffer) { return buffer; }
     protected:
         ggml_prec prec;
         int id;
@@ -97,6 +100,9 @@ namespace chatllm
         Embedding() : weight(nullptr) {}
         Embedding(InitContext *ctx, int num_embeddings, int embedding_dim)
             : weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, embedding_dim, num_embeddings)) {}
+
+        Embedding(InitContext *ctx, int num_embeddings, int embedding_dim, int pos_max)
+            : Embedding(ctx, num_embeddings, embedding_dim) {}
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
@@ -303,8 +309,6 @@ namespace chatllm
               n_ctx(0),
               shift_pending()
         {
-            k_cache->data = new char[ggml_nbytes(k_cache)];
-            v_cache->data = new char[ggml_nbytes(v_cache)];
             pos->data = new char[ggml_nbytes(pos)]();
         }
         using Block::forward;
@@ -322,6 +326,19 @@ namespace chatllm
             r += query_key_value.get_param_num(effective_only);
             r += dense.get_param_num(effective_only);
             return r;
+        }
+
+        size_t get_cache_size(void) const override
+        {
+            return ggml_nbytes(k_cache) + ggml_nbytes(v_cache);
+        }
+
+        void  *set_cache_buffer(void *buffer) override
+        {
+            uint8_t *b = (uint8_t *)buffer;
+            k_cache->data = b; b += ggml_nbytes(k_cache);
+            v_cache->data = b; b += ggml_nbytes(k_cache);
+            return b;
         }
 
     public:
@@ -362,6 +379,16 @@ namespace chatllm
             return r;
         }
 
+        size_t get_cache_size(void) const override
+        {
+            return attention.get_cache_size();
+        }
+
+        void  *set_cache_buffer(void *buffer) override
+        {
+            return attention.set_cache_buffer(buffer);
+        }
+
     public:
         LayerNorm input_layernorm;
         GLMSelfAttention attention;
@@ -387,8 +414,6 @@ namespace chatllm
               rope_scaling(1.0f),
               shift_pending()
         {
-            k_cache->data = new char[ggml_nbytes(k_cache)]();
-            v_cache->data = new char[ggml_nbytes(v_cache)]();
             pos->data = new char[ggml_nbytes(pos)]();
         }
 
@@ -408,6 +433,18 @@ namespace chatllm
             return r;
         }
 
+        size_t get_cache_size(void) const override
+        {
+            return ggml_nbytes(k_cache) + ggml_nbytes(v_cache);
+        }
+
+        void  *set_cache_buffer(void *buffer) override
+        {
+            uint8_t *b = (uint8_t *)buffer;
+            k_cache->data = b; b += ggml_nbytes(k_cache);
+            v_cache->data = b; b += ggml_nbytes(k_cache);
+            return b;
+        }
     public:
         int num_attention_heads;
         int num_kv_heads;
@@ -551,6 +588,16 @@ namespace chatllm
             mlp.set_id(id);
         }
 
+        size_t get_cache_size(void) const override
+        {
+            return attention.get_cache_size();
+        }
+
+        void  *set_cache_buffer(void *buffer) override
+        {
+            return attention.set_cache_buffer(buffer);
+        }
+
     public:
         InputNormBlock input_layernorm;
         AttentionBlock attention;
@@ -646,6 +693,16 @@ namespace chatllm
             post_mlp_layernorm.set_id(id);
         }
 
+        size_t get_cache_size(void) const override
+        {
+            return attention.get_cache_size();
+        }
+
+        void  *set_cache_buffer(void *buffer) override
+        {
+            return attention.set_cache_buffer(buffer);
+        }
+
     public:
         PreAttnNormBlock pre_attention_layernorm;
         AttentionBlock attention;
@@ -732,12 +789,10 @@ namespace chatllm
         {
             if (k_cache_ele_num > 0)
             {
-                k_cache->data = new char[ggml_nbytes(k_cache)]();
                 ggml_set_name(k_cache, "k_cache");
             }
             if (v_cache_ele_num > 0)
             {
-                v_cache->data = new char[ggml_nbytes(v_cache)]();
                 ggml_set_name(v_cache, "v_cache");
             }
             pos->data = new char[ggml_nbytes(pos)]();
@@ -746,6 +801,32 @@ namespace chatllm
         void shift_cache(int shift, int total) override
         {
             shift_pending = ShiftPending(shift, total);
+        }
+
+        size_t get_cache_size(void) const override
+        {
+            size_t r = 0;
+            if (k_cache)
+                r += ggml_nbytes(k_cache);
+            if (v_cache)
+                r += ggml_nbytes(v_cache);
+            return r;
+        }
+
+        void  *set_cache_buffer(void *buffer) override
+        {
+            uint8_t *b = (uint8_t *)buffer;
+            if (k_cache)
+            {
+                k_cache->data = b;
+                b += ggml_nbytes(k_cache);
+            }
+            if (v_cache)
+            {
+                v_cache->data = b;
+                b += ggml_nbytes(v_cache);
+            }
+            return b;
         }
 
     protected:
@@ -1798,6 +1879,16 @@ namespace chatllm
             r += attention.get_param_num(effective_only);
             r += mlp.get_param_num(effective_only);
             return r;
+        }
+
+        size_t get_cache_size(void) const override
+        {
+            return attention.get_cache_size();
+        }
+
+        void  *set_cache_buffer(void *buffer) override
+        {
+            return attention.set_cache_buffer(buffer);
         }
 
     public:
