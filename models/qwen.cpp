@@ -290,6 +290,9 @@ namespace v2
             auto &layer = transformer->layers[i];
             layer.attention.freq_base = config.rope_theta;
         }
+
+        if (transformer->get_param_num(false) > 20000000)
+            GRAPH_SIZE = 4096 * 2;
     }
 
     void ConditionalGeneration::load(ModelLoader &loader)
