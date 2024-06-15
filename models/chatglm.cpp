@@ -383,6 +383,64 @@ public:
     int observation_token_id;
 };
 
+class GLMInterceptor : public ChunkInterceptor
+{
+public:
+    GLMInterceptor() : ChunkInterceptor(), is_first(true), find_meta(false), found_tool_call(false)
+    {}
+
+    void put_chunk(bool _first, const std::string &chunk) override
+    {
+        if (is_first && found_tool_call)
+        {
+            found_tool_call = false;
+            is_first = false;
+            goto handle_data;
+        }
+
+        if (is_first)
+        {
+            std::string s = trim(chunk);
+            if (s.size() < 1) return;
+
+            _first = true;
+
+            if (s[0] != '\n')
+            {
+                find_meta = true;
+                found_tool_call = true;
+            }
+
+            is_first = false;
+        }
+
+    handle_data:
+        if (find_meta)
+            oss << chunk;
+        else
+            streamer->put_chunk(_first, chunk);
+    }
+
+    void end() override
+    {
+        if (find_meta)
+            streamer->putln(oss.str(), BaseStreamer::TextType::TOOL_CALLING);
+
+        oss.str("");
+        find_meta = false;
+        is_first = true;
+
+        ChunkInterceptor::end();
+    }
+protected:
+    std::ostringstream oss;
+    bool is_first;
+    bool find_meta;
+    bool found_tool_call;
+};
+
+static GLMInterceptor interceptor;
+
 class ConditionalGeneration : public v2::ConditionalGeneration
 {
 public:
@@ -391,6 +449,8 @@ public:
         : v2::ConditionalGeneration(config, MODEL_TYPE_CHATGLM3)
     {
     }
+
+    ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
 };
 
 size_t Tokenizer::load(const char *buffer, int n_vocab)
@@ -402,6 +462,10 @@ size_t Tokenizer::load(const char *buffer, int n_vocab)
     user_token_id   = token_id++;
     assistant_token_id  = token_id++;
     observation_token_id= token_id++;
+
+    terminate_ids.insert(eos_token_id);
+    terminate_ids.insert(user_token_id);
+    terminate_ids.insert(observation_token_id);
     return size;
 }
 
@@ -509,6 +573,42 @@ public:
     int nl_token_id;
 };
 
+class GLMInterceptor : public ChunkInterceptor
+{
+public:
+    GLMInterceptor() : ChunkInterceptor(), find_meta(false)
+    {}
+
+    void put_chunk(bool first, const std::string &chunk) override
+    {
+        if (first && (chunk[0] != '\n'))
+        {
+            find_meta = true;
+        }
+
+        if (find_meta)
+            oss << chunk;
+        else
+            streamer->put_chunk(first, chunk);
+    }
+
+    void end() override
+    {
+        if (find_meta)
+            streamer->putln(oss.str(), BaseStreamer::TextType::TOOL_CALLING);
+
+        oss.str("");
+        find_meta = false;
+
+        ChunkInterceptor::end();
+    }
+protected:
+    std::ostringstream oss;
+    bool find_meta;
+};
+
+static GLMInterceptor interceptor;
+
 class ConditionalGeneration : public v2::ConditionalGeneration
 {
 public:
@@ -519,9 +619,11 @@ public:
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             auto &attention = transformer->layers[i].attention;
-            attention.rope_theta *= config.rope_ratio;
+            attention.freq_base *= config.rope_ratio;
         }
     }
+
+    ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
 };
 
 void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const

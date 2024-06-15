@@ -975,7 +975,8 @@ namespace chatllm
         int load_session(FILE *f)
         {
             struct state state = {0};
-            fread(&state, sizeof(state), 1, f);
+            if (fread(&state, sizeof(state), 1, f) != 1)
+                return -10;
             if (state.cache_size != cache_size)
                 return -1;
             if (fread(cache_buffer, 1, cache_size, f) != cache_size)
@@ -1458,7 +1459,8 @@ namespace chatllm
             << "hidden_size         : " << config.hidden_size << std::endl
             << "num_attention_heads : " << config.num_attention_heads << std::endl
             << "num_hidden_layers   : " << config.num_hidden_layers << std::endl
-            << "intermediate_size   : " << config.intermediate_size << std::endl;
+            << "intermediate_size   : " << config.intermediate_size << std::endl
+            << "max_length          : " << config.max_length << std::endl;
 
         return oss.str();
     }

@@ -116,7 +116,7 @@ namespace chatllm
     class BaseHistoryEncoder
     {
     public:
-        BaseHistoryEncoder() : tokenizer(nullptr), skip_sys_prompt(false) {}
+        BaseHistoryEncoder() : skip_sys_prompt(false), tokenizer(nullptr) {}
 
         virtual void append_sys_prompt(std::vector<int> &ids) const;
 
@@ -189,20 +189,73 @@ namespace chatllm
         ggml_scratch scratch;
     };
 
+    class ChunkInterceptor;
+
     class BaseStreamer
     {
     public:
-        virtual ~BaseStreamer() = default;
-        virtual void put(const std::vector<int> &output_ids) = 0;
-        virtual void putln(const std::string &line) = 0;
-        // used for RAG
-        virtual void put_reference(const std::string &line)
+        enum TextType
         {
-            putln(line);
+            META            = 1,    // print a whole line: general information
+            ERR             = 2,    // print a whole line: error message
+            REF             = 3,    // print a whole line: reference
+            REWRITTEN_QUERY = 4,    // print a whole line: rewritten query
+            HISTORY_USER    = 5,    // print a whole line: user input history
+            HISTORY_AI      = 6,    // print a whole line: AI output history
+            TOOL_CALLING    = 7,
+        };
+        BaseStreamer(BaseTokenizer *tokenizer);
+        virtual ~BaseStreamer() = default;
+        virtual void put(const std::vector<int> &output_ids);
+        virtual void put_chunk(bool first, const std::string &chunk) = 0;
+        virtual void putln(const std::string &line, TextType type = TextType::META) = 0;
+        virtual void end();
+
+        virtual void set_interceptor(ChunkInterceptor *interceptor);
+        virtual void remove_interceptor(void);
+
+        // used for RAG
+        void put_reference(const std::string &line)
+        {
+            putln(line, TextType::REF);
         }
-        virtual void put_rewritten_query(const std::string &line)
-        {}
-        virtual void end() = 0;
+        void put_rewritten_query(const std::string &line)
+        {
+            putln(line, TextType::REWRITTEN_QUERY);
+        }
+        void put_history_user(const std::string &line)
+        {
+            putln(line, TextType::HISTORY_USER);
+        }
+        void put_history_ai(const std::string &line)
+        {
+            putln(line, TextType::HISTORY_AI);
+        }
+        void put_tool_calling(const std::string &line)
+        {
+            putln(line, TextType::TOOL_CALLING);
+        }
+    public:
+        bool is_prompt;
+    protected:
+        BaseTokenizer *tokenizer;
+        bool is_first;
+        size_t print_len;
+        std::vector<int> token_cache;
+        ChunkInterceptor *interceptor;
+
+        virtual void call_put_chunk(bool first, const std::string &chunk);
+    };
+
+    class ChunkInterceptor
+    {
+    public:
+        ChunkInterceptor() : streamer(nullptr) {}
+        virtual void intercept(BaseStreamer *streamer) { this->streamer = streamer; }
+        virtual void put_chunk(bool first, const std::string &chunk) { if (streamer) streamer->put_chunk(first, chunk); }
+        virtual void end() { }
+    protected:
+        BaseStreamer *streamer;
     };
 
     class MappedFile
@@ -364,6 +417,7 @@ namespace chatllm
         virtual int get_max_length(void) = 0;
 
         virtual int get_n_past(void) = 0;
+        virtual void set_n_past(int n_past) = 0;
 
         virtual void shift_memory(int keep) = 0;
 
@@ -371,12 +425,14 @@ namespace chatllm
         virtual int load_session(FILE *f) = 0;
 
         virtual int64_t get_param_num(bool effective_only) const = 0;
+
+        virtual ChunkInterceptor *get_interceptor(void) { return nullptr; }
     };
 
     class ModelProxy : public AbstractModel
     {
     public:
-        ModelProxy() : model(nullptr) {}
+        ModelProxy() : AbstractModel(), model(nullptr) {}
 
         virtual ~ModelProxy()
         {
@@ -423,6 +479,7 @@ namespace chatllm
         int get_max_length(void) override { return model->get_max_length(); }
 
         int get_n_past(void) override { return model->get_n_past(); }
+        void set_n_past(int n_past) override { model->set_n_past(n_past); }
 
         void shift_memory(int keep) override { model->shift_memory(keep); }
 
@@ -430,6 +487,9 @@ namespace chatllm
         int load_session(FILE *f) override { return model->load_session(f); }
 
         int64_t get_param_num(bool effective_only) const override { return model->get_param_num(effective_only); }
+
+        ChunkInterceptor *get_interceptor(void) override { return model->get_interceptor(); }
+
     protected:
         AbstractModel *model;
         void set_proxy_model(AbstractModel *model) { this->model = model; }
@@ -490,6 +550,8 @@ namespace chatllm
 
         int get_n_past(void) override { return n_past; }
 
+        void set_n_past(int n_past) override { this->n_past = n_past; }
+
         void shift_memory(int keep) override
         {
             CHATLLM_CHECK(n_past >= keep) << "length of kept should not exceeds history";
@@ -514,7 +576,8 @@ namespace chatllm
         int load_session(FILE *f) override
         {
             struct state state = {0};
-            fread(&state, sizeof(state), 1, f);
+            if (fread(&state, sizeof(state), 1, f) != 1)
+                return -1;
             if (state.type != type_) return -1;
             n_past = state.n_past;
             n_past_offset = state.n_past_offset;
@@ -590,6 +653,7 @@ namespace chatllm
         {
             Shift,
             Restart,
+            None,
         };
 
         Pipeline(const std::string &path);
@@ -614,9 +678,10 @@ namespace chatllm
         bool is_loaded(void) const { return modelobj.loaded; }
 
         virtual void restart(void);
+        virtual void rewind(int n_past);
 
         virtual int save_session(const std::vector<std::string> &history, const std::string &file_name);
-        virtual int load_session(std::vector<std::string> &history, const std::string &file_name);
+        virtual int load_session(std::vector<std::string> &history, const std::string &file_name, BaseStreamer *streamer, int *n_past = nullptr);
     protected:
         const char head_magic[16] = "CHATLLM-SESSION";
 
@@ -641,6 +706,8 @@ namespace chatllm
                          BaseStreamer *streamer);
         std::string chat_with_shift(const std::vector<std::string> &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);
+        std::string chat_without_extending(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+                               BaseStreamer *streamer);
 
         virtual void before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer);
         virtual void post_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer);

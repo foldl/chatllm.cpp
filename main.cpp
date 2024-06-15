@@ -29,7 +29,7 @@ struct Args
     std::string system = "";
     std::string prompt = "你好";
     std::string sampling = "top_p";
-    std::string extending = "restart";
+    chatllm::Pipeline::ExtendingMethod extending = chatllm::Pipeline::ExtendingMethod::Restart;
     std::string test_fn = "";
     std::string rag_template = "";
     std::string rag_context_sep = "";
@@ -68,6 +68,19 @@ struct Args
 #define MULTI_LINE_END_MARKER_W  L"\\."
 #define MULTI_LINE_END_MARKER     "\\."
 
+bool has_extending = false;
+
+static chatllm::Pipeline::ExtendingMethod parse_extending_method(const std::string &s)
+{
+    has_extending = true;
+    if (s == "shift")
+        return chatllm::Pipeline::ExtendingMethod::Shift;
+    else if (s == "restart")
+        return chatllm::Pipeline::ExtendingMethod::Restart;
+    else
+        return chatllm::Pipeline::ExtendingMethod::None;
+}
+
 void usage(const std::string &prog)
 {
     std::cout << "Usage: " << prog << " [options]\n"
@@ -92,7 +105,8 @@ void usage(const std::string &prog)
               << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
               << "  -c, --max_context_length N\n"
               << "                          max context length (default: 512)\n"
-              << "  --extending EXT         context extending method (EXT = restart | shift) (default: restart)\n"
+              << "  --extending EXT         context extending method (EXT = restart | shift | none)\n"
+              << "                          (default: none if `--load_session` is specified, otherwise restart)\n"
               << "  --multi                 enabled multiple lines of input\n"
               << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n"
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
@@ -195,119 +209,131 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         }
 
     size_t c = 1;
-    while (c < argc)
-    {
-        const char *arg = argv[c].c_str();
-        if ((strcmp(arg, "--help") == 0) || (strcmp(arg, "-h") == 0))
-        {
-            args.show_help = true;
-        }
-        else if ((strcmp(arg, "--interactive") == 0) || (strcmp(arg, "-i") == 0))
-        {
-            args.interactive = true;
-        }
-        else if (strcmp(arg, "--multi") == 0)
-        {
-            args.multi_line = true;
-        }
-        else if (strcmp(arg, "--tokenize") == 0)
-        {
-            args.tokenize = true;
-        }
-        else if (strcmp(arg, "--hide_reference") == 0)
-        {
-            args.hide_reference = true;
-        }
-        else if (strcmp(arg, "--hide_banner") == 0)
-        {
-            args.show_banner = false;
-        }
-        else if (strcmp(arg, "--show") == 0)
-        {
-            args.show = true;
-        }
-        else if (strcmp(arg, "+rag_dump") == 0)
-        {
-            args.rag_dump = true;
-        }
-        else if (strcmp(arg, "+rerank_rewrite") == 0)
-        {
-            args.rerank_rewrite = true;
-        }
-        else if (strcmp(arg, "--format") == 0)
-        {
-            c++;
-            if (c < argc)
-            {
-                if (argv[c] == "completion")
-                    args.format = chatllm::ChatFormat::COMPLETION;
-                else if (argv[c] == "qa")
-                    args.format = chatllm::ChatFormat::QA;
-                else
-                    args.format = chatllm::ChatFormat::CHAT;
-            }
-        }
-        else if (strcmp(arg, "--sys_file") == 0)
-        {
-            c++;
-            if (c < argc)
-                args.system = load_txt(argv[c]);
-        }
-        else if (strcmp(arg, "--save_session") == 0)
-        {
-            c++;
-            if (c + 1 < argc)
-            {
-                args.save_session_rounds = std::stoi(argv[c]);
-                args.save_session        = argv[c + 1];
-                c++;
-            }
-        }
-        else if (strcmp(arg, "--kv") == 0)
-        {
-            while (c + 2 < argc)
-            {
-                args.additional.insert_or_assign(argv[c + 1], argv[c + 2]);
-                c += 2;
-            }
-        }
-        handle_param("--model",                 "-m", model_path,           std::string)
-        handle_param("--prompt",                "-p", prompt,               std::string)
-        handle_param("--system",                "-s", system,               std::string)
-        handle_param("--max_length",            "-l", max_length,           std::stoi)
-        handle_param("--max_context_length",    "-c", max_context_length,   std::stoi)
-        handle_para0("--extending",                   extending,            std::string)
-        handle_para0("--sampling",                    sampling,             std::string)
-        handle_param("--top_k",                 "-k", top_k,                std::stoi)
-        handle_param("--top_p",                 "-q", top_p,                std::stof)
-        handle_para0("--tfs_z",                       tfs_z,                std::stof)
-        handle_param("--temp",                  "-t", temp,                 std::stof)
-        handle_para0("--presence_penalty",            presence_penalty,     std::stof)
-        handle_param("--threads",               "-n", num_threads,          std::stoi)
-        handle_para0("--seed",                        seed,                 std::stoi)
-        handle_para0("--test",                        test_fn,              std::string)
-        append_param("--vector_store",                vector_store,         std::string)
-        handle_para0("--embedding_model",             embedding_model_path, std::string)
-        handle_para0("--distance_strategy",           vc,                   ParseDistanceStrategy)
-        handle_para0("--retrieve_top_n",              retrieve_top_n,       std::stoi)
-        handle_para0("--reranker_model",              reranker_model_path,  std::string)
-        handle_para0("--retrieve_rewrite_template",   retrieve_rewrite_template,  std::string)
-        handle_para0("--rerank_score_thres",          rerank_score_thres,   std::stof)
-        handle_para0("--rerank_top_n",                rerank_top_n,         std::stoi)
-        handle_para0("--rag_post_extending",          rag_post_extending,   std::stoi)
-        handle_para0("--rag_template",                rag_template,         std::string)
-        handle_para0("--rag_context_sep",             rag_context_sep,      std::string)
-        handle_para0("--init_vs",                     vector_store_in,      std::string)
-        handle_para0("--merge_vs",                    merge_vs,             std::string)
-        handle_para0("--layer_spec",                  layer_spec,           std::string)
-        handle_para0("--load_session",                load_session,         std::string)
-        else
-            break;
 
-        c++;
+    try
+    {
+        while (c < argc)
+        {
+            const char *arg = argv[c].c_str();
+            if ((strcmp(arg, "--help") == 0) || (strcmp(arg, "-h") == 0))
+            {
+                args.show_help = true;
+            }
+            else if ((strcmp(arg, "--interactive") == 0) || (strcmp(arg, "-i") == 0))
+            {
+                args.interactive = true;
+            }
+            else if (strcmp(arg, "--multi") == 0)
+            {
+                args.multi_line = true;
+            }
+            else if (strcmp(arg, "--tokenize") == 0)
+            {
+                args.tokenize = true;
+            }
+            else if (strcmp(arg, "--hide_reference") == 0)
+            {
+                args.hide_reference = true;
+            }
+            else if (strcmp(arg, "--hide_banner") == 0)
+            {
+                args.show_banner = false;
+            }
+            else if (strcmp(arg, "--show") == 0)
+            {
+                args.show = true;
+            }
+            else if (strcmp(arg, "+rag_dump") == 0)
+            {
+                args.rag_dump = true;
+            }
+            else if (strcmp(arg, "+rerank_rewrite") == 0)
+            {
+                args.rerank_rewrite = true;
+            }
+            else if (strcmp(arg, "--format") == 0)
+            {
+                c++;
+                if (c < argc)
+                {
+                    if (argv[c] == "completion")
+                        args.format = chatllm::ChatFormat::COMPLETION;
+                    else if (argv[c] == "qa")
+                        args.format = chatllm::ChatFormat::QA;
+                    else
+                        args.format = chatllm::ChatFormat::CHAT;
+                }
+            }
+            else if (strcmp(arg, "--sys_file") == 0)
+            {
+                c++;
+                if (c < argc)
+                    args.system = load_txt(argv[c]);
+            }
+            else if (strcmp(arg, "--save_session") == 0)
+            {
+                c++;
+                if (c + 1 < argc)
+                {
+                    args.save_session_rounds = std::stoi(argv[c]);
+                    args.save_session        = argv[c + 1];
+                    c++;
+                }
+            }
+            else if (strcmp(arg, "--kv") == 0)
+            {
+                while (c + 2 < argc)
+                {
+                    args.additional.insert_or_assign(argv[c + 1], argv[c + 2]);
+                    c += 2;
+                }
+            }
+            handle_param("--model",                 "-m", model_path,           std::string)
+            handle_param("--prompt",                "-p", prompt,               std::string)
+            handle_param("--system",                "-s", system,               std::string)
+            handle_param("--max_length",            "-l", max_length,           std::stoi)
+            handle_param("--max_context_length",    "-c", max_context_length,   std::stoi)
+            handle_para0("--extending",                   extending,            parse_extending_method)
+            handle_para0("--sampling",                    sampling,             std::string)
+            handle_param("--top_k",                 "-k", top_k,                std::stoi)
+            handle_param("--top_p",                 "-q", top_p,                std::stof)
+            handle_para0("--tfs_z",                       tfs_z,                std::stof)
+            handle_param("--temp",                  "-t", temp,                 std::stof)
+            handle_para0("--presence_penalty",            presence_penalty,     std::stof)
+            handle_param("--threads",               "-n", num_threads,          std::stoi)
+            handle_para0("--seed",                        seed,                 std::stoi)
+            handle_para0("--test",                        test_fn,              std::string)
+            append_param("--vector_store",                vector_store,         std::string)
+            handle_para0("--embedding_model",             embedding_model_path, std::string)
+            handle_para0("--distance_strategy",           vc,                   ParseDistanceStrategy)
+            handle_para0("--retrieve_top_n",              retrieve_top_n,       std::stoi)
+            handle_para0("--reranker_model",              reranker_model_path,  std::string)
+            handle_para0("--retrieve_rewrite_template",   retrieve_rewrite_template,  std::string)
+            handle_para0("--rerank_score_thres",          rerank_score_thres,   std::stof)
+            handle_para0("--rerank_top_n",                rerank_top_n,         std::stoi)
+            handle_para0("--rag_post_extending",          rag_post_extending,   std::stoi)
+            handle_para0("--rag_template",                rag_template,         std::string)
+            handle_para0("--rag_context_sep",             rag_context_sep,      std::string)
+            handle_para0("--init_vs",                     vector_store_in,      std::string)
+            handle_para0("--merge_vs",                    merge_vs,             std::string)
+            handle_para0("--layer_spec",                  layer_spec,           std::string)
+            handle_para0("--load_session",                load_session,         std::string)
+            else
+                break;
+
+            c++;
+        }
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        return c;
     }
 
 #undef append_param
+
+    if (!has_extending && (args.load_session.size() > 0))
+        args.extending = chatllm::Pipeline::ExtendingMethod::None;
 
     return c;
 }
@@ -413,20 +439,13 @@ class TextStreamer : public chatllm::BaseStreamer
 {
 public:
     TextStreamer(chatllm::BaseTokenizer *tokenizer) :
-        tokenizer(tokenizer), is_prompt(true), print_len(0),
+        BaseStreamer(tokenizer),
         cout(std::cout),
         reference_tag("Reference:"), ref_count(0) {}
-    void put(const std::vector<int> &output_ids) override;
-    void putln(const std::string &line) override;
-    void put_reference(const std::string &line) override;
-    void put_rewritten_query(const std::string &line) override;
+    void put_chunk(bool first, const std::string &chunk) override;
+    void putln(const std::string &line, TextType type = TextType::META) override;
     void end() override;
 
-private:
-    chatllm::BaseTokenizer *tokenizer;
-    bool is_prompt;
-    std::vector<int> token_cache;
-    int print_len;
 public:
     std::ostream &cout;
     std::string reference_tag;
@@ -601,10 +620,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
         pipeline.model->seed(args.seed);
         args.max_length = pipeline.model->get_max_length();
 
-        if (args.extending == "shift")
-            pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Shift);
-        else
-            pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Restart);
+        pipeline.set_extending_method(args.extending);
 
         pipeline.tokenizer->set_chat_format(args.format);
     }
@@ -670,7 +686,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 
     if (args.load_session.size() > 0)
     {
-        CHATLLM_CHECK(pipeline.load_session(history, args.load_session) == 0) << "failed to load session file";
+        CHATLLM_CHECK(pipeline.load_session(history, args.load_session, nullptr) == 0) << "failed to load session file";
 
         for (size_t i = 0; i < history.size(); i++)
         {
@@ -688,7 +704,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 
     while (1)
     {
-        if ((args.save_session_rounds > 0) && (history.size() / 2 == args.save_session_rounds))
+        if ((args.save_session_rounds > 0) && ((int)(history.size() / 2) == args.save_session_rounds))
         {
             std::cout << std::endl << "saving session..." << std::endl;
             pipeline.save_session(history, args.save_session);
@@ -712,77 +728,47 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
     streamer.cout << "Bye\n";
 }
 
-void TextStreamer::putln(const std::string &line)
+void TextStreamer::putln(const std::string &line, TextType type)
 {
-    cout << line << std::endl << std::flush;
+    switch (type)
+    {
+    case TextType::ERR:
+        cout << "ERROR: " << line << std::endl << std::flush;
+        break;
+    case TextType::REF:
+        if (ref_count == 0)
+        {
+            putln("");
+            putln(reference_tag);
+        }
+        ref_count++;
+        cout << ref_count << ". " << line << std::endl << std::flush;
+        break;
+    case TextType::REWRITTEN_QUERY:
+        cout << "Searching " << line << " ..." << std::endl << std::flush;
+        break;
+    case TextType::HISTORY_USER:
+    case TextType::HISTORY_AI:
+        break;
+    case  TextType::TOOL_CALLING:
+        cout << " <TOOL_CALLING> Run this tool and tell AI the result: " << line << std::endl << std::flush;
+        break;
+    default:
+        cout << line << std::endl << std::flush;
+        break;
+    }
 }
 
-void TextStreamer::put_reference(const std::string &line)
+void TextStreamer::put_chunk(bool first, const std::string &chunk)
 {
-    if (ref_count == 0)
-    {
-        putln("");
-        putln(reference_tag);
-    }
-    ref_count++;
-    cout << ref_count << ". " << line << std::endl << std::flush;
-}
-
-void TextStreamer::put_rewritten_query(const std::string &line)
-{
-    cout << "Searching " << line << " ..." << std::endl << std::flush;
-}
-
-void TextStreamer::put(const std::vector<int> &output_ids)
-{
-    if (is_prompt)
-        is_prompt = false;
-
-    static const std::vector<char> puncts{',', '!', ':', ';', '?'};
-
-    token_cache.insert(token_cache.end(), output_ids.begin(), output_ids.end());
-    std::string text = tokenizer->decode(token_cache);
-    if (text.empty())
-    {
-        return;
-    }
-
-    std::string printable_text;
-    if ((text.back() == '\n') || (text.back() == '\r'))
-    {
-        // flush the cache after newline
-        printable_text = text.substr(print_len);
-        token_cache.clear();
-        print_len = 0;
-    }
-    else if (std::find(puncts.begin(), puncts.end(), text.back()) != puncts.end())
-    {
-        // last symbol is a punctuation, hold on
-    }
-    else if (text.size() >= 3 && text.compare(text.size() - 3, 3, "�") == 0)
-    {
-        // ends with an incomplete token, hold on
-    }
-    else
-    {
-        printable_text = text.substr(print_len);
-        print_len = (int)text.size();
-    }
-
-    cout << printable_text << std::flush;
+    cout << chunk << std::flush;
 }
 
 void TextStreamer::end()
 {
-    if (tokenizer)
-    {
-        std::string text = tokenizer->decode(token_cache);
-        cout << text.substr(print_len) << std::endl;
-    }
-    is_prompt = true;
-    token_cache.clear();
-    print_len = 0;
+    BaseStreamer::end();
     ref_count = 0;
+    cout << std::endl;
 }
 
 #if defined(_WIN32)
@@ -937,7 +923,8 @@ class Chat
 {
 public:
     Chat():
-        streamer(nullptr), pipeline(nullptr)
+        streamer(nullptr), pipeline(nullptr),
+        sess_n_past(-1), sess_hist_len(-1)
     {
         append_param("...");
     }
@@ -953,6 +940,10 @@ public:
     chatllm::BaseStreamer *streamer;
     chatllm::Pipeline *pipeline;
     chatllm::GenerationConfig gen_config;
+    int sess_n_past;
+    size_t sess_hist_len;
+    Args args;
+    std::string tool_input;
 };
 
 class FFIStreamer : public chatllm::BaseStreamer
@@ -961,82 +952,30 @@ public:
     FFIStreamer(chatllm::BaseTokenizer *tokenizer,
         f_chatllm_print f_print,
         f_chatllm_end f_end, void *user_data) :
-        tokenizer(tokenizer), is_prompt(true), print_len(0),
+        chatllm::BaseStreamer(tokenizer),
         f_print(f_print), f_end(f_end), user_data(user_data),
         ref_count(0)
     {
     }
 
-    void put(const std::vector<int> &output_ids) override
+    void put_chunk(bool is_first, const std::string &chunk) override
     {
-        if (is_prompt)
-            is_prompt = false;
-
-        static const std::vector<char> puncts{',', '!', ':', ';', '?'};
-
-        token_cache.insert(token_cache.end(), output_ids.begin(), output_ids.end());
-        std::string text = tokenizer->decode(token_cache);
-        if (text.empty())
-        {
-            return;
-        }
-
-        std::string printable_text;
-        if ((text.back() == '\n') || (text.back() == '\r'))
-        {
-            // flush the cache after newline
-            printable_text = text.substr(print_len);
-            token_cache.clear();
-            print_len = 0;
-        }
-        else
-        {
-            size_t end = tokenizer::get_end_of_valid_utf8(text, print_len);
-            if (end > print_len)
-            {
-                printable_text = text.substr(print_len, end - print_len);
-                print_len = end;
-            }
-        }
-
-        if (printable_text.size() > 0)
-            f_print(user_data, PRINT_CHAT_CHUNK, printable_text.c_str());
+        f_print(user_data, PRINT_CHAT_CHUNK, chunk.c_str());
     }
 
-    void putln(const std::string &line) override
+    void putln(const std::string &line, TextType type = TextType::META) override
     {
-        f_print(user_data, PRINTLN_META, line.c_str());
-    }
-
-    void put_reference(const std::string &line) override
-    {
-        f_print(user_data, PRINTLN_REF, line.c_str());
-    }
-
-    void put_rewritten_query(const std::string &line) override
-    {
-        f_print(user_data, PRINTLN_REWRITTEN_QUERY, line.c_str());
+        f_print(user_data, (int)type, line.c_str());
     }
 
     void end() override
     {
-        if (tokenizer)
-        {
-            std::string text = tokenizer->decode(token_cache);
-            putln(text.substr(print_len));
-        }
-        is_prompt = true;
-        token_cache.clear();
-        print_len = 0;
+        chatllm::BaseStreamer::end();
         f_end(user_data);
         ref_count = 0;
     }
 
 public:
-    chatllm::BaseTokenizer *tokenizer;
-    bool is_prompt;
-    std::vector<int> token_cache;
-    size_t print_len;
     f_chatllm_print f_print;
     f_chatllm_end f_end;
     void *user_data;
@@ -1056,6 +995,7 @@ void chatllm_append_param(struct chatllm_obj *obj, const char *utf8_str)
 
 static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline, chatllm::BaseStreamer &streamer)
 {
+    int r = 0;
     chat->pipeline = &pipeline;
     chat->streamer = &streamer;
 
@@ -1067,10 +1007,7 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline, chatl
         pipeline.model->seed(args.seed);
         args.max_length = pipeline.model->get_max_length();
 
-        if (args.extending == "shift")
-            pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Shift);
-        else
-            pipeline.set_extending_method(chatllm::Pipeline::ExtendingMethod::Restart);
+        pipeline.set_extending_method(args.extending);
 
         pipeline.tokenizer->set_chat_format(args.format);
     }
@@ -1083,14 +1020,25 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline, chatl
 
     show_banner(pipeline, args.interactive && args.show_banner, &streamer);
 
-    return 0;
+    if (args.load_session.size() > 0)
+    {
+        r = chatllm_load_session(reinterpret_cast<struct chatllm_obj *>(chat), args.load_session.c_str());
+        if (r) return r;
+    }
+
+    if (args.save_session_rounds == 0)
+    {
+        r = chatllm_save_session(reinterpret_cast<struct chatllm_obj *>(chat), args.save_session.c_str());
+    }
+
+    return r;
 }
 
 int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_end f_end, void *user_data)
 {
     Chat *chat = reinterpret_cast<Chat *>(obj);
+    Args &args = chat->args;
 
-    Args args;
     auto count = parse_args(args, chat->params);
 
     if (count < chat->params.size())
@@ -1143,13 +1091,42 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
 
 int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
 {
+    int r = 0;
     Chat *chat = reinterpret_cast<Chat *>(obj);
     FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
     if (!streamer->is_prompt) return -1;
 
     chat->history.push_back(utf8_str);
+
+generate:
     std::string output = chat->pipeline->chat(chat->history, chat->gen_config, streamer);
     chat->history.emplace_back(std::move(output));
+
+    if ((chat->args.save_session_rounds > 0) && (chat->history.size() / 2 == (size_t)chat->args.save_session_rounds))
+    {
+        streamer->putln("saving session...", chatllm::BaseStreamer::TextType::META);
+        r = chatllm_save_session(obj, chat->args.save_session.c_str());
+    }
+
+    if (chat->tool_input.size() > 0)
+    {
+        auto s = chat->tool_input;
+        chat->tool_input.clear();
+        chat->history.push_back(s.c_str());
+        goto generate;
+    }
+
+    return r;
+}
+
+int chatllm_tool_input(struct chatllm_obj *obj, const char *utf8_str)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    if (streamer->is_prompt)
+        return chatllm_user_input(obj, utf8_str);
+
+    chat->tool_input = std::string(utf8_str);
     return 0;
 }
 
@@ -1159,8 +1136,17 @@ void chatllm_restart(struct chatllm_obj *obj)
     FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
     if (!streamer->is_prompt) return;
 
-    chat->history.clear();
-    chat->pipeline->restart();
+    if (chat->sess_hist_len > 0)
+    {
+        if (chat->history.size() > chat->sess_hist_len)
+            chat->history.erase(chat->history.begin() + chat->sess_hist_len, chat->history.end());
+        chat->pipeline->rewind(chat->sess_n_past);
+    }
+    else
+    {
+        chat->history.clear();
+        chat->pipeline->restart();
+    }
 }
 
 void chatllm_abort_generation(struct chatllm_obj *obj)
@@ -1180,6 +1166,33 @@ void chatllm_show_statistics(struct chatllm_obj *obj)
 {
     Chat *chat = reinterpret_cast<Chat *>(obj);
     show_stat(*(chat->pipeline), *(chat->streamer));
+}
+
+int chatllm_save_session(struct chatllm_obj *obj, const char *utf8_str)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    if (!streamer->is_prompt) return -1;
+
+    streamer->putln("saving session ...", chatllm::BaseStreamer::TextType::META);
+
+    if (chat->history.size() < 1)
+    {
+        chat->pipeline->eval_sys_prompt(chat->gen_config);
+    }
+    return chat->pipeline->save_session(chat->history, utf8_str);
+}
+
+int  chatllm_load_session(struct chatllm_obj *obj, const char *utf8_str)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    if (!streamer->is_prompt) return -1;
+
+    int r = chat->pipeline->load_session(chat->history, utf8_str, streamer, &chat->sess_n_past);
+    if (0 == r)
+        chat->sess_hist_len = chat->history.size();
+    return r;
 }
 
 #endif

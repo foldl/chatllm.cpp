@@ -11,6 +11,9 @@ class PrintType(IntEnum):
     PRINTLN_ERROR           = 2,    # print a whole line: error message
     PRINTLN_REF             = 3,    # print a whole line: reference
     PRINTLN_REWRITTEN_QUERY = 4,    # print a whole line: rewritten query
+    PRINTLN_HISTORY_USER    = 5,    # print a whole line: user input history
+    PRINTLN_HISTORY_AI      = 6,    # print a whole line: AI output history
+    PRINTLN_TOOL_CALLING    = 7,    # print a whole line: tool calling (supported by only a few models)
 
 class LibChatLLM:
 
@@ -42,6 +45,7 @@ class LibChatLLM:
         self._chatllm_append_param = self._lib.chatllm_append_param
         self._chatllm_start = self._lib.chatllm_start
         self._chatllm_user_input = self._lib.chatllm_user_input
+        self._chatllm_tool_input = self._lib.chatllm_tool_input
         self._chatllm_abort_generation = self._lib.chatllm_abort_generation
         self._chatllm_restart = self._lib.chatllm_restart
         self._chatllm_set_gen_max_tokens = self._lib.chatllm_set_gen_max_tokens
@@ -58,6 +62,9 @@ class LibChatLLM:
 
         self._chatllm_user_input.restype = c_int
         self._chatllm_user_input.argtypes = [c_void_p, c_char_p]
+
+        self._chatllm_tool_input.restype = c_int
+        self._chatllm_tool_input.argtypes = [c_void_p, c_char_p]
 
         self._chatllm_abort_generation.restype = None
         self._chatllm_abort_generation.argtypes = [c_void_p]
@@ -86,6 +93,12 @@ class LibChatLLM:
             obj.callback_print_reference(txt)
         elif print_type == PrintType.PRINTLN_REWRITTEN_QUERY.value:
             obj.callback_print_rewritten_query(txt)
+        elif print_type == PrintType.PRINTLN_HISTORY_USER.value:
+            obj.callback_print_history_user(txt)
+        elif print_type == PrintType.PRINTLN_HISTORY_AI.value:
+            obj.callback_print_history_ai(txt)
+        elif print_type == PrintType.PRINTLN_TOOL_CALLING.value:
+            obj.call_tool(txt)
         elif print_type == PrintType.PRINTLN_ERROR.value:
             raise Exception(txt)
         else:
@@ -117,6 +130,9 @@ class LibChatLLM:
     def chat(self, obj: c_void_p, user_input: str) -> int:
         return self._chatllm_user_input(obj, c_char_p(user_input.encode()))
 
+    def tool_input(self, obj: c_void_p, user_input: str) -> int:
+        return self._chatllm_tool_input(obj, c_char_p(user_input.encode()))
+
     def abort(self, obj: c_void_p) -> None:
         self._chatllm_abort_generation(obj)
 
@@ -145,6 +161,7 @@ class ChatLLM:
         self.is_generating = False
         self.out_queue = None
         self.input_id = None
+        self.tool_input_id = None
         self.references = []
         self.rewritten_query = ''
         if param is not None:
@@ -170,6 +187,12 @@ class ChatLLM:
         if r != 0:
             raise Exception(f'ChatLLM: failed to `chat()` with error code {r}')
 
+    def tool_input(self, user_input: str, input_id = None) -> None:
+        self.tool_input_id = input_id
+        r = self._lib.tool_input(self._chat, user_input)
+        if r != 0:
+            raise Exception(f'ChatLLM: failed to `tool_input()` with error code {r}')
+
     def abort(self) -> None:
         self._lib.abort(self._chat)
 
@@ -194,9 +217,22 @@ class ChatLLM:
         else:
             self.out_queue.put(LLMChatChunk(self.input_id, s))
 
+    def callback_print_history_user(self, s: str) -> None:
+        pass
+
+    def callback_print_history_ai(self, s: str) -> None:
+        pass
+
+    def call_tool(self, s: str) -> None:
+        raise Exception(f'Tool calling not implemented! {s}')
+
     def callback_end(self) -> None:
-        if self.out_queue is not None:
+        if self.out_queue is None:
+            print('')
+        else:
             self.out_queue.put(LLMChatDone(self.input_id))
+        self.input_id = self.tool_input_id
+        self.tool_input_id = None
 
 class LLMChatInput:
     def __init__(self, input: str, id: Any) -> None:
@@ -280,6 +316,7 @@ def handler(signal_received, frame):
 
 def demo_streamer():
     global llm
+    signal.signal(signal.SIGINT, handler)
     llm = ChatLLM(LibChatLLM(), sys.argv[1:])
 
     streamer = ChatLLMStreamer(llm)
@@ -290,9 +327,10 @@ def demo_streamer():
         for s in streamer.chat(s):
             print(s, end='', flush=True)
 
-if __name__ == '__main__':
+def demo_simple(params, cls = ChatLLM):
+    global llm
     signal.signal(signal.SIGINT, handler)
-    llm = ChatLLM(LibChatLLM(), sys.argv[1:])
+    llm = cls(LibChatLLM(), params)
 
     while True:
         s = input('You  > ')
@@ -300,3 +338,6 @@ if __name__ == '__main__':
         llm.chat(s)
         if len(llm.references) > 0:
             print(llm.references)
+
+if __name__ == '__main__':
+    demo_simple(sys.argv[1:])
