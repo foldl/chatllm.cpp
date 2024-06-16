@@ -237,8 +237,8 @@ namespace chatllm
         }
     public:
         bool is_prompt;
-    protected:
         BaseTokenizer *tokenizer;
+    protected:
         bool is_first;
         size_t print_len;
         std::vector<int> token_cache;

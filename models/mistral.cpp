@@ -10,6 +10,7 @@ namespace mistral
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
         void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
         void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
     };
@@ -37,17 +38,86 @@ namespace mistral
             if (tp->GetPieceSize() == 32768)
             {
                 // Mistral v0.3
-                tp->AddAddedToken("[INST]",  3);
-                tp->AddAddedToken("[/INST]", 4);
-                tp->AddAddedToken("[TOOL_CALLS]",  5);
-                tp->AddAddedToken("[AVAILABLE_TOOLS]", 6);
-                tp->AddAddedToken("[/AVAILABLE_TOOLS]",  7);
-                tp->AddAddedToken("[TOOL_RESULTS]", 8);
-                tp->AddAddedToken("[/TOOL_RESULTS]",  9);
+                start_inst_token_id             = 3;
+                end_inst_token_id               = 4;
+                tool_calls_token_id             = 5;
+                start_avail_tools_token_id      = 6;
+                end_avail_tools_token_id        = 7;
+                start_tool_results_token_id     = 8;
+                end_tool_results_token_id       = 9;
+                tp->AddAddedToken("[INST]",             start_inst_token_id);
+                tp->AddAddedToken("[/INST]",            end_inst_token_id);
+                tp->AddAddedToken("[TOOL_CALLS]",       tool_calls_token_id);
+                tp->AddAddedToken("[AVAILABLE_TOOLS]",  start_avail_tools_token_id);
+                tp->AddAddedToken("[/AVAILABLE_TOOLS]", end_avail_tools_token_id);
+                tp->AddAddedToken("[TOOL_RESULTS]",     start_tool_results_token_id);
+                tp->AddAddedToken("[/TOOL_RESULTS]",    end_tool_results_token_id);
+            }
+            else
+            {
+                start_inst_token_id             = tp->PieceToId("[INST]");
+                end_inst_token_id               = tp->PieceToId("[/INST]");
+                tool_calls_token_id             = tp->PieceToId("[TOOL_CALLS]");
+                start_avail_tools_token_id      = tp->PieceToId("[AVAILABLE_TOOLS]");
+                end_avail_tools_token_id        = tp->PieceToId("[/AVAILABLE_TOOLS]");
+                start_tool_results_token_id     = tp->PieceToId("[TOOL_RESULTS]");
+                end_tool_results_token_id       = tp->PieceToId("[/TOOL_RESULTS]");
             }
             return r;
         }
+    public:
+        int start_inst_token_id;
+        int end_inst_token_id;
+        int tool_calls_token_id;
+        int start_avail_tools_token_id;
+        int end_avail_tools_token_id;
+        int start_tool_results_token_id;
+        int end_tool_results_token_id;
     };
+
+    class MistralInterceptor : public ChunkInterceptor
+    {
+    public:
+        MistralInterceptor() : ChunkInterceptor(), found_tool_call(false)
+        {}
+
+        void put_chunk(bool first, const std::string &chunk) override
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(streamer->tokenizer);
+            if (tok->start_avail_tools_token_id < 0)
+            {
+                streamer->put_chunk(first, chunk);
+                return;
+            }
+
+            if (first)
+            {
+                found_tool_call = chunk.starts_with("[TOOL_CALLS]");
+                if (found_tool_call) return;
+            }
+
+            if (found_tool_call)
+                oss << chunk;
+            else
+                streamer->put_chunk(first, chunk);
+        }
+
+        void end() override
+        {
+            if (found_tool_call)
+                streamer->putln(oss.str(), BaseStreamer::TextType::TOOL_CALLING);
+
+            oss.str("");
+            found_tool_call = false;
+
+            ChunkInterceptor::end();
+        }
+    protected:
+        std::ostringstream oss;
+        bool found_tool_call;
+    };
+
+    static MistralInterceptor interceptor;
 
     class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<MistralBlock<SLIDING_WINDOW_LEN>>
     {
@@ -74,6 +144,8 @@ namespace mistral
             : ConditionalGeneration(config, MODEL_TYPE_MISTRAL)
         {
         }
+
+        ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
     };
 
     void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
@@ -85,14 +157,45 @@ namespace mistral
         tok->encode(ai, ids, false, true);
     }
 
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(tok->bos_token_id);
+    }
+
     void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
         std::ostringstream oss_prompt;
 
-        oss_prompt << "[INST] " << user << " [/INST]";
-        tok->encode(oss_prompt.str(), ids, true, false);
+        if (tok->start_avail_tools_token_id >= 0)
+        {
+            if (user.starts_with("[TOOL_RESULTS]"))
+            {
+                oss_prompt << user;
+            }
+            else
+            {
+                std::string user_input = user;
+                const std::string tag_tools = "[/AVAILABLE_TOOLS]";
+                size_t pos = user.find(tag_tools);
+                if (pos != std::string::npos)
+                {
+                    oss_prompt <<  user.substr(0, pos + tag_tools.size());
+                    user_input = user.substr(pos + tag_tools.size());
+                }
+
+                oss_prompt << "[INST] " << user_input << " [/INST]";
+                tok->encode(oss_prompt.str(), ids, false, false);
+            }
+        }
+        else
+        {
+            oss_prompt << "[INST] " << user << " [/INST]";
+        }
+
+        tok->encode(oss_prompt.str(), ids, false, false);
     }
 }
 

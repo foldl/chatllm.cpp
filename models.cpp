@@ -682,6 +682,9 @@ namespace chatllm
             while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
             {
                 ggml_tensor *lm_logits = generate_next_token(curr_input_ids, gen_config);
+
+                if (aborted) break;
+
                 if (first_call)
                 {
                     if (performance)
@@ -775,7 +778,7 @@ namespace chatllm
             else
             {
                 int past = n_past + n_past_offset;
-                for (size_t i = 0 ; i < input_ids.size(); i++, past++)
+                for (size_t i = 0 ; (i < input_ids.size()) & !aborted; i++, past++)
                     lm_logits = run_model({input_ids[i]}, gen_config, past);
             }
 
