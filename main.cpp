@@ -970,9 +970,9 @@ public:
 
     void end() override
     {
-        chatllm::BaseStreamer::end();
         f_end(user_data);
         ref_count = 0;
+        chatllm::BaseStreamer::end();
     }
 
 public:

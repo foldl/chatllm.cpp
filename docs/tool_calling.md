@@ -6,6 +6,7 @@ Demos of tool calling for these models are provided:
 * [ChatGLM3](../bindings/tool_glm3.py)
 * [GLM-4](../bindings/tool_glm4.py)
 * [Mistral-Instruct-7B-v0.3](../bindings/tool_mistral.py)
+* [QWen v1.5 & v2](../bindings/tool_qwen.py)
 
 ## Precondition
 
@@ -76,4 +77,58 @@ A.I. > [Use Tools]: [{"name": "get_weather", "arguments": {"city_name": "Jinan"}
  The current weather in Jinan is clear. The temperature is 30 degrees Celsius, and it feels like 28 degrees Celsius. The humidity is 28%. The observation was made at 2:19 PM.
 You  > which city is hotter?
 A.I. >  The temperature in Beijing is 32 degrees Celsius, while the temperature in Jinan is 30 degrees Celsius. So, Beijing is hotter than Jinan.
+```
+
+### QWen
+
+Tool calling with QWen v1.5 & v2 is implemented in Python.
+
+#### v1.5 MoE
+
+```
+python tool_qwen.py -i -m /path/to/qwen1.5/moe/model.bin
+    ________          __  __    __    __  ___ (通义千问)
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+You are served by QWen2-MoE,                  /_/   /_/
+with 14315784192 (2.7B effect.) parameters.
+
+You  > weather in beijing
+A.I. > [Use Tool]: get_weather
+
+ The current weather in Beijing is sunny and the temperature is 33 degrees Celsius.
+You  > how about jinan?
+A.I. > [Use Tool]: get_weather
+
+ The current weather in Jinan is partly cloudy and the temperature is 36 degrees Celsius.
+You  > which city is hotter?
+A.I. > [Use Tool]: get_weather
+
+ The temperature in Beijing is currently 33 degrees Celsius, while in Jinan it is 36 degrees Celsius. So, Jinan is hotter.
+```
+
+#### v2
+
+```
+python tool_qwen.py -i -m /path/to/qwen2/1.5B/model.bin
+    ________          __  __    __    __  ___ (通义千问)
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+You are served by QWen2,                      /_/   /_/
+with 1543714304 (1.5B) parameters.
+
+You  > weather in beijing
+A.I. > [Use Tool]: get_weather
+
+The current weather in Beijing is Sunny, with a temperature of 33°C, a feels like temperature of 31°C, and a humidity of 36%. The weather observation time is 03:35 AM.
+You  > how about jinan
+A.I. > [Use Tool]: get_weather
+
+The current weather in Jinan is Partly cloudy, with a temperature of 36°C, a feels like temperature of 36°C, and a humidity of 27%. The weather observation time is 05:22 AM.
+You  > which city is hotter?
+A.I. > Jinan is hotter than Beijing. Jinan's temperature is 36°C and Beijing's temperature is 33°C.
 ```

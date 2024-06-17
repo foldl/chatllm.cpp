@@ -102,33 +102,8 @@ def get_weather(
     Get the current weather for `city_name`
     """
 
-    if not isinstance(city_name, str):
-        raise TypeError("City name must be a string")
-
-    key_selection = {
-        "current_condition": [
-            "temp_C",
-            "FeelsLikeC",
-            "humidity",
-            "weatherDesc",
-            "observation_time",
-        ],
-    }
-    import requests
-
-    try:
-        resp = requests.get(f"https://wttr.in/{city_name}?format=j1")
-        resp.raise_for_status()
-        resp = resp.json()
-        ret = {k: {_v: resp[k][0][_v] for _v in v} for k, v in key_selection.items()}
-    except:
-        import traceback
-
-        ret = (
-                "Error encountered while fetching weather data!\n" + traceback.format_exc()
-        )
-
-    return ret
+    import tool_glm4
+    return tool_glm4.get_weather(city_name)
 
 def build_tool_prompt(functions: list[dict], keywords: list[str]):
     def filter_func(f: dict) -> bool:
