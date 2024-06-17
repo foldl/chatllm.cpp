@@ -123,6 +123,8 @@
 * DeepSeek (`DeepseekV2ForCausalLM`)
     * [x] [V2-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Chat) (💣 not tested), [V2-Lite-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite-Chat)
 
+    * [x] [Coder-V2-Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Instruct) (💣 not tested), [Coder-V2-Lite-Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct)
+
     Two optimization modes are defined: speed (default) and memory. See `BaseMLAttention`.
 
 * XVERSE (`XverseForCausalLM`)

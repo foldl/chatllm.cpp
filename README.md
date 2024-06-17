@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-06-17: DeepSeek-Coder-V2
 * 2024-06-15: [Tool calling](./docs/tool_calling.md)
 * 2024-06-07: Qwen2
 * 2024-06-06: GLM-4
