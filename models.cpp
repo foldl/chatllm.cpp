@@ -665,7 +665,12 @@ namespace chatllm
             std::vector<int> output_ids;
             output_ids.reserve(gen_config.max_length);
 
-            if (!continuous) n_past = 0;
+            if (!continuous)
+            {
+                n_past = 0;
+                n_past_offset = 0;
+            }
+
             completed = false;
 
             transformer->set_ctx((int)input_ids.size());

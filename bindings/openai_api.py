@@ -244,9 +244,9 @@ class HttpHandler(BaseHTTPRequestHandler):
 
         responder = responder_cls(self, id, timestamp, model)
         streamer = get_streamer(model)
-        streamer.set_max_gen_tokens(max_tokens)
-
         if streamer is not None:
+            streamer.set_max_gen_tokens(max_tokens)
+
             try:
                 if restart: streamer.restart()
 

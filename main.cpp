@@ -941,7 +941,7 @@ public:
     chatllm::Pipeline *pipeline;
     chatllm::GenerationConfig gen_config;
     int sess_n_past;
-    size_t sess_hist_len;
+    int sess_hist_len;
     Args args;
     std::string tool_input;
 };
@@ -1138,7 +1138,7 @@ void chatllm_restart(struct chatllm_obj *obj)
 
     if (chat->sess_hist_len > 0)
     {
-        if (chat->history.size() > chat->sess_hist_len)
+        if (chat->history.size() > (size_t)chat->sess_hist_len)
             chat->history.erase(chat->history.begin() + chat->sess_hist_len, chat->history.end());
         chat->pipeline->rewind(chat->sess_n_past);
     }
@@ -1191,7 +1191,7 @@ int  chatllm_load_session(struct chatllm_obj *obj, const char *utf8_str)
 
     int r = chat->pipeline->load_session(chat->history, utf8_str, streamer, &chat->sess_n_past);
     if (0 == r)
-        chat->sess_hist_len = chat->history.size();
+        chat->sess_hist_len = (int)chat->history.size();
     return r;
 }
 
