@@ -1,7 +1,11 @@
-import sys, signal, time
+import sys, signal, time, os
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from chatllm import LibChatLLM, ChatLLM, ChatLLMStreamer
 import json
+
+this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+PATH_BINDS = os.path.join(this_dir, '..', 'bindings')
+sys.path.append(PATH_BINDS)
+from chatllm import LibChatLLM, ChatLLM, ChatLLMStreamer
 
 class HttpResponder:
     def __init__(self, req: BaseHTTPRequestHandler, id: str, timestamp: int, model: str) -> None:
@@ -277,10 +281,10 @@ if __name__ == '__main__':
         chat_args = chat_args[:i]
 
     basic_args = ['-i', '-m']
-    chat_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(), basic_args + [args[0]] + chat_args, False))
+    chat_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), basic_args + [args[0]] + chat_args, False))
 
     if len(args) >= 2:
-        fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(), basic_args + [args[1], '--format', 'completion'] + fim_args, False))
+        fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), basic_args + [args[1], '--format', 'completion'] + fim_args, False))
         fim_streamer.auto_restart = True
 
     http_server = HTTPServer(('0.0.0.0', 3000), HttpHandler)

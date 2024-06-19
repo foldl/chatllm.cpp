@@ -3,10 +3,10 @@
 Some models support tool calling (function calling, or code interpreter). It would be much easier (and cool) to do tool calling in Python.
 Demos of tool calling for these models are provided:
 
-* [ChatGLM3](../bindings/tool_glm3.py)
-* [GLM-4](../bindings/tool_glm4.py)
-* [Mistral-Instruct-7B-v0.3](../bindings/tool_mistral.py)
-* [QWen v1.5 & v2](../bindings/tool_qwen.py)
+* [ChatGLM3](../scripts/tool_glm3.py)
+* [GLM-4](../scripts/tool_glm4.py)
+* [Mistral-Instruct-7B-v0.3](../scripts/tool_mistral.py)
+* [QWen v1.5 & v2](../scripts/tool_qwen.py)
 
 ## Precondition
 

@@ -38,7 +38,7 @@ For example,
 
 ### Web demo
 
-There is also a [Chatbot](../bindings/chatllm_st.py) powered by [Streamlit](https://streamlit.io/):
+There is also a [Chatbot](../scripts/chatllm_st.py) powered by [Streamlit](https://streamlit.io/):
 
 ![](chatbot_st.png)
 
@@ -52,7 +52,7 @@ Note: "STOP" function is not implemented yet.
 
 ### OpenAI Compatible API
 
-[Here](../bindings/openai_api.py) is a server providing OpenAI Compatible API. Note that most of
+[Here](../scripts/openai_api.py) is a server providing OpenAI Compatible API. Note that most of
 the parameters are ignored. With this, one can start two servers one for chatting and one for
 code completion (a base model supporting fill-in-the-middle is required), and setup a fully functional
 local copilot in Visual Studio Code with the help of tools like [twinny](https://github.com/rjmacarthy/twinny).
@@ -97,10 +97,6 @@ bun run chatllm.ts -i -m path/to/model
 ```
 
 WARNING: Bun [looks buggy on Linux](https://github.com/oven-sh/bun/issues/10242).
-
-### OpenAI Compatible API
-
-[Here](../bindings/openai_api.ts) is a work in progress.
 
 ## Other Languages
 

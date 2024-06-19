@@ -6,6 +6,11 @@ import traceback
 from types import GenericAlias
 from typing import Any, Literal, get_origin, Annotated
 from dataclasses import dataclass
+import sys, os
+
+this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+PATH_BINDS = os.path.join(this_dir, '..', 'bindings')
+sys.path.append(PATH_BINDS)
 
 @dataclass
 class ToolObservation:
@@ -270,4 +275,4 @@ class ToolChatLLM(ChatLLM):
         self.tool_input(FN_RESULT + ': ' + rsp)
 
 if __name__ == '__main__':
-    chatllm.demo_simple(sys.argv[1:] + ['-s', build_system_prompt(get_tools(), 'en')], ToolChatLLM)
+    chatllm.demo_simple(sys.argv[1:] + ['-s', build_system_prompt(get_tools(), 'en')], ToolChatLLM, lib_path=PATH_BINDS)

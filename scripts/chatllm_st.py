@@ -1,12 +1,18 @@
 import streamlit as st
 import sys
+import sys, os
+
+this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+PATH_BINDS = os.path.join(this_dir, '..', 'bindings')
+sys.path.append(PATH_BINDS)
+
 from chatllm import ChatLLM, LibChatLLM, ChatLLMStreamer
 
 st.title("ChatLLM Chatbot Demo")
 
 if 'llm' not in st.session_state:
     args = sys.argv[1:]
-    st.session_state.llm = ChatLLM(LibChatLLM(), args, False)
+    st.session_state.llm = ChatLLM(LibChatLLM(PATH_BINDS), args, False)
     st.session_state.llm_streamer = ChatLLMStreamer(st.session_state.llm)
     st.session_state.banner = st.session_state.llm_streamer.flush_output()
 

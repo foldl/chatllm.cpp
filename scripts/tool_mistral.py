@@ -7,6 +7,11 @@ from types import GenericAlias
 from typing import Any, get_origin, Annotated
 from dataclasses import dataclass
 
+import sys, os
+this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+PATH_BINDS = os.path.join(this_dir, '..', 'bindings')
+sys.path.append(PATH_BINDS)
+
 @dataclass
 class ToolObservation:
     content_type: str
@@ -120,7 +125,7 @@ def build_tool_prompt(functions: list[dict], keywords: list[str]):
     value = f"{json.dumps(selected, ensure_ascii=False)}"
     return "[AVAILABLE_TOOLS]" + value + "[/AVAILABLE_TOOLS]"
 
-import chatllm, sys, re
+import chatllm
 from chatllm import ChatLLM
 
 def call_function(s: str) -> str:
@@ -155,5 +160,4 @@ class ToolChatLLM(ChatLLM):
         super().chat(user_input, input_id = input_id)
 
 if __name__ == '__main__':
-    # print(call_function('[{"name": "get_weather", "arguments": {"city_name": "Beijing"}}]'))
-    chatllm.demo_simple(sys.argv[1:], ToolChatLLM)
+    chatllm.demo_simple(sys.argv[1:], ToolChatLLM, lib_path=PATH_BINDS)

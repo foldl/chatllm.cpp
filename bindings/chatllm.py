@@ -23,14 +23,14 @@ class LibChatLLM:
     def __init__(self, lib: str = '') -> None:
 
         if lib == '':
-            this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-            lib = os.path.join(this_dir, 'libchatllm.')
-            if sys.platform == 'win32':
-                lib = lib + 'dll'
-            elif sys.platform == 'darwin':
-                lib = lib + 'dylib'
-            else:
-                lib = lib + 'so'
+            lib = os.path.dirname(os.path.abspath(sys.argv[0]))
+        lib = os.path.join(lib, 'libchatllm.')
+        if sys.platform == 'win32':
+            lib = lib + 'dll'
+        elif sys.platform == 'darwin':
+            lib = lib + 'dylib'
+        else:
+            lib = lib + 'so'
 
         if sys.platform == 'win32':
             self._lib = windll.LoadLibrary(lib)
@@ -327,10 +327,10 @@ def demo_streamer():
         for s in streamer.chat(s):
             print(s, end='', flush=True)
 
-def demo_simple(params, cls = ChatLLM):
+def demo_simple(params, cls = ChatLLM, lib_path: str =''):
     global llm
     signal.signal(signal.SIGINT, handler)
-    llm = cls(LibChatLLM(), params)
+    llm = cls(LibChatLLM(lib_path), params)
 
     while True:
         s = input('You  > ')

@@ -53,5 +53,5 @@ Before shuffling a model's layers, use `--show` to view basic information about 
 
 ## Talk to Each Other
 
-[Here](../bindings/crosstask.py) is a simple program to let two LLMs talk to each other. Both are willing to assist each other,
+[Here](../scripts/crosstask.py) is a simple program to let two LLMs talk to each other. Both are willing to assist each other,
 so the conversation might go to full of "I'm here to assist you" quickly and is not quite fruitful.

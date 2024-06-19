@@ -1,7 +1,12 @@
 # Let two LLMs talk to each other!
 
+import sys, os, signal
+
+this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+PATH_BINDS = os.path.join(this_dir, '..', 'bindings')
+sys.path.append(PATH_BINDS)
+
 from chatllm import ChatLLM, LibChatLLM
-import signal, sys
 
 class ForwardChatLLM(ChatLLM):
     chunk_acc = ''
@@ -44,8 +49,8 @@ if __name__ == '__main__':
         print(f"usage: python crosstalk.py path/to/model/A path/to/model/B initial_input")
         exit(-1)
 
-    model_a = ForwardChatLLM(LibChatLLM(), ['-m', args[0], '-i'], True)
-    model_b = ForwardChatLLM(LibChatLLM(), ['-m', args[1], '-i'], True)
+    model_a = ForwardChatLLM(LibChatLLM(PATH_BINDS), ['-m', args[0], '-i'], True)
+    model_b = ForwardChatLLM(LibChatLLM(PATH_BINDS), ['-m', args[1], '-i'], True)
 
     input = args[2]
     print('A > ' + input)
