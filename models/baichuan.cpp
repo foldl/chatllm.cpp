@@ -9,8 +9,9 @@ namespace _7b
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
         void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -51,12 +52,17 @@ namespace _7b
         return size;
     }
 
-    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        if ((round_idx == 0) && (tok->get_system_prompt().size() > 0))
+        if (tok->get_system_prompt().size() > 0)
             tok->encode(tok->get_system_prompt(), ids, false, false);
+    }
+
+    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
         ids.push_back(tok->user_token_id);
         tok->encode(user, ids, false, false);
@@ -64,7 +70,7 @@ namespace _7b
         tok->encode(user, ids, false, false);
     }
 
-    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 

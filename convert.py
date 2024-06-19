@@ -46,6 +46,7 @@ class ModelType(Enum):
     CHATGLM3 = 3
     CODEGEEX2 = 4
     CharacterGLM = 5
+    CHATGLM4 = 6
 
     InternLM   = 0x100
     InternLM2   = 0x101
@@ -68,6 +69,7 @@ class ModelType(Enum):
     DeepSeekV2          = 0x321
 
     Yi = 0x400
+    MAP_Neo = 0x401
 
     Phi2                = 0x500
     Phi2_v2             = 0x501
@@ -85,6 +87,7 @@ class ModelType(Enum):
 
     QWen    = 0x700
     QWen2   = 0x710
+    QWen2Tie = 0x711
     QWen2MoE = 0x750
 
     BlueLM  = 0x800
@@ -112,6 +115,8 @@ class ModelType(Enum):
     LlaMA3        = 0x1700
 
     StarCoder2    = 0x1800
+
+    XVERSE        = 0x1900
 
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
@@ -684,6 +689,27 @@ class TikTokenizerVocab:
 
     def __repr__(self) -> str:
         return f"<TikTokenizerVocab with {self.vocab_size} tokens>"
+
+def load_vocab_from_tiktok_mergeable_ranks(path9):
+    import base64
+    PAT_STR = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
+
+    def _load_tiktoken_bpe(tiktoken_bpe_file: str):
+        with open(tiktoken_bpe_file, "rb") as f:
+            contents = f.read()
+        return {
+            base64.b64decode(token): int(rank)
+            for token, rank in (line.split() for line in contents.splitlines() if line)
+        }
+
+    mergeable_ranks = _load_tiktoken_bpe(path9)
+
+    class TempTokenizer:
+        def __init__(self, mergeable_ranks) -> None:
+            self.mergeable_ranks = mergeable_ranks
+            self.special_tokens = {}
+
+    return TikTokenizerVocab(TempTokenizer(mergeable_ranks), fname_added_tokens = None)
 
 class BaseConverter:
     FILE_VERSION = 1
@@ -1865,12 +1891,19 @@ class ChatGLM2Converter(BaseConverter):
 
         return weight_names
 
-class ChatGLM3Converter(BaseConverter):
-    MODEL_TYPE = ModelType.CHATGLM3
+class ChatGLM4Converter(BaseConverter):
+    MODEL_TYPE = ModelType.CHATGLM4
 
     @staticmethod
     def dump_config(f, config, ggml_type):
+        config.eos_token_id = config.eos_token_id[0]
+
         ChatGLM2Converter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.rope_ratio
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
 
     @staticmethod
     def get_weight_names(config):
@@ -1878,17 +1911,6 @@ class ChatGLM3Converter(BaseConverter):
 
 class CharacterGLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.CharacterGLM
-
-    @staticmethod
-    def dump_config(f, config, ggml_type):
-        ChatGLM2Converter.dump_config(f, config, ggml_type)
-
-    @staticmethod
-    def get_weight_names(config):
-        return ChatGLM2Converter.get_weight_names(config)
-
-class CodeGeeX2Converter(BaseConverter):
-    MODEL_TYPE = ModelType.CODEGEEX2
 
     @staticmethod
     def dump_config(f, config, ggml_type):
@@ -2276,8 +2298,12 @@ class QWen2Converter(BaseConverter):
 
         weight_names += [
             "model.norm.weight",
-            "lm_head.weight"
         ]
+
+        if (config.tie_word_embeddings is None) or (not config.tie_word_embeddings):
+            weight_names += [
+                "lm_head.weight"
+            ]
 
         return weight_names
 
@@ -3207,40 +3233,7 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
 
         path9 = path / 'vocab' / "360.tiktoken"
         if path9.exists():
-            import base64
-            import tiktoken
-
-            PAT_STR = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
-
-            def _load_tiktoken_bpe(tiktoken_bpe_file: str):
-                with open(tiktoken_bpe_file, "rb") as f:
-                    contents = f.read()
-                return {
-                    base64.b64decode(token): int(rank)
-                    for token, rank in (line.split() for line in contents.splitlines() if line)
-                }
-
-            mergeable_ranks = _load_tiktoken_bpe(path9)
-
-            class TempTokenizer:
-                def __init__(self, mergeable_ranks) -> None:
-                    self.mergeable_ranks = mergeable_ranks
-                    self.special_tokens = {}
-
-            #encode = tiktoken.Encoding(
-                #"zhinao",
-                #pat_str=PAT_STR,
-                #mergeable_ranks=mergeable_ranks,
-                #special_tokens={}
-            #)
-
-            #decoder = {v: k for k, v in mergeable_ranks.items()}
-            #vocab = {decoder[i]: i for i in range(len(mergeable_ranks))}
-            ##vocab.update(self.added_tokens_encoder)
-            #print(vocab)
-
-            return TikTokenizerVocab(TempTokenizer(mergeable_ranks), fname_added_tokens = None)
-
+            return load_vocab_from_tiktok_mergeable_ranks(path9)
 
     raise FileNotFoundError(
         f"Could not find tokenizer.model in {path} or its parent; "
@@ -3260,7 +3253,8 @@ def load_some_model(path: Path) -> List[Path]:
     '''Load a model of any supported format.'''
     # Be extra-friendly and accept either a file or a directory:
     if path.is_dir():
-        globs = ["model-*-of-*.safetensors", "consolidated.*.pth", "pytorch_model-*-of-*.bin", "pytorch_model.bin", "model.safetensors", "*.pt"]
+        globs = ["model-*-of-*.safetensors", "consolidated.*.pth", "pytorch_model-*-of-*.bin",
+                 "pytorch_model.bin", "model.safetensors", "*.pt", "consolidated.safetensors"]
         for glob in globs:
             files = list(path.glob(glob))
             if len(files) > 0:
@@ -3296,14 +3290,18 @@ def main():
         args.arch = ''
 
     config = AttributeDict(load_config(Path(args.model_name_or_path)))
-
     if len(config.architectures) != 1:
         raise Exception(f'unknown architectures: {config.architectures}')
 
+    vocab_dir = Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir)
+
+    if (config._name_or_path == 'THUDM/glm-4-9b-chat') or (config._name_or_path == 'THUDM/glm4-9b-chat'):
+        vocab = load_vocab_from_tiktok_mergeable_ranks(vocab_dir / 'tokenizer.model')
+    else:
+        vocab = load_vocab(vocab_dir, skip_def_vocab_model)
+
     if arch == '':
         arch = config.architectures[0]
-
-    vocab = load_vocab(Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir), skip_def_vocab_model)
 
     if args.arch.lower() == 'grok-1-base':
         convert_grok_1_base(args, vocab, ggml_type)
@@ -3319,14 +3317,17 @@ def main():
 
     if arch == 'ChatGLMModel':
         if hasattr(config, "multi_query_attention"):
-            auto_map = config.auto_map
-            if 'AutoModelForCausalLM' in auto_map:
-                name: str = config._name_or_path
-                if name.find('codegeex') > 0:
-                    CodeGeeX2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
-                else:
-                    ChatGLM3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            if config.rope_ratio is not None:
+                ChatGLM4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
             else:
+                auto_map = config.auto_map
+                if 'AutoModelForCausalLM' in auto_map:
+                    name: str = config._name_or_path
+                    if name.find('codegeex') > 0:
+                        ChatGLM2Converter.MODEL_TYPE = ModelType.CODEGEEX2
+                    else:
+                        ChatGLM2Converter.MODEL_TYPE = ModelType.CHATGLM3
+
                 ChatGLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             ChatGLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
@@ -3343,6 +3344,9 @@ def main():
             LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'XverseForCausalLM':
+        LlamaConverter.MODEL_TYPE = ModelType.XVERSE
+        LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'codellama':
         CodeLlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek':
@@ -3358,6 +3362,9 @@ def main():
             config.max_position_embeddings = config.model_max_length
             BaiChuanConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'yi':
+        YiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'map-neo':
+        YiConverter.MODEL_TYPE = ModelType.MAP_Neo
         YiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'PhiForCausalLM':
         if config.hidden_act is not None:
@@ -3416,6 +3423,8 @@ def main():
             config.intermediate_size = config.ffn_hidden_size
         QWenConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2ForCausalLM':
+        if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
+            QWen2Converter.MODEL_TYPE = ModelType.QWen2Tie
         QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2MoeForCausalLM':
         QWen2MoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

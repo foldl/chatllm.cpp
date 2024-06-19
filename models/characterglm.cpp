@@ -5,8 +5,9 @@ struct Config : public glm::v2::Config
 class ChatHistoryEncoder : public BaseHistoryEncoder
 {
 public:
+    void append_sys_prompt(std::vector<int> &ids) const override;
     void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
 };
 
 static ChatHistoryEncoder _chat_encoder;
@@ -73,31 +74,33 @@ void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, con
     tokenizer->encode(oss.str(), ids);
 }
 
-void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
 {
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-    if (round_idx == 0)
+    std::ostringstream oss;
+
+    ids.insert(ids.end(), {tok->gmask_token_id, tok->sop_token_id}); // special prefix
+
+    oss << "以下是一段" << tok->user_name << "和" << tok->bot_name << "之间的对话。\n";
+    if (tok->bot_info.size() > 0)
     {
-        std::ostringstream oss;
-
-        ids.insert(ids.end(), {tok->gmask_token_id, tok->sop_token_id}); // special prefix
-
-        oss << "以下是一段" << tok->user_name << "和" << tok->bot_name << "之间的对话。\n";
-        if (tok->bot_info.size() > 0)
-        {
-            oss << "关于"
-                << tok->bot_name << "的信息："
-                << tok->bot_info << "\n";
-        }
-        if (tok->user_info.size() > 0)
-        {
-            oss << "关于"
-                << tok->user_name << "的信息："
-                << tok->user_info << "\n";
-        }
-        tok->encode(oss.str(), ids);
+        oss << "关于"
+            << tok->bot_name << "的信息："
+            << tok->bot_info << "\n";
     }
+    if (tok->user_info.size() > 0)
+    {
+        oss << "关于"
+            << tok->user_name << "的信息："
+            << tok->user_info << "\n";
+    }
+    tok->encode(oss.str(), ids);
+}
+
+void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+{
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
     std::ostringstream oss;
     oss << "[" << tok->user_name << "]" << user << "\n"

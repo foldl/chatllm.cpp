@@ -232,10 +232,10 @@ namespace ranker
                 loader.read_tensor(layer_prefix + "output.LayerNorm.bias",      transformer->layers[i].mlp.output.norm.bias);
             }
 
-            loader.read_tensor("classifier.dense.weight",       transformer->final.dense.weight);
-            loader.read_tensor("classifier.dense.bias",         transformer->final.dense.bias);
-            loader.read_tensor("classifier.out_proj.weight",    transformer->final.out_proj.weight);
-            loader.read_tensor("classifier.out_proj.bias",      transformer->final.out_proj.bias);
+            loader.read_tensor("classifier.dense.weight",       transformer->final_layernorm.dense.weight);
+            loader.read_tensor("classifier.dense.bias",         transformer->final_layernorm.dense.bias);
+            loader.read_tensor("classifier.out_proj.weight",    transformer->final_layernorm.out_proj.weight);
+            loader.read_tensor("classifier.out_proj.bias",      transformer->final_layernorm.out_proj.bias);
 
             CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
                 << "corrupted model weights";

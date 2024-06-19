@@ -52,6 +52,94 @@ namespace chatllm
         return str;
     }
 
+    BaseStreamer::BaseStreamer(BaseTokenizer *tokenizer)
+        : is_prompt(true), tokenizer(tokenizer), is_first(true), print_len(0),
+          interceptor(nullptr)
+    {
+    }
+
+    void BaseStreamer::put(const std::vector<int> &output_ids)
+    {
+        is_prompt = false;
+
+        token_cache.insert(token_cache.end(), output_ids.begin(), output_ids.end());
+        std::string text = tokenizer->decode(token_cache);
+        if (text.empty())
+        {
+            return;
+        }
+
+        std::string printable_text;
+        if ((text.back() == '\n') || (text.back() == '\r'))
+        {
+            // flush the cache after newline
+            printable_text = text.substr(print_len);
+            token_cache.clear();
+            print_len = 0;
+        }
+        else
+        {
+            size_t end = tokenizer::get_end_of_valid_utf8(text, print_len);
+            if (end > print_len)
+            {
+                printable_text = text.substr(print_len, end - print_len);
+                print_len = end;
+            }
+        }
+
+        if (printable_text.size() > 0)
+        {
+            call_put_chunk(is_first, printable_text);
+            is_first = false;
+        }
+    }
+
+    void BaseStreamer::end()
+    {
+        if (tokenizer)
+        {
+            std::string text = tokenizer->decode(token_cache);
+            size_t end = tokenizer::get_end_of_valid_utf8(text, print_len);
+            if (end > print_len)
+            {
+                call_put_chunk(is_first, text.substr(print_len));
+                print_len = end;
+            }
+        }
+
+        if (interceptor)
+        {
+            auto it = interceptor;
+            interceptor = nullptr;
+            it->end();
+        }
+
+        is_first = true;
+        is_prompt = true;
+        token_cache.clear();
+        print_len = 0;
+    }
+
+    void BaseStreamer::set_interceptor(ChunkInterceptor *interceptor)
+    {
+        this->interceptor = interceptor;
+        if (interceptor) interceptor->intercept(this);
+    }
+
+    void BaseStreamer::remove_interceptor(void)
+    {
+        if (interceptor) interceptor->intercept(nullptr);
+        interceptor = nullptr;
+    }
+
+    void BaseStreamer::call_put_chunk(bool first, const std::string &chunk)
+    {
+        if (interceptor)
+            interceptor->put_chunk(first, chunk);
+        else
+            put_chunk(first, chunk);
+    }
+
     BaseTokenizer::BaseTokenizer(const BaseConfig &config,
                         BaseHistoryEncoder *chat_encoder,
                         BaseHistoryEncoder *qa_encoder,
@@ -172,6 +260,40 @@ namespace chatllm
         return input_ids;
     }
 
+    std::vector<int> BaseTokenizer::encode_sys_prompt(void)
+    {
+        std::vector<int> ids;
+        switch (format)
+        {
+        case ChatFormat::COMPLETION:
+            if (completion_encoder)
+                completion_encoder->append_sys_prompt(ids);
+            else;
+            break;
+
+        case ChatFormat::QA:
+            if (qa_encoder)
+                qa_encoder->append_sys_prompt(ids);
+            else if (chat_encoder)
+            {
+                chat_encoder->append_sys_prompt(ids);
+            }
+            else;
+            break;
+        default:
+            if (chat_encoder)
+                chat_encoder->append_sys_prompt(ids);
+            else;
+        }
+
+        if (auto_add_bos && (bos_token_id >= 0))
+        {
+            if ((ids.size() > 0) && (ids[0] != bos_token_id))
+                ids.insert(ids.begin(), bos_token_id);
+        }
+        return ids;
+    }
+
     std::vector<int> BaseTokenizer::encode_history(const std::vector<std::string> &history, int max_length, const bool incremental)
     {
         switch (format)
@@ -208,6 +330,39 @@ namespace chatllm
                 r.push_back(bos_token_id);
         }
         return r;
+    }
+
+    void BaseTokenizer::set_skip_sys_prompt(bool skip)
+    {
+        if (chat_encoder)
+            chat_encoder->skip_sys_prompt = skip;
+        if (completion_encoder)
+            completion_encoder->skip_sys_prompt = skip;
+        if (qa_encoder)
+            qa_encoder->skip_sys_prompt = skip;
+    }
+
+    void BaseHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+    }
+
+    void BaseHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    {
+    }
+
+    void BaseHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        if (round_idx == 0)
+        {
+            if (!skip_sys_prompt)
+                append_sys_prompt(ids);
+        }
+        do_append_user(round_idx, user, ids);
+    }
+
+    void BaseHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        tokenizer->encode(user, ids);
     }
 
     static std::string shape_to_string(ggml_tensor *tensor)
@@ -526,7 +681,7 @@ namespace chatllm
         model->text_embedding(gen_config, input_ids, result);
     }
 
-    BaseModel *ModelObject::fork_model(const extra_args &args)
+    AbstractModel *ModelObject::fork_model(const extra_args &args)
     {
         if (!loaded) return nullptr;
         return ModelFactory::load_model_again(*loader, args);
@@ -581,6 +736,31 @@ namespace chatllm
         return output;
     }
 
+    std::string Pipeline::chat_without_extending(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+                               BaseStreamer *streamer)
+    {
+        bool continuous = tokenizer->get_chat_format() == ChatFormat::CHAT;
+        bool completed = false;
+        std::vector<int> input_ids;
+        if (initializing)
+        {
+            continuous = false;
+            initializing = false;
+        }
+        else;
+
+        input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous);
+
+        std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, gen_max_tokens, streamer);
+        if (!completed)
+        {
+            streamer->putln("\nRUN OUT OF CONTEXT. I have to stop now.\n");
+        }
+
+        std::string output = tokenizer->decode(output_ids);
+        return output;
+    }
+
     std::string Pipeline::chat_with_shift(const std::vector<std::string> &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer)
     {
@@ -613,10 +793,33 @@ namespace chatllm
         return output;
     }
 
+    void Pipeline::eval_sys_prompt(const GenerationConfig &gen_config)
+    {
+        bool completed = false;
+        std::vector<int> input_ids = tokenizer->encode_sys_prompt();
+
+        model->generate(input_ids, gen_config, false, completed, &performance, 1, nullptr);
+
+        // just in case that chatting is continued
+        tokenizer->set_skip_sys_prompt(true);
+        initializing = false;
+        return;
+    }
+
     std::string Pipeline::chat(std::vector<std::string> &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer)
     {
         std::string r;
+
+        if (modelobj.loaded && streamer)
+        {
+            ChunkInterceptor *interceptor = model->get_interceptor();
+            if (interceptor)
+            {
+                streamer->set_interceptor(interceptor);
+            }
+        }
+
         before_chat(history, gen_config, streamer);
 
         if (modelobj.loaded)
@@ -626,8 +829,11 @@ namespace chatllm
             case ExtendingMethod::Shift:
                 r = chat_with_shift(history, gen_config, streamer);
                 break;
-            default:
+            case ExtendingMethod::Restart:
                 r = chat_with_restart(history, gen_config, streamer);
+                break;
+            default:
+                r = chat_without_extending(history, gen_config, streamer);
                 break;
             }
         }
@@ -636,6 +842,7 @@ namespace chatllm
 
         if (streamer)
             streamer->end();
+
         return r;
     }
 
@@ -664,6 +871,86 @@ namespace chatllm
     void Pipeline::restart(void)
     {
         initializing = true;
+    }
+
+    void Pipeline::rewind(int n_past)
+    {
+        if (!modelobj.loaded) return;
+        model->set_n_past(n_past);
+    }
+
+    int Pipeline::save_session(const std::vector<std::string> &history, const std::string &file_name)
+    {
+        if (!modelobj.loaded) return -1000;
+
+        FILE *f = fopen(file_name.c_str(), "wb");
+        file_header header = {0};
+        memcpy(header.magic, head_magic, sizeof(header.magic));
+        header.history_len = history.size();
+
+        if (fwrite(&header, sizeof(header), 1, f) != 1)
+            return -1;
+
+        for (auto &s : history)
+        {
+            size_t len = s.size();
+            fwrite(&len, sizeof(len), 1, f);
+            fwrite(s.data(), 1, len, f);
+        }
+
+        model->save_session(f);
+
+        fclose(f);
+        return 0;
+    }
+
+    int Pipeline::load_session(std::vector<std::string> &history, const std::string &file_name, BaseStreamer *streamer, int *n_past)
+    {
+        if (!modelobj.loaded) return -1000;
+
+        int r = -1;
+        FILE *f = fopen(file_name.c_str(), "rb");
+        file_header header = {0};
+        if (fread(&header, sizeof(header), 1, f) != 1)
+            return -1;
+
+        history.clear();
+
+        if (memcmp(header.magic, head_magic, sizeof(header.magic)) == 0)
+        {
+            for (size_t i = 0; i < header.history_len; i++)
+            {
+                std::string s;
+                size_t len;
+                if (fread(&len, sizeof(len), 1, f) != 1)
+                    return -2;
+
+                s.resize(len);
+                if (fread(s.data(), 1, len, f) != len)
+                    return -3;
+                history.push_back(s);
+                if (streamer)
+                {
+                    if ((history.size() % 2) == 0)
+                        streamer->put_history_ai(s);
+                    else
+                        streamer->put_history_user(s);
+                }
+            }
+
+            r = model->load_session(f);
+            if (r != 0) goto exit;
+        }
+    exit:
+        fclose(f);
+        if (r == 0)
+        {
+            initializing = false;
+            tokenizer->set_skip_sys_prompt(true);
+            if (n_past != nullptr)
+                *n_past = model->get_n_past();
+        }
+        return r;
     }
 
     float Pipeline::qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config)

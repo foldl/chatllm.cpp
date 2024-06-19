@@ -6,13 +6,21 @@
 
 ![](./docs/demo.gif)
 
-Inference of a bunch of models from less than 3B to more than 300B, for real-time chatting with [RAG](./docs/rag.md) on your computer (CPU),
+Inference of a bunch of models from less than 1B to more than 300B, for real-time chatting with [RAG](./docs/rag.md) on your computer (CPU),
 pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml).
 
 | [Supported Models](./docs/models.md) | [Download Quantized Models](https://modelscope.cn/models/judd2024/chatllm_quantized_models) |
 
 **What's New:**
 
+* 2024-06-17: DeepSeek-Coder-V2 (Instruct & Base)
+* 2024-06-15: [Tool calling](./docs/tool_calling.md)
+* 2024-06-07: Qwen2
+* 2024-06-06: GLM-4
+* 2024-06-03: XVERSE
+* 2024-06-01: Codestral
+* 2024-05-30: MAP-Neo
+* 2024-05-29: [ggml](https://github.com/ggerganov/ggml) is forked instead of submodule
 * 2024-05-26: Aya-23 from Cohere
 * 2024-05-24: DeepSeek-V2 Light
 * 2024-05-23: Mistral v0.3
@@ -79,7 +87,7 @@ Use `-l` to specify the path of the LoRA model to be merged, such as:
 python3 convert.py -i path/to/model -l path/to/lora/model -o quantized.bin
 ```
 
-Note: Appropriately, only HF format is supported; Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.
+Note: Appropriately, only HF format is supported (with a few exceptions); Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.
 
 ### Build
 

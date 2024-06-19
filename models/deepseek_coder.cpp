@@ -7,8 +7,9 @@ struct Config : public llama::v2::Config
 class ChatHistoryEncoder : public BaseHistoryEncoder
 {
 public:
+    void append_sys_prompt(std::vector<int> &ids) const override;
     void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
 };
 
 static ChatHistoryEncoder _chat_encoder;
@@ -73,28 +74,31 @@ size_t Tokenizer::load(const char *buffer, int n_vocab)
     return size;
 }
 
+void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+{
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+    if (tok->get_system_prompt().size() > 0)
+        tok->encode(tok->get_system_prompt(), ids, true, false);
+}
+
 void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
 {
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     std::ostringstream oss_prompt;
 
-    if (round_idx == 0)
-        oss_prompt << tok->get_system_prompt();
+    append_user(round_idx, user, ids);
 
-    oss_prompt << "\n### Instruction:\n" << user
-               << "\n### Response:\n" << ai << "\n<|EOT|>";
+    oss_prompt << ai << "\n<|EOT|>";
 
     auto text = oss_prompt.str();
-    tok->encode(text, ids, true, false);
+    tok->encode(text, ids, false, false);
 }
 
-void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     std::ostringstream oss_prompt;
-
-    if (round_idx == 0)
-        oss_prompt << tok->get_system_prompt();
 
     oss_prompt << "\n### Instruction:\n" << user
                << "\n### Response:\n";

@@ -286,6 +286,7 @@ void Processor::OverrideTokenDecoding(int id, const std::string &tok)
 
 void Processor::AddAddedToken(const std::string &tok, int id)
 {
+    OverrideTokenDecoding(id, tok);
     added_tokens.emplace_back(TokenId{tok, id});
 }
 
@@ -730,6 +731,16 @@ int BPEProcessor2::DoEncode2(const std::string &input,
     if (input.size() < 1) return 0;
 
     llm_bpe_tokenizer tokenizer(vocab_);
+    tokenizer.tokenize(input, *ids);
+    return 0;
+}
+
+int BPEProcessor3::DoEncode2(const std::string &input,
+        std::vector<int> *ids) const
+{
+    if (input.size() < 1) return 0;
+
+    llama_sp_tokenizer tokenizer(vocab_);
     tokenizer.tokenize(input, *ids);
     return 0;
 }

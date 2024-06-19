@@ -1,5 +1,5 @@
 OUTPUT_PATH=obj
-GGML_BASE=third_party/ggml
+GGML_BASE=ggml
 GGML_SRC=$(GGML_BASE)/src
 GGML_INC=$(GGML_BASE)/include/ggml
 

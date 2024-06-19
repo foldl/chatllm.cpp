@@ -10,8 +10,9 @@ namespace deepseek
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
         void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -62,19 +63,24 @@ namespace deepseek
         tok->encode(ai, ids, false, true);
     }
 
-    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss_prompt;
 
-        if ((round_idx == 0) && (tok->get_system_prompt().size() > 0))
+        if (tok->get_system_prompt().size() > 0)
         {
             oss_prompt << "system\n"
                     << tok->get_system_prompt() << "\n";
             tok->encode(oss_prompt.str(), ids, true, false);
         }
+    }
 
-        oss_prompt.str("");
+    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::ostringstream oss_prompt;
+
         oss_prompt << "human\n" << user << "\n";
         tok->encode(oss_prompt.str(), ids, true, false);
 

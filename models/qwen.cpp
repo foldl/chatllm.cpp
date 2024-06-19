@@ -11,8 +11,9 @@ namespace v1
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
         void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -123,16 +124,18 @@ namespace v1
         tok->encode(ai, ids, false, true, true);
     }
 
-    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        tok->encode("system", ids, true, false, true);
+        tok->encode(tok->get_system_prompt(), ids, false, true, true);
+    }
+
+    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss_prompt;
-
-        if (round_idx == 0)
-        {
-            tok->encode("system", ids, true, false, true);
-            tok->encode(tok->get_system_prompt(), ids, false, true, true);
-        }
 
         tok->encode("user", ids, true, false, true);
         tok->encode(user, ids, false, true, true);
@@ -241,7 +244,7 @@ namespace v2
                                     Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int>>
     {
     public:
-        ConditionalGeneration(const Config &config);
+        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_QWEN2, bool tie_embeddings = false);
 
         void load(ModelLoader &loader) override;
 
@@ -254,28 +257,45 @@ namespace v2
     private:
         // hold ggml_context & kv_cache
         InitContext w_ctx_; // weight context
+        const bool tie_embeddings;
     };
 
-    ConditionalGeneration::ConditionalGeneration(const Config &config)
+    ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type, bool tie_embeddings)
         : BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int>>(MODEL_TYPE_QWEN2, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+                                    Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE),
+        config(config), tie_embeddings(tie_embeddings)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-        const size_t num_tensors = 3 + config.num_hidden_layers * 15;
+        const size_t num_tensors = 3 + config.num_hidden_layers * 15 + (tie_embeddings ? -1 : 0);
         const size_t ctx_size = num_tensors * tensor_ovhd;
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        transformer = new Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int>(&w_ctx_, config, false,
+
+        if (tie_embeddings)
+        {
+            transformer = new Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int>(&w_ctx_, config, nullptr,
                                                                                 config.hidden_size, config.num_attention_heads,
                                                                                 config.intermediate_size, config.num_key_value_heads,
                                                                                 config.max_length);
+        }
+        else
+        {
+            transformer = new Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int>(&w_ctx_, config, false,
+                                                                                config.hidden_size, config.num_attention_heads,
+                                                                                config.intermediate_size, config.num_key_value_heads,
+                                                                                config.max_length);
+        }
+
 
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             auto &layer = transformer->layers[i];
             layer.attention.freq_base = config.rope_theta;
         }
+
+        if (transformer->get_param_num(false) > 20000000)
+            GRAPH_SIZE = 4096 * 2;
     }
 
     void ConditionalGeneration::load(ModelLoader &loader)
@@ -301,11 +321,26 @@ namespace v2
             loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer->layers[i].mlp.gate_proj.weight);
         }
         loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
-        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
+        if (!tie_embeddings)
+            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
         CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
             << "corrupted model weights";
     }
+}
+
+namespace v2_tie
+{
+    typedef v2::Config Config;
+    typedef v2::Tokenizer Tokenizer;
+
+    class ConditionalGeneration : public v2::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config)
+            : v2::ConditionalGeneration(config, ModelType::MODEL_TYPE_QWEN2TIE, true)
+        {}
+    };
 }
 
 namespace v2_moe
@@ -324,39 +359,30 @@ namespace v2_moe
 
     typedef v2::Tokenizer Tokenizer;
 
-    const int NUM_EXPERTS                   =  60;
-    const int EXPERTS_PER_TOK               =  4;
-
-    // make it easy to test with different number of experts.
-    #define EFFECTIVE_EXPERTS_PER_TOK       EXPERTS_PER_TOK
-
-    typedef SparseMoE<SiLUMLP, NUM_EXPERTS, EXPERTS_PER_TOK> QWenSparseMoE;
-
-    typedef GatedMLP<SiLUMLP> QWenGatedMLP;
-
-    typedef CombinedMLP<QWenSparseMoE, QWenGatedMLP> QWenMoEMLP;
-
-    class QWen2MoEBlock : public LMBlock1<RMSNorm, QWen2SelfAttention, RMSNorm, QWenMoEMLP>
+    template <class QWenMoEMLP> class QWen2MoEBlock : public LMBlock1<RMSNorm, QWen2SelfAttention, RMSNorm, QWenMoEMLP>
     {
     public:
         QWen2MoEBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
                   int mlp_intermediate_size1, int mlp_intermediate_size2,
                   int num_kv_heads,
                   int head_dim, int max_length)
-            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, mlp_intermediate_size1, mlp_intermediate_size2,
+            : LMBlock1<RMSNorm, QWen2SelfAttention, RMSNorm, QWenMoEMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, mlp_intermediate_size1, mlp_intermediate_size2,
               num_kv_heads, head_dim, max_length)
         {}
     };
 
-    class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, RMSNorm, QWen2MoEBlock, int, int, int, int, int, int, int, int>>
+    template <const int NUM_EXPERTS, const int EXPERTS_PER_TOK, const int EFFECTIVE_EXPERTS_PER_TOK, class MoEBlock> class GenericConditionalGeneration : public BaseModelForConditionalGeneration<
+                                    Model<Config, Embedding, RMSNorm, MoEBlock, int, int, int, int, int, int, int, int>>
     {
     public:
-        ConditionalGeneration() = default;
+        typedef BaseModelForConditionalGeneration<
+                                    Model<Config, Embedding, RMSNorm, MoEBlock, int, int, int, int, int, int, int, int>> Base;
+    public:
+        GenericConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config)
+        GenericConditionalGeneration(const Config &config)
             : BaseModelForConditionalGeneration<
-                                        Model<Config, Embedding, RMSNorm, QWen2MoEBlock, int, int, int, int, int, int, int, int>>(MODEL_TYPE_QWEN2MoE, config, MEM_SIZE, SCRATCH_SIZE),
+                                        Model<Config, Embedding, RMSNorm, MoEBlock, int, int, int, int, int, int, int, int>>(MODEL_TYPE_QWEN2MoE, config, MEM_SIZE, SCRATCH_SIZE),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -368,7 +394,7 @@ namespace v2_moe
             CHATLLM_CHECK((NUM_EXPERTS == config.num_experts) && (EXPERTS_PER_TOK == config.num_experts_per_tok))
                 << "unsupported MoE param";
 
-            transformer = new Model<Config, Embedding, RMSNorm, QWen2MoEBlock, int, int, int, int, int, int, int, int>(
+            Base::transformer = new Model<Config, Embedding, RMSNorm, MoEBlock, int, int, int, int, int, int, int, int>(
                 &w_ctx_, config, false,
                 config.hidden_size, config.num_attention_heads,
                 config.intermediate_size, config.moe_intermediate_size, config.shared_expert_intermediate_size,
@@ -377,50 +403,50 @@ namespace v2_moe
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                auto &layer = transformer->layers[i];
+                auto &layer = Base::transformer->layers[i];
                 layer.attention.freq_base = config.rope_theta;
                 layer.mlp.mlp1.norm_topk_prob = config.norm_topk_prob != 0;
             }
 
-            GRAPH_SIZE = 4096 * 4;
+            Base::GRAPH_SIZE = 4096 * 4;
         }
 
         void load(ModelLoader &loader) override
         {
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            loader.read_tensor("model.embed_tokens.weight", Base::transformer->word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
+                std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
 
-                loader.read_tensor(layer_prefix + "input_layernorm.weight",          transformer->layers[i].input_layernorm.weight);
+                loader.read_tensor(layer_prefix + "input_layernorm.weight",          Base::transformer->layers[i].input_layernorm.weight);
 
                 for (int j = 0; j < config.num_experts; j++)
                 {
                     std::string prefix = layer_prefix + "mlp.experts." + std::to_string(j) + '.';
-                    loader.read_tensor(prefix + "down_proj.weight", transformer->layers[i].mlp.mlp1.experts[j].down_proj.weight);
-                    loader.read_tensor(prefix + "gate_proj.weight", transformer->layers[i].mlp.mlp1.experts[j].gate_proj.weight);
-                    loader.read_tensor(prefix + "up_proj.weight", transformer->layers[i].mlp.mlp1.experts[j].up_proj.weight);
+                    loader.read_tensor(prefix + "down_proj.weight", Base::transformer->layers[i].mlp.mlp1.experts[j].down_proj.weight);
+                    loader.read_tensor(prefix + "gate_proj.weight", Base::transformer->layers[i].mlp.mlp1.experts[j].gate_proj.weight);
+                    loader.read_tensor(prefix + "up_proj.weight", Base::transformer->layers[i].mlp.mlp1.experts[j].up_proj.weight);
                 }
 
-                loader.read_tensor(layer_prefix + "mlp.gate.weight", transformer->layers[i].mlp.mlp1.gate.weight);
+                loader.read_tensor(layer_prefix + "mlp.gate.weight", Base::transformer->layers[i].mlp.mlp1.gate.weight);
 
-                loader.read_tensor(layer_prefix + "mlp.shared_expert.down_proj.weight", transformer->layers[i].mlp.mlp2.down_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.shared_expert.gate_proj.weight", transformer->layers[i].mlp.mlp2.gate_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.shared_expert.up_proj.weight",   transformer->layers[i].mlp.mlp2.up_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.shared_expert_gate.weight",   transformer->layers[i].mlp.mlp2.gate.weight);
+                loader.read_tensor(layer_prefix + "mlp.shared_expert.down_proj.weight", Base::transformer->layers[i].mlp.mlp2.down_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.shared_expert.gate_proj.weight", Base::transformer->layers[i].mlp.mlp2.gate_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.shared_expert.up_proj.weight",   Base::transformer->layers[i].mlp.mlp2.up_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.shared_expert_gate.weight",   Base::transformer->layers[i].mlp.mlp2.gate.weight);
 
-                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
+                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", Base::transformer->layers[i].post_attention_layernorm.weight);
 
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   transformer->layers[i].attention.k_proj.bias);
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   transformer->layers[i].attention.q_proj.bias);
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer->layers[i].attention.v_proj.bias);
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", Base::transformer->layers[i].attention.k_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   Base::transformer->layers[i].attention.k_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", Base::transformer->layers[i].attention.q_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   Base::transformer->layers[i].attention.q_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", Base::transformer->layers[i].attention.v_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   Base::transformer->layers[i].attention.v_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", Base::transformer->layers[i].attention.o_proj.weight);
             }
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
-            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
+            loader.read_tensor("model.norm.weight", Base::transformer->final_layernorm.weight);
+            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(Base::transformer->lm_head)->weight);
 
             CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
                 << "corrupted model weights";
@@ -437,4 +463,72 @@ namespace v2_moe
         InitContext w_ctx_; // weight context
     };
 
+    template <const int NUM_EXPERTS, const int EXPERTS_PER_TOK, const int EFFECTIVE_EXPERTS_PER_TOK> class ClassConditionalGeneration
+    {
+    public:
+        typedef SparseMoE<SiLUMLP, NUM_EXPERTS, EXPERTS_PER_TOK> QWenSparseMoE;
+
+        typedef GatedMLP<SiLUMLP> QWenGatedMLP;
+
+        typedef CombinedMLP<QWenSparseMoE, QWenGatedMLP> QWenMoEMLP;
+
+        typedef QWen2MoEBlock<QWenMoEMLP> MoEBlock;
+
+        class ConditionalGeneration : public GenericConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, EFFECTIVE_EXPERTS_PER_TOK, MoEBlock>
+        {
+        public:
+            ConditionalGeneration() = default;
+
+            ConditionalGeneration(const Config &config) : GenericConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, EFFECTIVE_EXPERTS_PER_TOK, MoEBlock>(config) {}
+        };
+
+        static AbstractModel *create(const Config &config)
+        {
+            return new ConditionalGeneration(config);
+        }
+    };
+
+    namespace experts_60
+    {
+        const int NUM_EXPERTS                   =  60;
+        const int EXPERTS_PER_TOK               =  4;
+
+        // make it easy to test with different number of experts.
+        #define EFFECTIVE_EXPERTS_PER_TOK       EXPERTS_PER_TOK
+
+        typedef ClassConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, EFFECTIVE_EXPERTS_PER_TOK> ConditionalGeneration;
+    }
+
+    namespace experts_64
+    {
+        const int NUM_EXPERTS                   =  64;
+        const int EXPERTS_PER_TOK               =  8;
+
+        // make it easy to test with different number of experts.
+        #define EFFECTIVE_EXPERTS_PER_TOK       EXPERTS_PER_TOK
+
+        typedef ClassConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, EFFECTIVE_EXPERTS_PER_TOK> ConditionalGeneration;
+    }
+
+    class ConditionalGeneration : public ModelProxy
+    {
+    public:
+        ConditionalGeneration() = default;
+
+        ConditionalGeneration(const Config &config) : ModelProxy()
+        {
+            switch (config.num_experts)
+            {
+            case experts_60::NUM_EXPERTS:
+                set_proxy_model(experts_60::ConditionalGeneration::create(config));
+                break;
+            case experts_64::NUM_EXPERTS:
+                set_proxy_model(experts_64::ConditionalGeneration::create(config));
+                break;
+            default:
+                CHATLLM_CHECK(false) << "unsupported MoE param: num_experts = " << config.num_experts;
+                break;
+            }
+        }
+    };
 }

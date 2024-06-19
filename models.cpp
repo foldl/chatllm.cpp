@@ -83,6 +83,7 @@ namespace chatllm
         MODEL_TYPE_CHATGLM3 = 3,
         MODEL_TYPE_CODEGEEX2 = 4,
         MODEL_TYPE_CHARACTERGLM = 5,
+        MODEL_TYPE_GLM4 = 6,
 
         MODEL_TYPE_INTERNLM = 0x100,
         MODEL_TYPE_INTERNLM2= 0x101, // extended model, supporting 7B & 20B
@@ -105,6 +106,7 @@ namespace chatllm
         MODEL_TYPE_DEEPSEEK_V2       = 0x321,
 
         MODEL_TYPE_YI       = 0x400,
+        MODEL_TYPE_MAP_NEO  = 0x401,
 
         MODEL_TYPE_PHI2     = 0x500,
         MODEL_TYPE_PHI2_V2  = 0x501,
@@ -123,6 +125,7 @@ namespace chatllm
 
         MODEL_TYPE_QWEN     = 0x700,
         MODEL_TYPE_QWEN2    = 0x710,
+        MODEL_TYPE_QWEN2TIE = 0x711,
         MODEL_TYPE_QWEN2MoE = 0x750,
 
         MODEL_TYPE_BLUELM   = 0x800,
@@ -150,6 +153,8 @@ namespace chatllm
         MODEL_TYPE_LLAMA3           = 0x1700,
 
         MODEL_TYPE_STARCODER2       = 0x1800,
+
+        MODEL_TYPE_XVERSE           = 0x1900,
 
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
@@ -198,6 +203,8 @@ namespace chatllm
             return "ChatGLM2";
         case MODEL_TYPE_CHATGLM3:
             return "ChatGLM3";
+        case MODEL_TYPE_GLM4:
+            return "GLM-4";
         case MODEL_TYPE_CODEGEEX2:
             return "CodeGeeX2";
         case MODEL_TYPE_CHARACTERGLM:
@@ -224,6 +231,8 @@ namespace chatllm
             return "DeepSeek-V2";
         case MODEL_TYPE_YI:
             return "Yi";
+        case MODEL_TYPE_MAP_NEO:
+            return "MAP-Neo";
         case MODEL_TYPE_PHI2:
         case MODEL_TYPE_PHI2_V2:
             return "Phi-2";
@@ -254,6 +263,7 @@ namespace chatllm
         case MODEL_TYPE_QWEN:
             return "QWen";
         case MODEL_TYPE_QWEN2:
+        case MODEL_TYPE_QWEN2TIE:
             return "QWen2";
         case MODEL_TYPE_QWEN2MoE:
             return "QWen2-MoE";
@@ -296,6 +306,8 @@ namespace chatllm
             return "BGE-ReRanker-M3";
         case MODEL_TYPE_STARCODER2:
             return "StarCoder2";
+        case MODEL_TYPE_XVERSE:
+            return "XVERSE";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -320,6 +332,8 @@ namespace chatllm
             return "Φ";
         case MODEL_TYPE_QWEN:
         case MODEL_TYPE_QWEN2:
+        case MODEL_TYPE_QWEN2TIE:
+        case MODEL_TYPE_QWEN2MoE:
             return "通义千问";
         case MODEL_TYPE_TIGERBOT:
             return "虎博";
@@ -331,6 +345,8 @@ namespace chatllm
             return "⌘-R";
         case MODEL_TYPE_ZHINAO:
             return "360智脑";
+        case MODEL_TYPE_XVERSE:
+            return "元象";
         default:
             return "";
         }
@@ -599,7 +615,7 @@ namespace chatllm
 
         virtual ~BaseModelForConditionalGeneration() = default;
 
-        void set_layer_ids(const std::vector<int> &ids)
+        void set_layer_ids(const std::vector<int> &ids) override
         {
             CHATLLM_CHECK((int)ids.size() == config_.num_hidden_layers) << "length(layer_ids) must be " << config_.num_hidden_layers;
             layer_ids.clear();
@@ -636,6 +652,10 @@ namespace chatllm
                 << "requested max_length (" << gen_config.max_length << ") is larger than model's max_length ("
                 << config_.max_length << ")";
 
+            //for (int i = 0; i < (int)input_ids.size(); i++)
+            //    printf("%d, ", input_ids[i]);
+            //printf("\nn_past = %d, %d\n\n", n_past, continuous);
+
             std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config, _seed));
 
             aborted = false;
@@ -645,7 +665,12 @@ namespace chatllm
             std::vector<int> output_ids;
             output_ids.reserve(gen_config.max_length);
 
-            if (!continuous) n_past = 0;
+            if (!continuous)
+            {
+                n_past = 0;
+                n_past_offset = 0;
+            }
+
             completed = false;
 
             transformer->set_ctx((int)input_ids.size());
@@ -662,6 +687,9 @@ namespace chatllm
             while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
             {
                 ggml_tensor *lm_logits = generate_next_token(curr_input_ids, gen_config);
+
+                if (aborted) break;
+
                 if (first_call)
                 {
                     if (performance)
@@ -755,11 +783,26 @@ namespace chatllm
             else
             {
                 int past = n_past + n_past_offset;
-                for (size_t i = 0 ; i < input_ids.size(); i++, past++)
+                for (size_t i = 0 ; (i < input_ids.size()) & !aborted; i++, past++)
                     lm_logits = run_model({input_ids[i]}, gen_config, past);
             }
 
             return lm_logits;
+        }
+
+        int save_session(FILE *f) const
+        {
+            int r = BaseModel::save_session(f);
+            if (r != 0)
+                return r;
+            return transformer->save_session(f);
+        }
+
+        int load_session(FILE *f) override
+        {
+            int r = BaseModel::load_session(f);
+            if (r != 0) return r;
+            return transformer->load_session(f);
         }
 
     protected:
@@ -867,16 +910,23 @@ namespace chatllm
 
         HeterogeneousModel(InitContext *ctx, const Config &config, Block *lm_head, std::function<Block *(InitContext *, int)> create_layer)
         : config(config),
-          word_embeddings(ctx, config.vocab_size, config.hidden_size),
+          word_embeddings(ctx, config.vocab_size, config.hidden_size, config.max_length),
           final_layernorm(ctx, config.hidden_size),
-          lm_head(lm_head)
+          lm_head(lm_head),
+          cache_size(0)
         {
             layers.reserve(config.num_hidden_layers);
             for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
             {
-                layers.emplace_back(create_layer(ctx, layer_id));
-                layers[layer_id]->set_id(layer_id);
+                auto layer = create_layer(ctx, layer_id);
+                layers.emplace_back(layer);
+                layer->set_id(layer_id);
+                cache_size += layer->get_cache_size();
             }
+            cache_buffer = new char[cache_size];
+            void *buffer = cache_buffer;
+            for (auto layer: layers)
+                buffer = layer->set_cache_buffer(buffer);
         }
 
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
@@ -920,6 +970,33 @@ namespace chatllm
             return layers[index];
         }
 
+        int save_session(FILE *f)
+        {
+            struct state state = {.cache_size = cache_size };
+            if (fwrite(&state, sizeof(state), 1, f) != 1)
+                return -1;
+            if (fwrite(cache_buffer, 1, cache_size, f) != cache_size)
+                return -3;
+            return 0;
+        }
+
+        int load_session(FILE *f)
+        {
+            struct state state = {0};
+            if (fread(&state, sizeof(state), 1, f) != 1)
+                return -10;
+            if (state.cache_size != cache_size)
+                return -1;
+            if (fread(cache_buffer, 1, cache_size, f) != cache_size)
+                return -2;
+            return 0;
+        }
+
+    private:
+        struct state
+        {
+            size_t cache_size;
+        };
     protected:
         ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
@@ -947,6 +1024,8 @@ namespace chatllm
     protected:
         // std::vector<std::unique_ptr<Block>> layers;
         std::vector<Block *> layers;
+        void *cache_buffer;
+        size_t cache_size;
     };
 
     template <class Config, class Embedding, class FinalNorm, class LayerBlock, typename... _Types> class Model :
@@ -1002,55 +1081,29 @@ namespace chatllm
         Accessor layers;
     };
 
-    template <class Config, class Embedding, class LayerBlock, class FinalBlock, typename... _Types> class EmbeddingModel : public Block
+    template <class Config, class Embedding, class LayerBlock, class FinalBlock, typename... _Types> class EmbeddingModel : public Model
+        <Config, Embedding, FinalBlock, LayerBlock, _Types...>
     {
     public:
+        typedef Model<Config, Embedding, FinalBlock, LayerBlock, _Types...> Base;
+        typedef HeterogeneousModel<Config, Embedding, FinalBlock> BaseBase;
+
         EmbeddingModel() = default;
 
         EmbeddingModel(InitContext *ctx, const Config &config, _Types... layer_args)
-        : config(config),
-          word_embeddings(ctx, config.vocab_size, config.hidden_size, config.max_length),
-          final(ctx, config.hidden_size)
+        : Base(ctx, config, nullptr, std::forward<_Types>(layer_args)...)
         {
-            layers.reserve(config.num_hidden_layers);
-            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
-            {
-                layers.emplace_back(ctx, std::forward<_Types>(layer_args)...);
-                layers[layer_id].set_id(layer_id);
-            }
         }
 
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
         {
-            ggml_tensor *hidden_states = word_embeddings.forward(ctx, input_ids, n_past);
-            for (auto &layer : layers)
+            ggml_tensor *hidden_states = Base::word_embeddings.forward(ctx, input_ids, n_past);
+            for (auto &layer : BaseBase::layers)
             {
                 ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
-                hidden_states = layer.forward(ctx, hidden_states, n_past);
+                hidden_states = layer->forward(ctx, hidden_states, n_past);
             }
             return final_steps(ctx, input_ids, hidden_states);
-        }
-
-        void set_ctx(int n_ctx) override
-        {
-            for (auto &layer : layers)
-                layer.set_ctx(n_ctx);
-        }
-
-        void shift_cache(int shift, int total) override
-        {
-            for (auto &layer : layers)
-                layer.shift_cache(shift, total);
-        }
-
-        int64_t get_param_num(bool effective_only) const override
-        {
-            int64_t r = 0;
-            r += word_embeddings.get_param_num(effective_only);
-            if (layers.size() > 0)
-                r += layers[0].get_param_num(effective_only) * layers.size();
-            r += final.get_param_num(effective_only);
-            return r;
         }
 
     protected:
@@ -1058,33 +1111,15 @@ namespace chatllm
         {
             ggml_set_scratch(ctx->gctx.get(), {.offs = 0, .size = 0, .data = nullptr});
 
-            ggml_tensor *transformer_outputs = final.forward(ctx, hidden_states);
+            ggml_tensor *transformer_outputs = Base::final_layernorm.forward(ctx, hidden_states);
 
             return transformer_outputs;
         }
-    public:
-        Config config;
-        Embedding word_embeddings;
-        std::vector<LayerBlock> layers;
-        FinalBlock final;
     };
 
     namespace glm
     {
-        namespace v1
-        {
-            #include "models/chatglm_v1.cpp"
-        }
-
-        namespace v2
-        {
-            #include "models/chatglm_v2.cpp"
-        }
-
-        namespace v3
-        {
-            #include "models/chatglm_v3.cpp"
-        }
+        #include "models/chatglm.cpp"
     }
 
     namespace codegeex
@@ -1147,11 +1182,6 @@ namespace chatllm
     namespace starling
     {
         #include "models/starling.cpp"
-    }
-
-    namespace mixtral
-    {
-        #include "models/mixtral.cpp"
     }
 
     namespace wizard
@@ -1247,6 +1277,16 @@ namespace chatllm
     namespace starcoder
     {
         #include "models/starcoder.cpp"
+    }
+
+    namespace m_a_p
+    {
+        #include "models/m_a_p.cpp"
+    }
+
+    namespace xverse
+    {
+        #include "models/xverse.cpp"
     }
 
     template <class Config>
@@ -1396,7 +1436,7 @@ namespace chatllm
         exit(-1);
 #endif
         // load model
-        result.model = std::unique_ptr<BaseModel>(load_model<Config, ConditionalGeneration>(loader, config, args));
+        result.model = std::unique_ptr<AbstractModel>(load_model<Config, ConditionalGeneration>(loader, config, args));
 
         result.model->set_tokenizer(result.tokenizer.get());
 
@@ -1427,7 +1467,8 @@ namespace chatllm
             << "hidden_size         : " << config.hidden_size << std::endl
             << "num_attention_heads : " << config.num_attention_heads << std::endl
             << "num_hidden_layers   : " << config.num_hidden_layers << std::endl
-            << "intermediate_size   : " << config.intermediate_size << std::endl;
+            << "intermediate_size   : " << config.intermediate_size << std::endl
+            << "max_length          : " << config.max_length << std::endl;
 
         return oss.str();
     }
@@ -1444,6 +1485,7 @@ namespace chatllm
         CASE(CHATGLM3,              glm::v3, 1)                 \
         CASE(CODEGEEX2,             codegeex::v2, 1)            \
         CASE(CHARACTERGLM,          characterglm, 1)            \
+        CASE(GLM4,                  glm::v4, 1)                 \
                                                                 \
         CASE(INTERNLM,              internlm::v1, 1)            \
         CASE(INTERNLM2,             internlm::v2, 1)            \
@@ -1463,6 +1505,7 @@ namespace chatllm
         CASE(BAICHUAN,              baichuan::larger, 1)        \
                                                                 \
         CASE(YI,                    yi, 1)                      \
+        CASE(MAP_NEO,               m_a_p::neo, 1)              \
                                                                 \
         CASE(PHI2,                  phi::v2::v1, 1)             \
         CASE(PHI2_V2,               phi::v2::v2, 1)             \
@@ -1473,13 +1516,14 @@ namespace chatllm
         CASE(WIZARDLM,              wizard::lm, 1)              \
         CASE(WIZARDMATH,            wizard::math, 1)            \
                                                                 \
-        CASE(MISTRAL,               mistral, 1)                 \
+        CASE(MISTRAL,               mistral::mistral, 1)        \
         CASE(OPENCHAT,              openchat, 1)                \
-        CASE(MIXTRAL,               mixtral, 1)                 \
+        CASE(MIXTRAL,               mistral::mixtral, 1)        \
                                                                 \
         CASE(QWEN,                  qwen::v1, 2)                \
         CASE(QWEN2,                 qwen::v2, 1)                \
         CASE(QWEN2MoE,              qwen::v2_moe, 1)            \
+        CASE(QWEN2TIE,              qwen::v2_tie, 1)            \
                                                                 \
         CASE(TIGERBOT,              tigerbot, 1)                \
                                                                 \
@@ -1512,13 +1556,15 @@ namespace chatllm
                                                                 \
         CASE(STARCODER2,            starcoder::v2, 1)           \
                                                                 \
+        CASE(XVERSE,                xverse::dense, 1)           \
+                                                                \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \
         CASE(BGE_M3,                bge::embedding, 1)          \
         CASE(BGE_ReRanker_M3,       bge::ranker, 1)             \
 
 
-    BaseModel *ModelFactory::load_model_again(ModelLoader &loader, const ModelObject::extra_args &args)
+    AbstractModel *ModelFactory::load_model_again(ModelLoader &loader, const ModelObject::extra_args &args)
     {
         int model_type = loader.model_type;
         int version = loader.version;

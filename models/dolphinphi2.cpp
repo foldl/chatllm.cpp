@@ -47,17 +47,23 @@ public:
         tok->encode(ai, ids, false, true);
     }
 
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
+    void append_sys_prompt(std::vector<int> &ids) const override
     {
-        std::ostringstream oss_prompt;
-
         DolphinTokenizer *tok = dynamic_cast<DolphinTokenizer *>(tokenizer);
-        if ((round_idx == 0) && (tok->get_system_prompt().size() > 0))
+        std::ostringstream oss_prompt;
+        if (tok->get_system_prompt().size() > 0)
         {
             oss_prompt << "system" << std::endl << tok->get_system_prompt();
             tok->encode(oss_prompt.str(), ids, true, true);
         }
-        oss_prompt.str("");
+    }
+
+    void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
+    {
+        std::ostringstream oss_prompt;
+
+        DolphinTokenizer *tok = dynamic_cast<DolphinTokenizer *>(tokenizer);
+
         oss_prompt << "user" << std::endl << user;
         tok->encode(oss_prompt.str(), ids, true, true);
 

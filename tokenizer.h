@@ -178,12 +178,22 @@ public:
 
     const std::string IdToPiece(int id) const override;
 
-private:
+protected:
     int DoEncode(const std::string &input,
             std::vector<int> *ids) const override;
 
-    int DoEncode2(const std::string &input,
+    virtual int DoEncode2(const std::string &input,
             std::vector<int> *ids) const;
+};
+
+class BPEProcessor3: public BPEProcessor2
+{
+public:
+    BPEProcessor3() : BPEProcessor2() {}
+
+protected:
+    int DoEncode2(const std::string &input,
+            std::vector<int> *ids) const override;
 };
 
 class UnigramProcessor: public Processor

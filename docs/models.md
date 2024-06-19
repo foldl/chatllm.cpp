@@ -18,6 +18,7 @@
     * [x] WizardLM: [LM 7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0) (`-a WizardLM`), [LM 13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2) (`-a WizardLM`), [Coder Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0) (`-a WizardCoder`)
     * [x] TigerBot: [Chat-7B](https://huggingface.co/TigerResearch/tigerbot-7b-chat), [Chat-13B](https://huggingface.co/TigerResearch/tigerbot-13b-chat-v5) (`-a TigerBot`)
     * [x] CodeFuse-DeepSeek: [33B](https://huggingface.co/codefuse-ai/CodeFuse-DeepSeek-33B) (`-a CodeFuseDeepSeek`)
+    * [x] MAP-Neo: [Instruct-7B](https://huggingface.co/m-a-p/neo_7b_instruct_v0.1) (`-a MAP-Neo`)
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
 
@@ -34,9 +35,11 @@
 
         Note: Use additional key-value pair arguments to specify characters, `--kv user_name "..." bot_name "..." user_info "..." bot_info "..."`.
 
+    * [x] GLM-4: [Chat-9B-128k](https://huggingface.co/THUDM/glm-4-9b-chat), [Chat-9B-1M](https://huggingface.co/THUDM/glm-4-9b-chat-1m)
+
 * InternLM (`InternLMForCausalLM`, `InternLM2ForCausalLM`)
     * [x] v1: [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1), [Chat-20B](https://huggingface.co/internlm/internlm-chat-20b)
-    * [x] v2: [Chat-7B](https://huggingface.co/internlm/internlm2-chat-7b), [Chat-20B](https://huggingface.co/internlm/internlm2-chat-20b)
+    * [x] v2: [Chat-1.8B](https://huggingface.co/internlm/internlm2-chat-1_8b), [Chat-7B](https://huggingface.co/internlm/internlm2-chat-7b), [Chat-20B](https://huggingface.co/internlm/internlm2-chat-20b), [Math-Plus-1.8B](https://huggingface.co/internlm/internlm2-math-plus-1_8b), [Math-Plus-7B](https://huggingface.co/internlm/internlm2-math-plus-7), [Math-Plus-20](https://huggingface.co/internlm/internlm2-math-plus-20b)
 
 * Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
     * [x] Mistral: [Instruct-7B-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), [Instruct-7B-v0.3](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3)
@@ -68,6 +71,9 @@
         Note: For `MixtralForCausalLM` models, `--experts ...` is supported to select a subset of experts when converting.
         For example, `--experts 0,1,2,3` selects the first 4 experts.
 
+    * [x] Codestral: [22B-v0.1](https://huggingface.co/mistralai/Codestral-22B-v0.1)
+
+
 * Phi (`PhiForCausalLM`, `Phi3ForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4)
 
@@ -83,14 +89,9 @@
     * [x] v1: [Chat-7B](https://huggingface.co/Qwen/Qwen-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen-14B-Chat), [QAnything-7B](https://huggingface.co/netease-youdao/Qwen-7B-QAnything)
     * [x] v1.5: [Chat-0.5B](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat), [Chat-1.8B](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat), [Chat-4B](https://huggingface.co/Qwen/Qwen1.5-4B-Chat), [Chat-7B](https://huggingface.co/Qwen/Qwen1.5-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen1.5-14B-Chat), [CodeQwen-Chat-7B](https://huggingface.co/Qwen/CodeQwen1.5-7B-Chat) (-a `CodeQwen`)
     * [x] v1.5 MoE: [Chat-A2.7B](https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B-Chat)
+    * [x] v2: [Instruct-0.5B](https://huggingface.co/Qwen/Qwen2-0.5B-Instruct), [Instruct-1.5B](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct), [Instruct-7B](https://huggingface.co/Qwen/Qwen2-7B-Instruct), [Instruct-72B](https://huggingface.co/Qwen/Qwen2-72B-Instruct)
+    * [x] v2 MoE: [Instruct-57B-A2.7B](https://huggingface.co/Qwen/Qwen2-57B-A14B-Instruct) (💣 not tested)
 
-        Note: At present, to run this MoE model, manual update of `GGML_MAX_SRC` in `ggml.h` to a value >= 62 is required:
-
-        ```
-        #define GGML_MAX_SRC            62
-        ```
-
-        [Here is why](https://github.com/ggerganov/llama.cpp/pull/6074#issuecomment-2027419314).
 
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
@@ -122,11 +123,14 @@
 * DeepSeek (`DeepseekV2ForCausalLM`)
     * [x] [V2-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Chat) (💣 not tested), [V2-Lite-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite-Chat)
 
-    Two optimization modes are defined: speed (default) and memory.
+    * [x] [Coder-V2-Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Instruct) (💣 not tested), [Coder-V2-Lite-Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct)
 
-    Note: To run this model on CPU, some _customization_ on `ggml` is needed:
-    - Update `GGML_MAX_SRC` to values like 70 for V2-Lite-Chat, 170 for V2-Chat (see above)
-    - Fix this [issue](https://github.com/ggerganov/ggml/issues/835)
+    Two optimization modes are defined: speed (default) and memory. See `BaseMLAttention`.
+
+* XVERSE (`XverseForCausalLM`)
+    * [x] [Chat-7B](https://huggingface.co/xverse/XVERSE-7B-Chat), [Chat-13B](https://huggingface.co/xverse/XVERSE-13B-Chat), [Chat-65B](https://huggingface.co/xverse/XVERSE-65B-Chat)
+
+    Note: Tokenizer's behavior is not 100% identical.
 
 ## Base Models
 
@@ -134,6 +138,9 @@ Please use `--format completion` for these models.
 
 * LlaMA-like (`LlamaForCausalLM`):
     * [x] DeepSeek: [Coder-Base-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-base) (`-a DeepSeekCoder`), [Coder-Base-6.7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-base) (`-a DeepSeekCoder`)
+
+* DeepSeek (`DeepseekV2ForCausalLM`)
+    * [x] [Coder-V2-Base](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Base) (💣 not tested), [Coder-V2-Lite-Base](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Lite-Base)
 
 * Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
     * [x] Mistral: [Base-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1), [Base-7B-v0.3](https://huggingface.co/mistralai/Mistral-7B-v0.3)
