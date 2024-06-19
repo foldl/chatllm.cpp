@@ -9,7 +9,7 @@
 Inference of a bunch of models from less than 1B to more than 300B, for real-time chatting with [RAG](./docs/rag.md) on your computer (CPU),
 pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml).
 
-| [Supported Models](./docs/models.md) | [Download Quantized Models](https://modelscope.cn/models/judd2024/chatllm_quantized_models) |
+| [Supported Models](./docs/models.md) | [Download Quantized Models](./docs/quick_start.md#download-quantized-models) |
 
 **What's New:**
 
@@ -43,6 +43,10 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 * [x] [LoRA](./docs/models.md#lora-models);
 * [x] Python/JavaScript/C [Bindings](./docs/binding.md), web demo, and more possibilities.
+
+## Quick Start
+
+As simple as `python chatllm.py -i -m :model_id`. [Check it out](./docs/quick_start.md).
 
 ## Usage
 

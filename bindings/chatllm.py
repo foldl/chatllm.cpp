@@ -4,6 +4,12 @@ import os, sys, signal, queue
 import threading
 from typing import Any, Iterable, List, Union
 
+try:
+    import model_downloader
+except:
+    this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    sys.path.append(os.path.join(this_dir, '..', 'scripts'))
+    import model_downloader
 
 class PrintType(IntEnum):
     PRINT_CHAT_CHUNK        = 0,
@@ -20,10 +26,13 @@ class LibChatLLM:
     _obj2id = {}
     _id2obj = {}
 
-    def __init__(self, lib: str = '') -> None:
+    def __init__(self, lib: str = '', model_storage: str = '') -> None:
 
         if lib == '':
             lib = os.path.dirname(os.path.abspath(sys.argv[0]))
+        self._lib_path = lib
+        self.model_storage = os.path.abspath(model_storage if model_storage != '' else os.path.join(lib, '..', 'quantized'))
+
         lib = os.path.join(lib, 'libchatllm.')
         if sys.platform == 'win32':
             lib = lib + 'dll'
@@ -120,6 +129,9 @@ class LibChatLLM:
     def append_param(self, obj: c_void_p, param: Union[str, List[str]]) -> None:
         if isinstance(param, str):
             param = [param]
+            return
+
+        param = model_downloader.preprocess_args(param, self.model_storage)
         for s in param:
             self._chatllm_append_param(obj, c_char_p(s.encode()))
 

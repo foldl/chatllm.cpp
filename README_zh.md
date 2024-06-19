@@ -8,7 +8,7 @@
 
 在计算机（CPU）上实时聊天，可 [检索增强生成](./docs/rag.md) 。支持从不到 1B 到超过 300B 的一系列模型的推理。基于 [@ggerganov](https://github.com/ggerganov) 的 [ggml](https://github.com/ggerganov/ggml)，纯 C++ 实现。
 
-| [支持的模型](./docs/models.md) | [下载量化模型](https://modelscope.cn/models/judd2024/chatllm_quantized_models) |
+| [支持的模型](./docs/models.md) | [下载量化模型](./docs/quick_start.md#download-quantized-models) |
 
 ## 特点
 
@@ -23,6 +23,10 @@
 
 - [x] LoRA
 - [x] Python/JavaScript/C [绑定](./docs/binding.md)，网页演示，以及更多可能性。
+
+## 快速开始
+
+只需要简单一行 `python chatllm.py -i -m :model_id`. 查看 [详情](./docs/quick_start.md).
 
 ## 使用方法
 
