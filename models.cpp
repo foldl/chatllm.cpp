@@ -813,7 +813,8 @@ namespace chatllm
             ForwardContext ctx;
             ctx.gctx = GGMLContext({.mem_size = mem_size_, .mem_buffer = mem_buffer_.get(), .no_alloc = false});
             ctx.scratch = {.offs = 0, .size = scratch_size_, .data = scratch_buffer_.get()};
-            int n_threads = input_ids.size() >= 32 && ggml_cpu_has_blas() && !ggml_cpu_has_gpublas() ? 1 : gen_config.num_threads;
+            // int n_threads = input_ids.size() >= 32 && ggml_cpu_has_blas() && !ggml_cpu_has_gpublas() ? 1 : gen_config.num_threads;
+            int n_threads = input_ids.size() >= 32 ? gen_config.num_threads : 1;
             ctx.gf = ggml_new_graph_custom(ctx.gctx.get(), GRAPH_SIZE, false);
 
             dbg_ctx = &ctx;
@@ -830,7 +831,7 @@ namespace chatllm
             ggml_graph_compute_with_ctx(ctx.gctx.get(), ctx.gf, n_threads);
 
 #ifdef GGML_PERF
-            ggml_graph_print(&ctx.gf);
+            ggml_graph_print(ctx.gf);
 #endif
 
             return r;

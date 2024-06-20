@@ -3,6 +3,8 @@
 //
 
 #include <iostream>
+#include <thread>
+
 #include "chat.h"
 
 int main() {
@@ -18,12 +20,14 @@ int main() {
 
     {
         GenerationConfig config;
-        config.num_threads = 10;
+        config.num_threads = std::thread::hardware_concurrency();
         std::cout << result.model->qa_rank(config, ids) << std::endl;
     }
 
     {
-        std::cout << result.model->qa_rank({}, ids) << std::endl;
+        GenerationConfig config;
+        config.num_threads = 1;
+        std::cout << result.model->qa_rank(config, ids) << std::endl;
     }
 
 

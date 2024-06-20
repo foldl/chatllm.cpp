@@ -49,3 +49,7 @@ set_target_properties(libchatllm
 
 add_executable(main main.cpp chat.cpp vectorstore.cpp layers.cpp tokenizer.cpp models.cpp)
 target_link_libraries(main PRIVATE ggml)
+
+
+add_executable(test test.cpp chat.cpp vectorstore.cpp layers.cpp tokenizer.cpp models.cpp)
+target_link_libraries(test PRIVATE ggml)
