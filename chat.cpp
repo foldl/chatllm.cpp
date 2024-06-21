@@ -168,8 +168,7 @@ namespace chatllm
 
     bool BaseTokenizer::is_terminate_token_id(int id) const
     {
-        if (terminate_ids.size() < 1)
-            return id == eos_token_id;
+        if (id == eos_token_id) return true;
 
         return terminate_ids.find(id) != terminate_ids.end();
     }
