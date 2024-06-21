@@ -79,20 +79,10 @@ def register_tool(func: Callable):
 
     return func
 
-
-def dispatch_tool(tool_name: str, code: str, session_id: str) -> list[ToolObservation]:
+def dispatch_tool(tool_name: str, tool_params: dict, session_id: str) -> list[ToolObservation]:
     # Dispatch predefined tools
     if tool_name in ALL_TOOLS:
-        return ALL_TOOLS[tool_name](code, session_id)
-
-    code = code.strip().rstrip('<|observation|>').strip()
-
-    # Dispatch custom tools
-    try:
-        tool_params = json.loads(code)
-    except json.JSONDecodeError as e:
-        err = f"Error decoding JSON: {e}"
-        return [ToolObservation("system_error", err)]
+        return ALL_TOOLS[tool_name](json.dumps(tool_params, ensure_ascii=False), session_id)
 
     if tool_name not in _TOOL_HOOKS:
         err = f"Tool `{tool_name}` not found. Please use a provided tool."
@@ -105,7 +95,6 @@ def dispatch_tool(tool_name: str, code: str, session_id: str) -> list[ToolObserv
     except:
         err = traceback.format_exc()
         return [ToolObservation("system_error", err)]
-
 
 def get_tools() -> list[dict]:
     return copy.deepcopy(_TOOL_DESCRIPTIONS)
@@ -183,7 +172,7 @@ def call_function(s: str, session_id: str = '') -> str:
 
     try:
         tool_name, content = s.split("\n", maxsplit=1)
-        code = json.dumps(eval(content), ensure_ascii=False)
+        code = eval(content)
         observations = dispatch_tool(tool_name, code, session_id)
         rsp = '\n'.join([o.text for o in observations])
         return rsp

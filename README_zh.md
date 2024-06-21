@@ -46,7 +46,7 @@ git submodule update --init --recursive
 
 #### 量化模型
 
-**可以从[这里](https://modelscope.cn/models/judd2024/chatllm_quantized_models)下载一些量化模型。**
+**工具可[按需](https://modelscope.cn/models/judd2024/chatllm_quantized_models)自动下载部分量化模型。**
 
 为 `convert.py` 安装依赖:
 

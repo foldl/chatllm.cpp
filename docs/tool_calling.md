@@ -7,6 +7,7 @@ Demos of tool calling for these models are provided:
 * [GLM-4](../scripts/tool_glm4.py)
 * [Mistral-Instruct-7B-v0.3](../scripts/tool_mistral.py)
 * [QWen v1.5 & v2](../scripts/tool_qwen.py)
+* [DeepSeek Coder v2](../scripts/tool_deepseekcoder.py) (Note: function calling is *officially* unsupported.)
 
 ## Precondition
 
@@ -131,4 +132,36 @@ A.I. > [Use Tool]: get_weather
 The current weather in Jinan is Partly cloudy, with a temperature of 36°C, a feels like temperature of 36°C, and a humidity of 27%. The weather observation time is 05:22 AM.
 You  > which city is hotter?
 A.I. > Jinan is hotter than Beijing. Jinan's temperature is 36°C and Beijing's temperature is 33°C.
+```
+
+### DeepSeek Coder v2
+
+```
+python tool_deepseekcoder.py -i -m /path/to/deepseekcoder-v2-lite-model.bin
+    ________          __  __    __    __  ___
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+You are served by DeepSeek-V2,                /_/   /_/
+with 15706484224 (2.7B effect.) parameters.
+
+You  > weather in beijing?
+A.I. > [Use Tool]: get_weather
+
+北京当前的天气情况如下：
+- 温度：24°C
+- 体感温度：25°C
+- 湿度：74%
+- 天气描述：小雨
+- 观测时间：06:47 AM
+You  > how about jinan?
+A.I. > [Use Tool]: get_weather
+
+济南当前的天气情况如下：
+- 温度：24°C
+- 体感温度：26°C
+- 湿度：80%
+- 天气描述：局部有阵雨
+- 观测时间：10:50 AM
 ```

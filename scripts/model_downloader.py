@@ -1,8 +1,8 @@
 import requests
 import os
 
-def model_on_modelscope(proj: str, fn: str) -> dict:
-    url = f"https://modelscope.cn/api/v1/models/judd2024/{proj}/repo?Revision=master&FilePath={fn}"
+def model_on_modelscope(proj: str, fn: str, user: str = 'judd2024') -> dict:
+    url = f"https://modelscope.cn/api/v1/models/{user}/{proj}/repo?Revision=master&FilePath={fn}"
     return { 'fn': fn, 'url': url }
 
 all_models = {

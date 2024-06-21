@@ -97,7 +97,7 @@ class LibChatLLM:
         if print_type == PrintType.PRINT_CHAT_CHUNK.value:
             obj.callback_print(txt)
         elif print_type == PrintType.PRINTLN_META.value:
-            obj.callback_print(txt + '\n')
+            obj.callback_print_meta(txt)
         elif print_type == PrintType.PRINTLN_REF.value:
             obj.callback_print_reference(txt)
         elif print_type == PrintType.PRINTLN_REWRITTEN_QUERY.value:
@@ -166,6 +166,11 @@ class LLMChatChunk:
         self.id = id
         self.chunk = chunk
 
+class LLMChatMeta:
+    def __init__(self, id: Any, text: str) -> None:
+        self.id = id
+        self.text = text
+
 class ChatLLM:
     def __init__(self, lib: LibChatLLM, param: Union[None, str, List[str]], auto_start: bool = True) -> None:
         self._lib = lib
@@ -222,6 +227,12 @@ class ChatLLM:
 
     def callback_print_rewritten_query(self, s: str) -> None:
         self.rewritten_query = s
+
+    def callback_print_meta(self, s: str) -> None:
+        if self.out_queue is None:
+            print(s)
+        else:
+            self.out_queue.put(LLMChatMeta(self.input_id, s))
 
     def callback_print(self, s: str) -> None:
         if self.out_queue is None:
@@ -294,6 +305,8 @@ class ChatLLMStreamer:
             elif isinstance(output, LLMChatDone):
                 if output.id == id:
                     break
+            elif isinstance(output, LLMChatMeta):
+                yield output.text + '\n'
             else:
                 print(output)
                 raise Exception(output)

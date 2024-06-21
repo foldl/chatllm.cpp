@@ -66,7 +66,7 @@ git submodule update --init --recursive
 
 ### Quantize Model
 
-**Some quantized models can be downloaded from [here](https://modelscope.cn/models/judd2024/chatllm_quantized_models).**
+**Some quantized models can be downloaded [on demand](./docs/quick_start.md#download-quantized-models).**
 
 Install dependencies of `convert.py`:
 
