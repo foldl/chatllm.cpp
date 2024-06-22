@@ -12,11 +12,10 @@ from pprint import pformat
 import traceback
 from types import GenericAlias
 from typing import get_origin, Annotated
-import json, sys, re, os
+import json, sys, re
 
-this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-PATH_BINDS = os.path.join(this_dir, '..', 'bindings')
-sys.path.append(PATH_BINDS)
+import binding
+from binding import PATH_BINDS
 
 _TOOL_HOOKS = {}
 _TOOL_DESCRIPTIONS = {}

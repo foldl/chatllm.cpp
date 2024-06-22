@@ -7,7 +7,7 @@ Demos of tool calling for these models are provided:
 * [GLM-4](../scripts/tool_glm4.py)
 * [Mistral-Instruct-7B-v0.3](../scripts/tool_mistral.py)
 * [QWen v1.5 & v2](../scripts/tool_qwen.py)
-* [DeepSeek Coder v2](../scripts/tool_deepseekcoder.py) (Note: function calling is *officially* unsupported.)
+* [DeepSeek-Coder v2](../scripts/tool_deepseekcoder.py) (Note: function calling is *officially* unsupported.)
 
 ## Precondition
 
@@ -134,7 +134,7 @@ You  > which city is hotter?
 A.I. > Jinan is hotter than Beijing. Jinan's temperature is 36°C and Beijing's temperature is 33°C.
 ```
 
-### DeepSeek Coder v2
+### DeepSeek-Coder v2
 
 ```
 python tool_deepseekcoder.py -i -m /path/to/deepseekcoder-v2-lite-model.bin

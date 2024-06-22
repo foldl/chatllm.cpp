@@ -6,11 +6,10 @@ import traceback
 from types import GenericAlias
 from typing import Any, get_origin, Annotated
 from dataclasses import dataclass
+import sys
 
-import sys, os
-this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-PATH_BINDS = os.path.join(this_dir, '..', 'bindings')
-sys.path.append(PATH_BINDS)
+import binding
+from binding import PATH_BINDS
 
 @dataclass
 class ToolObservation:

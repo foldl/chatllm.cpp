@@ -1,0 +1,230 @@
+{
+    "gemma": {
+        "brief": "Gemma is a family of lightweight, state-of-the-art open models built by Google DeepMind. Updated to version 1.1.",
+        "default": "2b",
+        "license": "https://ai.google.dev/gemma/terms",
+        "variants": {
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1570351200,
+                        "url": "chatllm_quantized_models/gemma-1.1-2b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "llama3": {
+        "brief": "Meta Llama 3: The most capable openly available LLM to date.",
+        "default": "8b",
+        "license": "https://llama.meta.com/llama3/license",
+        "variants": {
+            "8b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 5025629392,
+                        "url": "chatllm_quantized_models/llama3-8b-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "minicpm": {
+        "brief": "MiniCPM is an End-Size LLM developed by ModelBest Inc. and TsinghuaNLP, with only 2.4B parameters excluding embeddings.",
+        "default": "2b-sft",
+        "license": "https://github.com/OpenBMB/General-Model-License/blob/main/%E9%80%9A%E7%94%A8%E6%A8%A1%E5%9E%8B%E8%AE%B8%E5%8F%AF%E5%8D%8F%E8%AE%AE-%E6%9D%A5%E6%BA%90%E8%AF%B4%E6%98%8E-%E5%AE%A3%E4%BC%A0%E9%99%90%E5%88%B6-%E5%95%86%E4%B8%9A%E6%8E%88%E6%9D%83.md",
+        "variants": {
+            "2b-dpo": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 1705488848,
+                        "url": "chatllm_quantized_models/minicpm-dpo-q4_1.bin"
+                    }
+                }
+            },
+            "2b-sft": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2897542592,
+                        "url": "chatllm_quantized_models/minicpm_sft_q8.bin"
+                    }
+                }
+            }
+        }
+    },
+    "qanything": {
+        "brief": "QAnything is a local knowledge base question-answering system based on QwenLM.",
+        "default": "7b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "7b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 4832334112,
+                        "url": "chatllm_quantized_models/qwen-qany-7b-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "qwen1.5": {
+        "brief": "Qwen1.5 is the beta version of Qwen2 from Alibaba group.",
+        "default": "moe",
+        "license": "Tongyi Qianwen RESEARCH LICENSE AGREEMENT",
+        "variants": {
+            "1.8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1956630800,
+                        "url": "chatllm_quantized_models/qwen1.5-1.8b.bin"
+                    }
+                }
+            },
+            "moe": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 8952812112,
+                        "url": "chatllm_quantized_models/qwen1.5-moe-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "qwen2": {
+        "brief": "Qwen2 is a new series of large language models from Alibaba group.",
+        "default": "1.5b",
+        "license": "All models with the exception of Qwen2 72B (both instruct and base models) are Apache 2.0 licensed. Qwen2 72B model still uses the original Qianwen License.",
+        "variants": {
+            "0.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 529392352,
+                        "url": "chatllm_quantized_qwen2/qwen2-0.5b.bin"
+                    }
+                }
+            },
+            "1.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1644897504,
+                        "url": "chatllm_quantized_qwen2/qwen2-1.5b.bin"
+                    }
+                }
+            },
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8096847120,
+                        "url": "chatllm_quantized_qwen2/qwen2-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "starling-lm": {
+        "brief": "Starling is a large language model trained by reinforcement learning from AI feedback focused on improving chatbot helpfulness.",
+        "default": "7b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "7b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 4074845056,
+                        "url": "chatllm_quantized_models/starling-7b-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "yi-1": {
+        "brief": "Yi (v1) is a high-performing, bilingual language model.",
+        "default": "34b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "34b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 19347696080,
+                        "url": "chatllm_quantized_models/yi-34b-q4.bin"
+                    }
+                }
+            }
+        }
+    },
+    "bce-emb": {
+        "brief": "BCEmbedding: Bilingual and Cross-lingual Embedding for RAG.",
+        "default": "0.2b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "0.2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 299434560,
+                        "url": "chatllm_quantized_models/bce_emb_q8.bin"
+                    }
+                }
+            }
+        }
+    },
+    "bce-reranker": {
+        "brief": "BCEmbedding: Bilingual and Cross-lingual Reranker for RAG.",
+        "default": "0.2b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "0.2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 300065332,
+                        "url": "chatllm_quantized_models/bce_reranker_q8.bin"
+                    }
+                }
+            }
+        }
+    },
+    "bge-m3": {
+        "brief": "BGE-M3, distinguished for its versatility in Multi-Functionality, Multi-Linguality, and Multi-Granularity.",
+        "default": "0.4b",
+        "license": "MIT",
+        "variants": {
+            "0.4b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 359572992,
+                        "url": "chatllm_quantized_models/bge-m3-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "bge-reranker-m3": {
+        "brief": "BGE-Reranker-v2-M3.",
+        "default": "0.4b",
+        "license": "MIT",
+        "variants": {
+            "0.4b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 360233284,
+                        "url": "chatllm_quantized_models/bge-reranker-m3-q4_1.bin"
+                    }
+                }
+            }
+        }
+    }
+}
