@@ -1,4 +1,86 @@
 {
+    "glm-4": {
+        "brief": "GLM-4-9B is the open-source version of the latest generation of pre-trained models in the GLM-4 series launched by Zhipu AI.",
+        "default": "9b",
+        "license": "https://huggingface.co/THUDM/glm-4-9b/blob/main/LICENSE",
+        "variants": {
+            "9b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 9993306576,
+                        "url": "chatllm_quantized_glm/glm4.bin"
+                    }
+                }
+            }
+        }
+    },
+    "chatglm3": {
+        "brief": "ChatGLM3 is a generation of pre-trained dialogue models jointly released by Zhipu AI and Tsinghua KEG.",
+        "default": "6b",
+        "license": "https://github.com/THUDM/ChatGLM3/blob/main/MODEL_LICENSE",
+        "variants": {
+            "6b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 6635798992,
+                        "url": "chatllm_quantized_glm/chatglm3-6b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "chatglm2": {
+        "brief": "ChatGLM2-6B is the second-generation version of the open-source bilingual (Chinese-English) chat model ChatGLM-6B.",
+        "default": "6b",
+        "license": "https://github.com/THUDM/ChatGLM2-6B/blob/main/MODEL_LICENSE",
+        "variants": {
+            "6b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 6635798992,
+                        "url": "chatllm_quantized_glm/chatglm2.bin"
+                    }
+                }
+            }
+        }
+    },
+    "phi3": {
+        "brief": "Phi-3 is a family of lightweight 3B (Mini) and 14B (Medium) state-of-the-art open models by Microsoft.",
+        "default": "mini-4k",
+        "license": "MIT",
+        "variants": {
+            "mini-4k": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4060935568,
+                        "url": "chatllm_quantized_phi3/phi3-mini-4k.bin"
+                    }
+                }
+            },
+            "mini-128k": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4060936592,
+                        "url": "chatllm_quantized_phi3/phi3-mini-128k.bin"
+                    }
+                }
+            },
+            "medium-128k": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 8727005584,
+                        "url": "chatllm_quantized_phi3/phi3-medium-128k_q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
     "yi-1.5": {
         "brief": "Yi 1.5 is a high-performing, bilingual language model.",
         "default": "6b",
