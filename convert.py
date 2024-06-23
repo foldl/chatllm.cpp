@@ -118,6 +118,8 @@ class ModelType(Enum):
 
     XVERSE        = 0x1900
 
+    Index         = 0x1a00
+
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
     BGE_M3        = 0x10000102
@@ -3144,6 +3146,26 @@ class DeepSeekV2Converter(BaseConverter):
 
         return weight_names
 
+class IndexConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Index
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name == 'lm_head.weight':
+            return nn.Parameter(nn.functional.normalize(tensor)) if config.norm_head else 0
+        else:
+            return Llama3Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        config.rope_theta = 10000.0
+
+        Llama3Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return Llama3Converter.get_weight_names(config)
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -3476,6 +3498,8 @@ def main():
             DeepSeekV2Converter.MODEL_TYPE = ModelType.DeepSeekV2
             print("DeelseekV2 is not fully supported yet!!!!")
         DeepSeekV2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'IndexForCausalLM':
+        IndexConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

@@ -1,4 +1,29 @@
 {
+    "index": {
+        "brief": "LLM developed by Bilibili.",
+        "default": "1.9b-chat",
+        "license": "https://huggingface.co/IndexTeam/Index-1.9B-Chat/blob/main/LICENSE",
+        "variants": {
+            "1.9b-chat": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2309982912,
+                        "url": "chatllm_quantized_index/index.bin"
+                    }
+                }
+            },
+            "1.9b-character": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2309982912,
+                        "url": "chatllm_quantized_index/index-ch.bin"
+                    }
+                }
+            }
+        }
+    },
     "glm-4": {
         "brief": "GLM-4-9B is the open-source version of the latest generation of pre-trained models in the GLM-4 series launched by Zhipu AI.",
         "default": "9b",

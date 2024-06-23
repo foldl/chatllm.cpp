@@ -156,6 +156,8 @@ namespace chatllm
 
         MODEL_TYPE_XVERSE           = 0x1900,
 
+        MODEL_TYPE_INDEX            = 0x1a00,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -308,6 +310,8 @@ namespace chatllm
             return "StarCoder2";
         case MODEL_TYPE_XVERSE:
             return "XVERSE";
+        case MODEL_TYPE_INDEX:
+            return "Index";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1289,6 +1293,11 @@ namespace chatllm
         #include "models/xverse.cpp"
     }
 
+    namespace index
+    {
+        #include "models/index.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1557,6 +1566,8 @@ namespace chatllm
         CASE(STARCODER2,            starcoder::v2, 1)           \
                                                                 \
         CASE(XVERSE,                xverse::dense, 1)           \
+                                                                \
+        CASE(INDEX,                 index, 1)                   \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \
