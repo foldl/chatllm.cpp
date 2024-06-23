@@ -19,10 +19,21 @@ public:
         sys_prompt = "";
         resevered_0_token_id = 3;
         resevered_1_token_id = 4;
+        unk_token_id = config.pad_token_id;
     }
+
+    size_t load(const char *buffer, int n_vocab) override
+    {
+        size_t size = llama::v2::Tokenizer::load(buffer, n_vocab);
+
+        pad_token_id = unk_token_id;
+        return size;
+    }
+
 public:
     int resevered_0_token_id;
     int resevered_1_token_id;
+    int unk_token_id;
 };
 
 class ConditionalGeneration : public llama::v3::ConditionalGeneration
