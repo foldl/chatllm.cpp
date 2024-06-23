@@ -51,7 +51,7 @@ def show():
         show_variants(info['variants'], info['default'])
         print()
 
-    for m in all_models.keys():
+    for m in sorted(all_models.keys()):
         show_model(m)
 
 def parse_model_id(model_id: str):
