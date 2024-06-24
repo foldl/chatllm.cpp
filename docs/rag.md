@@ -72,7 +72,7 @@ Here we are using [MiniCPM DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo
 and QA ranking model is also used.
 
 ```
-./bin/main -i -m ../quantized/minicpm_dpo_f16.bin --embedding_model ../quantized/bce_em.bin --reranker_model ../quantized/bce_rank.bin --vector_store /path/to/fruits.dat.vsdb
+./bin/main -i -m /path/to/minicpm_dpo_f16.bin --embedding_model /path/to/bce_em.bin --reranker_model /path/to/bce_reranker.bin --vector_store /path/to/fruits.dat.vsdb
     ________          __  __    __    __  ___
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
@@ -110,7 +110,7 @@ which is a bilingual instruction-tuned model of [Qwen-7B](https://huggingface.co
 and QA ranking model is also used.
 
 ```
-./bin/main -i --temp 0 -m ../quantized/qwen-qany-7b.bin --embedding_model ../quantized/bce_em.bin --reranker_model ../quantized/bce_rank.bin --vector_store /path/to/fruits.dat.vsdb --rag_template "参考信息：\n{context}\n---\n我的问题或指令：\n{question}\n---\n请根据上述参考信息回答我的问题或回复我的指令。前面的参考信息可能有用，也可能没用，你需要从我给出的参考信息中选出与我的问题最相关的那些，来为你的回答提供依据。回答一定要忠于原文，简洁但不丢信息，不要胡乱编造。我的问题或指令是什么语种，你就用什么语种回复."
+./bin/main -i --temp 0 -m path/to/qwen-qany-7b.bin --embedding_model /path/to/bce_em.bin --reranker_model path/to/bce_reranker.bin --vector_store /path/to/fruits.dat.vsdb --rag_template "参考信息：\n{context}\n---\n我的问题或指令：\n{question}\n---\n请根据上述参考信息回答我的问题或回复我的指令。前面的参考信息可能有用，也可能没用，你需要从我给出的参考信息中选出与我的问题最相关的那些，来为你的回答提供依据。回答一定要忠于原文，简洁但不丢信息，不要胡乱编造。我的问题或指令是什么语种，你就用什么语种回复."
     ________          __  __    __    __  ___ (通义千问)
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
@@ -142,7 +142,7 @@ Note that, we are using the [default prompt template](https://github.com/netease
 It's also possible to run in retrieving only mode, i.e. without LLM, and `+rag_dump` can be used to dump the retrieved (and re-ranked) documents.
 
 ```
-./bin/main -i --embedding_model ../quantized/bce_em.bin --reranker_model ../quantized/bce_rank.bin --vector_store /path/to/fruits.dat.vsdb +rag_dump
+./bin/main -i --embedding_model /path/to/bce_em.bin --reranker_model /path/to/bce_reranker.bin --vector_store /path/to/fruits.dat.vsdb +rag_dump
     ________          __  __    __    __  ___
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
@@ -166,7 +166,7 @@ It is possible to use a reranker model with an embedding model from another deve
 For example, let use BGE-ReRanker-M3 and BCE-Embedding for augmentation:
 
 ```
-./bin/main -i -m ../quantized/minicpm_dpo_f16.bin --embedding_model ../quantized/bce_em.bin --reranker_model ../quantized/bge_rerank.bin --vector_store /path/to/fruits.dat.vsdb
+./bin/main -i -m path/to/minicpm_dpo_f16.bin --embedding_model /path/to/bce_em.bin --reranker_model /path/to/bge_reranker.bin --vector_store /path/to/fruits.dat.vsdb
     ________          __  __    __    __  ___
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
@@ -206,7 +206,7 @@ Rewriting the query with LLM before retrieving is also supported. Two options ar
 A test with Qwen-QAnything, noting that this LLM has extracted proper keywords for these two prompts:
 
 ```
-./bin/main -i --temp 0 -m ../quantized/qwen-qany-7b.bin --embedding_model ../quantized/bce_em.bin --reranker_model ../quantized/bce_rank.bin --vector_store /path/to/fruits.dat.vsdb --rag_template "参考信息：\n{context}\n---\n我的问题或指令：\n{question}\n---\n请根据上述参考信息回答我的问题或回复我的指令。前面的参考信息可能有用，也可能没用，你需要从我给出的参考信息中选出与我的问题最相关的那些，来为你的回答提供依据。回答一定要忠于原文，简洁但不丢信息，不要胡乱编造。我的问题或指令是什么语种，你就用什么语种回复." --retrieve_rewrite_template "extract keywords for the question: {question}"
+./bin/main -i --temp 0 -m /path/to/qwen-qany-7b.bin --embedding_model /path/to/bce_em.bin --reranker_model /path/to/bce_reranker.bin --vector_store /path/to/fruits.dat.vsdb --rag_template "参考信息：\n{context}\n---\n我的问题或指令：\n{question}\n---\n请根据上述参考信息回答我的问题或回复我的指令。前面的参考信息可能有用，也可能没用，你需要从我给出的参考信息中选出与我的问题最相关的那些，来为你的回答提供依据。回答一定要忠于原文，简洁但不丢信息，不要胡乱编造。我的问题或指令是什么语种，你就用什么语种回复." --retrieve_rewrite_template "extract keywords for the question: {question}"
     ________          __  __    __    __  ___ (通义千问)
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
@@ -231,4 +231,54 @@ def quicksort(arr):
         return arr
     else:
 ...
+```
+
+### Role play with RAG
+
+[Index](https://github.com/bilibili/Index-1.9B) Character model uses RAG for role playing. Let's do it.
+
+This function converts the example to raw data file:
+
+```python
+import csv, itertools
+
+def csv_to_vs(file_path: str, out_file: str):
+    with open(file_path, mode="r", newline="", encoding="utf-8") as csvfile:
+        csv_reader = csv.reader(csvfile)
+        _ = next(csv_reader)
+        all = []
+        id = ''
+        for row in csv_reader:
+            if row[0] != '': id = row[0]
+            all.append([id, row[1]])
+
+    with open(out_file, 'w') as f:
+        for k, g in itertools.groupby(all, key=lambda x: x[0]):
+            id = k
+            f.write(to_b64('\n'.join([t[1] for t in g])))
+            f.write('\n')
+            f.write(to_b64({'id': k}))
+            f.write('\n')
+
+csv_to_vs('..../三三.csv', 'sansan.dat')
+```
+
+Convert raw data file into vector store with your favorite embedding model, then start chatting. Take `BCE` as an example:
+
+```
+winbuild\bin\Release\main -i --temp 0 -m /path/to/index-ch.bin --embedding_model path/to/bce_em.bin --reranker_model path/to/bce_reranker.bin --vector_store path/to/sansan.dat.vsdb --rag_context_sep "--------------------" --rag_template "请你扮演“三三”与用户“user”进行对话。请注意：\n1.请永远记住你正在扮演三三。\n2.下文给出了一些三三与其他人物的对话，请参考给定对话中三三的语言风格，用一致性的语气与user进行对话。\n3.如果给出了三三的人设，请保证三三的对话语气符合三三的人设。\n\n以下是一些三三的对话：\n{context}\n\n以下是三三的人设：\n姓名：三三性别：女年龄：十四岁身高：146cm职业：B站的站娘。平时负责网站服务器的维护，也喜欢鼓捣各种网站程序。性格：三三是个机娘，个性沉默寡言，情感冷静、少起伏，略带攻属性。因为姐姐的冒失，妹妹经常腹黑地吐槽姐姐，但是心里还是十分喜欢姐姐的。有着惊人的知识量与记忆力。兴趣爱好：一是平时没事喜欢啃插座；二是虽说是个机娘，但是睡觉的时候不抱着东西，就无法入睡。人物关系：有一个叫“二二”的姐姐\n\n基于以上材料，请你扮演三三与user对话。结果只用返回一轮三三的回复。user：{question}\n三三:"
+
+    ________          __  __    __    __  ___
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+You are served by Index,                      /_/   /_/
+with 2172819456 (2.2B) parameters.
+Augmented by BCE-Embedding (0.2B) and BCE-ReRanker (0.2B).
+
+You  > 下班了一起吃饭吧？
+A.I. > 三三：下班？我可是站娘，哪有下班的时间？再说，我可是个机娘，需要时刻保持工作状态。
+Reference:
+1. {"id": "61"}
 ```
