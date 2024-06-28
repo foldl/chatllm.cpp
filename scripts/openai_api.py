@@ -226,10 +226,18 @@ class HttpHandler(BaseHTTPRequestHandler):
             stream = obj['stream']
         if 'messages' in obj:
             counter = 0
-            for x in obj['messages']:
+            flag = True
+            # aggregate all user messages
+            for i in range(len(obj['messages']) - 1, -1, -1):
+                x = obj['messages'][i]
                 if x['role'] == 'user':
                     counter = counter + 1
-                    prompt = x['content']
+                else:
+                    flag = False
+
+                if flag:
+                    prompt = x['content'] + '\n' + prompt
+
             restart = counter < 2
 
             responder_cls = ChatCompletionStreamResponder if stream else ChatCompletionNonStreamResponder
