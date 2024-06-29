@@ -258,8 +258,6 @@ namespace chatllm
         const int hidden_size = (int)hidden_states->ne[0];
         const int qlen = (int)hidden_states->ne[1];
         const int head_size = hidden_size / num_attention_heads;
-        const int rope_dim = head_size / 2;
-        const int mqa_scale = num_attention_heads / num_kv_heads;
 
         before_forward(ctx, n_past, qlen);
 
@@ -383,8 +381,6 @@ namespace chatllm
     ggml_tensor *CoreAttention::cross_attention_3d(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
                                              ggml_tensor *query_layer, ggml_tensor *key_layer, ggml_tensor *v)
     {
-        const int head_size = hidden_size / num_attention_heads;
-
         // [qlen, heads, head_size]
         key_layer = apply_pos_embedding_k(ctx, key_layer, hidden_size, qlen, pos);
 
