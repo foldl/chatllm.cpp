@@ -142,6 +142,7 @@ namespace chatllm
         MODEL_TYPE_FUYU     = 0x1201,
 
         MODEL_TYPE_GEMMA    = 0x1300,
+        MODEL_TYPE_GEMMA2   = 0x1301,
 
         MODEL_TYPE_COHERE_COMMAND_R = 0x1400,
         MODEL_TYPE_COHERE_AYA_23     = 0x1401,
@@ -288,6 +289,8 @@ namespace chatllm
             return "Fuyu";
         case MODEL_TYPE_GEMMA:
             return "Gemma";
+        case MODEL_TYPE_GEMMA2:
+            return "Gemma-2";
         case MODEL_TYPE_COHERE_COMMAND_R:
             return "Command-R";
         case MODEL_TYPE_COHERE_AYA_23:
@@ -916,7 +919,7 @@ namespace chatllm
         : config(config),
           word_embeddings(ctx, config.vocab_size, config.hidden_size, config.max_length),
           final_layernorm(ctx, config.hidden_size),
-          lm_head(lm_head),
+          lm_head(lm_head), logits_pp(nullptr),
           cache_size(0)
         {
             layers.reserve(config.num_hidden_layers);
@@ -961,11 +964,12 @@ namespace chatllm
         {
             int64_t r = 0;
             r += word_embeddings.get_param_num(effective_only);
-            for (auto &layer : layers)
-                r += layer->get_param_num(effective_only);
+            r += get_param_num_of_layers(effective_only);
             r += final_layernorm.get_param_num(effective_only);
             if (lm_head)
                 r += lm_head->get_param_num(effective_only);
+            if (logits_pp)
+                r += logits_pp->get_param_num(effective_only);
             return r;
         }
 
@@ -1002,6 +1006,14 @@ namespace chatllm
             size_t cache_size;
         };
     protected:
+        virtual int64_t get_param_num_of_layers(bool effective_only) const
+        {
+            int64_t r = 0;
+            for (auto &layer : layers)
+                r += layer->get_param_num(effective_only);
+            return r;
+        }
+
         ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
             ggml_set_scratch(ctx->gctx.get(), {.offs = 0, .size = 0, .data = nullptr});
@@ -1018,6 +1030,9 @@ namespace chatllm
 
             ggml_tensor *lm_logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
                                              : word_embeddings.forward(ctx, transformer_outputs);
+
+            if (logits_pp)
+                lm_logits = logits_pp->forward(ctx, lm_logits);
             return lm_logits;
         }
     public:
@@ -1025,6 +1040,7 @@ namespace chatllm
         Embedding word_embeddings;
         FinalNorm final_layernorm;
         Block *lm_head;
+        Block *logits_pp;
     protected:
         // std::vector<std::unique_ptr<Block>> layers;
         std::vector<Block *> layers;
@@ -1070,15 +1086,12 @@ namespace chatllm
         {
         }
 
-        int64_t get_param_num(bool effective_only) const override
+    protected:
+        int64_t get_param_num_of_layers(bool effective_only) const override
         {
             int64_t r = 0;
-            r += Base::word_embeddings.get_param_num(effective_only);
             if (Base::layers.size() > 0)
                 r += Base::layers[0]->get_param_num(effective_only) * Base::layers.size();
-            r += Base::final_layernorm.get_param_num(effective_only);
-            if (Base::lm_head)
-                r += Base::lm_head->get_param_num(effective_only);
             return r;
         }
     public:
@@ -1554,7 +1567,8 @@ namespace chatllm
                                                                 \
         CASE(PERSIMMON,             adept::persimmon, 1)        \
                                                                 \
-        CASE(GEMMA,                 gemma, 1)                   \
+        CASE(GEMMA,                 gemma::v1, 1)               \
+        CASE(GEMMA2,                gemma::v2, 1)               \
                                                                 \
         CASE(COHERE_COMMAND_R,      cohere::command_r, 1)       \
         CASE(COHERE_AYA_23,         cohere::aya_23, 1)          \

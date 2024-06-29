@@ -104,6 +104,7 @@ class ModelType(Enum):
     Fuyu        = 0x1201
 
     Gemma       = 0x1300
+    Gemma2      = 0x1301
 
     CohereCommand = 0x1400
     CohereAya23   = 0x1401
@@ -2675,6 +2676,75 @@ class GemmaConverter(BaseConverter):
         r = LlamaConverter.get_weight_names(config)
         return r[:-1]
 
+class Gemma2Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Gemma2
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name == 'model.embed_tokens.weight':
+            return tensor * (config.hidden_size ** 0.5)
+        elif name.endswith('input_layernorm.weight') or \
+            name.endswith('post_attention_layernorm.weight') or \
+            name.endswith('post_feedforward_layernorm.weight') or \
+            name.endswith('pre_feedforward_layernorm.weight') or \
+            name == 'model.norm.weight':
+            return 1 + tensor
+        if name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        if name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        else:
+            return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.attention_bias == False, 'attention_bias == False'
+        if config.hidden_activation is not None:
+            assert config.hidden_activation == 'gelu_pytorch_tanh', "hidden_activation == 'gelu_pytorch_tanh'"
+        assert config.rope_theta > 0, "rope_theta must be positive"
+        assert config.final_logit_softcapping > 0, "final_logit_softcapping must be positive"
+
+        # fake it for LlamaConverter
+        config.hidden_act = 'silu'
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+            config.query_pre_attn_scalar,
+            config.sliding_window
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_theta,
+            config.final_logit_softcapping,
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.post_feedforward_layernorm.weight",
+                f"model.layers.{i}.pre_feedforward_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        return weight_names
+
 @dataclass
 class QuantizedWeight8bit:
     def __init__(self):
@@ -3484,6 +3554,8 @@ def main():
         FuyuConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'GemmaForCausalLM':
         GemmaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Gemma2ForCausalLM':
+        Gemma2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'CohereForCausalLM':
         CohereCommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'aya-23':

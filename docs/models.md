@@ -110,9 +110,10 @@
     * [x] [Chat-8B](https://huggingface.co/adept/persimmon-8b-chat)
 
 * Gemma (`GemmaForCausalLM`)
-    * [x] v1.0 [Instruct-2B](https://huggingface.co/google/gemma-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-7b-it)
-    * [x] v1.1 [Instruct-2B](https://huggingface.co/google/gemma-1.1-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-1.1-7b-it)
+    * [x] v1.0: [Instruct-2B](https://huggingface.co/google/gemma-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-7b-it)
+    * [x] v1.1: [Instruct-2B](https://huggingface.co/google/gemma-1.1-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-1.1-7b-it)
     * [x] CodeGemma v1.1: [Instruct-7B](https://huggingface.co/google/codegemma-1.1-7b-it)
+    * [x] v2: [Instruct-9B](https://huggingface.co/google/gemma-2-9b-it), [Instruct-27B](https://huggingface.co/google/gemma-2-27b-it)
 
 * Cohere (`CohereForCausalLM`)
     * [x] [C4AI Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
