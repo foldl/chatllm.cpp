@@ -169,6 +169,7 @@ struct Config : public BaseConfig
 
     float rope_theta;
     float final_logit_soft_capping;
+    float attn_logit_soft_capping;
 };
 
 typedef v1::Tokenizer Tokenizer;
@@ -201,10 +202,10 @@ public:
     {}
 };
 
-class LogitsPostProc: public Block
+class TanhScaling: public Block
 {
 public:
-    LogitsPostProc(float scale_pre, float scale_post) : scale_pre(scale_pre), scale_post(scale_post) {}
+    TanhScaling(float scale_pre, float scale_post) : scale_pre(scale_pre), scale_post(scale_post) {}
 
     ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override
     {
@@ -218,12 +219,13 @@ public:
     float scale_post;
 };
 
-template <class Layer> static void setup_layer(Block *block, const Config &config)
+template <class Layer> static void setup_layer(Block *block, const Config &config, Block *attn_scores_pp)
 {
     auto layer = dynamic_cast<Layer *>(block);
     auto &attention = layer->attention;
     attention.freq_base = config.rope_theta;
     attention.attn_scaling_factor = powf((float)config.query_pre_attn_scalar, -0.5);
+    attention.attn_scores_pp = attn_scores_pp;
 }
 
 template <class Layer> static void load_layer(ModelLoader &loader, const std::string &layer_prefix, Block *block)
@@ -250,7 +252,8 @@ public:
     ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_GEMMA2)
         : BaseModelForConditionalGeneration<
                                   HeterogeneousModel<BaseConfig, Embedding, RMSNorm>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config),
-          logits_pp(1.0f / config.final_logit_soft_capping / sqrtf((float)config.hidden_size), config.final_logit_soft_capping)
+          logits_pp(1.0f / config.final_logit_soft_capping / sqrtf((float)config.hidden_size), config.final_logit_soft_capping),
+          attn_scores_pp(1.0f / config.attn_logit_soft_capping, config.attn_logit_soft_capping)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 2 + (config.num_hidden_layers - config.num_hidden_layers / 2) * 14 + config.num_hidden_layers / 2 * 15;
@@ -282,15 +285,18 @@ public:
         {
             if (is_sliding(i))
             {
-                setup_layer<Gemma2SWABlock4k>(transformer->get_layer(i), config);
+                setup_layer<Gemma2SWABlock4k>(transformer->get_layer(i), config, &attn_scores_pp);
             }
             else
             {
-                setup_layer<Gemma2FullBlock>(transformer->get_layer(i), config);
+                setup_layer<Gemma2FullBlock>(transformer->get_layer(i), config, &attn_scores_pp);
             }
         }
 
         batch_input = false;
+
+        if (transformer->get_param_num(false) > 20000000)
+            GRAPH_SIZE = 4096;
     }
 
     void load(ModelLoader &loader) override
@@ -323,10 +329,11 @@ public:
 
 public:
     static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 244ull * 1024 * 1024;
+    static constexpr size_t SCRATCH_SIZE = 844ull * 1024 * 1024;
 
     BaseConfig config;
-    LogitsPostProc logits_pp;
+    TanhScaling logits_pp;
+    TanhScaling attn_scores_pp;
 
 private:
     // hold ggml_context & kv_cache

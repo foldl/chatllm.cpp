@@ -2678,6 +2678,7 @@ class GemmaConverter(BaseConverter):
 
 class Gemma2Converter(BaseConverter):
     MODEL_TYPE = ModelType.Gemma2
+    FILE_VERSION = 2
 
     @classmethod
     def pp(cls, config, name: str, tensor):
@@ -2718,6 +2719,7 @@ class Gemma2Converter(BaseConverter):
         config_values = [
             config.rope_theta,
             config.final_logit_softcapping,
+            config.attn_logit_softcapping,
         ]
         f.write(struct.pack("<" + "f" * len(config_values), *config_values))
 

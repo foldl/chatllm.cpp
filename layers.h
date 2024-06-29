@@ -712,6 +712,7 @@ namespace chatllm
               pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
               max_length(max_length),
               attn_scaling_factor(-1.0f),
+              attn_scores_pp(nullptr),
               shift_pending(),
               attn_scaling(true),
               causal(true),
@@ -731,6 +732,14 @@ namespace chatllm
         void shift_cache(int shift, int total) override
         {
             shift_pending = ShiftPending(shift, total);
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            if (attn_scores_pp)
+                r += attn_scores_pp->get_param_num(effective_only);
+            return r;
         }
 
         size_t get_cache_size(void) const override
@@ -806,6 +815,7 @@ namespace chatllm
         ggml_tensor *pos;
         const int max_length;
         float attn_scaling_factor;
+        Block *attn_scores_pp;
 
     protected:
         ShiftPending shift_pending;
@@ -874,7 +884,7 @@ namespace chatllm
 
         int64_t get_param_num(bool effective_only) const override
         {
-            int64_t r = 0;
+            int64_t r = KVCacheAttention::get_param_num(effective_only);
             r += query_key_value.get_param_num(effective_only);
             r += dense.get_param_num(effective_only);
             return r;
@@ -921,7 +931,7 @@ namespace chatllm
 
         int64_t get_param_num(bool effective_only) const override
         {
-            int64_t r = 0;
+            int64_t r = KVCacheAttention::get_param_num(effective_only);
             r += q_proj.get_param_num(effective_only);
             r += k_proj.get_param_num(effective_only);
             r += v_proj.get_param_num(effective_only);

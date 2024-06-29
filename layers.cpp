@@ -339,6 +339,9 @@ namespace chatllm
                 attn_scores = ggml_scale_inplace(ctx->gctx.get(), attn_scores, 1.f / sqrtf((float)head_size));
         }
 
+        if (attn_scores_pp)
+            attn_scores = attn_scores_pp->forward(ctx, attn_scores);
+
         attn_scores = apply_pos_embedding_kq(ctx, attn_scores, hidden_size, qlen, pos);
 
         // attn_masked = mask_past(attn_scores)

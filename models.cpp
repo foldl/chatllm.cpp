@@ -1568,7 +1568,7 @@ namespace chatllm
         CASE(PERSIMMON,             adept::persimmon, 1)        \
                                                                 \
         CASE(GEMMA,                 gemma::v1, 1)               \
-        CASE(GEMMA2,                gemma::v2, 1)               \
+        CASE(GEMMA2,                gemma::v2, 2)               \
                                                                 \
         CASE(COHERE_COMMAND_R,      cohere::command_r, 1)       \
         CASE(COHERE_AYA_23,         cohere::aya_23, 1)          \
