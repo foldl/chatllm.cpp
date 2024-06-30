@@ -274,6 +274,39 @@
             }
         }
     },
+    "gemma2": {
+        "brief": "Gemma is a family of lightweight, state-of-the-art open models built by Google DeepMind. Updated to version 2.",
+        "default": "9b",
+        "license": "https://ai.google.dev/gemma/terms",
+        "variants": {
+            "9b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 5781867888,
+                        "url": "chatllm_quantized_gemma-2/gemma-2-9b_q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 9824849264,
+                        "url": "chatllm_quantized_gemma-2/gemma-2-9b.bin"
+                    }
+                }
+            },
+            "27b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 17023592624,
+                        "url": "chatllm_quantized_gemma-2/gemma-2-27b_q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 28935088304,
+                        "url": "chatllm_quantized_gemma-2/gemma-2-27b.bin"
+                    }
+                }
+            }
+        }
+    },
     "llama3": {
         "brief": "Meta Llama 3: The most capable openly available LLM to date.",
         "default": "8b",
