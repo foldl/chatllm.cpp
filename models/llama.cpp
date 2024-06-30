@@ -295,3 +295,18 @@ namespace v3
         }
     };
 }
+
+namespace v2_plus
+{
+    typedef v3::Config Config;
+    typedef v2::Tokenizer Tokenizer;
+
+    class ConditionalGeneration : public v3::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration() = default;
+        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_LLAMA2)
+            : v3::ConditionalGeneration(config, type)
+        {}
+    };
+}

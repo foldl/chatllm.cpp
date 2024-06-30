@@ -95,6 +95,7 @@ namespace chatllm
         MODEL_TYPE_WIZARDLM         = 0x153,
         MODEL_TYPE_WIZARDMATH       = 0x154,
         MODEL_TYPE_TIGERBOT         = 0x155,
+        MODEL_TYPE_LLAMA2PLUS       = 0x156,
 
         MODEL_TYPE_BAICHUANLLAMA = 0x200,
         MODEL_TYPE_BAICHUAN      = 0x201,
@@ -217,6 +218,7 @@ namespace chatllm
         case MODEL_TYPE_INTERNLM3:
             return "InternLM";
         case MODEL_TYPE_LLAMA2:
+        case MODEL_TYPE_LLAMA2PLUS:
             return "LlaMa2";
         case MODEL_TYPE_CODELLAMA:
             return "CodeLlaMa";
@@ -1516,6 +1518,7 @@ namespace chatllm
         CASE(LLAMA2,                llama::v2, 1)               \
         CASE(LLAMA3,                llama::v3, 1)               \
         CASE(CODELLAMA,             codellama, 1)               \
+        CASE(LLAMA2PLUS,            llama::v2_plus, 1)          \
                                                                 \
         CASE(DEEPSEEK,              deepseek::v1, 1)            \
         CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \

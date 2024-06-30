@@ -58,6 +58,7 @@ class ModelType(Enum):
     WizardLM    = 0x153
     WizardMath  = 0x154
     TigerBot    = 0x155
+    LlaMA2Plus  = 0x156
 
     BaiChuanLlama = 0x200
     BaiChuan = 0x201
@@ -3388,10 +3389,12 @@ def main():
         raise Exception(f'unknown architectures: {config.architectures}')
 
     vocab_dir = Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir)
+    tokenizer_model_file_exists = False
 
     if (config._name_or_path == 'THUDM/glm-4-9b-chat') or (config._name_or_path == 'THUDM/glm4-9b-chat'):
         vocab = load_vocab_from_tiktok_mergeable_ranks(vocab_dir / 'tokenizer.model')
     else:
+        tokenizer_model_file_exists = (vocab_dir / 'tokenizer.model').exists()
         vocab = load_vocab(vocab_dir, skip_def_vocab_model)
 
     if arch == '':
@@ -3434,8 +3437,13 @@ def main():
     elif arch == 'InternLM2ForCausalLM':
         InternLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'LlamaForCausalLM':
-        if (config.num_key_value_heads is None) or (config.num_key_value_heads == config.num_attention_heads):
-            LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        if tokenizer_model_file_exists:
+            if ((config.num_key_value_heads is None) or (config.num_key_value_heads == config.num_attention_heads)) \
+                and ((config.rope_theta is None) or (config.rope_theta == 10000.0)):
+                LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            else:
+                Llama3Converter.MODEL_TYPE = ModelType.LlaMA2Plus
+                Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'XverseForCausalLM':

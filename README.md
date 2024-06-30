@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-07-01: LLM-Compiler
 * 2024-06-28: Gemma-2
 * 2024-06-23: Index
 * 2024-06-17: DeepSeek-Coder-V2 (Instruct & Base)
