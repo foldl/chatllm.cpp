@@ -1,4 +1,20 @@
 {
+    "llm-compiler": {
+        "brief": "LLM Compiler is a state-of-the-art LLM that builds upon Code Llama with improved performance for code optimization and compiler reasoning.",
+        "default": "7b",
+        "license": "https://huggingface.co/facebook/llm-compiler-7b/blob/main/LICENSE.pdf",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7160799888,
+                        "url": "chatllm_quantized_llm-compiler/llm-compiler-7b.bin"
+                    }
+                }
+            }
+        }
+    },
     "index": {
         "brief": "LLM developed by Bilibili.",
         "default": "1.9b-chat",
