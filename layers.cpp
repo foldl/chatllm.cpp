@@ -563,8 +563,7 @@ namespace chatllm
 
     ggml_tensor *BaichuanSelfAttention::apply_pos_embedding_kq(ForwardContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const
     {
-        const float max_alibi_bias = 8.0f;
-        return ggml_alibi(ggctx, kq, /*n_past*/ 0, num_attention_heads, max_alibi_bias);
+        return ggml_map_custom1(ggctx, kq, ggml_compute_forward_custom_alibi, GGML_N_TASKS_MAX, (void *)&alibi);
     }
 
     QWenSelfAttention::QWenSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)

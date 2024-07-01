@@ -15,6 +15,13 @@ namespace chatllm
     void inspect_tensor(ggml_tensor *tensor, const char *msg,
         ggml_tensor *temp1 = nullptr, ggml_tensor *temp2 = nullptr, ggml_tensor *temp3 = nullptr, ggml_tensor *temp4 = nullptr, ggml_tensor *temp5 = nullptr);
 
+    struct alibi_ctx
+    {
+        int    n_past;
+        int    n_head;
+        float  bias_max;
+    };
+
     enum ActFunc
     {
         GELU,   // equivelent to `gelu_new`
@@ -1954,6 +1961,9 @@ namespace chatllm
         BaichuanSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
             : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
         {
+            alibi.bias_max = 8.0f;
+            alibi.n_past = 0;
+            alibi.n_head = num_attention_heads;
         }
 
     protected:
@@ -1963,6 +1973,7 @@ namespace chatllm
 
         ggml_tensor *apply_pos_embedding_kq(ForwardContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const override;
 
+        alibi_ctx alibi;
     };
 
     class BaichuanBlock : public LMBlock1<RMSNorm, BaichuanSelfAttention, RMSNorm, SiLUMLP>

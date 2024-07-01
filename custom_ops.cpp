@@ -598,3 +598,136 @@ static void ggml_compute_forward_su_rope(struct ggml_tensor * dst , const struct
         break;
     }
 }
+
+static void ggml_compute_forward_custom_alibi_f32(struct ggml_tensor * dst , const struct ggml_tensor * a, int ith, int nth, const alibi_ctx *userdata)
+{
+    const struct ggml_tensor * src0 = a;
+
+    //const int n_past = ((int32_t *) dst->op_params)[0];
+    const int n_head = userdata->n_head;
+    float max_bias = userdata->bias_max;
+
+    const int64_t ne0 = src0->ne[0]; // all_seq_len = n_past + ne1
+    const int64_t ne1 = src0->ne[1]; // seq_len_without_past
+    const int64_t ne2 = src0->ne[2]; // n_head -> this is k
+    //const int64_t ne3 = src0->ne[3]; // 1 -> bsz
+
+    const int64_t n  = ggml_nrows(src0);
+    const int64_t ne2_ne3 = n/ne1; // ne2*ne3
+
+    const size_t nb0 = src0->nb[0];
+    const size_t nb1 = src0->nb[1];
+    const size_t nb2 = src0->nb[2];
+    //const int nb3 = src0->nb[3];
+
+    GGML_ASSERT(nb0 == sizeof(float));
+    GGML_ASSERT(n_head == ne2);
+
+    // add alibi to src0 (KQ_scaled)
+    const int n_heads_log2_floor = 1 << (int) floor(log2(n_head));
+
+    const float m0 = powf(2.0f, -(max_bias) / n_heads_log2_floor);
+    const float m1 = powf(2.0f, -(max_bias / 2.0f) / n_heads_log2_floor);
+
+    for (int64_t k = 0; k < ne2_ne3; k++)
+    {
+        // TODO: k*nb2 or k*nb3
+        float m_k;
+
+        if (k < n_heads_log2_floor)
+        {
+            m_k = powf(m0, k + 1.0f);
+        }
+        else
+        {
+            m_k = powf(m1, 2.0f * (k - n_heads_log2_floor) + 1.0f);
+        }
+
+        for (int64_t i = 0; i < ne0; i++)
+        {
+            for (int64_t j = 0; j < ne1; j++)
+            {
+                float * const src = (float *)((char *) src0->data + i*nb0 + j*nb1 + k*nb2);
+                float *      pdst = (float *)((char *)  dst->data + i*nb0 + j*nb1 + k*nb2);
+                pdst[0] = i * m_k + src[0];
+            }
+        }
+    }
+}
+
+static void ggml_compute_forward_custom_alibi_f16(struct ggml_tensor * dst , const struct ggml_tensor * a, int ith, int nth, const alibi_ctx *userdata)
+{
+    const struct ggml_tensor * src0 = a;
+
+    //const int n_past = ((int32_t *) dst->op_params)[0];
+    const int n_head = userdata->n_head;
+    float max_bias = userdata->bias_max;
+
+    const int64_t ne0 = src0->ne[0]; // all_seq_len = n_past + ne1
+    const int64_t ne1 = src0->ne[1]; // seq_len_without_past
+    const int64_t ne2 = src0->ne[2]; // n_head -> this is k
+    //const int ne3 = src0->ne[3]; // 1 -> bsz
+
+    const int64_t n  = ggml_nrows(src0);
+    const int64_t ne2_ne3 = n/ne1; // ne2*ne3
+
+    const size_t nb0 = src0->nb[0];
+    const size_t nb1 = src0->nb[1];
+    const size_t nb2 = src0->nb[2];
+    //const int nb3 = src0->nb[3];
+
+    GGML_ASSERT(nb0 == sizeof(ggml_fp16_t));
+    //GGML_ASSERT(ne1 + n_past == ne0); (void) n_past;
+    GGML_ASSERT(n_head == ne2);
+
+    // add alibi to src0 (KQ_scaled)
+    const int n_heads_log2_floor = 1 << (int) floor(log2(n_head));
+
+    const float m0 = powf(2.0f, -(max_bias) / n_heads_log2_floor);
+    const float m1 = powf(2.0f, -(max_bias / 2.0f) / n_heads_log2_floor);
+
+    for (int k = 0; k < ne2_ne3; k++)
+    {
+        // TODO: k*nb2 or k*nb3
+        float m_k;
+
+        if (k < n_heads_log2_floor)
+        {
+            m_k = powf(m0, k + 1.0f);
+        }
+        else
+        {
+            m_k = powf(m1, 2 * (k - n_heads_log2_floor) + 1.0f);
+        }
+
+        for (int i = 0; i < ne0; i++)
+        {
+            for (int j = 0; j < ne1; j++)
+            {
+                ggml_fp16_t * const src  = (ggml_fp16_t *)((char *) src0->data + i*nb0 + j*nb1 + k*nb2);
+                float       *      pdst  =       (float *)((char *)  dst->data + i*nb0 + j*nb1 + k*nb2);
+
+                // we return F32
+                pdst[0] = i * m_k + ggml_fp16_to_fp32(src[0]);
+            }
+        }
+    }
+}
+
+static void ggml_compute_forward_custom_alibi(struct ggml_tensor * dst , const struct ggml_tensor * a, int ith, int nth, void *userdata) {
+
+    const struct ggml_tensor * src0 = dst->src[0];
+
+    switch (src0->type)
+    {
+        case GGML_TYPE_F16:
+            ggml_compute_forward_custom_alibi_f16(dst, a, ith, nth, (const alibi_ctx *)userdata);
+            break;
+        case GGML_TYPE_F32:
+            ggml_compute_forward_custom_alibi_f32(dst, a, ith, nth, (const alibi_ctx *)userdata);
+            break;
+        default:
+            GGML_ASSERT(false);
+            break;
+    }
+}
