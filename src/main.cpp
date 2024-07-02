@@ -917,7 +917,7 @@ int main(int argc, const char **argv)
     #define DLL_DECL
 #endif
 
-#include "bindings/libchatllm.h"
+#include "../bindings/libchatllm.h"
 
 class Chat
 {

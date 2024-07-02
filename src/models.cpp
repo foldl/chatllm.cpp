@@ -1138,179 +1138,179 @@ namespace chatllm
 
     namespace glm
     {
-        #include "models/chatglm.cpp"
+        #include "../models/chatglm.cpp"
     }
 
     namespace codegeex
     {
         namespace v2
         {
-            #include "models/codegeex_v2.cpp"
+            #include "../models/codegeex_v2.cpp"
         }
     }
 
     namespace internlm
     {
-        #include "models/internlm.cpp"
+        #include "../models/internlm.cpp"
     }
 
     namespace llama
     {
-        #include "models/llama.cpp"
+        #include "../models/llama.cpp"
     }
 
     namespace codellama
     {
-        #include "models/codellama.cpp"
+        #include "../models/codellama.cpp"
     }
 
     namespace deepseek
     {
-        #include "models/deepseek.cpp"
+        #include "../models/deepseek.cpp"
     }
 
     namespace deepseek_coder
     {
-        #include "models/deepseek_coder.cpp"
+        #include "../models/deepseek_coder.cpp"
     }
 
     namespace baichuan
     {
-        #include "models/baichuan.cpp"
+        #include "../models/baichuan.cpp"
     }
 
     namespace yi
     {
-        #include "models/yi.cpp"
+        #include "../models/yi.cpp"
     }
     namespace phi
     {
-        #include "models/phi.cpp"
+        #include "../models/phi.cpp"
     }
 
     namespace mistral
     {
-        #include "models/mistral.cpp"
+        #include "../models/mistral.cpp"
     }
 
     namespace openchat
     {
-        #include "models/openchat.cpp"
+        #include "../models/openchat.cpp"
     }
 
     namespace starling
     {
-        #include "models/starling.cpp"
+        #include "../models/starling.cpp"
     }
 
     namespace wizard
     {
-        #include "models/wizard.cpp"
+        #include "../models/wizard.cpp"
     }
 
     namespace qwen
     {
-        #include "models/qwen.cpp"
+        #include "../models/qwen.cpp"
     }
 
     namespace tigerbot
     {
-        #include "models/tigerbot.cpp"
+        #include "../models/tigerbot.cpp"
     }
 
     namespace bluelm
     {
-        #include "models/bluelm.cpp"
+        #include "../models/bluelm.cpp"
     }
 
     namespace dolphinphi2
     {
-        #include "models/dolphinphi2.cpp"
+        #include "../models/dolphinphi2.cpp"
     }
 
     namespace stablelm
     {
-        #include "models/stablelm.cpp"
+        #include "../models/stablelm.cpp"
     }
 
     namespace neuralbeagle
     {
-        #include "models/neuralbeagle.cpp"
+        #include "../models/neuralbeagle.cpp"
     }
 
     namespace bce
     {
-        #include "models/bce.cpp"
+        #include "../models/bce.cpp"
     }
 
     namespace bge
     {
-        #include "models/bge.cpp"
+        #include "../models/bge.cpp"
     }
 
     namespace orion
     {
-        #include "models/orion.cpp"
+        #include "../models/orion.cpp"
     }
 
     namespace minicpm
     {
-        #include "models/minicpm.cpp"
+        #include "../models/minicpm.cpp"
     }
 
     namespace adept
     {
-        #include "models/adept.cpp"
+        #include "../models/adept.cpp"
     }
 
     namespace gemma
     {
-        #include "models/gemma.cpp"
+        #include "../models/gemma.cpp"
     }
 
     namespace codefuse
     {
-        #include "models/codefuse.cpp"
+        #include "../models/codefuse.cpp"
     }
 
     namespace characterglm
     {
-        #include "models/characterglm.cpp"
+        #include "../models/characterglm.cpp"
     }
 
     namespace cohere
     {
-        #include "models/cohere.cpp"
+        #include "../models/cohere.cpp"
     }
 
     namespace grok
     {
-        #include "models/grok.cpp"
+        #include "../models/grok.cpp"
     }
 
     namespace zhinao
     {
-        #include "models/zhinao.cpp"
+        #include "../models/zhinao.cpp"
     }
 
     namespace starcoder
     {
-        #include "models/starcoder.cpp"
+        #include "../models/starcoder.cpp"
     }
 
     namespace m_a_p
     {
-        #include "models/m_a_p.cpp"
+        #include "../models/m_a_p.cpp"
     }
 
     namespace xverse
     {
-        #include "models/xverse.cpp"
+        #include "../models/xverse.cpp"
     }
 
     namespace index
     {
-        #include "models/index.cpp"
+        #include "../models/index.cpp"
     }
 
     template <class Config>

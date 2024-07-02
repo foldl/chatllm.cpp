@@ -582,7 +582,7 @@ endif
 # Print build information
 #
 
-$(info I llama.cpp build info: )
+$(info I chatllm.cpp build info: )
 $(info I UNAME_S:   $(UNAME_S))
 $(info I UNAME_P:   $(UNAME_P))
 $(info I UNAME_M:   $(UNAME_M))
@@ -605,13 +605,6 @@ endif # eq ($(shell echo "$(CUDA_VERSION) < 11.7" | bc),1)
 endif # CHATLLM_CUDA
 $(info )
 
-ifdef CHATLLM_CUBLAS
-$(info !!!!)
-$(info CHATLLM_CUBLAS is deprecated and will be removed in the future. Use CHATLLM_CUDA instead.)
-$(info !!!!)
-$(info )
-endif
-
 #
 # Build library
 #
@@ -628,19 +621,19 @@ $(OUTPUT_PATH)/ggml-backend.o: $(GGML_SRC)/ggml-backend.c $(GGML_INC)/ggml.h $(G
 $(OUTPUT_PATH)/ggml-quants.o: $(GGML_SRC)/ggml-quants.c $(GGML_INC)/ggml.h $(GGML_SRC)/ggml-quants.h $(GGML_SRC)/ggml-common.h
 	$(CC) $(CFLAGS)    -c $< -o $@
 
-$(OUTPUT_PATH)/tokenizer.o: tokenizer.cpp unicode.h
+$(OUTPUT_PATH)/tokenizer.o: src/tokenizer.cpp src/unicode.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OUTPUT_PATH)/vectorstore.o: vectorstore.cpp vectorstore.h
+$(OUTPUT_PATH)/vectorstore.o: src/vectorstore.cpp src/vectorstore.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OUTPUT_PATH)/chat.o: chat.cpp chat.h
+$(OUTPUT_PATH)/chat.o: src/chat.cpp src/chat.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OUTPUT_PATH)/models.o: models.cpp models.h unicode.h
+$(OUTPUT_PATH)/models.o: src/models.cpp src/models.h src/unicode.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OUTPUT_PATH)/layers.o:layers.cpp layers.h
+$(OUTPUT_PATH)/layers.o: src/layers.cpp src/layers.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 OBJS += $(OUTPUT_PATH)/ggml-alloc.o $(OUTPUT_PATH)/ggml-backend.o $(OUTPUT_PATH)/ggml-quants.o
@@ -669,7 +662,7 @@ clean:
 # Helper function that replaces .c, .cpp, and .cu file endings with .o:
 GET_OBJ_FILE = $(patsubst %.c,%.o,$(patsubst %.cpp,%.o,$(patsubst %.cu,%.o,$(1))))
 
-$(OUTPUT_PATH)/main.o: main.cpp
+$(OUTPUT_PATH)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 
