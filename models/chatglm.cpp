@@ -18,7 +18,7 @@ class Tokenizer : public BaseTokenizer
 public:
     Tokenizer(const Config &config) : BaseTokenizer::BaseTokenizer(config, &_chat_encoder) {}
 
-    size_t load(const char *buffer, int n_vocab) override;
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
     void encode(const std::string &text, std::vector<int> &ids) const override;
 
@@ -50,7 +50,7 @@ private:
     InitContext w_ctx_; // weight context
 };
 
-size_t Tokenizer::load(const char *buffer, int n_vocab)
+size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
 {
     tp = new tokenizer::BPEProcessor1();
     size_t size = tp->Load(buffer, n_vocab);
@@ -231,7 +231,7 @@ public:
 
     Tokenizer(const Config &config, BaseHistoryEncoder *encoder) : BaseTokenizer::BaseTokenizer(config, encoder) {}
 
-    size_t load(const char *buffer, int n_vocab) override;
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
     void encode(const std::string &text, std::vector<int> &ids) const override;
 
@@ -265,7 +265,7 @@ private:
     InitContext w_ctx_; // weight context
 };
 
-size_t Tokenizer::load(const char *buffer, int n_vocab)
+size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
 {
     tp = new tokenizer::BPEProcessor1();
     size_t size = tp->Load(buffer, n_vocab);
@@ -372,7 +372,7 @@ public:
 
     Tokenizer(const Config &config, BaseHistoryEncoder *_chat_encoder) : v2::Tokenizer::Tokenizer(config, _chat_encoder) {}
 
-    size_t load(const char *buffer, int n_vocab) override;
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
     bool is_special_id(int id) const override;
 
@@ -453,7 +453,7 @@ public:
     ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
 };
 
-size_t Tokenizer::load(const char *buffer, int n_vocab)
+size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
 {
     size_t size = v2::Tokenizer::load(buffer, n_vocab);
 
@@ -542,7 +542,7 @@ public:
         BaseTokenizer::encode(text, ids);
     }
 
-    size_t load(const char *buffer, int n_vocab) override
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override
     {
         tp = new tokenizer::BPEProcessor2();
         size_t size = tp->Load(buffer, n_vocab);

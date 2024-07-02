@@ -22,7 +22,7 @@ public:
         unk_token_id = config.pad_token_id;
     }
 
-    size_t load(const char *buffer, int n_vocab) override
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override
     {
         size_t size = llama::v2::Tokenizer::load(buffer, n_vocab);
 

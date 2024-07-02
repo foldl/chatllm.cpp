@@ -30,7 +30,7 @@ namespace persimmon
             sys_prompt = "";
         }
 
-        size_t load(const char *buffer, int n_vocab) override;
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
         void encode(const std::string &text, std::vector<int> &ids) const override;
 
@@ -57,7 +57,7 @@ namespace persimmon
         InitContext w_ctx_; // weight context
     };
 
-    size_t Tokenizer::load(const char *buffer, int n_vocab)
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
         tp = new tokenizer::UnigramProcessor(0);
         size_t size = tp->Load(buffer, n_vocab);

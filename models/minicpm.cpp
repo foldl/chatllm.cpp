@@ -31,7 +31,7 @@ namespace v1
             sys_prompt = "";
         }
 
-        size_t load(const char *buffer, int n_vocab) override;
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
     };
 
     class ConditionalGeneration : public BaseModelForConditionalGeneration<
@@ -111,7 +111,7 @@ namespace v1
         InitContext w_ctx_; // weight context
     };
 
-    size_t Tokenizer::load(const char *buffer, int n_vocab)
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
         tp = new tokenizer::BPEProcessor1();
         size_t size = tp->Load(buffer, n_vocab);
@@ -167,7 +167,7 @@ namespace v2
             : v1::Tokenizer(config, &_chat_encoder)
         {}
 
-        size_t load(const char *buffer, int n_vocab) override
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
         {
             size_t size = v1::Tokenizer::load(buffer, n_vocab);
             im_end_token_id     = tp->PieceToId("<|im_end|>");

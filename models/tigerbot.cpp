@@ -23,7 +23,7 @@ public:
         sys_prompt = "";
     }
 
-    size_t load(const char *buffer, int n_vocab) override;
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
     bool is_special_id(int id) const override;
 
@@ -48,7 +48,7 @@ public:
     }
 };
 
-size_t Tokenizer::load(const char *buffer, int n_vocab)
+size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
 {
     size_t size = llama::v2::Tokenizer::load(buffer, n_vocab);
     response_token_id = pad_token_id - 1;

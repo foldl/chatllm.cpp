@@ -24,7 +24,7 @@ public:
         sys_prompt = "";
     }
 
-    size_t load(const char *buffer, int n_vocab) override
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override
     {
         tp = new tokenizer::BPEProcessor3();
         size_t size = tp->Load(buffer, n_vocab);

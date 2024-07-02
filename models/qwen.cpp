@@ -33,7 +33,7 @@ namespace v1
             sys_prompt = "You are a helpful assistant.";
         }
 
-        size_t load(const char *buffer, int n_vocab) override;
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
         void encode(const std::string &text, std::vector<int> &ids) const override;
 
@@ -70,7 +70,7 @@ namespace v1
         InitContext w_ctx_; // weight context
     };
 
-    size_t Tokenizer::load(const char *buffer, int n_vocab)
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
         tp = new tokenizer::BPEProcessor2();
         size_t size = tp->Load(buffer, n_vocab);
@@ -221,7 +221,7 @@ namespace v2
             : v1::Tokenizer(config, &v1::_chat_encoder)
         {}
 
-        size_t load(const char *buffer, int n_vocab) override
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
         {
             size_t r = v1::Tokenizer::load(buffer, n_vocab);
 

@@ -179,41 +179,41 @@ private:
 class Reader
 {
 public:
-    Reader(const char *buffer)
-        : buffer(buffer), offset(0) {}
+    Reader(DataReader *data_reader)
+        : data_reader(data_reader), offset(data_reader->tell()) {}
 
     void read_raw(void *r, size_t size)
     {
-        memcpy(r, buffer + offset, size);
-        offset += size;
+        data_reader->read_buffer(r, size);
+    }
+
+    template <typename T> T read_basic()
+    {
+        return data_reader->read_basic<T>();
     }
 
     uint32_t read_u32(void)
     {
-        uint32_t r;
-        read_raw(&r, sizeof(r));
-        return r;
+        return read_basic<uint32_t>();
     }
 
     int32_t read_i32(void)
     {
-        int32_t r;
-        read_raw(&r, sizeof(r));
-        return r;
+        return read_basic<int32_t>();
     }
 
     std::string read_string(int len)
     {
         std::vector<char> chars(len);
-        read_raw(chars.data(), len);
+        data_reader->read_buffer(chars.data(), len);
         return std::string(chars.data(), len);
     }
 
-    size_t get_total_size(void) { return offset; }
+    size_t get_total_size(void) { return data_reader->tell() - offset; }
 
 private:
-    const char *buffer;
-    size_t offset;
+    DataReader *data_reader;
+    const size_t offset;
 };
 
 int Processor::Encode(const std::string &input, std::vector<std::string> *pieces) const
@@ -323,9 +323,9 @@ static int load_vocab_list(_vocab &vocab, Reader &reader, bool has_score, bool h
         float score = 0.0f;
         uint8_t type = token_type::NORMAL;
         if (has_score)
-            reader.read_raw(&score, sizeof(score));
+            score = reader.read_basic<float>();
         if (has_type)
-            reader.read_raw(&type, sizeof(type));
+            type = reader.read_basic<uint8_t>();
 
         vocab.token_to_id[word] = id;
 
@@ -386,9 +386,9 @@ static void build_special_token_cache(_vocab &vocab)
     }
 }
 
-size_t BPEProcessor1::Load(const char *buffer, int n_vocab)
+size_t BPEProcessor1::Load(DataReader *data_reader, int n_vocab)
 {
-    Reader reader(buffer);
+    Reader reader(data_reader);
 
     vocab_.token_to_id.clear();
     vocab_.id_to_token.resize((size_t)n_vocab + 100);
@@ -407,9 +407,9 @@ int BPEProcessor1::DoEncode(const std::string &input,
     return 0;
 }
 
-size_t BPEProcessor2::Load(const char *buffer, int n_vocab)
+size_t BPEProcessor2::Load(DataReader *data_reader, int n_vocab)
 {
-    Reader reader(buffer);
+    Reader reader(data_reader);
 
     vocab_.token_to_id.clear();
     vocab_.id_to_token.resize((size_t)n_vocab + 100);
@@ -942,9 +942,9 @@ UnigramProcessor::UnigramProcessor(int unk_tok_id) : Processor::Processor(), unk
 
 }
 
-size_t UnigramProcessor::Load(const char *buffer, int n_vocab)
+size_t UnigramProcessor::Load(DataReader *data_reader, int n_vocab)
 {
-    Reader reader(buffer);
+    Reader reader(data_reader);
 
     vocab_.token_to_id.clear();
     vocab_.id_to_token.resize((size_t)n_vocab + 100);

@@ -29,7 +29,7 @@ namespace v2
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information.)""";
         }
 
-        size_t load(const char *buffer, int n_vocab) override;
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
         void encode(const std::string &text, std::vector<int> &ids) const override;
 
@@ -111,7 +111,7 @@ If a question does not make any sense, or is not factually coherent, explain why
         {}
     };
 
-    size_t Tokenizer::load(const char *buffer, int n_vocab)
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
         tp = new tokenizer::BPEProcessor1();
         size_t size = tp->Load(buffer, n_vocab);
@@ -199,7 +199,7 @@ namespace v3
             sys_prompt = "";
         }
 
-        size_t load(const char *buffer, int n_vocab) override
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
         {
             tp = new tokenizer::BPEProcessor2();
             size_t size = tp->Load(buffer, n_vocab);

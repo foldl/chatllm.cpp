@@ -23,7 +23,7 @@ public:
     {
     }
 
-    size_t load(const char *buffer, int n_vocab) override;
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
     bool is_special_id(int id) const override;
 public:
@@ -59,7 +59,7 @@ public:
     }
 };
 
-size_t Tokenizer::load(const char *buffer, int n_vocab)
+size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
 {
     tp = new tokenizer::BPEProcessor1();
     size_t size = tp->Load(buffer, n_vocab);

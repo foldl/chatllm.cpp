@@ -47,7 +47,7 @@ namespace neo
             sys_prompt = "You are a helpful, respectful and honest assistant named Neo.";
         }
 
-        size_t load(const char *buffer, int n_vocab) override
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
         {
             tp = new tokenizer::BPEProcessor1();
             size_t size = tp->Load(buffer, n_vocab);

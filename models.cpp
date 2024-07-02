@@ -1336,15 +1336,8 @@ namespace chatllm
 
         // load tokenizer
         Tokenizer *tokenizer = new Tokenizer(config);
-        size_t proto_size = tokenizer->load(loader.data + loader.tell(), config.vocab_size);
-
-        loader.seek(proto_size, SEEK_CUR);
-
-        if (0 == loader.offset_tensors)
-        {
-            loader.offset_tensors = loader.tell();
-            loader.load_all_tensors();
-        }
+        tokenizer->load(loader.get_reader(), config.vocab_size);
+        loader.load_all_tensors();
 
         return tokenizer;
     }
@@ -1410,8 +1403,6 @@ namespace chatllm
     template <class Config, class ConditionalGeneration>
     ConditionalGeneration *load_model(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
-        loader.seek(loader.offset_tensors, SEEK_SET);
-
         std::vector<int> layers;
         if (args.layer_spec.size() > 0)
         {

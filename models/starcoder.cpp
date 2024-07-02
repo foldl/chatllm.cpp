@@ -22,7 +22,7 @@ namespace v2
             sys_prompt = "";
         }
 
-        size_t load(const char *buffer, int n_vocab) override;
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
     };
 
     class ConditionalGeneration : public BaseModelForConditionalGeneration<
@@ -44,7 +44,7 @@ namespace v2
         InitContext w_ctx_; // weight context
     };
 
-    size_t Tokenizer::load(const char *buffer, int n_vocab)
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
         tp = new tokenizer::BPEProcessor2();
         size_t size = tp->Load(buffer, n_vocab);

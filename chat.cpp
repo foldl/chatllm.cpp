@@ -454,15 +454,16 @@ namespace chatllm
 
         struct stat sb;
         CHATLLM_CHECK(fstat(fd, &sb) == 0) << strerror(errno);
-        size = sb.st_size;
+        _size = sb.st_size;
 
-        data = (char *)mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
+        data = (char *)mmap(nullptr, _size, PROT_READ, MAP_SHARED, fd, 0);
         CHATLLM_CHECK(data != MAP_FAILED) << strerror(errno);
 
         CHATLLM_CHECK(close(fd) == 0) << strerror(errno);
+        ptr = data;
     }
 
-    MappedFile::~MappedFile() { CHATLLM_CHECK(munmap(data, size) == 0) << strerror(errno); }
+    MappedFile::~MappedFile() { CHATLLM_CHECK(munmap(data, _size) == 0) << strerror(errno); }
 #elif defined(_WIN32)
     MappedFile::MappedFile(const std::string &path)
     {
@@ -471,7 +472,7 @@ namespace chatllm
 
         struct _stat64 sb;
         CHATLLM_CHECK(_fstat64(fd, &sb) == 0) << strerror(errno);
-        size = sb.st_size;
+        _size = sb.st_size;
 
         HANDLE hFile = (HANDLE)_get_osfhandle(fd);
 
@@ -482,8 +483,8 @@ namespace chatllm
         CloseHandle(hMapping);
 
         CHATLLM_CHECK(data != NULL) << strerror(errno);
-
         CHATLLM_CHECK(close(fd) == 0) << strerror(errno);
+        ptr = data;
     }
 
     MappedFile::~MappedFile()
@@ -492,23 +493,65 @@ namespace chatllm
     }
 #endif
 
-    void ModelLoader::seek(int64_t offset, int whence)
+    int64_t MappedFile::tell()
+    {
+        return ptr - data;
+    }
+
+    void MappedFile::seek(int64_t offset, int whence)
     {
         if (whence == SEEK_SET)
             ptr = data + offset;
         else if (whence == SEEK_CUR)
             ptr += offset;
         else if (whence == SEEK_END)
-            ptr = data + size + offset;
+            ptr = data + size() + offset;
         else
             CHATLLM_THROW << "invalid seek mode " << whence;
     }
 
-    std::string ModelLoader::read_string(size_t length)
+    size_t MappedFile::read_buffer(void *output, size_t len)
     {
-        std::string s(ptr, ptr + length);
-        ptr += length;
-        return s;
+        size_t remain = size() - tell();
+        if (len > remain) len = remain;
+        memcpy(output, ptr, len);
+        ptr += len;
+        return len;
+    }
+
+    SimpleFile::SimpleFile(const std::string &path)
+    {
+        f = std::fopen(path.c_str(), "rb");
+        CHATLLM_CHECK(f != nullptr) << "cannot open file " << path << ": " << strerror(errno);
+        seek(0, SEEK_END);
+        _size = tell();
+        seek(0, SEEK_SET);
+    }
+
+    SimpleFile::~SimpleFile()
+    {
+        std::fclose(f);
+        f = nullptr;
+    }
+
+#if defined(_MSC_VER)
+#define ftello64    _ftelli64
+#define fseeko64    _fseeki64
+#endif
+
+    int64_t SimpleFile::tell()
+    {
+        return ftello64(f);
+    }
+
+    void SimpleFile::seek(int64_t offset, int whence)
+    {
+        CHATLLM_CHECK(fseeko64(f, offset, whence) == 0) << "SimpleFile::seek: fails offset = " << offset << ", whence = " << whence;
+    }
+
+    size_t SimpleFile::read_buffer(void *output, size_t len)
+    {
+        return fread(output, 1, len, f);
     }
 
     struct ggml_tensor * ggml_init_tensor(struct ggml_tensor *tensor,
@@ -540,9 +583,6 @@ namespace chatllm
             /*.padding      =*/ { 0 },
         };
 
-        // TODO: this should not be needed as long as we don't rely on aligned SIMD loads
-        //ggml_assert_aligned(result->data);
-
         for (int i = 0; i < n_dims; i++) {
             result->ne[i] = ne[i];
         }
@@ -556,12 +596,48 @@ namespace chatllm
         return result;
     }
 
+    TensorInfo::TensorInfo(enum ggml_type type, int n_dim, const int64_t *ne, size_t _offset)
+        : _offset(_offset), data(nullptr)
+    {
+        ggml_init_tensor(&tensor, type, n_dim, ne);
+    }
+
+    TensorInfo::~TensorInfo()
+    {
+        if (data)
+            free(data);
+        data = nullptr;
+    }
+
+    size_t TensorInfo::aligned_data_start(size_t offset)
+    {
+        constexpr size_t MEM_ALIGNED = 16;
+        return (offset + (MEM_ALIGNED - 1)) & ~(MEM_ALIGNED - 1);
+    }
+
+    size_t TensorInfo::aligned_size()
+    {
+        return (aligned_data_start(_offset) - _offset) + ggml_nbytes(&tensor);
+    }
+
+    void *TensorInfo::load(tokenizer::DataReader *reader)
+    {
+        if (data) return tensor.data;
+
+        constexpr int64_t MEM_ALIGNED = 16;
+        data = malloc(ggml_nbytes(&tensor) + MEM_ALIGNED);
+        tensor.data = (void *)aligned_data_start((size_t)data);
+
+        reader->seek(aligned_data_start(_offset), SEEK_SET);
+        reader->read_buffer(tensor.data, ggml_nbytes(&tensor));
+        return tensor.data;
+    }
+
     void ModelLoader::load_all_tensors(void)
     {
-        tensor_dict.clear(); //return;
-        struct ggml_tensor t;
+        if (tensor_dict.size() > 0) return;
 
-        while (tell() < (int64_t)size)
+        while (tell() < _file->size())
         {
             std::string weight_name;
 
@@ -570,8 +646,6 @@ namespace chatllm
                 int name_size = read_basic<int>();
                 weight_name = read_string(name_size);
             }
-
-            tensor_dict.emplace(weight_name, tell());
 
             int64_t ne[4] = {1,1,1,1};
 
@@ -585,41 +659,29 @@ namespace chatllm
 
             // read and check tensor dtype
             ggml_type dtype = (ggml_type)read_basic<int>();
-            ggml_init_tensor(&t, dtype, ndim, ne);
 
-            // map tensor data
-            {
-                constexpr int64_t MEM_ALIGNED = 16;
-                const int64_t data_offset = (tell() + (MEM_ALIGNED - 1)) & ~(MEM_ALIGNED - 1);
-                seek(data_offset + ggml_nbytes(&t), SEEK_SET);
-            }
+            tensor_dict.emplace(weight_name, TensorInfo(dtype, ndim, ne, tell()));
+
+            TensorInfo &t = tensor_dict.at(weight_name);
+
+            seek(t.aligned_size(), SEEK_CUR);
         }
     }
 
     void ModelLoader::read_tensor(const std::string &name, ggml_tensor *tensor)
     {
-        if (tensor_dict.size() > 0)
-        {
-            auto search = tensor_dict.find(name);
-            CHATLLM_CHECK(search != tensor_dict.end()) << "tensor not exist: " << name;
-            seek(search->second, SEEK_SET);
-        }
-        else
-        {
-            // read and check tensor name
-            int name_size = read_basic<int>();
-            CHATLLM_CHECK(name_size == (int)name.size())
-                << "tensor " << name << " name size mismatch: expect " << name.size() << " but got " << name_size
-                << "(part of name: " << read_string(name.size()) << ")";
-            std::string weight_name = read_string(name_size);
-            CHATLLM_CHECK(weight_name == name) << "tensor name mismatch: expect " << name << " but got " << weight_name;
-        }
+        auto search = tensor_dict.find(name);
+        CHATLLM_CHECK(search != tensor_dict.end()) << "tensor not exist: " << name;
 
         ggml_set_name(tensor, name.c_str());
+        TensorInfo &t = search->second;
+
+        CHATLLM_CHECK(t.tensor.type == tensor->type)
+                << "tensor " << name << " dtype mismatch: expect " << tensor->type << " but got " << t.tensor.type;
 
         // read and check tensor shape
         {
-            int ndim = read_basic<int>();
+            int ndim = ggml_n_dims(&t.tensor);
             int n_dims = ggml_n_dims(tensor);
 
             // a quick fix
@@ -628,28 +690,15 @@ namespace chatllm
 
             CHATLLM_CHECK(ndim == n_dims)
                 << "tensor " << name << " ndim mismatch: expect " << n_dims << " but got " << ndim;
-            for (int i = ndim - 1; i >= 0; i--)
+            for (int i = 0; i < ndim; i++)
             {
-                int dim_size = read_basic<int>();
+                int64_t dim_size = t.tensor.ne[i];
                 CHATLLM_CHECK(dim_size == tensor->ne[i]) << "tensor " << name << " shape mismatch at dim " << i
                                                          << ": expect " << tensor->ne[i] << " but got " << dim_size;
             }
         }
 
-        // read and check tensor dtype
-        {
-            ggml_type dtype = (ggml_type)read_basic<int>();
-            CHATLLM_CHECK(dtype == tensor->type)
-                << "tensor " << name << " dtype mismatch: expect " << tensor->type << " but got " << dtype;
-        }
-
-        // map tensor data
-        {
-            constexpr int64_t MEM_ALIGNED = 16;
-            const int64_t data_offset = (tell() + (MEM_ALIGNED - 1)) & ~(MEM_ALIGNED - 1);
-            tensor->data = const_cast<char *>(data) + data_offset;
-            seek(data_offset + ggml_nbytes(tensor), SEEK_SET);
-        }
+        tensor->data = t.load(_file.get());
     }
 
     ModelObject::ModelObject(const std::string &path)

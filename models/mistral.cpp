@@ -32,7 +32,7 @@ namespace mistral
             sys_prompt = "";
         }
 
-        size_t load(const char *buffer, int n_vocab) override
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
         {
             size_t r = llama::v2::Tokenizer::load(buffer, n_vocab);
             if (tp->GetPieceSize() == 32768)

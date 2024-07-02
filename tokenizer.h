@@ -101,6 +101,25 @@ public:
     std::string transform(const std::string &s) override;
 };
 
+class DataReader
+{
+public:
+    virtual int64_t tell() = 0;
+    virtual void seek(int64_t offset, int whence) = 0;
+    virtual int64_t size(void) const { return _size; }
+
+    virtual size_t read_buffer(void *output, size_t len) = 0;
+
+    template <typename T> T read_basic()
+    {
+        T obj;
+        read_buffer(&obj, sizeof(obj));
+        return obj;
+    }
+protected:
+    int64_t _size;
+};
+
 class Processor
 {
 public:
@@ -112,7 +131,7 @@ public:
 
     Processor() : piece_size(0), id_unk_token(-1), token_unk_id("<?>"), ret_special_token(false) {}
 
-    virtual size_t Load(const char *buffer, int n_vocab) = 0;
+    virtual size_t Load(DataReader *data_reader, int n_vocab) = 0;
 
     virtual int PieceToId(std::string_view piece) const;
 
@@ -162,7 +181,7 @@ class BPEProcessor1: public Processor
 public:
     BPEProcessor1() : Processor::Processor()  {}
 
-    size_t Load(const char *buffer, int n_vocab) override;
+    size_t Load(DataReader *data_reader, int n_vocab) override;
 
 protected:
     int DoEncode(const std::string &input,
@@ -174,7 +193,7 @@ class BPEProcessor2: public Processor
 public:
     BPEProcessor2() : Processor::Processor() {}
 
-    size_t Load(const char *buffer, int n_vocab) override;
+    size_t Load(DataReader *data_reader, int n_vocab) override;
 
     const std::string IdToPiece(int id) const override;
 
@@ -201,7 +220,7 @@ class UnigramProcessor: public Processor
 public:
     UnigramProcessor(int unk_tok_id);
 
-    size_t Load(const char *buffer, int n_vocab) override;
+    size_t Load(DataReader *data_reader, int n_vocab) override;
 
     int unk_tok_id;
 

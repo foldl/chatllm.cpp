@@ -11,7 +11,7 @@ public:
         : qwen::v1::Tokenizer(config, &qwen::v1::_chat_encoder)
     {}
 
-    size_t load(const char *buffer, int n_vocab) override
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override
     {
         size_t r = qwen::v1::Tokenizer::load(buffer, n_vocab);
 

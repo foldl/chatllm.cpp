@@ -21,7 +21,7 @@ public:
         bot_name = "CharacterGLM";
     }
 
-    size_t load(const char *buffer, int n_vocab) override;
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
     void set_additional_args(const std::map<std::string, std::string> &args) override;
 public:
@@ -41,7 +41,7 @@ public:
     }
 };
 
-size_t Tokenizer::load(const char *buffer, int n_vocab)
+size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
 {
     size_t size = glm::v2::Tokenizer::load(buffer, n_vocab);
 

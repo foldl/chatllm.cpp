@@ -27,7 +27,7 @@ public:
         sys_prompt = "You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.";
     }
 
-    size_t load(const char *buffer, int n_vocab) override;
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
     bool is_special_id(int id) const override;
 
@@ -55,7 +55,7 @@ private:
     Config config;
 };
 
-size_t Tokenizer::load(const char *buffer, int n_vocab)
+size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
 {
     tp = new tokenizer::BPEProcessor2();
     size_t size = tp->Load(buffer, n_vocab);

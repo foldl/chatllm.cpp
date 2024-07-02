@@ -74,7 +74,7 @@ namespace v2
         {
         }
 
-        size_t load(const char *buffer, int n_vocab) override;
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
         bool is_special_id(int id) const override;
 
@@ -180,7 +180,7 @@ namespace v2
 
     #define MAX_IT(x)  if (qa_seq_max_len < (int)x.size()) qa_seq_max_len = (int)x.size()
 
-    size_t Phi2Tokenizer::load(const char *buffer, int n_vocab)
+    size_t Phi2Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
         tp = new tokenizer::BPEProcessor2();
         size_t size = tp->Load(buffer, n_vocab);
@@ -383,7 +383,7 @@ namespace v3
         {
         }
 
-        size_t load(const char *buffer, int n_vocab) override
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
         {
             tp = new tokenizer::BPEProcessor1();
             size_t size = tp->Load(buffer, n_vocab);

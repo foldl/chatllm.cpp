@@ -6,7 +6,7 @@ public:
     {
     }
 
-    size_t load(const char *buffer, int n_vocab) override
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override
     {
         tp = new tokenizer::BPEProcessor2();
         size_t size = tp->Load(buffer, n_vocab);

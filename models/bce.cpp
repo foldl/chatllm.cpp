@@ -13,7 +13,7 @@ namespace embedding
             sys_prompt = "";
         }
 
-        size_t load(const char *buffer, int n_vocab) override;
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
         void encode(const std::string &text, std::vector<int> &ids) const override;
 
@@ -21,7 +21,7 @@ namespace embedding
         void encode(const std::string &text, std::vector<int> &ids, bool add_bos, bool add_eos, int max_length) const;
     };
 
-    size_t Tokenizer::load(const char *buffer, int n_vocab)
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
         tp = new tokenizer::UnigramProcessor(eos_token_id + 1);
         tp->RegisterPreprocessor(new tokenizer::TextPrepNewlineToSpaces());

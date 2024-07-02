@@ -85,7 +85,7 @@ public:
     {
     }
 
-    size_t load(const char *buffer, int n_vocab) override
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override
     {
         tp = new tokenizer::BPEProcessor1();
         size_t size = tp->Load(buffer, n_vocab);
@@ -237,7 +237,7 @@ namespace v3
 - InternLM (书生·浦语) can understand and communicate fluently in the language chosen by the user such as English and 中文.)"";
         }
 
-        size_t load(const char *buffer, int n_vocab) override
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
         {
             tp = new tokenizer::BPEProcessor1();
             size_t size = tp->Load(buffer, n_vocab);

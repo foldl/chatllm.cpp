@@ -63,7 +63,7 @@ namespace chatllm
 
         virtual ~BaseTokenizer() = default;
 
-        virtual size_t load(const char *buffer, int n_vocab) = 0;
+        virtual size_t load(tokenizer::DataReader *buffer, int n_vocab) = 0;
 
         virtual void encode(const std::string &text, std::vector<int> &ids) const;
         virtual std::vector<int> encode(const std::string &text) const;
@@ -258,65 +258,111 @@ namespace chatllm
         BaseStreamer *streamer;
     };
 
-    class MappedFile
+    class MappedFile : public tokenizer::DataReader
     {
     public:
         MappedFile(const std::string &path);
         ~MappedFile();
 
-    public:
+        int64_t tell() override;
+
+        void seek(int64_t offset, int whence) override;
+
+        size_t read_buffer(void *output, size_t len) override;
+
+    protected:
         char *data;
-        size_t size;
+        const char *ptr;
+    };
+
+    class SimpleFile : public tokenizer::DataReader
+    {
+    public:
+        SimpleFile(const std::string &path);
+        ~SimpleFile();
+
+        int64_t tell() override;
+
+        void seek(int64_t offset, int whence) override;
+
+        size_t read_buffer(void *output, size_t len) override;
+    protected:
+        FILE *f;
+    };
+
+    class TensorInfo
+    {
+    public:
+        TensorInfo(enum ggml_type type, int n_dim, const int64_t *ne, size_t _offset);
+        ~TensorInfo();
+
+        void *load(tokenizer::DataReader *reader);
+
+        size_t aligned_data_start(size_t offset);
+        size_t aligned_size(void);
+
+    public:
+        ggml_tensor tensor;
+        const size_t _offset;
+        void *data;
     };
 
     class ModelLoader
     {
     public:
         ModelLoader(const std::string &path)
-            : ModelLoader(new MappedFile(path))
+            : ModelLoader(new SimpleFile(path))
         {
         }
 
-        int64_t tell() const { return ptr - data; }
-
-        void seek(int64_t offset, int whence);
-
-        template <typename T>
-        T read_basic()
+        int64_t tell() const
         {
-            T obj = *(T *)ptr;
-            ptr += sizeof(T);
-            return obj;
+            return _file->tell();
         }
 
-        std::string read_string(size_t length);
+        void seek(int64_t offset, int whence)
+        {
+            _file->seek(offset, whence);
+        }
+
+        template <typename T> T read_basic()
+        {
+            return _file->read_basic<T>();
+        }
+
+        std::string read_string(size_t length)
+        {
+            std::string s;
+            s.resize(length);
+            _file->read_buffer(s.data(), length);
+            return s;
+        }
 
         void read_tensor(const std::string &name, ggml_tensor *tensor);
         void load_all_tensors(void);
 
+        tokenizer::DataReader *get_reader()
+        {
+            return _file.get();
+        }
+
     private:
-        ModelLoader(MappedFile *mapped_file)
-            : mapped_file(std::unique_ptr<MappedFile>(mapped_file)),
-              data(mapped_file->data), size(mapped_file->size), ptr(mapped_file->data),
+        ModelLoader(tokenizer::DataReader *mapped_file)
+            : _file(std::unique_ptr<tokenizer::DataReader>(mapped_file)),
               offset_config(0),
               offset_tokenizer(0),
-              offset_tensors(0),
               model_type(-1), version(-1)
         {
         }
 
-        std::unique_ptr<MappedFile> mapped_file;
+        std::unique_ptr<tokenizer::DataReader> _file;
 
     public:
-        const char *const data;
-        size_t size;
-        const char *ptr;
         size_t offset_config;
         size_t offset_tokenizer;
-        size_t offset_tensors;
         int model_type;
         int version;
-        std::map<std::string, int64_t> tensor_dict;
+        std::map<std::string, TensorInfo> tensor_dict;
     };
 
     // ===== generation =====

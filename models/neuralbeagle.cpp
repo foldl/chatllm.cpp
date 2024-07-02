@@ -20,7 +20,7 @@ public:
         sys_prompt = "";
     }
 
-    size_t load(const char *buffer, int n_vocab) override
+    size_t load(tokenizer::DataReader *buffer, int n_vocab) override
     {
         size_t r = mistral::mistral::Tokenizer::load(buffer, n_vocab);
         newline_token_id = tp->PieceToId("\n");
