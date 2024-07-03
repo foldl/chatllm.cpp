@@ -374,12 +374,13 @@ namespace v3
     {
     public:
         Phi3Tokenizer(const BaseConfig &config)
-            : BaseTokenizer::BaseTokenizer(config, &_chat_encoder)
+            : Phi3Tokenizer(config, &_chat_encoder)
         {
         }
 
         Phi3Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
-            : BaseTokenizer::BaseTokenizer(config, encoder)
+            : BaseTokenizer::BaseTokenizer(config, encoder),
+              append_nl_after_end_tok(false)
         {
         }
 
@@ -396,6 +397,8 @@ namespace v3
 
             pad_token_id = eos_token_id;
 
+            terminate_ids.insert(end_token_id);
+
             return size;
         }
 
@@ -410,9 +413,9 @@ namespace v3
             if (end_token_id >= 0)
             {
                 ids.push_back(end_token_id);
-               // ids.push_back(nl_token_id);
+                if (append_nl_after_end_tok)
+                    ids.push_back(nl_token_id);
             }
-            terminate_ids.insert(end_token_id);
         }
 
     public:
@@ -421,6 +424,7 @@ namespace v3
         int assistant_token_id;
         int end_token_id;
         int nl_token_id;
+        bool append_nl_after_end_tok;
     };
 
     typedef Phi3Tokenizer Tokenizer;
@@ -555,4 +559,53 @@ namespace v3_su
             }
         }
     };
+}
+
+namespace v3_su2
+{
+    typedef v3_su::Config Config;
+
+    class ChatHistoryEncoder : public BaseHistoryEncoder
+    {
+    public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
+        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
+        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public v3::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config) : v3::Tokenizer(config, &_chat_encoder)
+        {
+            append_nl_after_end_tok = true;
+        }
+    };
+
+    typedef v3_su::ConditionalGeneration ConditionalGeneration;
+
+    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        append_user(round_idx, user, ids);
+        tok->encode(ai, ids, -1, tok->end_token_id);
+    }
+
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        if (tok->get_system_prompt().size() > 0)
+            tok->encode(tok->get_system_prompt(), ids, tok->system_token_id, tok->end_token_id);
+    }
+
+    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        tok->encode(user, ids, tok->user_token_id, tok->end_token_id);
+        tok->encode("", ids, tok->assistant_token_id, -1);
+    }
 }

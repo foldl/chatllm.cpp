@@ -113,6 +113,7 @@ namespace chatllm
         MODEL_TYPE_PHI2_V2  = 0x501,
         MODEL_TYPE_PHI3     = 0x520,
         MODEL_TYPE_PHI3_SU  = 0x521,
+        MODEL_TYPE_PHI3_SU2 = 0x522,
 
         MODEL_TYPE_DOLPHINPHI2      = 0x510,
         MODEL_TYPE_DOLPHINPHI2_V2   = 0x511,
@@ -243,6 +244,7 @@ namespace chatllm
             return "Phi-2";
         case MODEL_TYPE_PHI3:
         case MODEL_TYPE_PHI3_SU:
+        case MODEL_TYPE_PHI3_SU2:
             return "Phi-3";
         case MODEL_TYPE_DOLPHINPHI2:
         case MODEL_TYPE_DOLPHINPHI2_V2:
@@ -338,6 +340,7 @@ namespace chatllm
         case MODEL_TYPE_PHI2_V2:
         case MODEL_TYPE_PHI3:
         case MODEL_TYPE_PHI3_SU:
+        case MODEL_TYPE_PHI3_SU2:
             return "Φ";
         case MODEL_TYPE_QWEN:
         case MODEL_TYPE_QWEN2:
@@ -1527,6 +1530,7 @@ namespace chatllm
         CASE(PHI2_V2,               phi::v2::v2, 1)             \
         CASE(PHI3,                  phi::v3, 1)                 \
         CASE(PHI3_SU,               phi::v3_su, 1)              \
+        CASE(PHI3_SU2,              phi::v3_su2, 1)             \
                                                                 \
         CASE(WIZARDCODER,           wizard::coder, 1)           \
         CASE(WIZARDLM,              wizard::lm, 1)              \

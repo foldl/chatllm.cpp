@@ -78,6 +78,7 @@ class ModelType(Enum):
     DolphinPhi2_v2      = 0x511
     Phi3                = 0x520
     Phi3_ScalingSU      = 0x521
+    Phi3_ScalingSU2     = 0x522
 
     Mistral = 0x600
     Mixtral = 0x601
@@ -2132,7 +2133,7 @@ class Phi3Converter(BaseConverter):
         return LlamaConverter.get_weight_names(config)
 
 class Phi3SUConverter(BaseConverter):
-    MODEL_TYPE = ModelType.Phi3_ScalingSU
+    MODEL_TYPE = ModelType.Phi3_ScalingSU2
 
     @classmethod
     def state_dict_pp(cls, config, state_dict):
@@ -2145,7 +2146,7 @@ class Phi3SUConverter(BaseConverter):
 
         MAX_FACTOR_LEN = 128
 
-        assert config.rope_scaling['type'] == "su", "rope_scaling must be null or `su`"
+        assert config.rope_scaling['type'] == "longrope", "rope_scaling must be null or `longrope`"
         assert len(config.rope_scaling['long_factor']) <= MAX_FACTOR_LEN, "config.rope_scaling['long_factor']) must <= MAX_FACTOR_LEN"
         rope_scaling = 1
         factors = pad_to(config.rope_scaling['short_factor'], MAX_FACTOR_LEN) + pad_to(config.rope_scaling['long_factor'], MAX_FACTOR_LEN)
@@ -3477,6 +3478,10 @@ def main():
             Phi3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             if config.rope_scaling['type'] == 'su':
+                Phi3SUConverter.MODEL_TYPE = ModelType.Phi3_ScalingSU
+                config.rope_scaling['type'] = 'longrope'
+
+            if config.rope_scaling['type'] == 'longrope':
                 Phi3SUConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
             else:
                 raise Exception(config.rope_scaling['type'])
