@@ -19,9 +19,6 @@ class ToolObservation:
     role_metadata: str | None = None
     metadata: Any = None
 
-def tool_not_implemented(code: str, session_id: str) -> list[ToolObservation]:
-    return [ToolObservation("system_error", 'not implemented yet')]
-
 _TOOL_HOOKS = {}
 _TOOL_DESCRIPTIONS = []
 

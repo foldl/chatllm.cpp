@@ -252,6 +252,11 @@ namespace v3
 
             newline_token_id = tp->PieceToId("\n");
 
+            tp->AddAddedToken("<|action_start|>",       action_start_token_id);
+            tp->AddAddedToken("<|action_end|>",         action_end_token_id);
+            tp->AddAddedToken("<|interpreter|>",        interpreter_token_id);
+            tp->AddAddedToken("<|plugin|>",             plugin_token_id);
+
             terminate_ids.insert(im_end_token_id);
 
             return size;
@@ -259,7 +264,7 @@ namespace v3
 
         bool is_special_id(int id) const override
         {
-            return (id == bos_token_id) || (id == eos_token_id) || ((plugin_token_id <= id) && (id <= im_start_token_id));
+            return (id == bos_token_id) || (id == eos_token_id) || (im_end_token_id == id) || (id == im_start_token_id);
         }
 
         void encode(const std::string &text, std::vector<int> &ids, bool add_im_start, bool add_im_end)
@@ -283,6 +288,62 @@ namespace v3
         int newline_token_id;
     };
 
+    class InternLMInterceptor : public ChunkInterceptor
+    {
+    public:
+        InternLMInterceptor() : ChunkInterceptor(), found_tool_call(false)
+        {}
+
+        void put_chunk(bool first, const std::string &chunk) override
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(streamer->tokenizer);
+            if (tok->action_start_token_id < 0)
+            {
+                streamer->put_chunk(first, chunk);
+                return;
+            }
+
+            if (!found_tool_call)
+            {
+                if (chunk.starts_with("<|action_start|>"))
+                {
+                    found_tool_call = true;
+                    return;
+                }
+            }
+            else
+            {
+                if (chunk.starts_with("<|action_end|>"))
+                {
+                    found_tool_call = false;
+                    return;
+                }
+            }
+
+            if (found_tool_call)
+                oss << chunk;
+            else
+                streamer->put_chunk(first, chunk);
+        }
+
+        void end() override
+        {
+            std::string tool_call = oss.str();
+            if (tool_call.size() > 0)
+                streamer->putln(tool_call, BaseStreamer::TextType::TOOL_CALLING);
+
+            oss.str("");
+            found_tool_call = false;
+
+            ChunkInterceptor::end();
+        }
+    protected:
+        std::ostringstream oss;
+        bool found_tool_call;
+    };
+
+    static InternLMInterceptor interceptor;
+
     class ConditionalGeneration: public GenericConditionalGeneration<false>
     {
     public:
@@ -292,6 +353,8 @@ namespace v3
             // ready for 20B
             GRAPH_SIZE = 4096;
         }
+
+        ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
     };
 
     void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const

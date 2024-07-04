@@ -8,6 +8,7 @@ Demos of tool calling for these models are provided:
 * [Mistral-Instruct-7B-v0.3](../scripts/tool_mistral.py)
 * [QWen v1.5 & v2](../scripts/tool_qwen.py)
 * [DeepSeek-Coder v2](../scripts/tool_deepseekcoder.py) (Note: function calling is *officially* unsupported.)
+* [InternLM 2.5](../scripts//tool_internlm.py)
 
 ## Precondition
 
@@ -164,4 +165,30 @@ A.I. > [Use Tool]: get_weather
 - 湿度：80%
 - 天气描述：局部有阵雨
 - 观测时间：10:50 AM
+```
+
+### InternLM 2.5
+
+```
+python tool_internlm.py -i -m path/to/internlm2.5-7b.bin --temp 0
+    ________          __  __    __    __  ___ (书生·浦语)
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+You are served by InternLM,                   /_/   /_/
+with 7737708544 (7.7B) parameters.
+
+You  > weather in beijing
+A.I. > 好的，我需要调用一个API来获取北京的天气信息。请稍等片刻
+
+[Use Tools]: get_weather
+北京现在的天气是晴天，气温为30摄氏度，湿度为55%。有什么其他问题我可以帮您解答吗？
+You  > how about jinan?
+A.I. > 好的，我需要调用一个API来获取济南的天气信息。请稍等片刻
+
+[Use Tools]: get_weather
+济南现在的天气是晴天，气温为27摄氏度，湿度为58%。有什么其他问题我可以帮您解答吗？
+You  > which city is hotter?
+A.I. > 根据提供的天气信息，北京的温度为30摄氏度，而济南的温度为27摄氏度。因此，北京比济南更热。
 ```
