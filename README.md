@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-07-04: InternLM 2.5 with tool calling
 * 2024-07-03: Phi3 mini (June 2024 Update)
 * 2024-07-01: LLM-Compiler
 * 2024-06-28: Gemma-2
