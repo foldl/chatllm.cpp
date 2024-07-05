@@ -1,5 +1,5 @@
 {
-    "internlm": {
+    "internlm2.5": {
         "brief": "InternLM2.5 is a 7B parameter model tailored for practical scenarios with outstanding reasoning capability.",
         "default": "7b",
         "license": "Apache License Version 2.0",
