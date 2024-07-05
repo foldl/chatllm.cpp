@@ -1,4 +1,95 @@
 {
+    "internlm": {
+        "brief": "InternLM2.5 is a 7B parameter model tailored for practical scenarios with outstanding reasoning capability.",
+        "default": "7b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8223436400,
+                        "url": "chatllm_quantized_internlm/internlm2.5-7b.bin"
+                    }
+                }
+            },
+            "7b-1m": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8223436400,
+                        "url": "chatllm_quantized_internlm/internlm2.5-7b-1m.bin"
+                    }
+                }
+            }
+        }
+    },
+    "internlm2": {
+        "brief": "The second generation of the InternLM model.",
+        "default": "1.8b",
+        "license": "https://huggingface.co/internlm/internlm2-7b#open-source-license",
+        "variants": {
+            "1.8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2008808560,
+                        "url": "chatllm_quantized_internlm/internlm2-1.8B.bin"
+                    }
+                }
+            },
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8223436400,
+                        "url": "chatllm_quantized_internlm/internlm2-chat-8b-new.bin"
+                    }
+                }
+            },
+            "20b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 21105570416,
+                        "url": "chatllm_quantized_internlm/internlm2-20b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "internlm2-math": {
+        "brief": "State-of-the-art bilingual open-sourced Math reasoning LLMs. A solver, prover, verifier, augmenter.",
+        "default": "1.8b",
+        "license": "Unknown. See https://huggingface.co/internlm/internlm2-math-plus-1_8b",
+        "variants": {
+            "1.8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2008808560,
+                        "url": "chatllm_quantized_internlm/internlm2-math-plus-1_8b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "internlm1": {
+        "brief": "InternLM has open-sourced a 7 billion parameter base model and a chat model tailored for practical scenarios.",
+        "default": "1.8b",
+        "license": "https://huggingface.co/internlm/internlm-chat-7b#open-source-license",
+        "variants": {
+            "1.8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7783400944,
+                        "url": "chatllm_quantized_internlm/internlmv1.1_7b.bin"
+                    }
+                }
+            }
+        }
+    },
     "llm-compiler": {
         "brief": "LLM Compiler is a state-of-the-art LLM that builds upon Code Llama with improved performance for code optimization and compiler reasoning.",
         "default": "7b",
