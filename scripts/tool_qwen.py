@@ -1,111 +1,30 @@
-from collections.abc import Callable
-import copy
-import inspect
 import json
-import traceback
-from types import GenericAlias
-from typing import Any, Literal, get_origin, Annotated
-from dataclasses import dataclass
+from typing import Literal
 import sys
 
-import binding
 from binding import PATH_BINDS
 
-@dataclass
-class ToolObservation:
-    content_type: str
-    text: str
-    image_url: str | None = None
-    role_metadata: str | None = None
-    metadata: Any = None
-
-_TOOL_HOOKS = {}
-_TOOL_DESCRIPTIONS = []
-
-
-def register_tool(func: Callable):
-    tool_name = func.__name__
-    tool_description = inspect.getdoc(func).strip()
-    python_params = inspect.signature(func).parameters
-    tool_params = {}
-    required_params = []
-
-    tpye_mapping = {
-        "str": "string",
-        "int": "integer",
-    }
-
-    for name, param in python_params.items():
-        annotation = param.annotation
-        if annotation is inspect.Parameter.empty:
-            raise TypeError(f"Parameter `{name}` missing type annotation")
-        if get_origin(annotation) != Annotated:
-            raise TypeError(f"Annotation type for `{name}` must be typing.Annotated")
-
-        typ, (description, required) = annotation.__origin__, annotation.__metadata__
-        typ: str = str(typ) if isinstance(typ, GenericAlias) else typ.__name__
-        if not isinstance(description, str):
-            raise TypeError(f"Description for `{name}` must be a string")
-        if not isinstance(required, bool):
-            raise TypeError(f"Required for `{name}` must be a bool")
-
-        if required:
-            required_params.append(name)
-
-        if typ in tpye_mapping:
-            typ = tpye_mapping[typ]
-
-        tool_params[name] = {
-                "description": description,
-                "type": typ,
-            }
-
-    tool_def = {
-        "name": tool_name,
-        "description": tool_description,
-        "parameters": {
-            "type": "object",
-            "properties": tool_params,
-            "required": required_params
-        }
-    }
-    # print("[registered tool] " + pformat(tool_def))
-    _TOOL_HOOKS[tool_name] = func
-    _TOOL_DESCRIPTIONS.append(tool_def)
-
-    return func
-
-
-def dispatch_tool(tool_name: str, tool_params: dict, session_id: str) -> ToolObservation:
-
-    if tool_name not in _TOOL_HOOKS:
-        err = f"Tool `{tool_name}` not found. Please use a provided tool."
-        return ToolObservation("system_error", err)
-
-    tool_hook = _TOOL_HOOKS[tool_name]
-    try:
-        ret: str = tool_hook(**tool_params)
-        return ToolObservation(tool_name, str(ret))
-    except:
-        err = traceback.format_exc()
-        return ToolObservation("system_error", err)
+import tool_definition
+from tool_definition import dispatch_tool
 
 def get_tools() -> list[dict]:
-    return copy.deepcopy(_TOOL_DESCRIPTIONS)
+    def convert(tool: dict):
+        tool_params = {}
+        required_params = []
+        for p in tool['parameters']:
+            if p['required']: required_params.append(p['name'])
 
+            tool_params[p['name']] = { "description": p['description'], "type": p['type'] }
 
-# Tool Definitions
+        r = {
+            "name": tool['name'],
+            "description": tool['description'],
+            "parameters": { "type": "object", "properties": tool_params, "required": required_params }
+        }
 
-@register_tool
-def get_weather(
-        city_name: Annotated[str, "The name of the city to be queried", True],
-) -> str:
-    """
-    Get the current weather for `city_name`
-    """
+        return r
 
-    import tool_glm4
-    return tool_glm4.get_weather(city_name)
+    return [convert(t) for t in tool_definition._TOOL_DESCRIPTIONS]
 
 FN_NAME = '✿FUNCTION✿'
 FN_ARGS = '✿ARGS✿'
@@ -212,8 +131,8 @@ def call_function(s: str, session_id: str = '') -> str:
         tool_name, code = parse_function_call(s)
         observation = dispatch_tool(tool_name, code, session_id)
         return observation.text
-    except:
-        print("error occurs")
+    except Exception as e:
+        print(f"error occurs: {e}")
         return "failed to call the function"
 
 class ToolChatLLM(ChatLLM):

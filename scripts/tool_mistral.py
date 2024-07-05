@@ -8,106 +8,34 @@ from typing import Any, get_origin, Annotated
 from dataclasses import dataclass
 import sys
 
-import binding
 from binding import PATH_BINDS
 
-@dataclass
-class ToolObservation:
-    content_type: str
-    text: str | dict
-    image_url: str | None = None
-    role_metadata: str | None = None
-    metadata: Any = None
-    id: str | None = None
+import tool_definition
+from tool_definition import dispatch_tool
 
-_TOOL_HOOKS = {}
-_TOOL_DESCRIPTIONS = []
-
-
-def register_tool(func: Callable):
-    tool_name = func.__name__
-    tool_description = inspect.getdoc(func).strip()
-    python_params = inspect.signature(func).parameters
-    tool_params = {}
-    required_params = []
-
-    tpye_mapping = {
-        "str": "string",
-        "int": "integer",
-    }
-
-    for name, param in python_params.items():
-        annotation = param.annotation
-        if annotation is inspect.Parameter.empty:
-            raise TypeError(f"Parameter `{name}` missing type annotation")
-        if get_origin(annotation) != Annotated:
-            raise TypeError(f"Annotation type for `{name}` must be typing.Annotated")
-
-        typ, (description, required) = annotation.__origin__, annotation.__metadata__
-        typ: str = str(typ) if isinstance(typ, GenericAlias) else typ.__name__
-        if not isinstance(description, str):
-            raise TypeError(f"Description for `{name}` must be a string")
-        if not isinstance(required, bool):
-            raise TypeError(f"Required for `{name}` must be a bool")
-
-        if required:
-            required_params.append(name)
-
-        if typ in tpye_mapping:
-            typ = tpye_mapping[typ]
-
-        tool_params[name] = {
-                "description": description,
-                "type": typ,
-            }
-
-    tool_def = {
-        "type": "function",
-        "function": {
-            "name": tool_name,
-            "description": tool_description,
-            "parameters": {
-                "type": "object",
-                "properties": tool_params,
-                "required": required_params
-            }
-        }
-    }
-    # print("[registered tool] " + pformat(tool_def))
-    _TOOL_HOOKS[tool_name] = func
-    _TOOL_DESCRIPTIONS.append(tool_def)
-
-    return func
-
-
-def dispatch_tool(tool_name: str, tool_params: dict, session_id: str | None) -> ToolObservation:
-    if tool_name not in _TOOL_HOOKS:
-        err = f"Tool `{tool_name}` not found. Please use a provided tool."
-        return ToolObservation("system_error", err, id=session_id)
-
-    tool_hook = _TOOL_HOOKS[tool_name]
-    try:
-        ret =tool_hook(**tool_params)
-        return ToolObservation(tool_name, ret, id=session_id)
-    except:
-        err = traceback.format_exc()
-        return ToolObservation("system_error", err, id=session_id)
+_TOOL_DESCRIPTIONS = None
 
 def get_tools() -> list[dict]:
-    return copy.deepcopy(_TOOL_DESCRIPTIONS)
+    def convert(tool: dict):
+        tool_params = {}
+        required_params = []
+        for p in tool['parameters']:
+            if p['required']: required_params.append(p['name'])
 
-# Tool Definitions
+            tool_params[p['name']] = { "description": p['description'], "type": p['type'] }
 
-@register_tool
-def get_weather(
-        city_name: Annotated[str, "The name of the city to be queried", True]
-) -> dict:
-    """
-    Get the current weather for `city_name`
-    """
+        r = {
+            "type": "function",
+            "function": {
+                "name": tool['name'],
+                "description": tool['description'],
+                "parameters": { "type": "object", "properties": tool_params, "required": required_params }
+            }
+        }
 
-    import tool_glm4
-    return tool_glm4.get_weather(city_name)
+        return r
+
+    return [convert(t) for t in tool_definition._TOOL_DESCRIPTIONS]
 
 def build_tool_prompt(functions: list[dict], keywords: list[str]):
     def filter_func(f: dict) -> bool:
@@ -129,12 +57,12 @@ from chatllm import ChatLLM
 
 def call_function(s: str) -> str:
     try:
-        calls = json.loads(s)
+        calls = tool_definition.json_decode_ignore_extra(s)
         observations = [dispatch_tool(c['name'], c['arguments'], c['id'] if 'id' in c else None) for c in calls]
         rsp = [{ 'content': o.text, 'id': o.id} if o.id is not None else { 'content': o.text} for o in observations]
         return json.dumps(rsp, ensure_ascii=False)
-    except:
-        print("error occurs")
+    except Exception as e:
+        print(f"error occurs: {e}")
         return "failed to call the function"
 
 def split_input(user_input: str):
@@ -155,8 +83,9 @@ class ToolChatLLM(ChatLLM):
 
     def chat(self, user_input: str, input_id = None) -> None:
         user_input, keywords = split_input(user_input)
-        user_input = build_tool_prompt(get_tools(), keywords) + user_input
+        user_input = build_tool_prompt(_TOOL_DESCRIPTIONS, keywords) + user_input
         super().chat(user_input, input_id = input_id)
 
 if __name__ == '__main__':
+    _TOOL_DESCRIPTIONS = get_tools()
     chatllm.demo_simple(sys.argv[1:], ToolChatLLM, lib_path=PATH_BINDS)
