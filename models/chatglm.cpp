@@ -587,7 +587,15 @@ public:
         }
 
         if (find_meta)
+        {
             oss << chunk;
+            if (oss.str().find(' ') != std::string::npos)
+            {
+                streamer->put_chunk(true, oss.str());
+                oss.str("");
+                find_meta = false;
+            }
+        }
         else
             streamer->put_chunk(first, chunk);
     }
@@ -613,8 +621,8 @@ class ConditionalGeneration : public v2::ConditionalGeneration
 {
 public:
     ConditionalGeneration() = default;
-    ConditionalGeneration(const Config &config)
-        : v2::ConditionalGeneration(config, MODEL_TYPE_GLM4)
+    ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_GLM4)
+        : v2::ConditionalGeneration(config, type)
     {
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

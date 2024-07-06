@@ -84,6 +84,7 @@ namespace chatllm
         MODEL_TYPE_CODEGEEX2 = 4,
         MODEL_TYPE_CHARACTERGLM = 5,
         MODEL_TYPE_GLM4 = 6,
+        MODEL_TYPE_CODEGEEX4 = 7,
 
         MODEL_TYPE_INTERNLM = 0x100,
         MODEL_TYPE_INTERNLM2= 0x101, // extended model, supporting 7B & 20B
@@ -212,6 +213,8 @@ namespace chatllm
             return "GLM-4";
         case MODEL_TYPE_CODEGEEX2:
             return "CodeGeeX2";
+        case MODEL_TYPE_CODEGEEX4:
+            return "CodeGeeX4";
         case MODEL_TYPE_CHARACTERGLM:
             return "CharacterGLM";
         case MODEL_TYPE_INTERNLM:
@@ -1146,10 +1149,7 @@ namespace chatllm
 
     namespace codegeex
     {
-        namespace v2
-        {
-            #include "../models/codegeex_v2.cpp"
-        }
+        #include "../models/codegeex.cpp"
     }
 
     namespace internlm
@@ -1504,6 +1504,7 @@ namespace chatllm
         CASE(CODEGEEX2,             codegeex::v2, 1)            \
         CASE(CHARACTERGLM,          characterglm, 1)            \
         CASE(GLM4,                  glm::v4, 1)                 \
+        CASE(CODEGEEX4,             codegeex::v4, 1)            \
                                                                 \
         CASE(INTERNLM,              internlm::v1, 1)            \
         CASE(INTERNLM2,             internlm::v2, 1)            \

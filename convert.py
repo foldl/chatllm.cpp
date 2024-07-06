@@ -47,6 +47,7 @@ class ModelType(Enum):
     CODEGEEX2 = 4
     CharacterGLM = 5
     CHATGLM4 = 6
+    CODEGEEX4 = 7
 
     InternLM   = 0x100
     InternLM2   = 0x101
@@ -3392,7 +3393,7 @@ def main():
     vocab_dir = Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir)
     tokenizer_model_file_exists = False
 
-    if (config._name_or_path == 'THUDM/glm-4-9b-chat') or (config._name_or_path == 'THUDM/glm4-9b-chat'):
+    if config._name_or_path in ['THUDM/glm-4-9b-chat', 'THUDM/glm4-9b-chat', 'THUDM/codegeex4-all-9b']:
         vocab = load_vocab_from_tiktok_mergeable_ranks(vocab_dir / 'tokenizer.model')
     else:
         tokenizer_model_file_exists = (vocab_dir / 'tokenizer.model').exists()
@@ -3429,6 +3430,9 @@ def main():
                 ChatGLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             ChatGLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'codegeex4':
+        ChatGLM4Converter.MODEL_TYPE = ModelType.CODEGEEX4
+        ChatGLM4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'characterglm':
         CharacterGLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InternLMForCausalLM':
