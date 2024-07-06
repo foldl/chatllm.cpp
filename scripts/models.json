@@ -1,4 +1,24 @@
 {
+    "codegeex4": {
+        "brief": "CodeGeeX4: Open Multilingual Code Generation Model.",
+        "default": "9b",
+        "license": "https://github.com/THUDM/CodeGeeX4/blob/main/MODEL_LICENSE",
+        "variants": {
+            "9b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 5881053648,
+                        "url": "chatllm_quantized_codegeex4/codegeex4-all-9b-q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 9993306576,
+                        "url": "chatllm_quantized_codegeex4/codegeex4-all-9b.bin"
+                    }
+                }
+            }
+        }
+    },
     "internlm2.5": {
         "brief": "InternLM2.5 is a 7B parameter model tailored for practical scenarios with outstanding reasoning capability.",
         "default": "7b",

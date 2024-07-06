@@ -57,7 +57,8 @@ the parameters are ignored. With this, one can start two servers one for chattin
 code completion (a base model supporting fill-in-the-middle is required), and setup a fully functional
 local copilot in Visual Studio Code with the help of tools like [twinny](https://github.com/rjmacarthy/twinny).
 
-`openai_api.py` takes two arguments specifying models for chatting and code completion respectively. For example, use
+`openai_api.py` takes three arguments specifying models for chatting, code completion and text
+embedding respectively. For example, use
 DeepSeekCoder instructed for chatting, and its base model for code completion:
 
 ```sh
@@ -67,7 +68,7 @@ python openai_api.py path/to/deepseekcoder-1.3b.bin /path/to/deepseekcoder-1.3b-
 Additional arguments for each model can be specified too. For example:
 
 ```sh
-python openai_api.py path/to/chat/model /path/to/fim/model --temp 0 --top_k 2 --- --temp 0.8
+python openai_api.py path/to/chat/model /path/to/fim/model * --temp 0 --top_k 2 --- --temp 0.8
 ```
 
 Where `--temp 0 --top_k 2` are passed to the chatting model, while `--temp 0.8` are passed to the code completion model.

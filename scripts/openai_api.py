@@ -1,6 +1,7 @@
 import sys, signal, time, os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
+import itertools
 
 this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 PATH_BINDS = os.path.join(this_dir, '..', 'bindings')
@@ -176,6 +177,7 @@ class SessionManager:
 session_man: SessionManager = SessionManager()
 chat_streamer: ChatLLMStreamer = None
 fim_streamer: ChatLLMStreamer = None
+emb_model_obj: ChatLLM = None
 http_server: HTTPServer = None
 
 def get_streamer(model: str) -> ChatLLMStreamer | None:
@@ -192,6 +194,33 @@ class HttpHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.send_response(404, 'POST')
+
+    def handl_EMBEDDING(self, obj: dict):
+        if emb_model_obj is None:
+            self.send_response(404, 'NOT SUPPORTED')
+            return
+
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+
+        def mk_emb(i: int, emb) -> dict:
+            return { "object": "embedding", "embedding": emb, "index": i }
+
+        input = obj['input']
+        if isinstance(input, str):
+            input = [input]
+
+        r = []
+        for i, s in enumerate(input):
+            r.append(mk_emb(i, emb_model_obj.text_embedding(s)))
+
+        rsp = {
+            "object": "list", "data": r,
+            "model": obj['model'],
+            "usage": { "prompt_tokens": 8, "total_tokens": 8 }
+        }
+        self.wfile.write(json.dumps(rsp).encode('utf-8'))
 
     def do_POST(self):
         print(self.path)
@@ -211,6 +240,9 @@ class HttpHandler(BaseHTTPRequestHandler):
             pass
         elif self.path.endswith('/generate'):
             model = 'fim'
+        elif self.path.endswith('/embeddings'):
+            self.handl_EMBEDDING(obj)
+            return
         else:
             self.send_error(404, 'NOT FOUND')
             return
@@ -271,6 +303,11 @@ class HttpHandler(BaseHTTPRequestHandler):
 
         responder.done()
 
+def split_list(lst, val):
+    return [list(group) for k,
+            group in
+            itertools.groupby(lst, lambda x: x==val) if not k]
+
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, handler)
 
@@ -278,22 +315,32 @@ if __name__ == '__main__':
 
     args = sys.argv[1:]
     if len(args) < 1:
-        print(f"usage: python openai_api.py path/to/chat/model path/to/fim/model [more args for chat model {ARG_SEP} more args for fim model]")
+        print(f"usage: python openai_api.py path/to/chat/model path/to/fim/model path/to/emb/model [more args for chat model {ARG_SEP} more args for fim model  {ARG_SEP} more args for embedding model]")
+        print('Use * to skip loading a model')
         exit(-1)
 
-    chat_args = args[2:]
-    fim_args = []
-    if ARG_SEP in chat_args:
-        i = chat_args.index(ARG_SEP)
-        fim_args = chat_args[i + 1:]
-        chat_args = chat_args[:i]
+    if len(args) < 3:
+        args = args + ['*' for i in range(3 - len(args))]
 
-    basic_args = ['-i', '-m']
-    chat_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), basic_args + [args[0]] + chat_args, False))
+    chat_model = args[0]
+    fim_model  = args[1]
+    emb_model  = args[2]
 
-    if len(args) >= 2:
-        fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), basic_args + [args[1], '--format', 'completion'] + fim_args, False))
+    all_model_args = split_list(args[3:], ARG_SEP)
+    chat_args = all_model_args[0] if len(all_model_args) >= 1 else []
+    fim_args  = all_model_args[1] if len(all_model_args) >= 2 else []
+    emb_args  = all_model_args[2] if len(all_model_args) >= 3 else []
+
+    basic_args = ['-m']
+    if chat_model != '*':
+        chat_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), basic_args + [chat_model] + chat_args, False))
+
+    if fim_model != '*':
+        fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), basic_args + [fim_model, '--format', 'completion'] + fim_args, False))
         fim_streamer.auto_restart = True
+
+    if emb_model != '*':
+        emb_model_obj = ChatLLM(LibChatLLM(PATH_BINDS), basic_args + [emb_model] + emb_args)
 
     http_server = HTTPServer(('0.0.0.0', 3000), HttpHandler)
     http_server.serve_forever()

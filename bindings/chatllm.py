@@ -2,6 +2,7 @@ from ctypes import *
 from enum import IntEnum
 import os, sys, signal, queue
 import threading
+import json
 from typing import Any, Iterable, List, Union
 
 try:
@@ -232,10 +233,10 @@ class ChatLLM:
         if r != 0:
             raise Exception(f'ChatLLM: failed to `tool_input()` with error code {r}')
 
-    def text_embedding(self, txt: str) -> str:
+    def text_embedding(self, txt: str) -> list[float]:
         self._result_embedding = ''
         assert self._lib.text_embedding(self._chat, txt) == 0, 'text_embedding failed'
-        return f"[{self._result_embedding}]"
+        return json.loads(f"[{self._result_embedding}]")
 
     def qa_rank(self, q: str, a: str) -> float:
         self._result_ranking = '-1.0'
