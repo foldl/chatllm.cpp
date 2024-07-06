@@ -1096,6 +1096,9 @@ int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
     FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
     if (!streamer->is_prompt) return -1;
 
+    if (chat->pipeline->is_loaded() && (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Chat))
+        return -1;
+
     chat->history.push_back(utf8_str);
 
 generate:
@@ -1128,6 +1131,52 @@ int chatllm_tool_input(struct chatllm_obj *obj, const char *utf8_str)
 
     chat->tool_input = std::string(utf8_str);
     return 0;
+}
+
+int chatllm_text_embedding(struct chatllm_obj *obj, const char *utf8_str)
+{
+    int r = 0;
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+
+    if (!chat->pipeline->is_loaded() || (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::TextEmbedding))
+        return -1;
+
+    std::vector<float> result;
+    std::string input(utf8_str);
+    chat->pipeline->text_embedding(input, chat->gen_config, result);
+
+    std::ostringstream oss;
+    for (size_t i = 0; i < result.size() - 1; i++)
+    {
+        if ((i > 0) && ((i % 8) == 0)) oss << std::endl;
+        oss << std::setw(14) << std::fixed << std::setprecision(8) << result[i] << ",";
+    }
+    oss << std::setw(14) << std::fixed << std::setprecision(8) << result.back();
+
+    streamer->putln(oss.str(), chatllm::BaseStreamer::TextType::EMBEDDING);
+
+    return r;
+}
+
+int chatllm_qa_rank(struct chatllm_obj *obj, const char *utf8_str_q, const char *utf8_str_a)
+{
+    int r = 0;
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+
+    if (!chat->pipeline->is_loaded() || (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Ranker))
+        return -1;
+
+    std::string q(utf8_str_q);
+    std::string a(utf8_str_a);
+    float result = chat->pipeline->qa_rank(q, a, chat->gen_config);
+
+    std::ostringstream oss;
+    oss << std::setw(14) << std::fixed << std::setprecision(8) << result;
+    streamer->putln(oss.str(), chatllm::BaseStreamer::TextType::RANKING);
+
+    return r;
 }
 
 void chatllm_restart(struct chatllm_obj *obj)

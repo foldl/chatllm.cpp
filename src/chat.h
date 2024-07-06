@@ -203,6 +203,8 @@ namespace chatllm
             HISTORY_USER    = 5,    // print a whole line: user input history
             HISTORY_AI      = 6,    // print a whole line: AI output history
             TOOL_CALLING    = 7,
+            EMBEDDING       = 8,
+            RANKING         = 9,
         };
         BaseStreamer(BaseTokenizer *tokenizer);
         virtual ~BaseStreamer() = default;

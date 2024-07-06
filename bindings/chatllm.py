@@ -20,6 +20,8 @@ class PrintType(IntEnum):
     PRINTLN_HISTORY_USER    = 5,    # print a whole line: user input history
     PRINTLN_HISTORY_AI      = 6,    # print a whole line: AI output history
     PRINTLN_TOOL_CALLING    = 7,    # print a whole line: tool calling (supported by only a few models)
+    PRINTLN_EMBEDDING       = 8,    # print a whole line: embedding (example: "0.1, 0.3, ...")
+    PRINTLN_RANKING         = 9,    # print a whole line: ranking (example: "0.8")
 
 class LibChatLLM:
 
@@ -50,15 +52,17 @@ class LibChatLLM:
             self._PRINTFUNC = CFUNCTYPE(None, c_void_p, c_int, c_char_p)
             self._ENDFUNC = CFUNCTYPE(None, c_void_p)
 
-        self._chatllm_create = self._lib.chatllm_create
-        self._chatllm_append_param = self._lib.chatllm_append_param
-        self._chatllm_start = self._lib.chatllm_start
-        self._chatllm_user_input = self._lib.chatllm_user_input
-        self._chatllm_tool_input = self._lib.chatllm_tool_input
-        self._chatllm_abort_generation = self._lib.chatllm_abort_generation
-        self._chatllm_restart = self._lib.chatllm_restart
-        self._chatllm_set_gen_max_tokens = self._lib.chatllm_set_gen_max_tokens
-        self._chatllm_show_statistics = self._lib.chatllm_show_statistics
+        self._chatllm_create            = self._lib.chatllm_create
+        self._chatllm_append_param      = self._lib.chatllm_append_param
+        self._chatllm_start             = self._lib.chatllm_start
+        self._chatllm_user_input        = self._lib.chatllm_user_input
+        self._chatllm_tool_input        = self._lib.chatllm_tool_input
+        self._chatllm_text_embedding    = self._lib.chatllm_text_embedding
+        self._chatllm_qa_rank           = self._lib.chatllm_qa_rank
+        self._chatllm_abort_generation  = self._lib.chatllm_abort_generation
+        self._chatllm_restart           = self._lib.chatllm_restart
+        self._chatllm_set_gen_max_tokens= self._lib.chatllm_set_gen_max_tokens
+        self._chatllm_show_statistics   = self._lib.chatllm_show_statistics
 
         self._chatllm_create.restype = c_void_p
         self._chatllm_create.argtypes = []
@@ -74,6 +78,12 @@ class LibChatLLM:
 
         self._chatllm_tool_input.restype = c_int
         self._chatllm_tool_input.argtypes = [c_void_p, c_char_p]
+
+        self._chatllm_text_embedding.restype = c_int
+        self._chatllm_text_embedding.argtypes = [c_void_p, c_char_p]
+
+        self._chatllm_qa_rank.restype = c_int
+        self._chatllm_qa_rank.argtypes = [c_void_p, c_char_p, c_char_p]
 
         self._chatllm_abort_generation.restype = None
         self._chatllm_abort_generation.argtypes = [c_void_p]
@@ -108,6 +118,10 @@ class LibChatLLM:
             obj.callback_print_history_ai(txt)
         elif print_type == PrintType.PRINTLN_TOOL_CALLING.value:
             obj.call_tool(txt)
+        elif print_type == PrintType.PRINTLN_EMBEDDING.value:
+            obj.callback_print_embedding(txt)
+        elif print_type == PrintType.PRINTLN_RANKING.value:
+            obj.callback_print_ranking(txt)
         elif print_type == PrintType.PRINTLN_ERROR.value:
             raise Exception(txt)
         else:
@@ -145,6 +159,12 @@ class LibChatLLM:
     def tool_input(self, obj: c_void_p, user_input: str) -> int:
         return self._chatllm_tool_input(obj, c_char_p(user_input.encode()))
 
+    def text_embedding(self, obj: c_void_p, text: str) -> str:
+        return self._chatllm_text_embedding(obj, c_char_p(text.encode()))
+
+    def qa_rank(self, obj: c_void_p, q: str, a: str) -> float:
+        return self._chatllm_qa_rank(obj, c_char_p(q.encode()), c_char_p(a.encode()))
+
     def abort(self, obj: c_void_p) -> None:
         self._chatllm_abort_generation(obj)
 
@@ -181,6 +201,8 @@ class ChatLLM:
         self.tool_input_id = None
         self.references = []
         self.rewritten_query = ''
+        self._result_embedding = None
+        self._result_ranking = None
         if param is not None:
             self.append_param(param)
             if auto_start:
@@ -209,6 +231,16 @@ class ChatLLM:
         r = self._lib.tool_input(self._chat, user_input)
         if r != 0:
             raise Exception(f'ChatLLM: failed to `tool_input()` with error code {r}')
+
+    def text_embedding(self, txt: str) -> str:
+        self._result_embedding = ''
+        assert self._lib.text_embedding(self._chat, txt) == 0, 'text_embedding failed'
+        return f"[{self._result_embedding}]"
+
+    def qa_rank(self, q: str, a: str) -> float:
+        self._result_ranking = '-1.0'
+        assert self._lib.qa_rank(self._chat, q, a) == 0, 'qa_rank failed'
+        return float(self._result_ranking)
 
     def abort(self) -> None:
         self._lib.abort(self._chat)
@@ -245,6 +277,12 @@ class ChatLLM:
 
     def callback_print_history_ai(self, s: str) -> None:
         pass
+
+    def callback_print_embedding(self, s: str) -> None:
+        self._result_embedding = s
+
+    def callback_print_ranking(self, s: str) -> None:
+        self._result_ranking = s
 
     def call_tool(self, s: str) -> None:
         raise Exception(f'Tool calling not implemented! {s}')
@@ -351,6 +389,26 @@ def demo_streamer():
         print('A.I. > ', end='', flush=True)
         for s in streamer.chat(s):
             print(s, end='', flush=True)
+
+def demo_embedding(params, cls = ChatLLM, lib_path: str =''):
+    global llm
+    signal.signal(signal.SIGINT, handler)
+    llm = cls(LibChatLLM(lib_path), params)
+
+    while True:
+        s = input('Input    > ')
+        print('Embedding > ', flush=True)
+        print(llm.text_embedding(s))
+
+def demo_ranking(params, cls = ChatLLM, lib_path: str =''):
+    global llm
+    signal.signal(signal.SIGINT, handler)
+    llm = cls(LibChatLLM(lib_path), params)
+
+    while True:
+        q = input('Question > ')
+        a = input('Answer   > ')
+        print(f'Score    > {llm.qa_rank(q, a)}', flush=True)
 
 def demo_simple(params, cls = ChatLLM, lib_path: str =''):
     global llm
