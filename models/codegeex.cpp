@@ -77,8 +77,8 @@ public:
     {
     }
 
-    // FIXME: this mode seems not support tool calling actually
-    // https://github.com/THUDM/CodeGeeX4/issues/8
+    // Tool calling seems to be wrapped by ```json ... ```,
+    // which shall be handled by, such as Python bindings
     ChunkInterceptor *get_interceptor(void) override { return nullptr; }
 };
 }

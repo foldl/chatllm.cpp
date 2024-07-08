@@ -3,8 +3,7 @@
 Some models support tool calling (function calling, or code interpreter). It would be much easier (and cool) to do tool calling in Python.
 Demos of tool calling for these models are provided:
 
-* [ChatGLM3](../scripts/tool_glm3.py)
-* [GLM-4](../scripts/tool_glm4.py)
+* [ChatGLM3](../scripts/tool_glm3.py), [GLM-4](../scripts/tool_glm4.py), [CodeGeeX4](../scripts/tool_codegeex4.py)
 * [Mistral-Instruct-7B-v0.3](../scripts/tool_mistral.py)
 * [QWen v1.5 & v2](../scripts/tool_qwen.py)
 * [DeepSeek-Coder v2](../scripts/tool_deepseekcoder.py) (Note: function calling is *officially* unsupported.)
@@ -191,4 +190,23 @@ A.I. > 好的，我需要调用一个API来获取济南的天气信息。请稍�
 济南现在的天气是晴天，气温为27摄氏度，湿度为58%。有什么其他问题我可以帮您解答吗？
 You  > which city is hotter?
 A.I. > 根据提供的天气信息，北京的温度为30摄氏度，而济南的温度为27摄氏度。因此，北京比济南更热。
+```
+
+### CodeGeeX4
+
+```
+python tool_codegeex4.py -m :codegeex4
+    ________          __  __    __    __  ___
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+You are served by CodeGeeX4,                  /_/   /_/
+with 9399951360 (9.4B) parameters.
+
+You  >  what's the weather like in beijing?
+A.I. >
+[Use Tool] get_weather
+
+The current weather in Beijing is sunny with a temperature of 29°C. The humidity is 58%. The observation time is 07:59 AM.
 ```
