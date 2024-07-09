@@ -306,6 +306,8 @@ void Processor::RegisterPreprocessor(TextPreprocessor *prep)
 static int load_vocab_list(_vocab &vocab, Reader &reader, bool has_score, bool has_type, int start_piece_id)
 {
     int count = 0;
+    bool byte_fallback_started = false;
+    int last_byte = -1;
     while (true)
     {
         int len = reader.read_i32();
@@ -327,7 +329,40 @@ static int load_vocab_list(_vocab &vocab, Reader &reader, bool has_score, bool h
         if (has_type)
             type = reader.read_basic<uint8_t>();
 
-        vocab.token_to_id[word] = id;
+        bool flag = false;
+        if (word.size() == 1)
+        {
+            int ch = (uint8_t)(word[0]);
+            if (ch <= 255)
+            {
+                if (!byte_fallback_started && (ch == 0))
+                {
+                    byte_fallback_started = true;
+                    last_byte = -1;
+                }
+
+                if (byte_fallback_started)
+                {
+                    if (ch == last_byte + 1)
+                    {
+                        last_byte = ch;
+                        vocab.byte_fallback_tok_ids[last_byte] = id;
+                        flag = true;
+                    }
+                    else
+                    {
+                        byte_fallback_started = false;
+                    }
+                }
+            }
+            else
+            {
+                byte_fallback_started = false;
+            }
+        }
+
+        if (!flag)
+            vocab.token_to_id[word] = id;
 
         auto &tok_score = vocab.id_to_token[id];
         tok_score.tok = std::move(word);
@@ -336,6 +371,15 @@ static int load_vocab_list(_vocab &vocab, Reader &reader, bool has_score, bool h
 
         count++;
     }
+
+    for (int i = 0; i <= last_byte; i++)
+    {
+        std::string word(1, (char)i);
+        vocab.token_to_id.insert(std::pair{word, vocab.byte_fallback_tok_ids[i]});
+    }
+
+    if (last_byte == 255)
+        vocab.byte_fallback_ready = true;
 
     return count;
 }

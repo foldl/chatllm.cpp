@@ -36,6 +36,8 @@ struct _vocab
 
     std::unordered_map<id, token> special_tokens_cache;
     std::map<std::pair<std::string, std::string>, int> bpe_ranks;
+    int byte_fallback_tok_ids[256];
+    bool byte_fallback_ready;
 
     int find_bpe_rank(std::string token_left, std::string token_right) const
     {
@@ -129,7 +131,10 @@ public:
         int id;
     };
 
-    Processor() : piece_size(0), id_unk_token(-1), token_unk_id("<?>"), ret_special_token(false) {}
+    Processor() : piece_size(0), id_unk_token(-1), token_unk_id("<?>"), ret_special_token(false)
+    {
+        vocab_.byte_fallback_ready = false;
+    }
 
     virtual size_t Load(DataReader *data_reader, int n_vocab) = 0;
 
