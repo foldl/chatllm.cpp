@@ -333,31 +333,24 @@ static int load_vocab_list(_vocab &vocab, Reader &reader, bool has_score, bool h
         if (word.size() == 1)
         {
             int ch = (uint8_t)(word[0]);
-            if (ch <= 255)
+            if (!byte_fallback_started && (ch == 0))
             {
-                if (!byte_fallback_started && (ch == 0))
-                {
-                    byte_fallback_started = true;
-                    last_byte = -1;
-                }
-
-                if (byte_fallback_started)
-                {
-                    if (ch == last_byte + 1)
-                    {
-                        last_byte = ch;
-                        vocab.byte_fallback_tok_ids[last_byte] = id;
-                        flag = true;
-                    }
-                    else
-                    {
-                        byte_fallback_started = false;
-                    }
-                }
+                byte_fallback_started = true;
+                last_byte = -1;
             }
-            else
+
+            if (byte_fallback_started)
             {
-                byte_fallback_started = false;
+                if (ch == last_byte + 1)
+                {
+                    last_byte = ch;
+                    vocab.byte_fallback_tok_ids[last_byte] = id;
+                    flag = true;
+                }
+                else
+                {
+                    byte_fallback_started = false;
+                }
             }
         }
 
