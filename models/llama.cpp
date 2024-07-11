@@ -310,3 +310,234 @@ namespace v2_plus
         {}
     };
 }
+
+namespace multi
+{
+    struct Config : public v3::Config
+    {
+        int n_future_tokens;
+    };
+
+    class Tokenizer : public v2::Tokenizer
+    {
+    public:
+        Tokenizer(const Config &config)
+            : v2::Tokenizer(config)
+        {
+           // sys_prompt = "";
+        }
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            size_t r = v2::Tokenizer::load(buffer, n_vocab);
+            return r;
+        }
+    };
+
+    class LlamaBlockNonInplace : public LMBlock1<RMSNormNonInplace, LlamaSelfAttention, RMSNorm, SiLUMLP>
+    {
+    public:
+        LlamaBlockNonInplace(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
+    // MultiPredModel seems better to inherit from HeterogeneousModel (or move into it)
+    // If there are more models use this technique, then DO IT.
+    class MultiPredModel : public Model<BaseConfig, Embedding, RMSNorm, LlamaBlockNonInplace, int, int, int, int, int>
+    {
+    public:
+        typedef Model<BaseConfig, Embedding, RMSNorm, LlamaBlockNonInplace, int, int, int, int, int> Base;
+        MultiPredModel(InitContext *ctx, const Config &config, int hidden_size, int num_attention_heads, int intermediate_size,
+                       int num_key_value_heads, int max_length, int n_future_tokens)
+            : Model<BaseConfig, Embedding, RMSNorm, LlamaBlockNonInplace, int, int, int, int, int>(
+                    ctx, config, false, hidden_size, num_attention_heads, intermediate_size, num_key_value_heads, max_length),
+              n_future_tokens(n_future_tokens)
+        {
+            size_t extra_cache_size = 0;
+            effective_n = n_future_tokens;
+
+            for (int i = 0; i < n_future_tokens - 1; i++)
+            {
+                auto layer = new LlamaBlockNonInplace(ctx, hidden_size, num_attention_heads, intermediate_size, num_key_value_heads, max_length);
+                extra_heads.push_back(layer);
+                layer->set_id(config.num_hidden_layers + i);
+                extra_cache_size += layer->get_cache_size();;
+            }
+
+            extra_cache.resize(extra_cache_size);
+            void *buffer = (void *)extra_cache.data();
+
+            prediction_heads.push_back(get_layer(config.num_hidden_layers - 1));
+            for (int i = 0; i < n_future_tokens - 1; i++)
+            {
+                auto layer = extra_heads[i];
+                buffer = layer->set_cache_buffer(buffer);
+                prediction_heads.push_back(layer);
+            }
+        }
+
+        ~MultiPredModel()
+        {
+        }
+
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
+        {
+            ggml_tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
+            for (int i = 0; i <= config.num_hidden_layers - 2; i++)
+            {
+                // reserve scratch memory for h_truck
+                if (i <= config.num_hidden_layers - 3)
+                    ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
+                hidden_states = get_layer(i)->forward(ctx, hidden_states, n_past);
+            }
+
+            auto h_trunk = hidden_states;
+            ggml_tensor *lm_logits = ggml_new_tensor_2d(ctx->gctx.get(), GGML_TYPE_F32, config.vocab_size, effective_n);
+
+            for (int i = 0; i < effective_n; i++)
+            {
+                ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
+                ggml_tensor *tok_states = prediction_heads[i]->forward(ctx, h_trunk, n_past);
+
+                ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
+
+                ggml_tensor *logits = calc_logits(ctx, input_ids, tok_states);
+                ggml_tensor *view = ggml_view_1d(ctx->gctx.get(), lm_logits, config.vocab_size,
+                                                 i * ggml_nbytes(logits));
+                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), logits, view));
+            }
+
+            return lm_logits;
+        }
+
+        int set_n_future_tokens(int n)
+        {
+            if ((1 <= n) && (n <= n_future_tokens))
+                effective_n = n;
+            return effective_n;
+        }
+
+    protected:
+        int64_t get_param_num_of_layers(bool effective_only) const override
+        {
+            int64_t r = Base::get_param_num_of_layers(effective_only);
+            if (extra_heads.size() > 0)
+                r += extra_heads[0]->get_param_num(effective_only) * extra_heads.size();
+            return r;
+        }
+
+        ggml_tensor *calc_logits(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
+        {
+            // NOTE: only compute next_token_logits for the last token
+            hidden_states = ggml_view_2d(ctx->gctx.get(), hidden_states, config.hidden_size, 1,
+                                        config.hidden_size * ggml_element_size(hidden_states),
+                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml_element_size(hidden_states));
+
+            ggml_tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
+
+            transformer_outputs =
+                    ggml_view_1d(ctx->gctx.get(), transformer_outputs, config.hidden_size, 0);
+
+            ggml_tensor *logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
+                                             : word_embeddings.forward(ctx, transformer_outputs);
+
+            if (logits_pp)
+                logits = logits_pp->forward(ctx, logits);
+            return logits;
+        }
+    public:
+        const int n_future_tokens;
+        std::vector<LlamaBlockNonInplace *> extra_heads;
+        std::vector<Block *> prediction_heads;
+        std::vector<uint8_t> extra_cache;
+    private:
+        int effective_n;
+    };
+
+
+    class ConditionalGeneration : public BaseModelForConditionalGeneration<MultiPredModel>
+    {
+    private:
+        typedef BaseModelForConditionalGeneration<MultiPredModel> Base;
+    public:
+        ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_LLAMA_MULTI,
+                                     int tensors_per_layer = 12)
+            : BaseModelForConditionalGeneration<MultiPredModel>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+        {
+            constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+            const size_t num_tensors = 3 + (config.num_hidden_layers + config.n_future_tokens - 1) * tensors_per_layer;
+            const size_t ctx_size = num_tensors * tensor_ovhd;
+            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+            w_ctx_.dtype = config.dtype;
+
+            Base::transformer = new MultiPredModel(&w_ctx_, config,
+                                                    config.hidden_size, config.num_attention_heads,
+                                                    config.intermediate_size, config.num_key_value_heads, config.max_length,
+                                                    config.n_future_tokens);
+            Base::GRAPH_SIZE = 4096 * 2;
+        }
+
+        void load(ModelLoader &loader) override
+        {
+            loader.read_tensor("model.embed_tokens.weight", Base::transformer->word_embeddings.weight);
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
+                loader.read_tensor(layer_prefix + "input_layernorm.weight", Base::transformer->layers[i].input_layernorm.weight);
+                loader.read_tensor(layer_prefix + "mlp.down_proj.weight", Base::transformer->layers[i].mlp.down_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", Base::transformer->layers[i].mlp.gate_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.up_proj.weight", Base::transformer->layers[i].mlp.up_proj.weight);
+                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", Base::transformer->layers[i].post_attention_layernorm.weight);
+
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", Base::transformer->layers[i].attention.k_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", Base::transformer->layers[i].attention.o_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", Base::transformer->layers[i].attention.q_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", Base::transformer->layers[i].attention.v_proj.weight);
+            }
+
+            for (int i = 0; i < (int)Base::transformer->extra_heads.size(); i++)
+            {
+                std::string layer_prefix = "model.extra_heads." + std::to_string(i) + '.';
+                loader.read_tensor(layer_prefix + "input_layernorm.weight",             Base::transformer->extra_heads[i]->input_layernorm.weight);
+                loader.read_tensor(layer_prefix + "mlp.down_proj.weight",               Base::transformer->extra_heads[i]->mlp.down_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.gate_proj.weight",               Base::transformer->extra_heads[i]->mlp.gate_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.up_proj.weight",                 Base::transformer->extra_heads[i]->mlp.up_proj.weight);
+                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",    Base::transformer->extra_heads[i]->post_attention_layernorm.weight);
+
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", Base::transformer->extra_heads[i]->attention.k_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", Base::transformer->extra_heads[i]->attention.o_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", Base::transformer->extra_heads[i]->attention.q_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", Base::transformer->extra_heads[i]->attention.v_proj.weight);
+            }
+            loader.read_tensor("model.norm.weight", Base::transformer->final_layernorm.weight);
+            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(Base::transformer->lm_head)->weight);
+
+            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+                << "corrupted model weights";
+        }
+
+        void set_additional_args(const std::map<std::string, std::string> &args) override
+        {
+            #define get_value(n) do {                       \
+                auto it = args.find(#n);                    \
+                if (it != args.end()) n = it->second;       \
+            } while (0)
+
+            std::string n_future_tokens("");
+            get_value(n_future_tokens);
+            if (n_future_tokens.size() > 0)
+                dynamic_cast<MultiPredModel *>(Base::transformer)->set_n_future_tokens(std::atoi(n_future_tokens.c_str()));
+        }
+
+    public:
+        static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
+        static constexpr size_t SCRATCH_SIZE = 2844ull * 1024 * 1024;
+
+        Config config;
+
+    private:
+        // hold ggml_context & kv_cache
+        InitContext w_ctx_; // weight context
+    };
+}

@@ -241,10 +241,11 @@ namespace chatllm
     class RMSNorm : public Block
     {
     public:
-        RMSNorm() : weight(nullptr) {}
-        RMSNorm(InitContext *ctx, int normalized_shape)
+        RMSNorm() : weight(nullptr), inplace(true) {}
+        RMSNorm(InitContext *ctx, int normalized_shape, bool inplace = true)
             : weight(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape)),
-              eps(1e-5f) {}
+              eps(1e-5f),
+              inplace(inplace) {}
 
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
@@ -257,6 +258,13 @@ namespace chatllm
     public:
         ggml_tensor *weight;
         float eps;
+        const bool inplace;
+    };
+
+    class RMSNormNonInplace : public RMSNorm
+    {
+    public:
+        RMSNormNonInplace(InitContext *ctx, int normalized_shape) : RMSNorm(ctx, normalized_shape, false) {}
     };
 
     // This is **the** feed forward network (Multi-Layer Perceptron) in _Attention Is All You Need_.

@@ -89,6 +89,7 @@ void usage(const std::string &prog)
               << "  -h, --help              show this help message and exit\n"
               << "  -m, --model PATH        model path\n"
               << "  -p, --prompt PROMPT     prompt to start generation with (default: 你好)\n"
+              << "      --prompt_file FN    prompt from file\n"
               << "  -s, --system SYSTEM     system prompt (instruction) (default: model specific)\n"
               << "      --sys_file FN       system prompt (instruction) from file\n"
               << "  -i, --interactive       run in interactive mode\n"
@@ -264,12 +265,6 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                         args.format = chatllm::ChatFormat::CHAT;
                 }
             }
-            else if (strcmp(arg, "--sys_file") == 0)
-            {
-                c++;
-                if (c < argc)
-                    args.system = load_txt(argv[c]);
-            }
             else if (strcmp(arg, "--save_session") == 0)
             {
                 c++;
@@ -290,7 +285,9 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             }
             handle_param("--model",                 "-m", model_path,           std::string)
             handle_param("--prompt",                "-p", prompt,               std::string)
+            handle_para0("--prompt_file",                 prompt,               load_txt)
             handle_param("--system",                "-s", system,               std::string)
+            handle_para0("--sys_file",                    system,               load_txt)
             handle_param("--max_length",            "-l", max_length,           std::stoi)
             handle_param("--max_context_length",    "-c", max_context_length,   std::stoi)
             handle_para0("--extending",                   extending,            parse_extending_method)

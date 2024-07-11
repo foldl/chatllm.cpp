@@ -475,6 +475,8 @@ namespace chatllm
         virtual int64_t get_param_num(bool effective_only) const = 0;
 
         virtual ChunkInterceptor *get_interceptor(void) { return nullptr; }
+
+        virtual void set_additional_args(const std::map<std::string, std::string> &args) {}
     };
 
     class ModelProxy : public AbstractModel

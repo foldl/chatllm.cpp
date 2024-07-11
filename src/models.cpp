@@ -166,6 +166,8 @@ namespace chatllm
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
         MODEL_TYPE_BGE_ReRanker_M3  = 0x10000103,
+
+        MODEL_TYPE_LLAMA_MULTI      = 0x20000001,
     };
 
     ModelPurpose get_model_purpose(ModelType model_type)
@@ -223,7 +225,7 @@ namespace chatllm
             return "InternLM";
         case MODEL_TYPE_LLAMA2:
         case MODEL_TYPE_LLAMA2PLUS:
-            return "LlaMa2";
+            return "LlaMA2";
         case MODEL_TYPE_CODELLAMA:
             return "CodeLlaMa";
         case MODEL_TYPE_BAICHUAN:
@@ -322,6 +324,8 @@ namespace chatllm
             return "XVERSE";
         case MODEL_TYPE_INDEX:
             return "Index";
+        case MODEL_TYPE_LLAMA_MULTI:
+            return "LlaMA-Multi";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -703,8 +707,6 @@ namespace chatllm
             {
                 ggml_tensor *lm_logits = generate_next_token(curr_input_ids, gen_config);
 
-                if (aborted) break;
-
                 if (first_call)
                 {
                     if (performance)
@@ -712,48 +714,52 @@ namespace chatllm
                     first_call = false;
                 }
 
-                int next_token_id = sampler->sampling((float *)lm_logits->data, (int)lm_logits->ne[0]);
-
-// printf("\nnext = %d\n", next_token_id);
-
-                if (next_token_id == Sampler::ABORT)
-                {
-                    aborted = true;
-                    break;
-                }
-
-//#define DISABLE_CACHE
-#ifndef DISABLE_CACHE
+    //#define DISABLE_CACHE
+    #ifndef DISABLE_CACHE
                 n_past += (int)curr_input_ids.size();
-                curr_input_ids = {next_token_id};
-#else
-                curr_input_ids.push_back(next_token_id);
-#endif
+                curr_input_ids.clear();
+    #endif
+                float *logits = (float *)lm_logits->data;
 
-                int pop_output = 0;
-                int keep_idx = 0;
-                output_ids.push_back(next_token_id);
-
-                if (is_output_terminated(output_ids, keep_idx, pop_output))
+                for (int64_t tok_idx = 0; (tok_idx < lm_logits->ne[1]) && !aborted; tok_idx++, logits += lm_logits->ne[0])
                 {
-                    while (pop_output-- > 0)
-                        output_ids.pop_back();
-                    keep_idx = (int)output_ids.size();
-                    completed = true;
-                }
+                    int next_token_id = sampler->sampling(logits, (int)lm_logits->ne[0]);
 
-                if (streamer)
-                {
-                    if (keep_idx > (int)output_ids.size())
+    // printf("\nnext = %d\n", next_token_id);
+
+                    if (next_token_id == Sampler::ABORT)
+                    {
+                        aborted = true;
+                        break;
+                    }
+
+                    curr_input_ids.push_back(next_token_id);
+
+                    int pop_output = 0;
+                    int keep_idx = 0;
+                    output_ids.push_back(next_token_id);
+
+                    if (is_output_terminated(output_ids, keep_idx, pop_output))
+                    {
+                        while (pop_output-- > 0)
+                            output_ids.pop_back();
                         keep_idx = (int)output_ids.size();
-                    for (; next_output_idx < keep_idx; next_output_idx++)
-                        streamer->put({output_ids[next_output_idx]});
-                }
+                        completed = true;
+                    }
 
-                if ((gen_max_tokens > 0) && ((n_past + (int)curr_input_ids.size() >= gen_max_tokens)))
-                {
-                    aborted = true;
-                    break;
+                    if (streamer)
+                    {
+                        if (keep_idx > (int)output_ids.size())
+                            keep_idx = (int)output_ids.size();
+                        for (; next_output_idx < keep_idx; next_output_idx++)
+                            streamer->put({output_ids[next_output_idx]});
+                    }
+
+                    if ((gen_max_tokens > 0) && ((n_past + (int)curr_input_ids.size() >= gen_max_tokens)))
+                    {
+                        aborted = true;
+                        break;
+                    }
                 }
             }
 
@@ -1486,7 +1492,12 @@ namespace chatllm
             << "num_attention_heads : " << config.num_attention_heads << std::endl
             << "num_hidden_layers   : " << config.num_hidden_layers << std::endl
             << "intermediate_size   : " << config.intermediate_size << std::endl
-            << "max_length          : " << config.max_length << std::endl;
+            << "max_length          : " << config.max_length << std::endl << std::endl
+
+            << "bos_token_id        : " << config.bos_token_id << std::endl
+            << "eos_token_id        : " << config.eos_token_id << std::endl
+            << "pad_token_id        : " << config.pad_token_id << std::endl
+            << "sep_token_id        : " << config.sep_token_id << std::endl;
 
         return oss.str();
     }
@@ -1514,6 +1525,7 @@ namespace chatllm
         CASE(LLAMA3,                llama::v3, 1)               \
         CASE(CODELLAMA,             codellama, 1)               \
         CASE(LLAMA2PLUS,            llama::v2_plus, 1)          \
+        CASE(LLAMA_MULTI,           llama::multi, 1)            \
                                                                 \
         CASE(DEEPSEEK,              deepseek::v1, 1)            \
         CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \

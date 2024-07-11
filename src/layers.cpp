@@ -100,7 +100,7 @@ namespace chatllm
 
     ggml_tensor *RMSNorm::forward(ForwardContext *ctx, ggml_tensor *input)
     {
-        ggml_tensor *output = ggml_rms_norm_inplace(ctx->gctx.get(), input, eps);
+        ggml_tensor *output = inplace ? ggml_rms_norm_inplace(ctx->gctx.get(), input, eps) : ggml_rms_norm(ctx->gctx.get(), input, eps);
         output = ggml_mul_inplace(ctx->gctx.get(), output, weight);
         return output;
     }

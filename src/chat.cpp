@@ -1024,6 +1024,7 @@ namespace chatllm
     {
         if (!modelobj.loaded) return;
         tokenizer->set_additional_args(args);
+        model->set_additional_args(args);
     }
 
     void Pipeline::before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer)

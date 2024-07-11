@@ -183,3 +183,20 @@ Please use `--format completion` for these models.
 These LoRA models have been tested:
 
 * [Llama-3-Chinese-8B-Instruct](https://huggingface.co/hfl/llama-3-chinese-8b-instruct-lora)
+
+## Special Models
+
+* [Facebook multi-token prediction models](https://huggingface.co/facebook/multi-token-prediction) checkpoints
+
+    Download at least one multi-token prediction checkpoint (such as 7B_1T_4).
+    Assume it is stored at /path/to/llama-multi-predict/7B_1T_4. Make sure `tokenizer.model` is downloaded to /path/to/llama-multi-predict.
+
+    To convert it with `-a llama-multi-token-prediction-ckpt`:
+
+    ```sh
+    python convert.py -i /path/to/llama-multi-predict/7B_1T_4 -o llama-multi.bin -a llama-multi-token-prediction-ckpt
+    ```
+
+    This is a base model, and remember to use `--format completion`.
+
+    Tip: Use `--kv n_future_tokens N` to change number of future tokens, N = [1, 4].

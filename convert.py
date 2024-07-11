@@ -124,6 +124,8 @@ class ModelType(Enum):
 
     Index         = 0x1a00
 
+    LlaMAMulti    = 0x20000001
+
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
     BGE_M3        = 0x10000102
@@ -1041,6 +1043,86 @@ class Llama3Converter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
+
+class LlamaMultiConverter(BaseConverter):
+    MODEL_TYPE = ModelType.LlaMAMulti
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            mapping = {
+                'tok_embeddings.weight': 'embed_tokens.weight',
+                "attention_norm.weight": 'input_layernorm.weight',
+                "feed_forward.w1.weight": 'mlp.gate_proj.weight',
+                "feed_forward.w2.weight": 'mlp.down_proj.weight',
+                "feed_forward.w3.weight": 'mlp.up_proj.weight',
+                "ffn_norm.weight": 'post_attention_layernorm.weight',
+                "attention.wk.weight": 'self_attn.k_proj.weight',
+                "attention.wo.weight": 'self_attn.o_proj.weight',
+                "attention.wq.weight": 'self_attn.q_proj.weight',
+                "attention.wv.weight": 'self_attn.v_proj.weight',
+                "model.output.weight": 'lm_head.weight',
+            }
+
+            new_name = 'model.' + name
+
+            for k in mapping.keys():
+                if new_name.endswith(k):
+                    new_name = new_name.replace(k, mapping[k])
+                    break
+
+            new_dict[new_name] = tensor #Llama3Converter.pp(config, new_name, tensor)
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+
+        hidden_dim = 4 * config.dim
+        intermediate_size = int(2 * hidden_dim / 3)
+        # custom dim factor multiplier
+        if config.ffn_dim_multiplier is not None:
+            intermediate_size = int(config.ffn_dim_multiplier * intermediate_size)
+        intermediate_size = config.multiple_of * ((intermediate_size + config.multiple_of - 1) // config.multiple_of)
+
+        config.hidden_size = config.dim
+        config.num_attention_heads = config.n_heads
+        config.num_hidden_layers = config.n_layers - config.n_future_tokens + 1
+        config.intermediate_size = intermediate_size
+        config.max_position_embeddings = 4096
+        config.num_key_value_heads = config.n_kv_heads
+        config.bos_token_id = 1
+        config.eos_token_id = 2
+
+        config.hidden_act = 'silu'
+
+        Llama3Converter.dump_config(f, config, ggml_type)
+        config_values = [
+            config.n_future_tokens,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = Llama3Converter.get_weight_names(config)
+
+        for i in range(config.n_future_tokens - 1):
+            weight_names += [
+                f"model.extra_heads.{i}.input_layernorm.weight",
+                f"model.extra_heads.{i}.mlp.down_proj.weight",
+                f"model.extra_heads.{i}.mlp.gate_proj.weight",
+                f"model.extra_heads.{i}.mlp.up_proj.weight",
+                f"model.extra_heads.{i}.post_attention_layernorm.weight",
+                f"model.extra_heads.{i}.self_attn.k_proj.weight",
+                f"model.extra_heads.{i}.self_attn.o_proj.weight",
+                f"model.extra_heads.{i}.self_attn.q_proj.weight",
+                f"model.extra_heads.{i}.self_attn.v_proj.weight",
+            ]
+
+        return weight_names
 
 class CodeLlamaConverter(BaseConverter):
     MODEL_TYPE = ModelType.CodeLlaMA
@@ -3336,8 +3418,8 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
         f"Could not find tokenizer.model in {path} or its parent; "
         "if it's in another directory, pass the directory as --vocab-dir")
 
-def load_config(path: Path) -> Any:
-    with open(path / 'config.json', 'r') as fp:
+def load_config(path: Path, config_fn: str) -> Any:
+    with open(path / config_fn, 'r') as fp:
         r = json.load(fp)
     if (path / 'generation_config.json').is_file():
         with open(path / 'generation_config.json', 'r') as fp:
@@ -3351,7 +3433,7 @@ def load_some_model(path: Path) -> List[Path]:
     # Be extra-friendly and accept either a file or a directory:
     if path.is_dir():
         globs = ["model-*-of-*.safetensors", "consolidated.*.pth", "pytorch_model-*-of-*.bin",
-                 "pytorch_model.bin", "model.safetensors", "*.pt", "consolidated.safetensors"]
+                 "pytorch_model.bin", "model.safetensors", "*.pt", "consolidated.safetensors", "consolidated.pth"]
         for glob in globs:
             files = list(path.glob(glob))
             if len(files) > 0:
@@ -3386,9 +3468,14 @@ def main():
         skip_def_vocab_model = True
         args.arch = ''
 
-    config = AttributeDict(load_config(Path(args.model_name_or_path)))
-    if len(config.architectures) != 1:
-        raise Exception(f'unknown architectures: {config.architectures}')
+    config_fn = 'config.json'
+    if args.arch.lower() == 'llama-multi-token-prediction-ckpt':
+        config_fn = 'params.json'
+    config = AttributeDict(load_config(Path(args.model_name_or_path), config_fn))
+    if arch == '':
+        if len(config.architectures) != 1:
+            raise Exception(f'unknown architectures: {config.architectures}')
+        arch = config.architectures[0]
 
     vocab_dir = Path(args.model_name_or_path) if args.vocab_dir == '' else Path(args.vocab_dir)
     tokenizer_model_file_exists = False
@@ -3398,9 +3485,6 @@ def main():
     else:
         tokenizer_model_file_exists = (vocab_dir / 'tokenizer.model').exists()
         vocab = load_vocab(vocab_dir, skip_def_vocab_model)
-
-    if arch == '':
-        arch = config.architectures[0]
 
     if args.arch.lower() == 'grok-1-base':
         convert_grok_1_base(args, vocab, ggml_type)
@@ -3451,6 +3535,8 @@ def main():
                 Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'llama-multi-token-prediction-ckpt':
+        LlamaMultiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'XverseForCausalLM':
         LlamaConverter.MODEL_TYPE = ModelType.XVERSE
         LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
