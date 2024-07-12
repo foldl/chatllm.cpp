@@ -58,6 +58,7 @@ class LibChatLLM:
         self._chatllm_start             = self._lib.chatllm_start
         self._chatllm_user_input        = self._lib.chatllm_user_input
         self._chatllm_tool_input        = self._lib.chatllm_tool_input
+        self._chatllm_tool_completion   = self._lib.chatllm_tool_completion
         self._chatllm_text_embedding    = self._lib.chatllm_text_embedding
         self._chatllm_qa_rank           = self._lib.chatllm_qa_rank
         self._chatllm_abort_generation  = self._lib.chatllm_abort_generation
@@ -79,6 +80,9 @@ class LibChatLLM:
 
         self._chatllm_tool_input.restype = c_int
         self._chatllm_tool_input.argtypes = [c_void_p, c_char_p]
+
+        self._chatllm_tool_completion.restype = c_int
+        self._chatllm_tool_completion.argtypes = [c_void_p, c_char_p]
 
         self._chatllm_text_embedding.restype = c_int
         self._chatllm_text_embedding.argtypes = [c_void_p, c_char_p]
@@ -160,6 +164,9 @@ class LibChatLLM:
     def tool_input(self, obj: c_void_p, user_input: str) -> int:
         return self._chatllm_tool_input(obj, c_char_p(user_input.encode()))
 
+    def tool_completion(self, obj: c_void_p, user_input: str) -> int:
+        return self._chatllm_tool_completion(obj, c_char_p(user_input.encode()))
+
     def text_embedding(self, obj: c_void_p, text: str) -> str:
         return self._chatllm_text_embedding(obj, c_char_p(text.encode()))
 
@@ -232,6 +239,13 @@ class ChatLLM:
         r = self._lib.tool_input(self._chat, user_input)
         if r != 0:
             raise Exception(f'ChatLLM: failed to `tool_input()` with error code {r}')
+
+    def tool_completion(self, user_input: str, completion_id = None) -> None:
+        self.tool_completion_id = completion_id
+        self.abort()
+        r = self._lib.tool_completion(self._chat, user_input)
+        if r != 0:
+            raise Exception(f'ChatLLM: failed to `tool_completion()` with error code {r}')
 
     def text_embedding(self, txt: str) -> list[float]:
         self._result_embedding = ''

@@ -8,6 +8,7 @@ Demos of tool calling for these models are provided:
 * [QWen v1.5 & v2](../scripts/tool_qwen.py)
 * [DeepSeek-Coder v2](../scripts/tool_deepseekcoder.py) (Note: function calling is *officially* unsupported.)
 * [InternLM 2.5](../scripts//tool_internlm.py)
+* [NuminaMath](../scripts/tool_numinamath.py)
 
 ## Precondition
 
@@ -210,3 +211,36 @@ A.I. >
 
 The current weather in Beijing is sunny with a temperature of 29°C. The humidity is 58%. The observation time is 07:59 AM.
 ```
+
+### NuminaMath
+
+> ```
+> 💣💣 DANGEROUS! NO SAND-BOXING. DEMO ONLY. 💣💣
+>     ________          __  __    __    __  ___
+>    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+>   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+>  / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+>  \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+> You are served by NumiaMath,                  /_/   /_/
+> with 6910365696 (6.9B) parameters.
+> ```
+> You  > show the result of 10!
+> A.I. >
+> Sure, let's calculate the factorial of 10 using Python. The factorial of a non-negative integer \( n \) (denoted as \( n! \)) is the product of all positive integers less than or equal to \( n \).
+>
+> For example, \( 10! = 10 \times 9 \times 8 \times 7 \times 6 \times 5 \times 4 \times 3 \times 2 \times 1 \).
+>
+> Let's compute \( 10! \) using Python.
+> ```python
+> import math
+>
+> # Calculate the factorial of 10
+> result = math.factorial(10)
+> print(result)
+> ```
+>
+> [EXEC CODE]3628800
+>
+> The factorial of 10, denoted as \(10!\), is \(3,628,800\).
+>
+> Thus, the result of \(10!\) is \(\boxed{3628800}\).

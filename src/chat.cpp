@@ -189,6 +189,12 @@ namespace chatllm
         tp->Encode(input, &ids);
     }
 
+    void BaseTokenizer::encode_external_text_completion(const std::string &text, std::vector<int> &ids) const
+    {
+        std::string input = preprocess(text);
+        tp->Encode(input, &ids);
+    }
+
     void BaseTokenizer::encode_qa(const std::string &q, const std::string &a, std::vector<int> &ids) const
     {
         std::string input = preprocess(q);
@@ -885,6 +891,58 @@ namespace chatllm
                 break;
             }
         }
+
+        post_chat(history, gen_config, streamer);
+
+        if (streamer)
+            streamer->end();
+
+        return r;
+    }
+
+    std::string Pipeline::chat_with_ext_completion(const std::vector<std::string> &history, std::string &external, const GenerationConfig &gen_config,
+                         BaseStreamer *streamer)
+    {
+        bool continuous = true;
+        bool completed = false;
+        std::vector<int> input_ids;
+
+        tokenizer->encode_external_text_completion(external, input_ids);
+
+        std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, gen_max_tokens, streamer);
+        if (!completed)
+        {
+            if (continuous)
+            {
+                streamer->putln("\nRUN OUT OF CONTEXT. Let me forget something and try again ...\n");
+                input_ids = tokenizer->encode_history(history, gen_config.max_context_length);
+                output_ids = model->generate(input_ids, gen_config, false, completed, &performance, gen_max_tokens, streamer);
+            }
+            else
+                streamer->putln("\nRUN OUT OF CONTEXT. I have to stop now.\n");
+        }
+
+        std::string output = tokenizer->decode(output_ids);
+        return output;
+    }
+
+    std::string Pipeline::chat_continue(std::vector<std::string> &history, std::string &external_ai, const GenerationConfig &gen_config,
+                         BaseStreamer *streamer)
+    {
+        std::string r;
+
+        if (modelobj.loaded && streamer)
+        {
+            ChunkInterceptor *interceptor = model->get_interceptor();
+            if (interceptor)
+            {
+                streamer->set_interceptor(interceptor);
+            }
+        }
+
+        before_chat(history, gen_config, streamer);
+
+        r = chat_with_ext_completion(history, external_ai, gen_config, streamer);
 
         post_chat(history, gen_config, streamer);
 

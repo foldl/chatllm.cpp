@@ -13,6 +13,8 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-07-12: NuminaMath
+* 2024-07-11: Meta-AI multi-token prediction models
 * 2024-07-05: CodeGeeX4
 * 2024-07-04: InternLM 2.5 with tool calling
 * 2024-07-03: Phi3 mini (June 2024 Update)

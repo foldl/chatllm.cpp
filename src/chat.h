@@ -68,6 +68,8 @@ namespace chatllm
         virtual void encode(const std::string &text, std::vector<int> &ids) const;
         virtual std::vector<int> encode(const std::string &text) const;
 
+        virtual void encode_external_text_completion(const std::string &text, std::vector<int> &ids) const;
+
         virtual void encode_qa(const std::string &q, const std::string &a, std::vector<int> &ids) const;
 
         virtual std::string decode(const std::vector<int> &ids) const;
@@ -714,6 +716,9 @@ namespace chatllm
         virtual void abort_generation(void);
         virtual void eval_sys_prompt(const GenerationConfig &gen_config);
 
+        std::string chat_continue(std::vector<std::string> &history, std::string &external, const GenerationConfig &gen_config,
+                         BaseStreamer *streamer = nullptr);
+
         void set_system_prompt(const std::string &prompt);
         void set_extending_method(ExtendingMethod method);
         virtual void set_additional_args(const std::map<std::string, std::string> &args);
@@ -752,6 +757,8 @@ namespace chatllm
         ExtendingMethod extending;
         ModelObject modelobj;
 
+        std::string chat_with_ext_completion(const std::vector<std::string> &history, std::string &external, const GenerationConfig &gen_config,
+                         BaseStreamer *streamer);
         std::string chat_with_restart(const std::vector<std::string> &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);
         std::string chat_with_shift(const std::vector<std::string> &history, const GenerationConfig &gen_config,

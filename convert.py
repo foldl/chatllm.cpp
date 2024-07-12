@@ -67,6 +67,7 @@ class ModelType(Enum):
     DeepSeek            = 0x300
     DeepSeekCoder       = 0x301
     CodeFuseDeepSeek    = 0x302
+    NuminaMath          = 0x303
     DeepSeekV2Light     = 0x320
     DeepSeekV2          = 0x321
 
@@ -3543,6 +3544,9 @@ def main():
     elif arch == 'codellama':
         CodeLlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek':
+        DeepSeekConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'numinamath':
+        DeepSeekConverter.MODEL_TYPE = ModelType.NuminaMath
         DeepSeekConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseekcoder':
         DeepSeekCoderConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

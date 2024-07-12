@@ -104,6 +104,7 @@ namespace chatllm
         MODEL_TYPE_DEEPSEEK = 0x300,
         MODEL_TYPE_DEEPSEEK_CODER   = 0x301,
         MODEL_TYPE_CODEFUSE_DEEPSEEK = 0x302,
+        MODEL_TYPE_NUMINAMATH        = 0x303,
         MODEL_TYPE_DEEPSEEK_V2_LIGHT = 0x320,
         MODEL_TYPE_DEEPSEEK_V2       = 0x321,
 
@@ -237,6 +238,8 @@ namespace chatllm
             return "DeepSeek-Coder";
         case MODEL_TYPE_CODEFUSE_DEEPSEEK:
             return "CodeFuse-DeepSeek";
+        case MODEL_TYPE_NUMINAMATH:
+            return "NumiaMath";
         case MODEL_TYPE_DEEPSEEK_V2:
         case MODEL_TYPE_DEEPSEEK_V2_LIGHT:
             return "DeepSeek-V2";
@@ -1322,6 +1325,11 @@ namespace chatllm
         #include "../models/index.cpp"
     }
 
+    namespace numinamath
+    {
+        #include "../models/numinamath.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1530,6 +1538,7 @@ namespace chatllm
         CASE(DEEPSEEK,              deepseek::v1, 1)            \
         CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \
         CASE(CODEFUSE_DEEPSEEK,     codefuse::deepseek, 1)      \
+        CASE(NUMINAMATH,            numinamath, 1)              \
         CASE(DEEPSEEK_V2_LIGHT,     deepseek::v2_light, 1)      \
         CASE(DEEPSEEK_V2,           deepseek::v2, 1)            \
                                                                 \

@@ -21,6 +21,7 @@
     * [x] CodeFuse-DeepSeek: [33B](https://huggingface.co/codefuse-ai/CodeFuse-DeepSeek-33B) (`-a CodeFuseDeepSeek`)
     * [x] MAP-Neo: [Instruct-7B](https://huggingface.co/m-a-p/neo_7b_instruct_v0.1) (`-a MAP-Neo`)
     * [*] Index: [Chat-1.9B](https://huggingface.co/IndexTeam/Index-1.9B-Chat), [Character-1.9B](https://huggingface.co/IndexTeam/Index-1.9B-Character)
+    * [x] NuminaMath: [7B-TIR](https://huggingface.co/AI-MO/NuminaMath-7B-TIR)
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
 
@@ -186,7 +187,7 @@ These LoRA models have been tested:
 
 ## Special Models
 
-* [Facebook multi-token prediction models](https://huggingface.co/facebook/multi-token-prediction) checkpoints
+* [Meta-AI multi-token prediction models](https://huggingface.co/facebook/multi-token-prediction) checkpoints
 
     Download at least one multi-token prediction checkpoint (such as 7B_1T_4).
     Assume it is stored at /path/to/llama-multi-predict/7B_1T_4. Make sure `tokenizer.model` is downloaded to /path/to/llama-multi-predict.

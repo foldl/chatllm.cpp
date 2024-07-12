@@ -18,7 +18,11 @@ namespace v1
     {
     public:
         Tokenizer(const Config &config)
-            : llama::v2::Tokenizer::Tokenizer(config, &_chat_encoder)
+            : Tokenizer(config, &_chat_encoder)
+        {}
+
+        Tokenizer(const Config &config, BaseHistoryEncoder *chat_encoder)
+            : llama::v2::Tokenizer::Tokenizer(config, chat_encoder)
         {
             sys_prompt = "";
         }
@@ -71,7 +75,7 @@ namespace v1
         std::ostringstream oss_prompt;
 
         oss_prompt << "User: " << user << "\n\n"
-                << "Assistant: ";
+                   << "Assistant: ";
 
         auto text = oss_prompt.str();
         tok->encode(text, ids, false, false);
