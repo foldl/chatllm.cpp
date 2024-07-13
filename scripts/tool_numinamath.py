@@ -46,12 +46,13 @@ class ToolChatLLM(ChatLLM):
         python_code = python_code[0]
         if len(python_code) < 1: return
 
-        print('[EXEC CODE] ', end='')
+        print('[CHECK IT! PRESS ENTER TO RUN]', end='')
+        input()
         result = exec_code(python_code).strip(' \r\n')
-        print(result)
+        print('```\n' + result + '\n```')
 
-        self.tool_completion(result)
+        self.tool_completion('\n' + result + '\n```')
 
 if __name__ == '__main__':
-    print("💣💣 DANGEROUS! NO SAND-BOXING. DEMO ONLY. 💣💣")
+    print("💣💣 DANGER! NO SAND-BOXING. DEMO ONLY. 💣💣")
     chatllm.demo_simple(sys.argv[1:], ToolChatLLM, lib_path=PATH_BINDS)
