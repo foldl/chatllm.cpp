@@ -1578,7 +1578,8 @@ namespace chatllm
             r += experts_up.get_param_num(effective_only);
             if (effective_only)
             {
-                r /= num_local_experts / num_experts_per_tok;
+                r /= num_local_experts;
+                r *= num_experts_per_tok;
             }
             r += gate.get_param_num(effective_only);
 
