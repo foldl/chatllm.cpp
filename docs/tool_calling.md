@@ -28,7 +28,7 @@ python tool_glm4.py -i -m /path/to/your/model.bin --save_session 0 /path/to/sess
 Below is a demo with GLM-4 which loads a previously saved session:
 
 ```
-python tool_glm4.py -i --temp 0 -m path/to/glm-4.bin --load_session /path/to/session/file
+python tool_glm4.py -i --temp 0 -m :glm-4 --load_session /path/to/session/file
     ________          __  __    __    __  ___
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
@@ -60,7 +60,7 @@ which contains keywords to filter tools.
 Note that, in the second round, no tools are provided, and the model is able to use the tool given in the first round.
 
 ```
-python tool_mistral.py -i -m ..\quantized\mistral-7b-v0.3.bin
+python tool_mistral.py -i -m :mistral
     ________          __  __    __    __  ___
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
@@ -88,7 +88,7 @@ Tool calling with QWen v1.5 & v2 is implemented in Python.
 #### v1.5 MoE
 
 ```
-python tool_qwen.py -i -m /path/to/qwen1.5/moe/model.bin
+python tool_qwen.py -i -m :qwen1.5:moe
     ________          __  __    __    __  ___ (通义千问)
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
@@ -114,7 +114,7 @@ A.I. > [Use Tool]: get_weather
 #### v2
 
 ```
-python tool_qwen.py -i -m /path/to/qwen2/1.5B/model.bin
+python tool_qwen.py -i -m :qwen2:1.5b
     ________          __  __    __    __  ___ (通义千问)
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
@@ -138,7 +138,7 @@ A.I. > Jinan is hotter than Beijing. Jinan's temperature is 36°C and Beijing's 
 ### DeepSeek-Coder v2
 
 ```
-python tool_deepseekcoder.py -i -m /path/to/deepseekcoder-v2-lite-model.bin
+python tool_deepseekcoder.py -i -m :deepseek-coder-v2:light
     ________          __  __    __    __  ___
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
@@ -170,7 +170,7 @@ A.I. > [Use Tool]: get_weather
 ### InternLM 2.5
 
 ```
-python tool_internlm.py -i -m path/to/internlm2.5-7b.bin --temp 0
+python tool_internlm.py -i -m :internlm2.5 --temp 0
     ________          __  __    __    __  ___ (书生·浦语)
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
   / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
@@ -215,6 +215,8 @@ The current weather in Beijing is sunny with a temperature of 29°C. The humidit
 ### NuminaMath
 
 > ```
+> python tool_numinamath.py --temp 0 -m :numinamath
+>
 > 💣💣 DANGEROUS! NO SAND-BOXING. DEMO ONLY. 💣💣
 >     ________          __  __    __    __  ___
 >    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
@@ -225,6 +227,7 @@ The current weather in Beijing is sunny with a temperature of 29°C. The humidit
 > with 6910365696 (6.9B) parameters.
 > ```
 > You  > show the result of 10!
+>
 > A.I. >
 > Sure, let's calculate the factorial of 10 using Python. The factorial of a non-negative integer \( n \) (denoted as \( n! \)) is the product of all positive integers less than or equal to \( n \).
 >

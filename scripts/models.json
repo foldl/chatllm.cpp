@@ -1,4 +1,40 @@
 {
+    "mistral": {
+        "brief": "The Mistral-7B-Instruct-v0.3 Large Language Model (LLM) is an instruct fine-tuned version of the Mistral-7B-v0.3.",
+        "default": "7b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7702259552,
+                        "url": "chatllm_quantized_mistral/mistral-7b-v0.3.bin"
+                    }
+                }
+            }
+        }
+    },
+    "numinamath": {
+        "brief": "NuminaMath is a series of language models that are trained to solve math problems using tool-integrated reasoning (TIR).",
+        "default": "7b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7345830096,
+                        "url": "chatllm_quantized_numinamath/numinamath.bin"
+                    },
+                    "f16": {
+                        "size": 13824063696,
+                        "url": "chatllm_quantized_numinamath/numinamath-f16.bin"
+                    }
+                }
+            }
+        }
+    },
     "codegeex4": {
         "brief": "CodeGeeX4: Open Multilingual Code Generation Model.",
         "default": "9b",
@@ -219,6 +255,19 @@
                     "q8": {
                         "size": 4060936592,
                         "url": "chatllm_quantized_phi3/phi3-mini-128k.bin"
+                    }
+                }
+            },
+            "medium-4k": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 8727004560,
+                        "url": "chatllm_quantized_phi3-medium-4k/phi3-medium-4k_q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 14834427280,
+                        "url": "chatllm_quantized_phi3-medium-4k/phi3-medium-4k.bin"
                     }
                 }
             },
