@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-07-14: [ggml updated](https://github.com/ggerganov/ggml/tree/3e7e5e26f90fecf4f7c2808df7d94454630b219c)
 * 2024-07-12: NuminaMath
 * 2024-07-11: Meta-AI multi-token prediction models
 * 2024-07-05: CodeGeeX4

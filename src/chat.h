@@ -302,6 +302,8 @@ namespace chatllm
 
         void *load(tokenizer::DataReader *reader);
 
+        size_t read_data(tokenizer::DataReader *reader, void *data, size_t data_size);
+
         size_t aligned_data_start(size_t offset);
         size_t aligned_size(void);
 
@@ -343,6 +345,11 @@ namespace chatllm
         }
 
         void read_tensor(const std::string &name, ggml_tensor *tensor);
+        void read_tensor(const std::string &name, const std::vector<std::string> &concat_list, ggml_tensor *tensor);
+        void read_tensor(const std::string &name,
+                        const std::string &layer_prefix, int num, const std::string &suffix,
+                        ggml_tensor *tensor);
+
         void load_all_tensors(void);
 
         tokenizer::DataReader *get_reader()

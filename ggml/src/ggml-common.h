@@ -65,13 +65,8 @@ typedef sycl::half2 ggml_half2;
 // QK = number of values after dequantization
 // QK_K = super-block size
 
-#ifdef GGML_QKK_64
-#define QK_K 64
-#define K_SCALE_SIZE 4
-#else
 #define QK_K 256
 #define K_SCALE_SIZE 12
-#endif // GGML_QKK_64
 
 #if defined(GGML_COMMON_DECL_CUDA) || defined(GGML_COMMON_DECL_HIP) || defined(GGML_COMMON_DECL_SYCL)
 // QR = QK / number of values before dequantization
@@ -111,33 +106,34 @@ typedef sycl::half2 ggml_half2;
 #define QR6_K 2
 
 #define QI2_XXS (QK_K / (4*QR2_XXS))
-#define QR2_XXS 8
+#define QR2_XXS 4
 
 #define QI2_XS (QK_K / (4*QR2_XS))
-#define QR2_XS 8
+#define QR2_XS 4
 
 #define QI2_S (QK_K / (4*QR2_S))
-#define QR2_S 8
+#define QR2_S 4
 
 #define QI3_XXS (QK_K / (4*QR3_XXS))
-#define QR3_XXS 8
+#define QR3_XXS 4
 
 #define QI3_XS (QK_K / (4*QR3_XS))
-#define QR3_XS 8
+#define QR3_XS 4
 
 #define QI1_S (QK_K / (4*QR1_S))
 #define QR1_S 8
 
+#define QI1_M (QK_K / (4*QR1_M))
+#define QR1_M 8
+
 #define QI4_NL (QK4_NL / (4*QR4_NL))
 #define QR4_NL 2
 
-#if QK_K == 64
-#define QI4_XS QI4_NL
-#define QR4_XS QR4_NL
-#else
 #define QI4_XS (QK_K / (4*QR4_XS))
-#define QR4_XS 8
-#endif
+#define QR4_XS 2
+
+#define QI3_S (QK_K / (4*QR3_S))
+#define QR3_S 4
 
 #endif // GGML_COMMON_DECL_CUDA || GGML_COMMON_DECL_HIP
 
@@ -228,15 +224,6 @@ static_assert(sizeof(block_q2_K) == 2*sizeof(ggml_half) + QK_K/16 + QK_K/4, "wro
 // weight is represented as x = a * q
 // 16 blocks of 16 elements each
 // Effectively 3.4375 bits per weight
-#ifdef GGML_QKK_64
-typedef struct {
-    uint8_t hmask[QK_K/8]; // quants - high bit
-    uint8_t qs[QK_K/4];    // quants - low 2 bits
-    uint8_t scales[2];
-    ggml_half d;           // super-block scale
-} block_q3_K;
-static_assert(sizeof(block_q3_K) == sizeof(ggml_half) + QK_K / 4 + QK_K / 8 + 2, "wrong q3_K block size/padding");
-#else
 typedef struct {
     uint8_t hmask[QK_K/8]; // quants - high bit
     uint8_t qs[QK_K/4];    // quants - low 2 bits
@@ -244,20 +231,11 @@ typedef struct {
     ggml_half d;           // super-block scale
 } block_q3_K;
 static_assert(sizeof(block_q3_K) == sizeof(ggml_half) + QK_K / 4 + QK_K / 8 + 12, "wrong q3_K block size/padding");
-#endif
 
 // 4-bit quantization
 // 8 blocks of 32 elements each
 // weight is represented as x = a * q + b
 // Effectively 4.5 bits per weight
-#ifdef GGML_QKK_64
-typedef struct {
-    ggml_half d[2];     // super-block scales/mins
-    uint8_t scales[2];  // 4-bit block scales/mins
-    uint8_t qs[QK_K/2]; // 4--bit quants
-} block_q4_K;
-static_assert(sizeof(block_q4_K) == 2*sizeof(ggml_half) + QK_K/2 + 2, "wrong q4_K block size/padding");
-#else
 typedef struct {
     union {
         struct {
@@ -270,21 +248,11 @@ typedef struct {
     uint8_t qs[QK_K/2];           // 4--bit quants
 } block_q4_K;
 static_assert(sizeof(block_q4_K) == 2*sizeof(ggml_half) + K_SCALE_SIZE + QK_K/2, "wrong q4_K block size/padding");
-#endif
 
 // 5-bit quantization
 // 8 blocks of 32 elements each
 // weight is represented as x = a * q + b
 // Effectively 5.5 bits per weight
-#ifdef GGML_QKK_64
-typedef struct {
-    ggml_half d;             // super-block scale
-    int8_t  scales[QK_K/16]; // 8-bit block scales
-    uint8_t qh[QK_K/8];      // quants, high bit
-    uint8_t qs[QK_K/2];      // quants, low 4 bits
-} block_q5_K;
-static_assert(sizeof(block_q5_K) == sizeof(ggml_half) + QK_K/2 + QK_K/8 + QK_K/16, "wrong q5_K block size/padding");
-#else
 typedef struct {
     union {
         struct {
@@ -298,7 +266,6 @@ typedef struct {
     uint8_t qs[QK_K/2];           // quants, low 4 bits
 } block_q5_K;
 static_assert(sizeof(block_q5_K) == 2*sizeof(ggml_half) + K_SCALE_SIZE + QK_K/2 + QK_K/8, "wrong q5_K block size/padding");
-#endif
 
 // 6-bit quantization
 // weight is represented as x = a * q
@@ -356,11 +323,7 @@ typedef struct {
 static_assert(sizeof(block_iq3_xxs) == sizeof(ggml_half) + 3*(QK_K/8), "wrong iq3_xxs block size/padding");
 
 // 3.4375 bpw
-#if QK_K == 64
-#define IQ3S_N_SCALE 2
-#else
 #define IQ3S_N_SCALE QK_K/64
-#endif
 typedef struct {
     ggml_half d;
     uint8_t qs[QK_K/4];
@@ -377,6 +340,20 @@ typedef struct {
 } block_iq1_s;
 static_assert(sizeof(block_iq1_s) == sizeof(ggml_half) + QK_K/8 + QK_K/16, "wrong iq1_s block size/padding");
 
+// 1.75 bpw
+typedef struct {
+    uint8_t  qs[QK_K/8];      // grid index, low 8 bits
+    uint8_t  qh[QK_K/16];     // grid index, high 3 bits + grid shift bit (for two groups of 8)
+    uint8_t  scales[QK_K/32]; // 3-bit block scales (4-bit if QK_K == 64)
+} block_iq1_m;
+static_assert(sizeof(block_iq1_m) == QK_K/8 + QK_K/16 + QK_K/32, "wrong iq1_m block size/padding");
+
+// Used by IQ1_M quants
+typedef union {
+    ggml_half f16;
+    uint16_t  u16;
+} iq1m_scale_t;
+
 // Non-linear quants
 #define QK4_NL 32
 typedef struct {
@@ -385,9 +362,6 @@ typedef struct {
 } block_iq4_nl;
 static_assert(sizeof(block_iq4_nl) == sizeof(ggml_half) + QK4_NL/2, "wrong iq4_nl block size/padding");
 
-#if QK_K == 64
-#define block_iq4_xs block_iq4_nl
-#else
 typedef struct {
     ggml_half d;
     uint16_t scales_h;
@@ -395,7 +369,6 @@ typedef struct {
     uint8_t  qs[QK_K/2];
 } block_iq4_xs;
 static_assert(sizeof(block_iq4_xs) == sizeof(ggml_half) + sizeof(uint16_t) + QK_K/64 + QK_K/2, "wrong iq4_xs block size/padding");
-#endif
 
 #endif // GGML_COMMON_DECL
 #endif // GGML_COMMON_DECL
@@ -426,10 +399,11 @@ static_assert(sizeof(block_iq4_xs) == sizeof(ggml_half) + sizeof(uint16_t) + QK_
 
 #define GGML_COMMON_IMPL
 #elif defined(GGML_COMMON_IMPL_SYCL)
+
 #include <cstdint>
 
-#define GGML_TABLE_BEGIN(type, name, size) static dpct::global_memory<const type, 1> name(sycl::range<1>(size), {
-#define GGML_TABLE_END() });
+#define GGML_TABLE_BEGIN(type, name, size) static const type name[size] = {
+#define GGML_TABLE_END() };
 
 #define GGML_COMMON_IMPL
 #endif
@@ -1050,6 +1024,7 @@ GGML_TABLE_END()
 
 #define NGRID_IQ1S 2048
 #define IQ1S_DELTA 0.125f
+#define IQ1M_DELTA 0.125f
 #if defined(GGML_COMMON_IMPL_C)
 GGML_TABLE_BEGIN(uint64_t, iq1s_grid, NGRID_IQ1S)
     0xffffffffffffffff, 0xffffffffffffff01, 0xffffffffffff0000, 0xffffffffffff01ff,

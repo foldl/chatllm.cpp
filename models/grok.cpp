@@ -46,7 +46,7 @@ protected:
         r = ggml_tanh_inplace(ctx->gctx.get(), r);
         r = ggml_scale_inplace(ctx->gctx.get(), r, max);
         return r;
-    }
+  }
 };
 
 class GrokSelfAttention : public RoPESelfAttention<GrokBaseAttention>
@@ -56,11 +56,20 @@ public:
         : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length, false, false) {}
 };
 
+template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class GrokSparseMoE : public BaseSparseMLP
+{
+public:
+    GrokSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
+        : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::GELU, false)
+    {
+    }
+};
+
 template<int num_local_experts, int num_experts_per_tok> class GrokBlock : public LMBlock4<RMSNorm,
                  GrokSelfAttention,
                  RMSNorm,
                  RMSNorm,
-                 SparseMoE<GELUMLP, num_local_experts, num_experts_per_tok>,
+                 GrokSparseMoE<num_local_experts, num_experts_per_tok>,
                  RMSNorm>
 {
 public:
@@ -68,7 +77,7 @@ public:
                  GrokSelfAttention,
                  RMSNorm,
                  RMSNorm,
-                 SparseMoE<GELUMLP, num_local_experts, num_experts_per_tok>,
+                 GrokSparseMoE<num_local_experts, num_experts_per_tok>,
                  RMSNorm> GrokLMBlock;
     GrokBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
         : GrokLMBlock(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
@@ -107,7 +116,7 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     : BaseModelForConditionalGeneration(MODEL_TYPE_GROK_1, config, MEM_SIZE, SCRATCH_SIZE), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-    const size_t num_tensors = 2 + config.num_hidden_layers * (12 + config.num_experts * 3);
+    const size_t num_tensors = 2 + config.num_hidden_layers * (12 + 3);
     const size_t ctx_size = num_tensors * tensor_ovhd;
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;
@@ -136,13 +145,9 @@ void ConditionalGeneration::load(ModelLoader &loader)
     {
         std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
 
-        for (int j = 0; j < config.num_experts; j++)
-        {
-            std::string prefix = layer_prefix + "experts." + std::to_string(j) + '.';
-            loader.read_tensor(prefix + "w1.weight", transformer->layers[i].mlp.experts[j].gate_proj.weight);
-            loader.read_tensor(prefix + "w2.weight", transformer->layers[i].mlp.experts[j].down_proj.weight);
-            loader.read_tensor(prefix + "w3.weight", transformer->layers[i].mlp.experts[j].up_proj.weight);
-        }
+        loader.read_tensor(layer_prefix + "mlp.experts_down.weight", layer_prefix + "experts.", config.num_experts, ".w2.weight", transformer->layers[i].mlp.experts_down.weight);
+        loader.read_tensor(layer_prefix + "mlp.experts_gate.weight", layer_prefix + "experts.", config.num_experts, ".w1.weight", transformer->layers[i].mlp.experts_gate.weight);
+        loader.read_tensor(layer_prefix + "mlp.experts_up.weight",   layer_prefix + "experts.", config.num_experts, ".w3.weight", transformer->layers[i].mlp.experts_up.weight);
 
         loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
         loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);

@@ -463,12 +463,20 @@ namespace v2_light
         return 0.1f * mscale * logf(scale) + 1.0f;
     }
 
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class DeepSeekSparseMoE : public BaseSparseMLP
+    {
+    public:
+        DeepSeekSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
+            : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, false)
+        {
+        }
+    };
+
     template <int NUM_EXPERTS, int EXPERTS_PER_TOK, int EFFECTIVE_EXPERTS_PER_TOK> class ConditionalGeneration0 : public BaseModelForConditionalGeneration<
                                     HeterogeneousModel<Config, Embedding, RMSNorm>>
     {
     public:
-        typedef SparseMoE<SiLUMLP, NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK> DeepSeekSparseMoE;
-        typedef CombinedMLP<DeepSeekSparseMoE, SiLUMLP> DeepSeekMoEMLP;
+        typedef CombinedMLP<DeepSeekSparseMoE<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, SiLUMLP> DeepSeekMoEMLP;
         typedef LMBlock1<RMSNorm, SpeedMLAttention, RMSNorm, DeepSeekMoEMLP> DeepSeek2MoEBlock;
         typedef BaseModelForConditionalGeneration<HeterogeneousModel<Config, Embedding, RMSNorm>> Base;
     public:
@@ -484,7 +492,7 @@ namespace v2_light
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-            const size_t num_tensors = 3 + (config.num_hidden_layers - 1) * (16 + 3 * config.n_routed_experts) + 15
+            const size_t num_tensors = 3 + (config.num_hidden_layers - 1) * (16 + 3) + 15
                                 + (q_lora_rank > 0 ? config.num_hidden_layers * 2 : 0);
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
@@ -573,13 +581,9 @@ namespace v2_light
                     loader.read_tensor(layer_prefix + "input_layernorm.weight",          layer->input_layernorm.weight);
                     loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", layer->post_attention_layernorm.weight);
 
-                    for (int j = 0; j < config.n_routed_experts; j++)
-                    {
-                        std::string prefix = layer_prefix + "mlp.experts." + std::to_string(j) + '.';
-                        loader.read_tensor(prefix + "down_proj.weight", layer->mlp.mlp1.experts[j].down_proj.weight);
-                        loader.read_tensor(prefix + "gate_proj.weight", layer->mlp.mlp1.experts[j].gate_proj.weight);
-                        loader.read_tensor(prefix + "up_proj.weight", layer->mlp.mlp1.experts[j].up_proj.weight);
-                    }
+                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_down.weight", layer_prefix + "mlp.experts.", config.n_routed_experts, ".down_proj.weight", layer->mlp.mlp1.experts_down.weight);
+                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_gate.weight", layer_prefix + "mlp.experts.", config.n_routed_experts, ".gate_proj.weight", layer->mlp.mlp1.experts_gate.weight);
+                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_up.weight",   layer_prefix + "mlp.experts.", config.n_routed_experts, ".up_proj.weight",   layer->mlp.mlp1.experts_up.weight);
 
                     loader.read_tensor(layer_prefix + "mlp.gate.weight", layer->mlp.mlp1.gate.weight);
 

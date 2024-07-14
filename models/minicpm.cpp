@@ -258,7 +258,13 @@ namespace moe
     // make it easy to test with different number of experts.
     #define EFFECTIVE_EXPERTS_PER_TOK       EXPERTS_PER_TOK
 
-    typedef SparseMoE<SiLUMLP, NUM_EXPERTS, EXPERTS_PER_TOK> MiniCPMSparseMoE;
+    class MiniCPMSparseMoE : public BaseSparseMLP
+    {
+    public:
+        MiniCPMSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
+            : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, false)
+        {}
+    };
 
     class MiniCPMBlock : public LMBlock3<RMSNorm, LlamaSelfAttention, RMSNorm, MiniCPMSparseMoE>
     {
@@ -277,7 +283,7 @@ namespace moe
                                     Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-            const size_t num_tensors = 2 + config.num_hidden_layers * (10 + config.num_experts * 3);
+            const size_t num_tensors = 2 + config.num_hidden_layers * (10 + 3);
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
@@ -309,16 +315,13 @@ namespace moe
                 std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
                 loader.read_tensor(layer_prefix + "input_layernorm.weight", transformer->layers[i].input_layernorm.weight);
 
-                for (int j = 0; j < config.num_experts; j++)
-                {
-                    std::string prefix = layer_prefix + "mlp.experts." + std::to_string(j) + '.';
-                    loader.read_tensor(prefix + "w1.weight", transformer->layers[i].mlp.experts[j].gate_proj.weight);
-                    loader.read_tensor(prefix + "w2.weight", transformer->layers[i].mlp.experts[j].down_proj.weight);
-                    loader.read_tensor(prefix + "w3.weight", transformer->layers[i].mlp.experts[j].up_proj.weight);
-                }
+                loader.read_tensor(layer_prefix + "mlp.experts_gate.weight", layer_prefix + "mlp.experts.", config.num_experts, ".w1.weight", transformer->layers[i].mlp.experts_gate.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_down.weight", layer_prefix + "mlp.experts.", config.num_experts, ".w2.weight", transformer->layers[i].mlp.experts_down.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_up.weight",   layer_prefix + "mlp.experts.", config.num_experts, ".w3.weight", transformer->layers[i].mlp.experts_up.weight);
 
-                loader.read_tensor(layer_prefix + "mlp.gate.weight",     transformer->layers[i].mlp.gate.weight);
-                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
+                loader.read_tensor(layer_prefix + "mlp.gate.weight",                transformer->layers[i].mlp.gate.weight);
+
+                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",transformer->layers[i].post_attention_layernorm.weight);
 
                 loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
                 loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);

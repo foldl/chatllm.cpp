@@ -231,6 +231,25 @@ namespace mixtral
         }
     };
 
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class MixtralSparseMoE : public BaseSparseMLP
+    {
+    public:
+        MixtralSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
+            : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, false)
+        {
+        }
+    };
+
+    template<int num_local_experts, int num_experts_per_tok, int sliding_window_len> class MixtralBlock : public LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm,
+                        MixtralSparseMoE<num_local_experts, num_experts_per_tok>>
+    {
+    public:
+        MixtralBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm,
+                       MixtralSparseMoE<num_local_experts, num_experts_per_tok>>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
     template<int _NUM_EXPERTS, int _EXPERTS_PER_TOK, ModelType type> class _ConditionalGeneration : public BaseModelForConditionalGeneration<Model<Config, Embedding, RMSNorm,
         MixtralBlock<_NUM_EXPERTS, _EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int>>
     {
@@ -243,7 +262,7 @@ namespace mixtral
         : Base(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-            const size_t num_tensors = 3 + config.num_hidden_layers * (11 + _NUM_EXPERTS * 3);
+            const size_t num_tensors = 3 + config.num_hidden_layers * (11 + 3);
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
@@ -271,13 +290,9 @@ namespace mixtral
             {
                 std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
 
-                for (int j = 0; j < _NUM_EXPERTS; j++)
-                {
-                    std::string prefix = layer_prefix + "block_sparse_moe.experts." + std::to_string(j) + '.';
-                    loader.read_tensor(prefix + "w1.weight", Base::transformer->layers[i].mlp.experts[j].gate_proj.weight);
-                    loader.read_tensor(prefix + "w2.weight", Base::transformer->layers[i].mlp.experts[j].down_proj.weight);
-                    loader.read_tensor(prefix + "w3.weight", Base::transformer->layers[i].mlp.experts[j].up_proj.weight);
-                }
+                loader.read_tensor(layer_prefix + "mlp.experts_down.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w2.weight", Base::transformer->layers[i].mlp.experts_down.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_gate.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w1.weight", Base::transformer->layers[i].mlp.experts_gate.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_up.weight",   layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w3.weight", Base::transformer->layers[i].mlp.experts_up.weight);
 
                 loader.read_tensor(layer_prefix + "block_sparse_moe.gate.weight",
                                 Base::transformer->layers[i].mlp.gate.weight);

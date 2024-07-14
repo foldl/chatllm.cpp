@@ -15,6 +15,12 @@ namespace chatllm
     void inspect_tensor(ggml_tensor *tensor, const char *msg,
         ggml_tensor *temp1 = nullptr, ggml_tensor *temp2 = nullptr, ggml_tensor *temp3 = nullptr, ggml_tensor *temp4 = nullptr, ggml_tensor *temp5 = nullptr);
 
+    struct ggml_tensor * ggml_mul_mat_id(
+        struct ggml_context * ctx,
+        void  * as, int n_expert,
+        struct ggml_tensor  * ids, int i,
+        struct ggml_tensor  * b) ;
+
     struct alibi_ctx
     {
         int    n_past;
@@ -160,6 +166,28 @@ namespace chatllm
     public:
         ggml_tensor *weight; // [out_features, in_features]
         ggml_tensor *bias;   // [out_features]
+    };
+
+    class MultiLinear : public Block
+    {
+    public:
+        MultiLinear() : weight(nullptr) {}
+        MultiLinear(InitContext *ctx, int in_features, int out_features, int multi)
+            : weight(ggml_new_tensor_3d(ctx->gctx.get(), ctx->dtype, in_features, out_features, multi)) {}
+
+        using Block::forward;
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override { return nullptr; };
+
+        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input, ggml_tensor *selected);
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = ggml_nelements(weight);
+            return r;
+        }
+
+    public:
+        ggml_tensor *weight; // [out_features, in_features, multi]
     };
 
     class LayerNorm : public Block
@@ -954,6 +982,8 @@ namespace chatllm
             return r;
         }
 
+        void set_prec(ggml_prec prec) override;
+
         using Block::forward;
         ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
 
@@ -1375,12 +1405,12 @@ namespace chatllm
         // input & output: [qlen, heads, head_size]
         ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
         {
-            return ggml_rope_custom_inplace(ctx->gctx.get(), k, past, rope_dim, rope_mode, n_ctx, n_original_ctx,
+            return ggml_rope_ext_inplace(ctx->gctx.get(), k, past, nullptr, rope_dim, rope_mode, n_original_ctx,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size]
         }
         ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
         {
-            return ggml_rope_custom_inplace(ctx->gctx.get(), q, past, rope_dim, rope_mode, n_ctx, n_original_ctx,
+            return ggml_rope_ext_inplace(ctx->gctx.get(), q, past, nullptr, rope_dim, rope_mode, n_original_ctx,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
         }
     };
@@ -1516,106 +1546,53 @@ namespace chatllm
         MLP2 mlp2;
     };
 
-    template<class Expert, int num_local_experts, int num_experts_per_tok> class SparseMoE : public Block
+    class BaseSparseMLP : public Block
     {
     public:
-        //typedef SiLUMLP Expert;
-        SparseMoE() = default;
-        SparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
-            : gate(ctx, hidden_size, num_local_experts, false),
+        BaseSparseMLP() = default;
+        BaseSparseMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
+                  ActFunc act, bool gate_use_bias)
+            : num_local_experts(num_local_experts), num_experts_per_tok(num_experts_per_tok),
+              gate(ctx, hidden_size, num_local_experts, gate_use_bias),
+              experts_gate(ctx, hidden_size, intermediate_size, num_local_experts),
+              experts_down(ctx, intermediate_size, hidden_size, num_local_experts),
+              experts_up  (ctx, hidden_size, intermediate_size, num_local_experts),
+              act(act),
               norm_topk_prob(true)
         {
-            for (int i = 0; i < num_local_experts; i++)
-            {
-                experts.emplace_back(Expert(ctx, hidden_size, intermediate_size));
-                expert_gates.push_back(experts[i].gate_proj.weight);
-                expert_downs.push_back(experts[i].down_proj.weight);
-                expert_ups.push_back(experts[i].up_proj.weight);
-            }
         }
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override
-        {
-            const int64_t n_tokens = hidden_states->ne[1];
-            const int n_expert = num_local_experts;
-
-            ggml_context * ggctx = ctx->gctx.get();
-
-            ggml_tensor * logits = gate.forward(ctx, hidden_states); // [n_tokens, num_experts]
-
-            ggml_tensor * probs = ggml_soft_max(ggctx, logits); // [n_tokens, num_experts]
-
-            // select experts
-            ggml_tensor * selected_experts = ggml_top_k(ggctx, probs, num_experts_per_tok); // [n_tokens, num_experts_per_tok]
-
-            ggml_tensor * weights = ggml_get_rows(ggctx,
-                    ggml_reshape_3d(ggctx, probs, 1, n_expert, n_tokens), selected_experts);
-
-            weights = ggml_reshape_2d(ggctx, weights, num_experts_per_tok, n_tokens); // [n_tokens, num_experts_per_tok]
-
-            if (norm_topk_prob)
-            {
-                ggml_tensor * weights_sum = ggml_sum_rows(ggctx, weights);
-
-                weights = ggml_div(ggctx, weights, weights_sum); // [n_tokens, num_experts_per_tok]
-            }
-
-            // compute expert outputs
-            ggml_tensor * moe_out = nullptr;
-
-            for (int i = 0; i < num_experts_per_tok; i++)
-            {
-                ggml_tensor * cur_expert;
-
-                ggml_tensor * cur_up = ggml_mul_mat_id(ggctx, expert_ups.data(), n_expert, selected_experts, i, hidden_states);
-
-                ggml_tensor * cur_gate = ggml_mul_mat_id(ggctx, expert_gates.data(), n_expert, selected_experts, i, hidden_states);
-
-                cur_gate = ggml_silu(ggctx, cur_gate);
-
-                cur_expert = ggml_mul(ggctx, cur_up, cur_gate); // [n_tokens, n_embd]
-
-                cur_expert = ggml_mul_mat_id(ggctx, expert_downs.data(), n_expert, selected_experts, i, cur_expert); // [n_tokens, n_embd]
-
-                cur_expert = ggml_mul(ggctx, cur_expert,
-                        ggml_view_2d(ggctx, weights, 1, n_tokens, weights->nb[1], i * weights->nb[0]));
-
-                if (i == 0) {
-                    moe_out = cur_expert;
-                } else {
-                    moe_out = ggml_add(ggctx, moe_out, cur_expert);
-                }
-            }
-
-            return moe_out;
-        }
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
 
         void set_prec(ggml_prec prec) override
         {
             gate.set_prec(prec);
-            for (auto &expert : experts)
-            {
-                // TODO: At present, `Expert.forward` is implemented in `forward`.
-                expert.set_prec(prec);
-            }
         }
 
         int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
+            r += experts_gate.get_param_num(effective_only);
+            r += experts_down.get_param_num(effective_only);
+            r += experts_up.get_param_num(effective_only);
+            if (effective_only)
+            {
+                r /= num_local_experts / num_experts_per_tok;
+            }
             r += gate.get_param_num(effective_only);
-            r += experts[0].get_param_num(effective_only) *
-                    (effective_only ? num_experts_per_tok : experts.size());
+
             return r;
         }
 
     public:
+        const int num_local_experts;
+        const int num_experts_per_tok;
         Linear gate;
-        std::vector<Expert> experts;
-        std::vector<ggml_tensor *> expert_gates;
-        std::vector<ggml_tensor *> expert_ups;
-        std::vector<ggml_tensor *> expert_downs;
+        MultiLinear experts_gate;
+        MultiLinear experts_down;
+        MultiLinear experts_up;
+        const ActFunc act;
         bool norm_topk_prob;
     };
 
@@ -1946,16 +1923,6 @@ namespace chatllm
 
         MistralSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
             : RoPESelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
-    };
-
-    template<int num_local_experts, int num_experts_per_tok, int sliding_window_len> class MixtralBlock : public LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm,
-                        SparseMoE<SiLUMLP, num_local_experts, num_experts_per_tok>>
-    {
-    public:
-        MixtralBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock1<RMSNorm, MistralSelfAttention<sliding_window_len>, RMSNorm,
-                       SparseMoE<SiLUMLP, num_local_experts, num_experts_per_tok>>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
-        {}
     };
 
     class BaichuanSelfAttention : public RoPESelfAttention<BaseAttention>

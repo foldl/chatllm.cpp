@@ -567,6 +567,8 @@ namespace chatllm
     {
         struct ggml_tensor *result = tensor;
 
+
+
         *result = ggml_tensor {
             /*.type         =*/ type,
             /*.backend      =*/ GGML_BACKEND_TYPE_CPU,
@@ -578,15 +580,12 @@ namespace chatllm
             /*.flags        =*/ 0,
             /*.grad         =*/ NULL,
             /*.src          =*/ { NULL },
-            /*.perf_runs    =*/ 0,
-            /*.perf_cycles  =*/ 0,
-            /*.perf_time_us =*/ 0,
             /*.view_src     =*/ NULL,
             /*.view_offs    =*/ 0,
             /*.data         =*/ NULL,
             /*.name         =*/ { 0 },
             /*.extra        =*/ NULL,
-            /*.padding      =*/ { 0 },
+            ///*.padding      =*/ { 0 },
         };
 
         for (int i = 0; i < n_dims; i++) {
@@ -634,9 +633,22 @@ namespace chatllm
         data = malloc(ggml_nbytes(&tensor) + MEM_ALIGNED);
         tensor.data = (void *)aligned_data_start((size_t)data);
 
-        reader->seek(aligned_data_start(_offset), SEEK_SET);
-        reader->read_buffer(tensor.data, ggml_nbytes(&tensor));
+        if (reader)
+        {
+            reader->seek(aligned_data_start(_offset), SEEK_SET);
+            reader->read_buffer(tensor.data, ggml_nbytes(&tensor));
+        }
         return tensor.data;
+    }
+
+    size_t TensorInfo::read_data(tokenizer::DataReader *reader, void *data, size_t data_size)
+    {
+        size_t size = ggml_nbytes(&tensor);
+        CHATLLM_CHECK(size <= data_size) << "TensorInfo::read_data: " << " data buffer too small, required at least " << size << ", actual " << data_size;
+
+        reader->seek(aligned_data_start(_offset), SEEK_SET);
+        reader->read_buffer(data, size);
+        return size;
     }
 
     void ModelLoader::load_all_tensors(void)
@@ -705,6 +717,44 @@ namespace chatllm
         }
 
         tensor->data = t.load(_file.get());
+    }
+
+    void ModelLoader::read_tensor(const std::string &name,
+        const std::string &layer_prefix, int num, const std::string &suffix,
+        ggml_tensor *tensor)
+    {
+        std::vector<std::string> names;
+        for (int j = 0; j < num; j++)
+        {
+            names.push_back(layer_prefix + std::to_string(j) + suffix);
+        }
+        read_tensor(name, names, tensor);
+    }
+
+    void ModelLoader::read_tensor(const std::string &name, const std::vector<std::string> &concat_list, ggml_tensor *tensor)
+    {
+        auto search = tensor_dict.find(name);
+        if (search != tensor_dict.end())
+            return read_tensor(name, tensor);
+
+        tensor_dict.emplace(name, TensorInfo(tensor->type, 4, tensor->ne, 0));
+
+        TensorInfo &t = tensor_dict.at(name);
+        uint8_t *buffer = (uint8_t *)t.load(nullptr);
+
+        size_t total_size = t.aligned_size();
+        for (size_t i = 0; i < concat_list.size(); i++)
+        {
+            auto search = tensor_dict.find(concat_list[i]);
+            CHATLLM_CHECK(search != tensor_dict.end()) << "tensor " << concat_list[i] << " not exists.";
+
+            size_t size = search->second.read_data(_file.get(), buffer, total_size);
+            buffer += size;
+            total_size -= size;
+        }
+        CHATLLM_CHECK(total_size == 0) << "tensor " << name << " not fully loaded.";
+
+        tensor->data = t.load(nullptr);
     }
 
     ModelObject::ModelObject(const std::string &path)

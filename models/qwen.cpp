@@ -386,7 +386,7 @@ namespace v2_moe
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-            const size_t num_tensors = 3 + config.num_hidden_layers * (17 + 3 * config.num_experts);
+            const size_t num_tensors = 3 + config.num_hidden_layers * (17 + 3);
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
@@ -420,13 +420,9 @@ namespace v2_moe
 
                 loader.read_tensor(layer_prefix + "input_layernorm.weight",          Base::transformer->layers[i].input_layernorm.weight);
 
-                for (int j = 0; j < config.num_experts; j++)
-                {
-                    std::string prefix = layer_prefix + "mlp.experts." + std::to_string(j) + '.';
-                    loader.read_tensor(prefix + "down_proj.weight", Base::transformer->layers[i].mlp.mlp1.experts[j].down_proj.weight);
-                    loader.read_tensor(prefix + "gate_proj.weight", Base::transformer->layers[i].mlp.mlp1.experts[j].gate_proj.weight);
-                    loader.read_tensor(prefix + "up_proj.weight", Base::transformer->layers[i].mlp.mlp1.experts[j].up_proj.weight);
-                }
+                loader.read_tensor(layer_prefix + "mlp.mlp1.experts_down.weight", layer_prefix + "mlp.experts.", config.num_experts, ".down_proj.weight", Base::transformer->layers[i].mlp.mlp1.experts_down.weight);
+                loader.read_tensor(layer_prefix + "mlp.mlp1.experts_gate.weight", layer_prefix + "mlp.experts.", config.num_experts, ".gate_proj.weight", Base::transformer->layers[i].mlp.mlp1.experts_gate.weight);
+                loader.read_tensor(layer_prefix + "mlp.mlp1.experts_up.weight",   layer_prefix + "mlp.experts.", config.num_experts, ".up_proj.weight",   Base::transformer->layers[i].mlp.mlp1.experts_up.weight);
 
                 loader.read_tensor(layer_prefix + "mlp.gate.weight", Base::transformer->layers[i].mlp.mlp1.gate.weight);
 
@@ -463,14 +459,21 @@ namespace v2_moe
         InitContext w_ctx_; // weight context
     };
 
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class QWenSparseMoE : public BaseSparseMLP
+    {
+    public:
+        QWenSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
+            : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, false)
+        {
+        }
+    };
+
     template <const int NUM_EXPERTS, const int EXPERTS_PER_TOK, const int EFFECTIVE_EXPERTS_PER_TOK> class ClassConditionalGeneration
     {
     public:
-        typedef SparseMoE<SiLUMLP, NUM_EXPERTS, EXPERTS_PER_TOK> QWenSparseMoE;
-
         typedef GatedMLP<SiLUMLP> QWenGatedMLP;
 
-        typedef CombinedMLP<QWenSparseMoE, QWenGatedMLP> QWenMoEMLP;
+        typedef CombinedMLP<QWenSparseMoE<NUM_EXPERTS, EXPERTS_PER_TOK>, QWenGatedMLP> QWenMoEMLP;
 
         typedef QWen2MoEBlock<QWenMoEMLP> MoEBlock;
 
