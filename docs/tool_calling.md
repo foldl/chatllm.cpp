@@ -214,6 +214,8 @@ The current weather in Beijing is sunny with a temperature of 29°C. The humidit
 
 ### NuminaMath
 
+Note: F16 (`-m :numinamath:f16`) performs better (correct vs wrong) than Q8.
+
 > ```
 > python tool_numinamath.py --temp 0 -m :numinamath
 >
