@@ -1,5 +1,29 @@
 {
-    "mistral": {
+    "zhinao": {
+        "brief": "360Zhinao from Qihoo360.",
+        "default": "7b-4k",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "7b-4k": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 4865497088,
+                        "url": "chatllm_quantized_zhinao/zhinao-7b-4k-q4_1.bin"
+                    }
+                }
+            },
+            "7b-360k": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 4865497088,
+                        "url": "chatllm_quantized_zhinao/zhinao-7b-360k-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },"mistral": {
         "brief": "The Mistral-7B-Instruct-v0.3 Large Language Model (LLM) is an instruct fine-tuned version of the Mistral-7B-v0.3.",
         "default": "7b",
         "license": "Apache License Version 2.0",
