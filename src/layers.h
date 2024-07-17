@@ -176,7 +176,7 @@ namespace chatllm
             : weight(ggml_new_tensor_3d(ctx->gctx.get(), ctx->dtype, in_features, out_features, multi)) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override { return nullptr; };
+        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override { return nullptr; }
 
         virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input, ggml_tensor *selected);
 
