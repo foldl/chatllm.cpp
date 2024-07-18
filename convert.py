@@ -118,6 +118,7 @@ class ModelType(Enum):
     Zhinao        = 0x1600
 
     LlaMA3        = 0x1700
+    SmolLM        = 0x1701
 
     StarCoder2    = 0x1800
 
@@ -1044,6 +1045,22 @@ class Llama3Converter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
+
+class SmolLMConverter(BaseConverter):
+    MODEL_TYPE = ModelType.SmolLM
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return Llama3Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        return Llama3Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        r = Llama3Converter.get_weight_names(config)
+        return r[:-1]
 
 class LlamaMultiConverter(BaseConverter):
     MODEL_TYPE = ModelType.LlaMAMulti
@@ -3538,6 +3555,8 @@ def main():
             Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'llama-multi-token-prediction-ckpt':
         LlamaMultiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'smollm':
+        SmolLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'XverseForCausalLM':
         LlamaConverter.MODEL_TYPE = ModelType.XVERSE
         LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

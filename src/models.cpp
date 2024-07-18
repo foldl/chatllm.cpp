@@ -156,6 +156,7 @@ namespace chatllm
         MODEL_TYPE_ZHINAO           = 0x1600,
 
         MODEL_TYPE_LLAMA3           = 0x1700,
+        MODEL_TYPE_SMOLLM           = 0x1701,
 
         MODEL_TYPE_STARCODER2       = 0x1800,
 
@@ -329,6 +330,8 @@ namespace chatllm
             return "Index";
         case MODEL_TYPE_LLAMA_MULTI:
             return "LlaMA-Multi";
+        case MODEL_TYPE_SMOLLM:
+            return "SmolLM";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1330,6 +1333,11 @@ namespace chatllm
         #include "../models/numinamath.cpp"
     }
 
+    namespace smollm
+    {
+        #include "../models/smollm.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1602,6 +1610,8 @@ namespace chatllm
         CASE(XVERSE,                xverse::dense, 1)           \
                                                                 \
         CASE(INDEX,                 index, 1)                   \
+                                                                \
+        CASE(SMOLLM,                smollm, 1)                  \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

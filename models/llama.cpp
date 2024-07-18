@@ -46,19 +46,24 @@ If a question does not make any sense, or is not factually coherent, explain why
         typedef BaseModelForConditionalGeneration<
                     Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>> Base;
     public:
-        GenericConditionalGeneration(const BaseConfig &config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12)
+        GenericConditionalGeneration(const BaseConfig &config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12, bool tie_lm_head = false)
             : BaseModelForConditionalGeneration<
                                     Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-            const size_t num_tensors = 3 + config.num_hidden_layers * tensors_per_layer;
+            const size_t num_tensors = (tie_lm_head ? 2 : 3) + config.num_hidden_layers * tensors_per_layer;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
 
-            Base::transformer = new Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>(&w_ctx_, config, false,
-                                                                                    config.hidden_size, config.num_attention_heads,
-                                                                                    config.intermediate_size, num_key_value_heads, max_length);
+            if (tie_lm_head)
+                Base::transformer = new Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>(&w_ctx_, config, nullptr,
+                                                                                        config.hidden_size, config.num_attention_heads,
+                                                                                        config.intermediate_size, num_key_value_heads, max_length);
+            else
+                Base::transformer = new Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int>(&w_ctx_, config, false,
+                                                                                        config.hidden_size, config.num_attention_heads,
+                                                                                        config.intermediate_size, num_key_value_heads, max_length);
             Base::GRAPH_SIZE = 4096 * 2;
         }
 
@@ -80,7 +85,9 @@ If a question does not make any sense, or is not factually coherent, explain why
                 loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", Base::transformer->layers[i].attention.v_proj.weight);
             }
             loader.read_tensor("model.norm.weight", Base::transformer->final_layernorm.weight);
-            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(Base::transformer->lm_head)->weight);
+
+            if (Base::transformer->lm_head)
+                loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(Base::transformer->lm_head)->weight);
 
             CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
                 << "corrupted model weights";
