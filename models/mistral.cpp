@@ -22,11 +22,11 @@ namespace mistral
     class Tokenizer : public llama::v2::Tokenizer
     {
     public:
-        Tokenizer(const Config &config)
+        Tokenizer(const llama::v2::Config &config)
             : Tokenizer(config, &_chat_encoder)
         {}
 
-        Tokenizer(const Config &config, BaseHistoryEncoder *encoder)
+        Tokenizer(const llama::v2::Config &config, BaseHistoryEncoder *encoder)
             : llama::v2::Tokenizer::Tokenizer(config, encoder)
         {
             sys_prompt = "";
@@ -133,7 +133,7 @@ namespace mistral
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                auto &attention = transformer->layers[i].attention;
+                auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
                 attention.freq_base = config.rope_theta;
             }
 
@@ -250,11 +250,11 @@ namespace mixtral
         {}
     };
 
-    template<int _NUM_EXPERTS, int _EXPERTS_PER_TOK, ModelType type> class _ConditionalGeneration : public BaseModelForConditionalGeneration<Model<Config, Embedding, RMSNorm,
-        MixtralBlock<_NUM_EXPERTS, _EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int>>
+    template<int _NUM_EXPERTS, int _EXPERTS_PER_TOK, ModelType type> class _ConditionalGeneration : public BaseModelForConditionalGeneration
     {
-    typedef BaseModelForConditionalGeneration<Model<Config, Embedding, RMSNorm,
-        MixtralBlock<_NUM_EXPERTS, _EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int>> Base;
+    public:
+        typedef BaseModelForConditionalGeneration Base;
+        typedef Model<Config, Embedding, RMSNorm, MixtralBlock<_NUM_EXPERTS, _EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int> ModelClass;
     public:
         _ConditionalGeneration() = default;
 
@@ -275,7 +275,7 @@ namespace mixtral
 
             Base::GRAPH_SIZE = 4096 * 2;
 
-            Base::transformer = new Model<Config, Embedding, RMSNorm, MixtralBlock<_NUM_EXPERTS, _EXPERTS_PER_TOK, mistral::SLIDING_WINDOW_LEN>, int, int, int, int, int>(
+            Base::transformer = new ModelClass(
                                 &w_ctx_, config, false,
                                 config.hidden_size, config.num_attention_heads,
                                 config.intermediate_size, config.num_key_value_heads, config.max_length);
@@ -285,31 +285,32 @@ namespace mixtral
 
         void load(ModelLoader &loader) override
         {
-            loader.read_tensor("model.embed_tokens.weight", Base::transformer->word_embeddings.weight);
+            auto transformer = get_typed_transformer<ModelClass>();
+            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
 
-                loader.read_tensor(layer_prefix + "mlp.experts_down.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w2.weight", Base::transformer->layers[i].mlp.experts_down.weight);
-                loader.read_tensor(layer_prefix + "mlp.experts_gate.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w1.weight", Base::transformer->layers[i].mlp.experts_gate.weight);
-                loader.read_tensor(layer_prefix + "mlp.experts_up.weight",   layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w3.weight", Base::transformer->layers[i].mlp.experts_up.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_down.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w2.weight", transformer->layers[i].mlp.experts_down.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_gate.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w1.weight", transformer->layers[i].mlp.experts_gate.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_up.weight",   layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w3.weight", transformer->layers[i].mlp.experts_up.weight);
 
                 loader.read_tensor(layer_prefix + "block_sparse_moe.gate.weight",
-                                Base::transformer->layers[i].mlp.gate.weight);
+                                transformer->layers[i].mlp.gate.weight);
 
                 loader.read_tensor(layer_prefix + "input_layernorm.weight",
-                                Base::transformer->layers[i].input_layernorm.weight);
+                                transformer->layers[i].input_layernorm.weight);
 
                 loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",
-                                Base::transformer->layers[i].post_attention_layernorm.weight);
+                                transformer->layers[i].post_attention_layernorm.weight);
 
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", Base::transformer->layers[i].attention.k_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", Base::transformer->layers[i].attention.o_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", Base::transformer->layers[i].attention.q_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", Base::transformer->layers[i].attention.v_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
             }
-            loader.read_tensor("model.norm.weight", Base::transformer->final_layernorm.weight);
-            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(Base::transformer->lm_head)->weight);
+            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
             CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
                 << "corrupted model weights";
@@ -355,4 +356,62 @@ namespace mixtral
     const int EXPERTS_PER_TOK               =  2;
 
     typedef _ConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, MODEL_TYPE_MIXTRAL> ConditionalGeneration;
+}
+
+namespace mistral2
+{
+    struct Config : public llama::v2::Config
+    {
+        int num_key_value_heads;
+        int head_dim;
+        int sliding_window;
+        float rope_theta;
+    };
+
+    class Tokenizer : public mistral::Tokenizer
+    {
+    public:
+        Tokenizer(const Config &config)
+            : mistral::Tokenizer(config, &mistral::_chat_encoder)
+        {}
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            tp = new tokenizer::BPEProcessor2();
+            size_t size = tp->Load(buffer, n_vocab);
+
+            start_inst_token_id             = tp->PieceToId("[INST]");
+            end_inst_token_id               = tp->PieceToId("[/INST]");
+            tool_calls_token_id             = tp->PieceToId("[TOOL_CALLS]");
+            start_avail_tools_token_id      = tp->PieceToId("[AVAILABLE_TOOLS]");
+            end_avail_tools_token_id        = tp->PieceToId("[/AVAILABLE_TOOLS]");
+            start_tool_results_token_id     = tp->PieceToId("[TOOL_RESULTS]");
+            end_tool_results_token_id       = tp->PieceToId("[/TOOL_RESULTS]");
+            return size;
+        }
+    };
+
+    class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<MistralBlock<mistral::SLIDING_WINDOW_LEN>>
+    {
+    public:
+        ConditionalGeneration() = default;
+
+        ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_MISTRAL2)
+            : llama::v2::GenericConditionalGeneration<MistralBlock<mistral::SLIDING_WINDOW_LEN>>(config, type,
+                config.num_key_value_heads, config.head_dim, config.max_length, 13, false)
+        {
+            CHATLLM_CHECK((config.sliding_window <= 0) || (config.sliding_window == mistral::SLIDING_WINDOW_LEN))
+                << "sliding_window (" << config.sliding_window << ") must be " << mistral::SLIDING_WINDOW_LEN;
+
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto &attention = get_typed_transformer<ModelClass2>()->layers[i].attention;
+                attention.freq_base = config.rope_theta;
+            }
+
+            batch_input = false;
+        }
+
+        ChunkInterceptor *get_interceptor(void) override { return &mistral::interceptor; }
+    };
 }

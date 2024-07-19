@@ -79,6 +79,7 @@
         For example, `--experts 0,1,2,3` selects the first 4 experts.
 
     * [x] Codestral: [22B-v0.1](https://huggingface.co/mistralai/Codestral-22B-v0.1)
+    * [x] Mistral-Nemo: [Nemo-Instruct-2407](https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407)
 
 
 * Phi (`PhiForCausalLM`, `Phi3ForCausalLM`)

@@ -38,16 +38,14 @@ public:
     virtual void encode(const std::string &text, std::vector<int> &ids, bool add_bos, bool add_eos) const;
 };
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                  Model<Config, Embedding, LayerNorm, OrionBlock, int, int, int, int, int>>
+class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
 private:
-    typedef BaseModelForConditionalGeneration<
-                Model<Config, Embedding, RMSNorm, OrionBlock, int, int, int, int, int>> Base;
+    typedef BaseModelForConditionalGeneration Base;
+    typedef Model<Config, Embedding, LayerNorm, OrionBlock, int, int, int, int, int> ModelClass;
 public:
     ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_ORION)
-        : BaseModelForConditionalGeneration<
-                                  Model<Config, Embedding, LayerNorm, OrionBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+        : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 4 + config.num_hidden_layers * 14;
@@ -55,13 +53,15 @@ public:
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        transformer = new Model<Config, Embedding, LayerNorm, OrionBlock, int, int, int, int, int>(&w_ctx_, config, false,
-                                                                                config.hidden_size, config.num_attention_heads,
-                                                                                config.intermediate_size, config.num_key_value_heads, config.max_length);
+        transformer = new ModelClass(&w_ctx_, config, false,
+                                    config.hidden_size, config.num_attention_heads,
+                                    config.intermediate_size, config.num_key_value_heads, config.max_length);
     }
 
     void load(ModelLoader &loader) override
     {
+        auto transformer = get_typed_transformer<ModelClass>();
+
         loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

@@ -26,6 +26,7 @@ public:
     ConditionalGeneration(const Config &config, ModelType type)
         : llama::v2::ConditionalGeneration(config, type)
     {
+        auto transformer = Base::get_typed_transformer<ModelClass>();
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             auto &attention = transformer->layers[i].attention;

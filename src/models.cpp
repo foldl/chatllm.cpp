@@ -126,6 +126,7 @@ namespace chatllm
         MODEL_TYPE_NEURALBEAGLE = 0x603,
         MODEL_TYPE_STARLING     = 0x604,
         MODEL_TYPE_WIZARDLM2_MOE  = 0x605,
+        MODEL_TYPE_MISTRAL2       = 0x606,
 
         MODEL_TYPE_QWEN     = 0x700,
         MODEL_TYPE_QWEN2    = 0x710,
@@ -265,6 +266,7 @@ namespace chatllm
         case MODEL_TYPE_WIZARDMATH:
             return "WizardMath";
         case MODEL_TYPE_MISTRAL:
+        case MODEL_TYPE_MISTRAL2:
             return "Mistral";
         case MODEL_TYPE_MIXTRAL:
             return "Mixtral MoE";
@@ -623,7 +625,14 @@ namespace chatllm
         }
     };
 
-    template<class LM> class BaseModelForConditionalGeneration : public BaseModel
+    class ModelBlock: public Block
+    {
+    public:
+        virtual int save_session(FILE *f) = 0;
+        virtual int load_session(FILE *f) = 0;
+    };
+
+    class BaseModelForConditionalGeneration : public BaseModel
     {
     public:
         BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, size_t mem_size, size_t scratch_size)
@@ -898,8 +907,13 @@ namespace chatllm
             return true;
         }
 
+        template <class T> T *get_typed_transformer(void) const
+        {
+            return dynamic_cast<T *>(transformer);
+        }
+
     protected:
-        LM *transformer;
+        ModelBlock *transformer;
         size_t GRAPH_SIZE;
         bool batch_input;
         float logit_scale;
@@ -926,7 +940,7 @@ namespace chatllm
         return oss.str();
     }
 
-    template <class Config, class Embedding, class FinalNorm> class HeterogeneousModel : public Block
+    template <class Config, class Embedding, class FinalNorm> class HeterogeneousModel : public ModelBlock
     {
     public:
         HeterogeneousModel() = default;
@@ -998,7 +1012,7 @@ namespace chatllm
             return layers[index];
         }
 
-        int save_session(FILE *f)
+        int save_session(FILE *f) override
         {
             struct state state = {.cache_size = cache_size };
             if (fwrite(&state, sizeof(state), 1, f) != 1)
@@ -1008,7 +1022,7 @@ namespace chatllm
             return 0;
         }
 
-        int load_session(FILE *f)
+        int load_session(FILE *f) override
         {
             struct state state = {0};
             if (fread(&state, sizeof(state), 1, f) != 1)
@@ -1569,6 +1583,7 @@ namespace chatllm
         CASE(MISTRAL,               mistral::mistral, 1)        \
         CASE(OPENCHAT,              openchat, 1)                \
         CASE(MIXTRAL,               mistral::mixtral, 1)        \
+        CASE(MISTRAL2,              mistral::mistral2, 1)       \
                                                                 \
         CASE(QWEN,                  qwen::v1, 2)                \
         CASE(QWEN2,                 qwen::v2, 1)                \

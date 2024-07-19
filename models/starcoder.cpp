@@ -25,9 +25,10 @@ namespace v2
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
     };
 
-    class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, LayerNorm, StarCoder2Block<SLIDING_WINDOW_LEN>, int, int, int, int, int>>
+    class ConditionalGeneration : public BaseModelForConditionalGeneration
     {
+    public:
+        typedef Model<Config, Embedding, LayerNorm, StarCoder2Block<SLIDING_WINDOW_LEN>, int, int, int, int, int> ModelClass;
     public:
         ConditionalGeneration(const Config &config);
 
@@ -52,8 +53,7 @@ namespace v2
     }
 
     ConditionalGeneration::ConditionalGeneration(const Config &config)
-        : BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, LayerNorm, StarCoder2Block<SLIDING_WINDOW_LEN>, int, int, int, int, int>>(MODEL_TYPE_STARCODER2, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+        : BaseModelForConditionalGeneration(MODEL_TYPE_STARCODER2, config, MEM_SIZE, SCRATCH_SIZE), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 3 + config.num_hidden_layers * 20;
@@ -64,13 +64,13 @@ namespace v2
         CHATLLM_CHECK(config.sliding_window == SLIDING_WINDOW_LEN)
             << "sliding_window (" << config.sliding_window << ") must be " << SLIDING_WINDOW_LEN;
 
-        transformer = new Model<Config, Embedding, LayerNorm, StarCoder2Block<SLIDING_WINDOW_LEN>, int, int, int, int, int>(&w_ctx_, config, nullptr,
+        transformer = new ModelClass(&w_ctx_, config, nullptr,
                                                             config.hidden_size, config.num_attention_heads,
                                                             config.intermediate_size, config.num_key_value_heads, config.max_length);
 
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            auto &layer = transformer->layers[i];
+            auto &layer = get_typed_transformer<ModelClass>()->layers[i];
             layer.attention.freq_base = config.rope_theta;
         }
 
@@ -79,6 +79,8 @@ namespace v2
 
     void ConditionalGeneration::load(ModelLoader &loader)
     {
+        auto transformer = get_typed_transformer<ModelClass>();
+
         loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

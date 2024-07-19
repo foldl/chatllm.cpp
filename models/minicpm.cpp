@@ -34,13 +34,13 @@ namespace v1
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
     };
 
-    class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>>
+    class ConditionalGeneration : public BaseModelForConditionalGeneration
     {
     public:
+        typedef Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int> ModelClass;
+    public:
         ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_MINICPM, bool tie_word_embeddings = true)
-            : BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+            : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = (tie_word_embeddings ? 2 : 3) + config.num_hidden_layers * 12;
@@ -50,25 +50,25 @@ namespace v1
 
             if (tie_word_embeddings)
             {
-                transformer = new Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>(&w_ctx_, config, nullptr,
-                                                                                    config.hidden_size, config.num_attention_heads,
-                                                                                    config.intermediate_size, config.num_key_value_heads, config.max_length);
+                transformer = new ModelClass(&w_ctx_, config, nullptr,
+                                            config.hidden_size, config.num_attention_heads,
+                                            config.intermediate_size, config.num_key_value_heads, config.max_length);
             }
             else
             {
-                transformer = new Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>(&w_ctx_, config, false,
-                                                                                    config.hidden_size, config.num_attention_heads,
-                                                                                    config.intermediate_size, config.num_key_value_heads, config.max_length);
+                transformer = new ModelClass(&w_ctx_, config, false,
+                                            config.hidden_size, config.num_attention_heads,
+                                            config.intermediate_size, config.num_key_value_heads, config.max_length);
             }
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                auto &attention = transformer->layers[i].attention;
+                auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
                 attention.freq_base = config.rope_theta;
                 attention.freq_scale = 1 / config.rope_scaling;
                 attention.set_prec(ggml_prec::GGML_PREC_F32);
 
-                transformer->layers[i].hidden_scaling = config.scale_depth;
+                get_typed_transformer<ModelClass>()->layers[i].hidden_scaling = config.scale_depth;
             }
 
             GRAPH_SIZE = 4096;
@@ -76,6 +76,8 @@ namespace v1
 
         void load(ModelLoader &loader) override
         {
+            auto transformer = get_typed_transformer<ModelClass>();
+
             loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
@@ -274,13 +276,13 @@ namespace moe
         {}
     };
 
-    class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>>
+    class ConditionalGeneration : public BaseModelForConditionalGeneration
     {
     public:
+        typedef Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int> ModelClass;
+    public:
         ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_MINICPM_MoE)
-            : BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+            : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = 2 + config.num_hidden_layers * (10 + 3);
@@ -291,24 +293,26 @@ namespace moe
             CHATLLM_CHECK((NUM_EXPERTS == config.num_experts) && (EXPERTS_PER_TOK == config.num_experts_per_tok))
                 << "unsupported MoE param";
 
-            transformer = new Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int>(&w_ctx_, config, nullptr,
-                                                                                config.hidden_size, config.num_attention_heads,
-                                                                                config.intermediate_size, config.num_key_value_heads, config.max_length);
+            transformer = new ModelClass(&w_ctx_, config, nullptr,
+                                        config.hidden_size, config.num_attention_heads,
+                                        config.intermediate_size, config.num_key_value_heads, config.max_length);
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                auto &attention = transformer->layers[i].attention;
+                auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
                 attention.freq_base = config.rope_theta;
                 attention.freq_scale = 1 / config.rope_scaling;
                 attention.set_prec(ggml_prec::GGML_PREC_F32);
 
-                transformer->layers[i].hidden_scaling = config.scale_depth;
+                get_typed_transformer<ModelClass>()->layers[i].hidden_scaling = config.scale_depth;
             }
             GRAPH_SIZE = 4096;
         }
 
         void load(ModelLoader &loader) override
         {
+            auto transformer = get_typed_transformer<ModelClass>();
+
             loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {

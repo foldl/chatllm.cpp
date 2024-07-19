@@ -68,13 +68,14 @@ public:
     int system_token_id;
 };
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                  Model<BaseConfig, Embedding, LayerNormNoBias, CohereBlock, int, int, int, int, int>>
+class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
 public:
+    typedef Model<BaseConfig, Embedding, LayerNormNoBias, CohereBlock, int, int, int, int, int> ModelClass;
+
+public:
     ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_COHERE_COMMAND_R)
-        : BaseModelForConditionalGeneration<
-                                  Model<BaseConfig, Embedding, LayerNormNoBias, CohereBlock, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+        : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 2 + config.num_hidden_layers * 11;
@@ -82,14 +83,14 @@ public:
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        transformer = new Model<BaseConfig, Embedding, LayerNormNoBias, CohereBlock, int, int, int, int, int>(&w_ctx_, config,
+        transformer = new ModelClass(&w_ctx_, config,
                 nullptr,
                 config.hidden_size, config.num_attention_heads,
                 config.intermediate_size, config.num_key_value_heads, config.max_length);
 
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            auto &attention = transformer->layers[i].attention;
+            auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
             attention.freq_base = config.rope_theta;
         }
 
@@ -100,6 +101,8 @@ public:
 
     void load(ModelLoader &loader) override
     {
+        auto transformer = get_typed_transformer<ModelClass>();
+
         loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

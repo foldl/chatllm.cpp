@@ -88,6 +88,7 @@ class ModelType(Enum):
     NeuralBeagle = 0x603
     Starling = 0x604
     WizardLMMoE = 0x605
+    Mistral2 = 0x606
 
     QWen    = 0x700
     QWen2   = 0x710
@@ -142,6 +143,13 @@ class TokenType(Enum):
     USER_DEFINED = 4
     UNUSED       = 5
     BYTE         = 6
+
+class TokenizerType(Enum):
+    BPE1         = 0
+    BPE2         = 1
+    Unigram      = 2
+
+g_tokenizer_type = TokenizerType.BPE1
 
 g_special_tokens: Dict = {}
 
@@ -430,6 +438,9 @@ def s_to_bytes(s):
 
 class UnigramTokenizerJsonVocab:
     def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
+        global g_tokenizer_type
+        g_tokenizer_type = TokenizerType.Unigram
+
         model = json.load(open(fname_tokenizer / "tokenizer.json", encoding='utf-8'))
         if model['model']['type'] != 'Unigram':
             raise Exception(f"Unigram expected, but {model['model']['type']} encountered.")
@@ -474,6 +485,8 @@ class FastTokenizerVocab:
     def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
 
         global g_special_tokens
+        global g_tokenizer_type
+        g_tokenizer_type = TokenizerType.BPE2
 
         model = json.load(open(fname_tokenizer / "tokenizer.json", encoding='utf-8'))
         if model['model']['type'] != 'BPE':
@@ -632,6 +645,9 @@ class TikTokenizerVocab:
         return parts
 
     def __init__(self, fname_tokenizer: Any, fname_added_tokens: Optional[Path]) -> None:
+        global g_tokenizer_type
+        g_tokenizer_type = TokenizerType.BPE2
+
         if isinstance(fname_tokenizer, Path):
             from transformers import AutoTokenizer  # type: ignore[attr-defined]
             tokenizer = AutoTokenizer.from_pretrained(fname_tokenizer, trust_remote_code=True)
@@ -1406,6 +1422,30 @@ class MistralConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
+
+class Mistral2Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Mistral2
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return MistralConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert g_tokenizer_type == TokenizerType.BPE2, 'BPE2 must be used'
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim if config.head_dim is not None else (config.hidden_size // config.num_attention_heads),
+            config.sliding_window if config.sliding_window is not None else -1,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        return MistralConverter.get_weight_names(config)
 
 def make_experts_id_map(experts):
     r = {}
@@ -3608,7 +3648,15 @@ def main():
     elif arch == 'wizardmath':
         WizardMathConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MistralForCausalLM':
-        MistralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        custom_head_dim = False
+        if config.head_dim is not None:
+            if config.head_dim != config.hidden_size // config.num_attention_heads:
+                custom_head_dim = True
+
+        if (g_tokenizer_type == TokenizerType.BPE2) or custom_head_dim:
+            Mistral2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        else:
+            MistralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MixtralForCausalLM':
         if args.experts != '':
             config.experts = sorted([int(x, 0) for x in args.experts.split(',')])

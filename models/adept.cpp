@@ -38,9 +38,10 @@ namespace persimmon
         void encode(const std::string &text, std::vector<int> &ids, bool add_bos, bool add_eos) const;
     };
 
-    class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, LayerNorm, PersimmonBlock, int, int, int, int>>
+    class ConditionalGeneration : public BaseModelForConditionalGeneration
     {
+    public:
+        typedef Model<Config, Embedding, LayerNorm, PersimmonBlock, int, int, int, int> ModelClass;
     public:
         ConditionalGeneration(const Config &config);
 
@@ -105,8 +106,7 @@ namespace persimmon
     }
 
     ConditionalGeneration::ConditionalGeneration(const Config &config)
-        : BaseModelForConditionalGeneration<
-                                    Model<Config, Embedding, LayerNorm, PersimmonBlock, int, int, int, int>>(MODEL_TYPE_PERSIMMON, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+        : BaseModelForConditionalGeneration(MODEL_TYPE_PERSIMMON, config, MEM_SIZE, SCRATCH_SIZE), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 4 + config.num_hidden_layers * 23;
@@ -114,13 +114,13 @@ namespace persimmon
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        transformer = new Model<Config, Embedding, LayerNorm, PersimmonBlock, int, int, int, int>(&w_ctx_, config, false,
+        transformer = new ModelClass(&w_ctx_, config, false,
                                                             config.hidden_size, config.num_attention_heads,
                                                             config.intermediate_size, config.max_length);
 
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            auto &layer = transformer->layers[i];
+            auto &layer = get_typed_transformer<ModelClass>()->layers[i];
             layer.attention.rope_dim = config.rope_dim;
             layer.attention.freq_base = config.rope_theta;
         }
@@ -128,6 +128,8 @@ namespace persimmon
 
     void ConditionalGeneration::load(ModelLoader &loader)
     {
+        auto transformer = get_typed_transformer<ModelClass>();
+
         loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

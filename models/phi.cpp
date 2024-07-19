@@ -87,9 +87,10 @@ namespace v2
         std::vector<int> chat_terminate_seq;
     };
 
-    class Phi2ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                        Model<BaseConfig, Embedding, LayerNorm, Phi2Block, int, int, int, int, int>>
+    class Phi2ConditionalGeneration : public BaseModelForConditionalGeneration
     {
+    public:
+        typedef Model<BaseConfig, Embedding, LayerNorm, Phi2Block, int, int, int, int, int> ModelClass;
     public:
         Phi2ConditionalGeneration() = default;
         Phi2ConditionalGeneration(const BaseConfig &config, ModelType type)
@@ -101,15 +102,15 @@ namespace v2
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
 
-            transformer = new Model<BaseConfig, Embedding, LayerNorm, Phi2Block, int, int, int, int, int>(&w_ctx_, config, true,
+            transformer = new ModelClass(&w_ctx_, config, true,
                                 config.hidden_size, config.num_attention_heads,
                                 config.intermediate_size, config.num_attention_heads, config.max_length);
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                transformer->layers[i].set_id(i);
-                transformer->layers[i].attention.set_id(i);
-                transformer->layers[i].attention.set_prec(ggml_prec::GGML_PREC_F32);
+                get_typed_transformer<ModelClass>()->layers[i].set_id(i);
+                get_typed_transformer<ModelClass>()->layers[i].attention.set_id(i);
+                get_typed_transformer<ModelClass>()->layers[i].attention.set_prec(ggml_prec::GGML_PREC_F32);
             }
         }
 
@@ -243,6 +244,7 @@ namespace v2
 
         void ConditionalGeneration::load(ModelLoader &loader)
         {
+            auto transformer = get_typed_transformer<ModelClass>();
             loader.read_tensor("transformer.embd.wte.weight", transformer->word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
@@ -308,13 +310,14 @@ namespace v2
         {
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                transformer->layers[i].attention.rope_dim = config.rope_dim;
-                transformer->layers[i].attention.freq_base = config.rope_theta;
+                get_typed_transformer<ModelClass>()->layers[i].attention.rope_dim = config.rope_dim;
+                get_typed_transformer<ModelClass>()->layers[i].attention.freq_base = config.rope_theta;
             }
         }
 
         void ConditionalGeneration::load(ModelLoader &loader)
         {
+            auto transformer = get_typed_transformer<ModelClass>();
             loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
@@ -473,7 +476,7 @@ namespace v3
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                auto &attention = transformer->layers[i].attention;
+                auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
                 attention.freq_base = config.rope_theta;
             }
 
@@ -550,7 +553,7 @@ namespace v3_su
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                auto &attention = transformer->layers[i].attention;
+                auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
                 attention.config(config.original_max_position_embeddings, config.rope_theta,
                                  scaling_factor,
                                  config.hidden_size / config.num_attention_heads / 2,

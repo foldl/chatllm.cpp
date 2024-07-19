@@ -116,6 +116,8 @@ void ConditionalGeneration::load(ModelLoader &loader)
 {
     llama::v2::ConditionalGeneration::load(loader);
 
+    auto transformer = get_typed_transformer<ModelClass>();
+
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
         auto &attention = transformer->layers[i].attention;

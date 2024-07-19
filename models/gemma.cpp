@@ -69,13 +69,14 @@ public:
     int nl_token_id;
 };
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                  Model<BaseConfig, Embedding, RMSNorm, GemmaBlock, int, int, int, int, int, int>>
+class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
 public:
+    typedef Model<BaseConfig, Embedding, RMSNorm, GemmaBlock, int, int, int, int, int, int> ModelClass;
+
+public:
     ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_GEMMA)
-        : BaseModelForConditionalGeneration<
-                                  Model<BaseConfig, Embedding, RMSNorm, GemmaBlock, int, int, int, int, int, int>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+        : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 2 + config.num_hidden_layers * 12;
@@ -83,20 +84,22 @@ public:
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        transformer = new Model<BaseConfig, Embedding, RMSNorm, GemmaBlock, int, int, int, int, int, int>(&w_ctx_, config,
+        transformer = new ModelClass(&w_ctx_, config,
                 nullptr,
                 config.hidden_size, config.num_attention_heads,
                 config.intermediate_size, config.num_key_value_heads, config.head_dim, config.max_length);
 
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            auto &attention = transformer->layers[i].attention;
+            auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
             attention.freq_base = config.rope_theta;
         }
     }
 
     void load(ModelLoader &loader) override
     {
+        auto transformer = get_typed_transformer<ModelClass>();
+
         loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
@@ -245,13 +248,13 @@ template <class Layer> static void load_layer(ModelLoader &loader, const std::st
     loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", layer->attention.v_proj.weight);
 }
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                  HeterogeneousModel<BaseConfig, Embedding, RMSNorm>>
+class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
 public:
+    typedef HeterogeneousModel<BaseConfig, Embedding, RMSNorm> ModelClass;
+public:
     ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_GEMMA2)
-        : BaseModelForConditionalGeneration<
-                                  HeterogeneousModel<BaseConfig, Embedding, RMSNorm>>(type, config, MEM_SIZE, SCRATCH_SIZE), config(config),
+        : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config),
           logits_pp(1.0f / config.final_logit_soft_capping / sqrtf((float)config.hidden_size), config.final_logit_soft_capping),
           attn_scores_pp(1.0f / config.attn_logit_soft_capping, config.attn_logit_soft_capping)
     {
@@ -277,19 +280,19 @@ public:
             }
         };
 
-        transformer = new HeterogeneousModel<BaseConfig, Embedding, RMSNorm>(&w_ctx_, config, nullptr, create_layer);
+        transformer = new ModelClass(&w_ctx_, config, nullptr, create_layer);
 
-        transformer->logits_pp = &logits_pp;
+        get_typed_transformer<ModelClass>()->logits_pp = &logits_pp;
 
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             if (is_sliding(i))
             {
-                setup_layer<Gemma2SWABlock4k>(transformer->get_layer(i), config, &attn_scores_pp);
+                setup_layer<Gemma2SWABlock4k>(get_typed_transformer<ModelClass>()->get_layer(i), config, &attn_scores_pp);
             }
             else
             {
-                setup_layer<Gemma2FullBlock>(transformer->get_layer(i), config, &attn_scores_pp);
+                setup_layer<Gemma2FullBlock>(get_typed_transformer<ModelClass>()->get_layer(i), config, &attn_scores_pp);
             }
         }
 
@@ -301,6 +304,8 @@ public:
 
     void load(ModelLoader &loader) override
     {
+        auto transformer = get_typed_transformer<ModelClass>();
+
         loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

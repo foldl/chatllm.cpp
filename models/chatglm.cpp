@@ -31,9 +31,10 @@ public:
     int gmask_token_id;
 };
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration<
-    Model<Config, Embedding, LayerNorm, GLMBlock, int, int, int, int>>
+class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
+public:
+    typedef Model<Config, Embedding, LayerNorm, GLMBlock, int, int, int, int> TransformerClass;
 public:
     ConditionalGeneration() = default;
     ConditionalGeneration(const Config &config);
@@ -172,13 +173,15 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;
 
-    transformer = new Model<Config, Embedding, LayerNorm, GLMBlock, int, int, int, int>(&w_ctx_, config, nullptr,
+    transformer = new TransformerClass(&w_ctx_, config, nullptr,
                             config.hidden_size, config.num_attention_heads, config.num_hidden_layers,
                             config.max_length);
 }
 
 void ConditionalGeneration::load(ModelLoader &loader)
 {
+    TransformerClass *transformer = dynamic_cast<TransformerClass *>(this->transformer);
+
     loader.read_tensor("transformer.word_embeddings.weight", transformer->word_embeddings.weight);
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
@@ -245,9 +248,10 @@ public:
     int eop_token_id;
 };
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration<
-    Model<Config, Embedding, RMSNorm, GLM2Block, int, int, int, int, int>>
+class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
+public:
+    typedef Model<Config, Embedding, RMSNorm, GLM2Block, int, int, int, int, int> TransformerClass;
 public:
     ConditionalGeneration() = default;
     ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_CHATGLM2);
@@ -319,13 +323,14 @@ ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType typ
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;
 
-    transformer = new Model<Config, Embedding, RMSNorm, GLM2Block, int, int, int, int, int>(&w_ctx_, config, false,
+    transformer = new TransformerClass(&w_ctx_, config, false,
                             config.hidden_size, config.num_attention_heads, config.num_kv_heads,
                             config.intermediate_size, config.max_length);
 }
 
 void ConditionalGeneration::load(ModelLoader &loader)
 {
+    TransformerClass *transformer = dynamic_cast<TransformerClass *>(this->transformer);
     loader.read_tensor("transformer.embedding.word_embeddings.weight", transformer->word_embeddings.weight);
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
@@ -624,6 +629,7 @@ public:
     ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_GLM4)
         : v2::ConditionalGeneration(config, type)
     {
+        auto transformer = get_typed_transformer<TransformerClass>();
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             auto &attention = transformer->layers[i].attention;

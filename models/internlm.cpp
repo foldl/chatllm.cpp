@@ -1,9 +1,8 @@
-template<bool bias> class GenericConditionalGeneration : public BaseModelForConditionalGeneration<
-                                    Model<BaseConfig, Embedding, RMSNorm, InternLMBlock<bias>, int, int, int, int, int>>
+template<bool bias> class GenericConditionalGeneration : public BaseModelForConditionalGeneration
 {
 public:
-    typedef BaseModelForConditionalGeneration<
-                Model<BaseConfig, Embedding, RMSNorm, InternLMBlock<bias>, int, int, int, int, int>> Base;
+    typedef BaseModelForConditionalGeneration Base;
+    typedef Model<BaseConfig, Embedding, RMSNorm, InternLMBlock<bias>, int, int, int, int, int> TransformerClass;
 
     GenericConditionalGeneration() = default;
     GenericConditionalGeneration(const BaseConfig &config, ModelType type)
@@ -19,12 +18,14 @@ public:
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
-        Base::transformer = new Model<BaseConfig, Embedding, RMSNorm, InternLMBlock<bias>, int, int, int, int, int>(&w_ctx_, config, false,
+        Base::transformer = new TransformerClass(&w_ctx_, config, false,
                                     config.hidden_size, config.num_attention_heads,
                                     config.intermediate_size, num_key_value_heads, config.max_length);
+
+        auto transformer = Base::get_typed_transformer<TransformerClass>();
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            auto &attention = Base::transformer->layers[i].attention;
+            auto &attention = transformer->layers[i].attention;
             attention.freq_base = rope_theta;
             attention.freq_scale = 1 / rope_scaling;
         }
@@ -32,36 +33,38 @@ public:
 
     void load(ModelLoader &loader) override
     {
-        loader.read_tensor("model.embed_tokens.weight", Base::transformer->word_embeddings.weight);
+        TransformerClass *transformer = dynamic_cast<TransformerClass *>(Base::transformer);
+
+        loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
             if (true)
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", Base::transformer->layers[i].attention.q_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
             if (bias)
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   Base::transformer->layers[i].attention.q_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   transformer->layers[i].attention.q_proj.bias);
             if (true)
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", Base::transformer->layers[i].attention.k_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
             if (bias)
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   Base::transformer->layers[i].attention.k_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   transformer->layers[i].attention.k_proj.bias);
             if (true)
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", Base::transformer->layers[i].attention.v_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
             if (bias)
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   Base::transformer->layers[i].attention.v_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer->layers[i].attention.v_proj.bias);
             if (true)
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", Base::transformer->layers[i].attention.o_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
             if (bias)
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.bias",   Base::transformer->layers[i].attention.o_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.bias",   transformer->layers[i].attention.o_proj.bias);
 
-            loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", Base::transformer->layers[i].mlp.gate_proj.weight);
-            loader.read_tensor(layer_prefix + "mlp.down_proj.weight", Base::transformer->layers[i].mlp.down_proj.weight);
-            loader.read_tensor(layer_prefix + "mlp.up_proj.weight",   Base::transformer->layers[i].mlp.up_proj.weight);
+            loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer->layers[i].mlp.gate_proj.weight);
+            loader.read_tensor(layer_prefix + "mlp.down_proj.weight", transformer->layers[i].mlp.down_proj.weight);
+            loader.read_tensor(layer_prefix + "mlp.up_proj.weight",   transformer->layers[i].mlp.up_proj.weight);
 
-            loader.read_tensor(layer_prefix + "input_layernorm.weight",          Base::transformer->layers[i].input_layernorm.weight);
-            loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", Base::transformer->layers[i].post_attention_layernorm.weight);
+            loader.read_tensor(layer_prefix + "input_layernorm.weight",          transformer->layers[i].input_layernorm.weight);
+            loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
         }
-        loader.read_tensor("model.norm.weight", Base::transformer->final_layernorm.weight);
-        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(Base::transformer->lm_head)->weight);
+        loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+        loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
         CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
             << "corrupted model weights";

@@ -44,9 +44,10 @@ public:
     }
 };
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int>>
+class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
+public:
+    typedef Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int> ModelClass;
 public:
     ConditionalGeneration(const Config &config);
 
@@ -64,8 +65,7 @@ private:
 };
 
 ConditionalGeneration::ConditionalGeneration(const Config &config)
-    : BaseModelForConditionalGeneration<
-                                Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int>>(MODEL_TYPE_ZHINAO, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+    : BaseModelForConditionalGeneration(MODEL_TYPE_ZHINAO, config, MEM_SIZE, SCRATCH_SIZE), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
     const size_t num_tensors = 3 + config.num_hidden_layers * 15;
@@ -73,14 +73,14 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;
 
-    transformer = new Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int>(&w_ctx_, config, false,
-                                                                            config.hidden_size, config.num_attention_heads,
-                                                                            config.intermediate_size, config.num_key_value_heads,
-                                                                            config.max_length);
+    transformer = new ModelClass(&w_ctx_, config, false,
+                                config.hidden_size, config.num_attention_heads,
+                                config.intermediate_size, config.num_key_value_heads,
+                                config.max_length);
 
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
-        auto &layer = transformer->layers[i];
+        auto &layer = get_typed_transformer<ModelClass>()->layers[i];
         layer.attention.freq_base = config.rope_theta;
         layer.attention.set_prec(ggml_prec::GGML_PREC_F32);
     }
@@ -88,6 +88,8 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
 
 void ConditionalGeneration::load(ModelLoader &loader)
 {
+    auto transformer = get_typed_transformer<ModelClass>();
+
     loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
     for (int i = 0; i < config.num_hidden_layers; i++)
     {

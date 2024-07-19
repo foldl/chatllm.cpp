@@ -84,9 +84,10 @@ public:
     {}
 };
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration<Model<Config, Embedding, RMSNorm,
-    GrokBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, int, int, int, int, int>>
+class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
+public:
+    typedef Model<Config, Embedding, RMSNorm, GrokBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, int, int, int, int, int> ModelClass;
 public:
     ConditionalGeneration() = default;
 
@@ -126,20 +127,22 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
 
     GRAPH_SIZE = 4096 * 2;
 
-    transformer = new Model<Config, Embedding, RMSNorm, GrokBlock<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, int, int, int, int, int>(
+    transformer = new ModelClass(
                         &w_ctx_, config, nullptr,
                         config.hidden_size, config.num_attention_heads,
                         config.intermediate_size, config.num_key_value_heads, config.max_length);
 
     for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            auto &attention = transformer->layers[i].attention;
+            auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
             attention.freq_base = config.rope_theta;
         }
 }
 
 void ConditionalGeneration::load(ModelLoader &loader)
 {
+    auto transformer = get_typed_transformer<ModelClass>();
+
     loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
     for (int i = 0; i < config.num_hidden_layers; i++)
     {

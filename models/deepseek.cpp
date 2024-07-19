@@ -472,13 +472,13 @@ namespace v2_light
         }
     };
 
-    template <int NUM_EXPERTS, int EXPERTS_PER_TOK, int EFFECTIVE_EXPERTS_PER_TOK> class ConditionalGeneration0 : public BaseModelForConditionalGeneration<
-                                    HeterogeneousModel<Config, Embedding, RMSNorm>>
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK, int EFFECTIVE_EXPERTS_PER_TOK> class ConditionalGeneration0 : public BaseModelForConditionalGeneration
     {
     public:
         typedef CombinedMLP<DeepSeekSparseMoE<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, SiLUMLP> DeepSeekMoEMLP;
         typedef LMBlock1<RMSNorm, SpeedMLAttention, RMSNorm, DeepSeekMoEMLP> DeepSeek2MoEBlock;
-        typedef BaseModelForConditionalGeneration<HeterogeneousModel<Config, Embedding, RMSNorm>> Base;
+        typedef BaseModelForConditionalGeneration Base;
+        typedef HeterogeneousModel<Config, Embedding, RMSNorm> ModelClass;
     public:
         ConditionalGeneration0() = default;
 
@@ -486,9 +486,7 @@ namespace v2_light
         {}
 
         ConditionalGeneration0(const Config &config, ModelType type, int q_lora_rank)
-            : BaseModelForConditionalGeneration<
-                                        HeterogeneousModel<Config, Embedding, RMSNorm>>(
-                                            type, config, MEM_SIZE, SCRATCH_SIZE),
+            : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -521,8 +519,9 @@ namespace v2_light
                 }
             };
 
-            Base::transformer = new HeterogeneousModel<Config, Embedding, RMSNorm>(
+            auto transformer = new ModelClass(
                 &w_ctx_, config, false, create_layer);
+            Base::transformer = transformer;
 
             float m = yarn_get_mscale(config.factor, config.mscale) / yarn_get_mscale(config.factor, config.mscale_all_dim);
             float attn_scaling_factor = 1 / sqrtf((float)(config.qk_rope_head_dim + config.qk_nope_head_dim));
@@ -563,6 +562,8 @@ namespace v2_light
 
         void load(ModelLoader &loader) override
         {
+            auto transformer = get_typed_transformer<ModelClass>();
+
             loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
             loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);

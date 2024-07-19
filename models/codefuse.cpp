@@ -43,7 +43,7 @@ namespace deepseek
         {
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                auto &attention = transformer->layers[i].attention;
+                auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
                 attention.freq_base = config.rope_theta;
                 attention.freq_scale = 1 / config.rope_scaling;
             }

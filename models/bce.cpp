@@ -55,15 +55,15 @@ namespace embedding
         encode(text, ids, true, true, max_length - 2);
     }
 
-    class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                  EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, BCEFinalNorm, int, int, int, int, int>>
+    class ConditionalGeneration : public BaseModelForConditionalGeneration
     {
+    public:
+        typedef EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, BCEFinalNorm, int, int, int, int, int> ModelClass;
     public:
         ConditionalGeneration() = default;
 
         ConditionalGeneration(const Config &config, ModelType type, size_t mem_size, size_t scratch_size)
-            : BaseModelForConditionalGeneration<
-                EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, BCEFinalNorm, int, int, int, int, int>>(type, config, mem_size, scratch_size),
+            : BaseModelForConditionalGeneration(type, config, mem_size, scratch_size),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -72,9 +72,9 @@ namespace embedding
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
 
-            transformer = new EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, BCEFinalNorm, int, int, int, int, int>(&w_ctx_, config,
-                                                                                    config.hidden_size, config.num_attention_heads,
-                                                                                    config.intermediate_size, config.num_attention_heads, config.max_length);
+            transformer = new ModelClass(&w_ctx_, config,
+                                        config.hidden_size, config.num_attention_heads,
+                                        config.intermediate_size, config.num_attention_heads, config.max_length);
         }
 
         ConditionalGeneration(const Config &config)
@@ -83,6 +83,8 @@ namespace embedding
 
         void load(ModelLoader &loader) override
         {
+            auto transformer = get_typed_transformer<ModelClass>();
+
             loader.read_tensor("embeddings.word_embeddings.weight",         transformer->word_embeddings.word_weight);
             loader.read_tensor("embeddings.position_embeddings.weight",     transformer->word_embeddings.position_weight);
             loader.read_tensor("embeddings.LayerNorm.weight",               transformer->word_embeddings.ln.weight);
@@ -176,9 +178,10 @@ namespace ranker
         }
     };
 
-    class ConditionalGeneration : public BaseModelForConditionalGeneration<
-                                  EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, RobertaClassificationHead, int, int, int, int, int>>
+    class ConditionalGeneration : public BaseModelForConditionalGeneration
     {
+    public:
+        typedef EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, RobertaClassificationHead, int, int, int, int, int> ModelClass;
     public:
         ConditionalGeneration() = default;
 
@@ -187,8 +190,7 @@ namespace ranker
         {}
 
         ConditionalGeneration(const Config &config, ModelType type, size_t mem_size, size_t scratch_size)
-            : BaseModelForConditionalGeneration<
-                EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, RobertaClassificationHead, int, int, int, int, int>>(type, config, mem_size, scratch_size),
+            : BaseModelForConditionalGeneration(type, config, mem_size, scratch_size),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -197,13 +199,15 @@ namespace ranker
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
 
-            transformer = new EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, RobertaClassificationHead, int, int, int, int, int>(&w_ctx_, config,
-                                                                                    config.hidden_size, config.num_attention_heads,
-                                                                                    config.intermediate_size, config.num_attention_heads, config.max_length);
+            transformer = new ModelClass(&w_ctx_, config,
+                                        config.hidden_size, config.num_attention_heads,
+                                        config.intermediate_size, config.num_attention_heads, config.max_length);
         }
 
         void load(ModelLoader &loader) override
         {
+            auto transformer = get_typed_transformer<ModelClass>();
+
             loader.read_tensor("embeddings.word_embeddings.weight",         transformer->word_embeddings.word_weight);
             loader.read_tensor("embeddings.position_embeddings.weight",     transformer->word_embeddings.position_weight);
             loader.read_tensor("embeddings.LayerNorm.weight",               transformer->word_embeddings.ln.weight);
