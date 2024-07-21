@@ -1,4 +1,40 @@
 {
+    "mistral-nemo": {
+        "brief": "Mistral NeMo, a 12B model that offers a large context window of up to 128k tokens.",
+        "default": "12b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "12b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 7662149840,
+                        "url": "chatllm_quantized_240722/nemo-12b-q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 13020373200,
+                        "url": "chatllm_quantized_240722/nemo-12b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "smollm": {
+        "brief": "SmolLM, a family of state-of-the-art small models with 135M, 360M, and 1.7B parameters, trained on a new high-quality dataset.",
+        "default": "1.7b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "12b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1819874192,
+                        "url": "chatllm_quantized_240722/smolllm-1.7b.bin"
+                    }
+                }
+            }
+        }
+    },
     "zhinao": {
         "brief": "360Zhinao from Qihoo360.",
         "default": "7b-4k",
@@ -23,7 +59,8 @@
                 }
             }
         }
-    },"mistral": {
+    },
+    "mistral": {
         "brief": "The Mistral-7B-Instruct-v0.3 Large Language Model (LLM) is an instruct fine-tuned version of the Mistral-7B-v0.3.",
         "default": "7b",
         "license": "Apache License Version 2.0",
