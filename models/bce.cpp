@@ -172,7 +172,7 @@ namespace ranker
             ids.insert(std::end(ids), std::begin(ids_q), std::end(ids_q));
             ids.push_back(eos_token_id);
 
-            ids.push_back(eos_token_id);
+            ids.push_back(bos_token_id);
             ids.insert(std::end(ids), std::begin(ids_a), std::end(ids_a));
             ids.push_back(eos_token_id);
         }
