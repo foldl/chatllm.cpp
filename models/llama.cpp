@@ -249,7 +249,11 @@ namespace v3
 
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override
         {
-            tp = new tokenizer::BPEProcessor2();
+            tp = new tokenizer::BPEProcessor2(
+                {
+                    "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+                }
+            );
             size_t size = tp->Load(buffer, n_vocab);
 
             start_header_id = tp->PieceToId("<|start_header_id|>");

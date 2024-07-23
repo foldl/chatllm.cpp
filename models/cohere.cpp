@@ -33,7 +33,12 @@ public:
 
     size_t load(tokenizer::DataReader *buffer, int n_vocab) override
     {
-        tp = new tokenizer::BPEProcessor2();
+        tp = new tokenizer::BPEProcessor2(
+            {
+                "\\p{N}",
+                "'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p{N}]+|\\s+(?!\\S)",
+            }
+        );
         size_t size = tp->Load(buffer, n_vocab);
 
         start_of_turn_token_id  = tp->PieceToId("<|START_OF_TURN_TOKEN|>");

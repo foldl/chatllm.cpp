@@ -38,7 +38,7 @@ if (GGML_PERF)
     add_compile_definitions(GGML_PERF)
 endif ()
 
-add_library(libchatllm SHARED EXCLUDE_FROM_ALL src/main.cpp src/chat.cpp src/vectorstore.cpp src/layers.cpp src/tokenizer.cpp src/models.cpp)
+add_library(libchatllm SHARED EXCLUDE_FROM_ALL src/main.cpp src/chat.cpp src/vectorstore.cpp src/layers.cpp src/tokenizer.cpp src/models.cpp src/unicode.cpp src/unicode-data.cpp)
 target_link_libraries(libchatllm PRIVATE ggml)
 target_compile_definitions(libchatllm PUBLIC CHATLLM_SHARED_LIB)
 SET_TARGET_PROPERTIES(libchatllm PROPERTIES PREFIX "")
@@ -47,5 +47,5 @@ set_target_properties(libchatllm
   LIBRARY_OUTPUT_DIRECTORY "../bindings"
 )
 
-add_executable(main src/main.cpp src/chat.cpp src/vectorstore.cpp src/layers.cpp src/tokenizer.cpp src/models.cpp)
+add_executable(main src/main.cpp src/chat.cpp src/vectorstore.cpp src/layers.cpp src/tokenizer.cpp src/models.cpp src/unicode.cpp src/unicode-data.cpp)
 target_link_libraries(main PRIVATE ggml)

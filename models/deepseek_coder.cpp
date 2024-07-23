@@ -58,7 +58,15 @@ private:
 
 size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
 {
-    tp = new tokenizer::BPEProcessor2();
+    tp = new tokenizer::BPEProcessor2(
+        {
+            "[\r\n]",
+            "\\s?\\p{L}+",
+            "\\s?\\p{P}+",
+            "[一-龥ࠀ-一가-퟿]+",
+            "\\p{N}",
+        }
+    );
     size_t size = tp->Load(buffer, n_vocab);
 
     std::vector<int> ids;

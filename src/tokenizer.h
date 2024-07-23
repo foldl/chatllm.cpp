@@ -196,7 +196,9 @@ protected:
 class BPEProcessor2: public Processor
 {
 public:
-    BPEProcessor2() : Processor::Processor() {}
+    BPEProcessor2();
+
+    BPEProcessor2(std::vector<std::string> regex_exprs);
 
     size_t Load(DataReader *data_reader, int n_vocab) override;
 
@@ -208,6 +210,8 @@ protected:
 
     virtual int DoEncode2(const std::string &input,
             std::vector<int> *ids) const;
+
+    std::vector<std::string> regex_exprs;
 };
 
 class BPEProcessor3: public BPEProcessor2

@@ -1,7 +1,7 @@
 OUTPUT_PATH=obj
 GGML_BASE=ggml
 GGML_SRC=$(GGML_BASE)/src
-GGML_INC=$(GGML_BASE)/include/ggml
+GGML_INC=$(GGML_BASE)/include
 
 # Define the default target now so that it is always the first target
 BUILD_TARGETS = $(OUTPUT_PATH)/main
@@ -427,12 +427,6 @@ define NVCC_COMPILE
 endef # NVCC_COMPILE
 endif # JETSON_EOL_MODULE_DETECT
 
-$(OUTPUT_PATH)/ggml-cuda/%.o: ggml-cuda/%.cu ggml-cuda/%.cuh $(GGML_INC)/ggml.h $(GGML_INC)/ggml-common.h $(GGML_INC)/ggml-cuda/common.cuh
-	$(NVCC_COMPILE)
-
-$(OUTPUT_PATH)/ggml-cuda.o: $(GGML_SRC)/ggml-cuda.cu $(GGML_INC)/ggml-cuda.h $(GGML_INC)/ggml.h $(GGML_INC)/ggml-backend.h $(GGML_INC)/ggml-backend-impl.h $(GGML_INC)/ggml-common.h $(wildcard ggml-cuda/*.cuh)
-	$(NVCC_COMPILE)
-
 endif # CHATLLM_CUDA
 
 ifdef CHATLLM_CLBLAST
@@ -449,8 +443,6 @@ ifdef CHATLLM_CLBLAST
 	endif
 	OBJS    += $(OUTPUT_PATH)/ggml-opencl.o
 
-$(OUTPUT_PATH)/ggml-opencl.o: $(GGML_SRC)/ggml-opencl.cpp $(GGML_INC)/ggml-opencl.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
 endif # CHATLLM_CLBLAST
 
 ifdef CHATLLM_VULKAN
@@ -474,8 +466,6 @@ ifdef CHATLLM_VULKAN_RUN_TESTS
 	MK_CPPFLAGS  += -DGGML_VULKAN_RUN_TESTS
 endif
 
-$(OUTPUT_PATH)/ggml-vulkan.o: $(GGML_SRC)/ggml-vulkan.cpp $(GGML_INC)/ggml-vulkan.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
 endif # CHATLLM_VULKAN
 
 ifdef CHATLLM_HIPBLAS
@@ -509,12 +499,6 @@ endif # CHATLLM_CUDA_NO_PEER_COPY
 	OBJS        += $(OUTPUT_PATH)/ggml-cuda.o
 	OBJS        += $(patsubst %.cu,%.o,$(wildcard ggml-cuda/*.cu))
 
-$(OUTPUT_PATH)/ggml-cuda.o: $(GGML_SRC)/ggml-cuda.cu $(GGML_INC)/ggml-cuda.h $(GGML_INC)/ggml.h $(GGML_INC)/ggml-backend.h $(GGML_INC)/ggml-backend-impl.h $(GGML_INC)/ggml-common.h $(wildcard ggml-cuda/*.cuh)
-	$(HIPCC) $(CXXFLAGS) $(HIPFLAGS) -x hip -c -o $@ $<
-
-$(OUTPUT_PATH)/ggml-cuda/%.o: ggml-cuda/%.cu ggml-cuda/%.cuh $(GGML_SRC)/ggml.h $(GGML_SRC)/ggml-common.h ggml-cuda/common.cuh
-	$(HIPCC) $(CXXFLAGS) $(HIPFLAGS) -x hip -c -o $@ $<
-
 endif # CHATLLM_HIPBLAS
 
 ifdef CHATLLM_METAL
@@ -531,8 +515,6 @@ endif
 endif # CHATLLM_METAL
 
 ifdef CHATLLM_METAL
-$(OUTPUT_PATH)/ggml-metal.o: $(GGML_SRC)/ggml-metal.m $(GGML_SRC)/ggml-metal.h $(GGML_SRC)/ggml.h
-	$(CC) $(CFLAGS) -c $< -o $@
 
 ifdef CHATLLM_METAL_EMBED_LIBRARY
 $(OUTPUT_PATH)/ggml-metal-embed.o: ggml-metal.metal ggml-common.h
@@ -551,9 +533,10 @@ endif
 endif # CHATLLM_METAL
 
 ifdef CHATLLM_MPI
-$(OUTPUT_PATH)/ggml-mpi.o: $(GGML_SRC)/ggml-mpi.c $(GGML_SRC)/ggml-mpi.h
-	$(CC) $(CFLAGS) -c $< -o $@
 endif # CHATLLM_MPI
+
+$(OUTPUT_PATH)/ggml-cuda.o: $(GGML_SRC)/ggml-cuda.cu $(GGML_INC)/ggml-cuda.h $(GGML_INC)/ggml.h $(GGML_INC)/ggml-backend.h $(GGML_INC)/ggml-backend-impl.h $(GGML_INC)/ggml-common.h $(wildcard ggml-cuda/*.cuh)
+	$(NVCC_COMPILE)
 
 GF_CC := $(CC)
 include scripts/get-flags.mk
@@ -609,7 +592,7 @@ $(info )
 # Build library
 #
 
-$(OUTPUT_PATH)/ggml.o: $(GGML_SRC)/ggml.c $(GGML_INC)/ggml.h $(GGML_SRC)/ggml-cuda.h
+$(OUTPUT_PATH)/ggml.o: $(GGML_SRC)/ggml.c $(GGML_INC)/ggml.h $(GGML_INC)/ggml-cuda.h
 	$(CC)  $(CFLAGS)   -c $< -o $@
 
 $(OUTPUT_PATH)/ggml-alloc.o: $(GGML_SRC)/ggml-alloc.c $(GGML_INC)/ggml.h $(GGML_INC)/ggml-alloc.h
@@ -621,7 +604,13 @@ $(OUTPUT_PATH)/ggml-backend.o: $(GGML_SRC)/ggml-backend.c $(GGML_INC)/ggml.h $(G
 $(OUTPUT_PATH)/ggml-quants.o: $(GGML_SRC)/ggml-quants.c $(GGML_INC)/ggml.h $(GGML_SRC)/ggml-quants.h $(GGML_SRC)/ggml-common.h
 	$(CC) $(CFLAGS)    -c $< -o $@
 
-$(OUTPUT_PATH)/tokenizer.o: src/tokenizer.cpp src/unicode.h
+$(OUTPUT_PATH)/tokenizer.o: src/tokenizer.cpp src/tokenizer.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OUTPUT_PATH)/unicode.o: src/unicode.cpp src/unicode.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OUTPUT_PATH)/unicode-data.o: src/unicode-data.cpp src/unicode-data.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OUTPUT_PATH)/vectorstore.o: src/vectorstore.cpp src/vectorstore.h
@@ -666,7 +655,7 @@ $(OUTPUT_PATH)/main.o: src/main.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 
-$(OUTPUT_PATH)/main: $(OUTPUT_PATH)/main.o $(OUTPUT_PATH)/models.o $(OUTPUT_PATH)/chat.o $(OUTPUT_PATH)/layers.o $(OUTPUT_PATH)/vectorstore.o $(OUTPUT_PATH)/tokenizer.o $(OUTPUT_PATH)/ggml.o $(COMMON_DEPS) $(OBJS)
+$(OUTPUT_PATH)/main: $(OUTPUT_PATH)/main.o $(OUTPUT_PATH)/models.o $(OUTPUT_PATH)/chat.o $(OUTPUT_PATH)/layers.o $(OUTPUT_PATH)/vectorstore.o $(OUTPUT_PATH)/tokenizer.o $(OUTPUT_PATH)/unicode.o $(OUTPUT_PATH)/unicode-data.o $(OUTPUT_PATH)/ggml.o $(COMMON_DEPS) $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo
 	@echo '====  Run ./obj/main -h for help.  ===='

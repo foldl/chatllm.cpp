@@ -74,7 +74,12 @@ namespace v1
 
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
-        tp = new tokenizer::BPEProcessor2();
+        tp = new tokenizer::BPEProcessor2(
+            {
+                // "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
+                "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+            }
+        );
         size_t size = tp->Load(buffer, n_vocab);
         tp->EnableReturnSpecialToken(true);
 
