@@ -490,7 +490,7 @@ static void run_file(Args &args, chatllm::Pipeline &pipeline, TextStreamer &stre
 
             streamer.cout << "A.I. > " << std::flush;
             std::string output = pipeline.chat(history, gen_config, &streamer);
-            history.push_back(output, chatllm::MsgRole::User);
+            history.push_back(output, chatllm::MsgRole::Assistant);
         }
     }
 
