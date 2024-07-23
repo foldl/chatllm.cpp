@@ -52,6 +52,73 @@ namespace chatllm
         return str;
     }
 
+    Message & Message::operator =(const chatllm::Message &m)
+    {
+        this->content = m.content;
+        return *this;
+    }
+
+    Messages::Messages()
+        : sep(""), auto_aggregate(true), round(-1)
+    {
+    }
+
+    void Messages::clear(void)
+    {
+        history.clear();
+    }
+
+    void Messages::push_back(const Message &m)
+    {
+        push_back(m.content, m.role);
+    }
+
+    void Messages::push_back(const std::string &content, MsgRole role)
+    {
+        if (MsgRole::Auto == role)
+        {
+            if (history.size() > 0)
+            {
+                for (int i = (int)history.size() - 1; (i >= 0) && (MsgRole::Auto == role); i--)
+                {
+                    switch (history[i].role)
+                    {
+                    case MsgRole::User:
+                        role = MsgRole::Assistant;
+                        break;
+                    case MsgRole::Assistant:
+                        role = MsgRole::User;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
+
+            if (MsgRole::Auto == role)
+                role = MsgRole::User;
+        }
+
+        if (auto_aggregate && (history.size() > 0))
+        {
+            auto &last = history[history.size() - 1];
+            if (role == last.role)
+            {
+                last.content = last.content + sep + content;
+                return;
+            }
+        }
+
+        if (role != MsgRole::Assistant)
+        {
+            const MsgRole last = history.size() > 0 ? history[history.size() - 1].role : MsgRole::Assistant;
+            if (MsgRole::Assistant == last)
+                round++;
+        }
+
+        history.emplace_back(content, role, round);
+    }
+
     BaseStreamer::BaseStreamer(BaseTokenizer *tokenizer)
         : is_prompt(true), tokenizer(tokenizer), is_first(true), print_len(0),
           interceptor(nullptr)
@@ -150,7 +217,7 @@ namespace chatllm
         sep_token_id(config.sep_token_id),
         tp(nullptr),
         sys_prompt(""),
-        history_offset(0),
+        encode_start(0),
         max_length(config.max_length),
         format(ChatFormat::CHAT),
         chat_encoder(chat_encoder),
@@ -225,15 +292,15 @@ namespace chatllm
         return text;
     }
 
-    int BaseTokenizer::get_history_start(const std::vector<std::string> &history, int max_length) const
+    int BaseTokenizer::get_history_start(const Messages &history, int max_length) const
     {
         int start = (int)history.size() - 1;
-        size_t total_id_num = encode(history[start]).size();
+        size_t total_id_num = encode(history[start].content).size();
         start--;
         while (start >= 1)
         {
-            total_id_num += encode(history[start]).size();
-            total_id_num += encode(history[start - 1]).size();
+            total_id_num += encode(history[start].content).size();
+            total_id_num += encode(history[start - 1].content).size();
             if ((int)total_id_num >= max_length)
                 break;
             start -= 2;
@@ -241,26 +308,26 @@ namespace chatllm
         return start + 1;
     }
 
-    std::vector<int> BaseTokenizer::encode_history(BaseHistoryEncoder *encoder, const std::vector<std::string> &history, int max_length, const bool incremental)
+    std::vector<int> BaseTokenizer::encode_history(BaseHistoryEncoder *encoder, const Messages &history, int max_length, const bool incremental)
     {
-        CHATLLM_CHECK(history.size() % 2 == 1) << "invalid history size " << history.size();
         std::vector<int> input_ids;
 
         if (!incremental)
         {
-            int start = get_history_start(history, max_length / 2);
-            history_offset = start;
-
-            for (; start <= (int)history.size() - 3; start += 2)
-            {
-                std::string user = trim(history[start]);
-                std::string ai = trim(history[start + 1]);
-                encoder->append_pair((start - history_offset) / 2, user, ai, input_ids);
-            }
+            encode_start = get_history_start(history, max_length / 2);
+        }
+        else
+        {
+            for (; (encode_start < (int)history.size()) && (history[encode_start].role == MsgRole::Assistant); encode_start++)
+                ;
         }
 
-        std::string user = trim(history[history.size() - 1]);
-        encoder->append_user((int)((history.size() - history_offset - 1) / 2), trim(user), input_ids);
+        for (; encode_start < (int)history.size(); encode_start++)
+        {
+            encoder->append_message(history[encode_start], input_ids);
+        }
+
+        encoder->append_ai_opening(encode_start > 0 ? history[encode_start - 1].round : 0, input_ids);
 
         return input_ids;
     }
@@ -299,7 +366,7 @@ namespace chatllm
         return ids;
     }
 
-    std::vector<int> BaseTokenizer::encode_history(const std::vector<std::string> &history, int max_length, const bool incremental)
+    std::vector<int> BaseTokenizer::encode_history(const Messages &history, int max_length, const bool incremental)
     {
         switch (format)
         {
@@ -314,7 +381,7 @@ namespace chatllm
                 return encode_history(qa_encoder, history, max_length, incremental);
             else if (chat_encoder)
             {
-                std::vector<std::string> copied;
+                Messages copied;
                 copied.push_back(history[history.size() - 1]);
                 return encode_history(chat_encoder, copied, max_length, incremental);
             }
@@ -326,7 +393,7 @@ namespace chatllm
             else;
         }
 
-        std::vector<int> r = encode(history[history.size() - 1]);
+        std::vector<int> r = encode(history[(int)history.size() - 1].content);
         if (auto_add_bos && (bos_token_id >= 0))
         {
             if ((r.size() > 0) && (r[0] != bos_token_id))
@@ -351,23 +418,50 @@ namespace chatllm
     {
     }
 
-    void BaseHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
-    {
-    }
-
     void BaseHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
-        if (round_idx == 0)
+        tokenizer->encode(user, ids);
+    }
+
+    void BaseHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+    {
+        CHATLLM_THROW << "BaseHistoryEncoder::append_ai no override.";
+    }
+
+    void BaseHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        CHATLLM_THROW << "BaseHistoryEncoder::append_ai no override.";
+    }
+
+    void BaseHistoryEncoder::append_tool(int round_idx, const std::string &tool, std::vector<int> &ids) const
+    {
+        append_user(round_idx, tool, ids);
+    }
+
+    void BaseHistoryEncoder::append_message(const Message &msg, std::vector<int> &ids) const
+    {
+        if ((ids.size() < 1) && (msg.round == 0))
         {
             if (!skip_sys_prompt)
                 append_sys_prompt(ids);
         }
-        do_append_user(round_idx, user, ids);
-    }
 
-    void BaseHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
-    {
-        tokenizer->encode(user, ids);
+        int round_idx = msg.round;
+
+        switch (msg.role)
+        {
+        case MsgRole::User:
+            append_user(round_idx, msg.content, ids);
+            break;
+        case MsgRole::Assistant:
+            append_ai(round_idx, msg.content, ids);
+            break;
+        case MsgRole::Tool:
+            append_tool(round_idx, msg.content, ids);
+            break;
+        case MsgRole::Auto:
+            break;
+        }
     }
 
     static std::string shape_to_string(ggml_tensor *tensor)
@@ -808,7 +902,7 @@ namespace chatllm
         tokenizer = modelobj.tokenizer.get();
     }
 
-    std::string Pipeline::chat_with_restart(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+    std::string Pipeline::chat_with_restart(const Messages &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer)
     {
         bool continuous = tokenizer->get_chat_format() == ChatFormat::CHAT;
@@ -840,7 +934,7 @@ namespace chatllm
         return output;
     }
 
-    std::string Pipeline::chat_without_extending(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+    std::string Pipeline::chat_without_extending(const Messages &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer)
     {
         bool continuous = tokenizer->get_chat_format() == ChatFormat::CHAT;
@@ -865,7 +959,7 @@ namespace chatllm
         return output;
     }
 
-    std::string Pipeline::chat_with_shift(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+    std::string Pipeline::chat_with_shift(const Messages &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer)
     {
         bool continuous = true;
@@ -910,7 +1004,7 @@ namespace chatllm
         return;
     }
 
-    std::string Pipeline::chat(std::vector<std::string> &history, const GenerationConfig &gen_config,
+    std::string Pipeline::chat(Messages &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer)
     {
         std::string r;
@@ -950,7 +1044,7 @@ namespace chatllm
         return r;
     }
 
-    std::string Pipeline::chat_with_ext_completion(const std::vector<std::string> &history, std::string &external, const GenerationConfig &gen_config,
+    std::string Pipeline::chat_with_ext_completion(const Messages &history, std::string &external, const GenerationConfig &gen_config,
                          BaseStreamer *streamer)
     {
         bool continuous = true;
@@ -976,7 +1070,7 @@ namespace chatllm
         return output;
     }
 
-    std::string Pipeline::chat_continue(std::vector<std::string> &history, std::string &external_ai, const GenerationConfig &gen_config,
+    std::string Pipeline::chat_continue(Messages &history, std::string &external_ai, const GenerationConfig &gen_config,
                          BaseStreamer *streamer)
     {
         std::string r;
@@ -1035,7 +1129,7 @@ namespace chatllm
         model->set_n_past(n_past);
     }
 
-    int Pipeline::save_session(const std::vector<std::string> &history, const std::string &file_name)
+    int Pipeline::save_session(const Messages &history, const std::string &file_name)
     {
         if (!modelobj.loaded) return -1000;
 
@@ -1047,11 +1141,13 @@ namespace chatllm
         if (fwrite(&header, sizeof(header), 1, f) != 1)
             return -1;
 
-        for (auto &s : history)
+        for (auto &s : history.history)
         {
-            size_t len = s.size();
+            int role = s.role;
+            fwrite(&role, sizeof(role), 1, f);
+            size_t len = s.content.size();
             fwrite(&len, sizeof(len), 1, f);
-            fwrite(s.data(), 1, len, f);
+            fwrite(s.content.data(), 1, len, f);
         }
 
         model->save_session(f);
@@ -1060,7 +1156,7 @@ namespace chatllm
         return 0;
     }
 
-    int Pipeline::load_session(std::vector<std::string> &history, const std::string &file_name, BaseStreamer *streamer, int *n_past)
+    int Pipeline::load_session(Messages &history, const std::string &file_name, BaseStreamer *streamer, int *n_past)
     {
         if (!modelobj.loaded) return -1000;
 
@@ -1078,13 +1174,17 @@ namespace chatllm
             {
                 std::string s;
                 size_t len;
+                int role;
+                if (fread(&role, sizeof(role), 1, f) != 1)
+                    return -9;
+
                 if (fread(&len, sizeof(len), 1, f) != 1)
                     return -2;
 
                 s.resize(len);
                 if (fread(s.data(), 1, len, f) != len)
                     return -3;
-                history.push_back(s);
+                history.push_back(s, MsgRole(role));
                 if (streamer)
                 {
                     if ((history.size() % 2) == 0)
@@ -1135,11 +1235,11 @@ namespace chatllm
         model->set_additional_args(args);
     }
 
-    void Pipeline::before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
+    void Pipeline::before_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
     {
     }
 
-    void Pipeline::post_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
+    void Pipeline::post_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
     {
     }
 
@@ -1203,8 +1303,8 @@ namespace chatllm
             rewrite_model->set_tokenizer(tokenizer);
         }
 
-        std::vector<std::string> history;
-        history.push_back(prompt);
+        Messages history;
+        history.push_back(prompt, MsgRole::User);
         bool completed = false;
 
         std::vector<int> input_ids = tokenizer->encode_history(history, gen_config.max_context_length, false);
@@ -1215,10 +1315,10 @@ namespace chatllm
         return tokenizer->decode(output_ids);
     }
 
-    void RAGPipeline::before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
+    void RAGPipeline::before_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
     {
         size_t index = history.size() - 1;
-        std::string query(history.back());
+        std::string query(history.back().content);
         std::string rewritten_query(query);
         std::vector<float> query_emb;
         std::vector<int64_t> selected;
@@ -1292,7 +1392,7 @@ namespace chatllm
 
         auto composed = composer.compose_augmented_query(query, augments);
 
-        history[index] = composed;
+        history[index].content = composed;
     }
 
     std::string RAGPipeline::get_additional_description(void) const
@@ -1314,7 +1414,7 @@ namespace chatllm
         return oss.str();
     }
 
-    void RAGPipeline::post_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
+    void RAGPipeline::post_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
     {
         if (hide_reference || (metainfo.size() < 1)) return;
 

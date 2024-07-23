@@ -113,11 +113,11 @@ class ChatHistoryEncoder : public BaseHistoryEncoder
 {
 public:
     ChatHistoryEncoder(bool insert_eoh) : insert_eoh(insert_eoh) {}
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override
+    void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override
     {
         std::ostringstream oss_prompt;
 
-        append_user(round_idx, user, ids);
+        append_ai_opening(round_idx, ids);
 
         oss_prompt << ai << "<eoa>\n";
         auto text = oss_prompt.str();
@@ -139,15 +139,20 @@ public:
         tokenizer->encode(text, ids);
     }
 
-    void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
     {
         std::ostringstream oss_prompt;
 
         oss_prompt << "<s><|User|>:" << user;
         if (insert_eoh) oss_prompt << "<eoh>";
-        oss_prompt << "\n<|Bot|>:";
+        oss_prompt << "\n";
         auto text = oss_prompt.str();
         tokenizer->encode(text, ids);
+    }
+
+    void append_ai_opening(int round_idx, std::vector<int> &ids) const override
+    {
+        tokenizer->encode("<|Bot|>:", ids);
     }
 public:
     bool insert_eoh;
@@ -223,8 +228,10 @@ namespace v3
     {
     public:
         ChatHistoryEncoder() {}
-        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_sys_prompt(std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -360,36 +367,43 @@ namespace v3
         ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
     };
 
-    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        append_user(round_idx, user, ids);
+        append_ai_opening(round_idx, ids);
         tok->encode(ai, ids, false, true);
     }
 
-    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss_prompt;
 
-        if (round_idx == 0)
+        ids.push_back(tok->bos_token_id);
+        if (tok->get_system_prompt().size() > 0)
         {
-            ids.push_back(tok->bos_token_id);
-            if (tok->get_system_prompt().size() > 0)
-            {
-                oss_prompt << "system\n"
-                           << tok->get_system_prompt();
-                tok->encode(oss_prompt.str(), ids, true, true);
-            }
+            oss_prompt << "system\n"
+                        << tok->get_system_prompt();
+            tok->encode(oss_prompt.str(), ids, true, true);
         }
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::ostringstream oss_prompt;
 
         oss_prompt.str("");
         oss_prompt << "user\n"
                    << user;
         tok->encode(oss_prompt.str(), ids, true, true);
+    }
 
-        oss_prompt.str("");
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::ostringstream oss_prompt;
         oss_prompt << "assistant\n";
         tok->encode(oss_prompt.str(), ids, true, false);
     }

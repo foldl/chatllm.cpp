@@ -5,8 +5,9 @@ typedef llama::v2::Config Config;
 class ChatHistoryEncoder : public BaseHistoryEncoder
 {
 public:
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
 };
 
 static ChatHistoryEncoder _chat_encoder;
@@ -61,14 +62,14 @@ public:
     {}
 };
 
-void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
 {
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-    append_user(round_idx, user, ids);
+    append_ai_opening(round_idx, ids);
     tok->encode(ai, ids, false, true);
 }
 
-void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     std::ostringstream oss_prompt;
@@ -76,14 +77,23 @@ void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, 
     //if (round_idx == 0)
     //    ids.push_back(tok->bos_token_id);
 
-    oss_prompt << "Human: " << user
-               << "\n\nAssistant: ";
+    oss_prompt << "Human: " << user << "\n\n";
 
     auto text = oss_prompt.str();
     tok->encode(text, ids, false, false);
+}
 
-    for (auto x : ids)
-        printf("%d, ", x);
-    printf("\n");
+void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+{
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+    std::ostringstream oss_prompt;
+
+    //if (round_idx == 0)
+    //    ids.push_back(tok->bos_token_id);
+
+    oss_prompt << "Assistant: ";
+
+    auto text = oss_prompt.str();
+    tok->encode(text, ids, false, false);
 }
 }

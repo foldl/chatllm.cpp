@@ -15,7 +15,7 @@ ALL_TOOLS = {
     "cogview": tool_not_implemented,
 }
 
-def dispatch_tool(tool_name: str, tool_params: dict, session_id: str) -> list[ToolObservation]:
+def dispatch_tool(tool_name: str, tool_params: dict, session_id: str) -> ToolObservation:
     if tool_name in ALL_TOOLS:
         return ALL_TOOLS[tool_name](json.dumps(tool_params, ensure_ascii=False), session_id)
 

@@ -6,8 +6,9 @@ class ChatHistoryEncoder : public BaseHistoryEncoder
 {
 public:
     void append_sys_prompt(std::vector<int> &ids) const override;
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
 };
 
 static ChatHistoryEncoder _chat_encoder;
@@ -66,9 +67,9 @@ void Tokenizer::set_additional_args(const std::map<std::string, std::string> &ar
     bot_info  = std::regex_replace(bot_info, r, " ");
 }
 
-void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
 {
-    append_user(round_idx, user, ids);
+    append_ai_opening(round_idx, ids);
     std::ostringstream oss;
     oss << ai << "\n";
     tokenizer->encode(oss.str(), ids);
@@ -98,12 +99,20 @@ void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
     tok->encode(oss.str(), ids);
 }
 
-void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
     std::ostringstream oss;
-    oss << "[" << tok->user_name << "]" << user << "\n"
-        << "[" << tok->bot_name << "]";
+    oss << "[" << tok->user_name << "]" << user << "\n";
+    tok->encode(oss.str(), ids);
+}
+
+void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+{
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+    std::ostringstream oss;
+    oss << "[" << tok->bot_name << "]";
     tok->encode(oss.str(), ids);
 }

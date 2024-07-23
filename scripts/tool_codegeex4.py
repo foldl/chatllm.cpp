@@ -100,13 +100,14 @@ class ToolChatLLM(ChatLLM):
         super().callback_end()
 
         rsp = '\n'.join([call_function(s) for s in self.tool_calls])
-        if rsp != '':
-            self.tool_input(rsp)
 
         self.chunk_acc = ''
         self.non_empty_acc = ''
         self.not_tool = False
         self.tool_calls = []
+
+        if rsp != '':
+            self.tool_input(rsp)
 
 if __name__ == '__main__':
     #print(build_sys_prompt())

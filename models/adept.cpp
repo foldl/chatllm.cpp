@@ -11,8 +11,9 @@ namespace persimmon
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
-        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -81,28 +82,30 @@ namespace persimmon
         encode(text, ids, false, false);
     }
 
-    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss_prompt;
 
-        append_user(round_idx, user, ids);
+        append_ai_opening(round_idx, ids);
 
         oss_prompt << ai << "\n\n";
         tok->encode(oss_prompt.str(), ids, false, true);
     }
 
-    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss_prompt;
 
         oss_prompt << " human: " << user << "\n\n";
         tok->encode(oss_prompt.str(), ids, true, false);
+    }
 
-        oss_prompt.str("");
-        oss_prompt << "adept: ";
-        tok->encode(oss_prompt.str(), ids, true, false);
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode("adept: ", ids, true, false);
     }
 
     ConditionalGeneration::ConditionalGeneration(const Config &config)

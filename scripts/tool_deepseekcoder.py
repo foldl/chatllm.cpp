@@ -81,8 +81,7 @@ class ToolChatLLM(ChatLLM):
         tool_name, tool_param = parse_function_call(s)
         print(f"[Use Tool]: {tool_name}")
         rsp = dispatch_tool(tool_name, tool_param, '')
-        self.tool_input('<｜tool▁output▁begin｜>' + rsp[0].text + '<｜tool▁output▁end｜>')
+        self.tool_input('<｜tool▁output▁begin｜>' + rsp.text + '<｜tool▁output▁end｜>')
 
 if __name__ == '__main__':
     chatllm.demo_simple(sys.argv[1:] + ['-s', build_system_prompt(get_tools())], ToolChatLLM, lib_path=PATH_BINDS)
-

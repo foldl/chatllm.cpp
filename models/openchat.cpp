@@ -4,8 +4,9 @@ class ChatHistoryEncoder : public BaseHistoryEncoder
 {
 public:
     void append_sys_prompt(std::vector<int> &ids) const override;
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
 };
 
 static ChatHistoryEncoder _chat_encoder;
@@ -38,7 +39,7 @@ public:
     }
 };
 
-void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
 {
     // {{ bos_token }}
     // {% for message in messages %}
@@ -47,7 +48,7 @@ void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, con
     // {% if add_generation_prompt %}{{ 'GPT4 Correct Assistant:' }}{% endif %}
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-    append_user(round_idx, user, ids);
+    append_ai_opening(round_idx, ids);
 
     tok->encode(ai, ids, false, true);
 }
@@ -58,7 +59,7 @@ void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
     ids.push_back(tok->bos_token_id);
 }
 
-void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
@@ -66,8 +67,14 @@ void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, 
 
     oss_prompt << tok->get_system_prompt() << " Correct User: " << user;
     tok->encode(oss_prompt.str(), ids, false, true);
+}
 
-    oss_prompt.str("");
+void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+{
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+    std::ostringstream oss_prompt;
+
     oss_prompt << tok->get_system_prompt() << " Correct Assistant: ";
     tok->encode(oss_prompt.str(), ids, false, false);
 }

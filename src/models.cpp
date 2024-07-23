@@ -158,6 +158,7 @@ namespace chatllm
 
         MODEL_TYPE_LLAMA3           = 0x1700,
         MODEL_TYPE_SMOLLM           = 0x1701,
+        MODEL_TYPE_LLAMA3_GROQ_TOOL = 0x1702,
 
         MODEL_TYPE_STARCODER2       = 0x1800,
 
@@ -315,7 +316,7 @@ namespace chatllm
         case MODEL_TYPE_ZHINAO:
             return "Zhinao";
         case MODEL_TYPE_LLAMA3:
-            return "LlaMa3";
+            return "LlaMA3";
         case MODEL_TYPE_BCE_Embedding:
             return "BCE-Embedding";
         case MODEL_TYPE_BCE_ReRanker:
@@ -334,6 +335,8 @@ namespace chatllm
             return "LlaMA-Multi";
         case MODEL_TYPE_SMOLLM:
             return "SmolLM";
+        case MODEL_TYPE_LLAMA3_GROQ_TOOL:
+            return "LlaMA-Groq-Tool-Use";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1352,6 +1355,11 @@ namespace chatllm
         #include "../models/smollm.cpp"
     }
 
+    namespace groq
+    {
+        #include "../models/groq.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1627,6 +1635,7 @@ namespace chatllm
         CASE(INDEX,                 index, 1)                   \
                                                                 \
         CASE(SMOLLM,                smollm, 1)                  \
+        CASE(LLAMA3_GROQ_TOOL,      groq, 1)                    \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

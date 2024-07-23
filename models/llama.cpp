@@ -8,8 +8,9 @@ namespace v2
     {
     public:
         void append_sys_prompt(std::vector<int> &ids) const override;
-        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -176,10 +177,10 @@ If a question does not make any sense, or is not factually coherent, explain why
         encode(text, ids, false, false);
     }
 
-    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        append_user(round_idx, user, ids);
+        append_ai_opening(round_idx, ids);
         tok->encode(ai, ids, false, true);
     }
 
@@ -193,7 +194,7 @@ If a question does not make any sense, or is not factually coherent, explain why
         tok->encode(text, ids, true, false);
     }
 
-    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss_prompt;
@@ -202,6 +203,10 @@ If a question does not make any sense, or is not factually coherent, explain why
 
         auto text = oss_prompt.str();
         tok->encode(text, ids, true, false);
+    }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
     }
 
     bool Tokenizer::is_special_id(int id) const
@@ -222,8 +227,9 @@ namespace v3
     {
     public:
         void append_sys_prompt(std::vector<int> &ids) const override;
-        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -286,10 +292,10 @@ namespace v3
         int nl_token_id;
     };
 
-    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        append_user(round_idx, user, ids);
+        append_ai_opening(round_idx, ids);
         tok->encode(ai, ids);
         ids.push_back(tok->eot_id);
     }
@@ -306,13 +312,19 @@ namespace v3
         }
     }
 
-    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss;
 
         tok->encode_header("user", ids);
         tok->encode_content(user, ids);
+    }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::ostringstream oss;
 
         tok->encode_header("assistant", ids);
     }

@@ -3,20 +3,22 @@ namespace v2
     class QAHistoryEncoder : public BaseHistoryEncoder
     {
     public:
-        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
-        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
-    void QAHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    void QAHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
-        append_user(round_idx, user, ids);
+        append_ai_opening(round_idx, ids);
 
         std::ostringstream oss_prompt;
         oss_prompt << ai << "\n";
@@ -24,20 +26,29 @@ namespace v2
         tokenizer->encode(text, ids);
     }
 
-    void QAHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void QAHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         std::ostringstream oss_prompt;
 
-        oss_prompt << "Instruct: " << user << "\n"
-                << "Output: ";
+        oss_prompt << "Instruct: " << user << "\n";
 
         auto text = oss_prompt.str();
         tokenizer->encode(text, ids);
     }
 
-    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    void QAHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
     {
-        append_user(round_idx, user, ids);
+        std::ostringstream oss_prompt;
+
+        oss_prompt << "Output: ";
+
+        auto text = oss_prompt.str();
+        tokenizer->encode(text, ids);
+    }
+
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+    {
+        append_ai_opening(round_idx, ids);
 
         std::ostringstream oss_prompt;
         oss_prompt << ai << "\n";
@@ -45,12 +56,21 @@ namespace v2
         tokenizer->encode(text, ids);
     }
 
-    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         std::ostringstream oss_prompt;
 
-        oss_prompt << "Alice: " << user << "\n"
-                << "Bob: ";
+        oss_prompt << "Alice: " << user << "\n";
+
+        auto text = oss_prompt.str();
+        tokenizer->encode(text, ids);
+    }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        std::ostringstream oss_prompt;
+
+        oss_prompt << "Bob: ";
 
         auto text = oss_prompt.str();
         tokenizer->encode(text, ids);
@@ -367,8 +387,9 @@ namespace v3
     {
     public:
         void append_sys_prompt(std::vector<int> &ids) const override;
-        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -484,10 +505,10 @@ namespace v3
         }
     };
 
-    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        append_user(round_idx, user, ids);
+        append_ai_opening(round_idx, ids);
         tok->encode(ai, ids, -1, tok->end_token_id);
     }
 
@@ -500,11 +521,16 @@ namespace v3
             tok->encode(tok->get_system_prompt(), ids, tok->system_token_id, tok->end_token_id);
     }
 
-    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
         tok->encode(user, ids, tok->user_token_id, tok->end_token_id);
+    }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         tok->encode("", ids, tok->assistant_token_id, -1);
     }
 }
@@ -572,8 +598,9 @@ namespace v3_su2
     {
     public:
         void append_sys_prompt(std::vector<int> &ids) const override;
-        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -589,10 +616,10 @@ namespace v3_su2
 
     typedef v3_su::ConditionalGeneration ConditionalGeneration;
 
-    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        append_user(round_idx, user, ids);
+        append_ai_opening(round_idx, ids);
         tok->encode(ai, ids, -1, tok->end_token_id);
     }
 
@@ -604,11 +631,17 @@ namespace v3_su2
             tok->encode(tok->get_system_prompt(), ids, tok->system_token_id, tok->end_token_id);
     }
 
-    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
         tok->encode(user, ids, tok->user_token_id, tok->end_token_id);
+    }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
         tok->encode("", ids, tok->assistant_token_id, -1);
     }
 }

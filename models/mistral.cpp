@@ -11,8 +11,10 @@ namespace mistral
     {
     public:
         void append_sys_prompt(std::vector<int> &ids) const override;
-        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_tool(int round_idx, const std::string &content, std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -148,13 +150,24 @@ namespace mistral
         ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
     };
 
-    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        append_user(round_idx, user, ids);
+        append_ai_opening(round_idx, ids);
 
         tok->encode(ai, ids, false, true);
+    }
+
+    void ChatHistoryEncoder::append_tool(int round_idx, const std::string &content, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        std::ostringstream oss_prompt;
+
+        oss_prompt << "[TOOL_RESULTS]" << content << "[/TOOL_RESULTS]";
+
+        tok->encode(oss_prompt.str(), ids, false, true);
     }
 
     void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
@@ -163,7 +176,7 @@ namespace mistral
         ids.push_back(tok->bos_token_id);
     }
 
-    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
@@ -197,6 +210,10 @@ namespace mistral
 
         tok->encode(oss_prompt.str(), ids, false, false);
     }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+    }
 }
 
 namespace mixtral
@@ -211,8 +228,9 @@ namespace mixtral
     {
     public:
         void append_sys_prompt(std::vector<int> &ids) const override;
-        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -327,11 +345,11 @@ namespace mixtral
         InitContext w_ctx_; // weight context
     };
 
-    void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        append_user(round_idx, user, ids);
+        append_ai_opening(round_idx, ids);
 
         tok->encode(ai, ids, false, true);
     }
@@ -342,7 +360,7 @@ namespace mixtral
         ids.push_back(tok->bos_token_id);
     }
 
-    void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
@@ -350,6 +368,10 @@ namespace mixtral
 
         oss_prompt << "[INST] " << user << " [/INST]";
         tok->encode(oss_prompt.str(), ids, false, false);
+    }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
     }
 
     const int NUM_EXPERTS                   =  8;

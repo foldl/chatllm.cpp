@@ -476,7 +476,7 @@ static void show_stat(chatllm::Pipeline &pipeline, chatllm::BaseStreamer &stream
 
 static void run_file(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
-    std::vector<std::string> history;
+    chatllm::Messages history;
     std::string input;
     std::ifstream f(args.test_fn);
 
@@ -486,11 +486,11 @@ static void run_file(Args &args, chatllm::Pipeline &pipeline, TextStreamer &stre
         {
             trim(input);
             streamer.cout << "You  > " << input << std::endl;
-            history.emplace_back(std::move(input));
+            history.push_back(input, chatllm::MsgRole::User);
 
             streamer.cout << "A.I. > " << std::flush;
             std::string output = pipeline.chat(history, gen_config, &streamer);
-            history.emplace_back(std::move(output));
+            history.push_back(output, chatllm::MsgRole::User);
         }
     }
 
@@ -635,11 +635,25 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
     pipeline.set_additional_args(args.additional);
 
     const std::string ai_prompt   = "A.I.";
-    const std::string user_prompt = "You";
-    const int prompt_len = 4;
+    const std::string user_prompt = "You ";
+
+    auto show_msg_role = [&](chatllm::MsgRole role) -> std::string
+    {
+        switch (role)
+        {
+        case chatllm::MsgRole::Assistant:
+            return ai_prompt;
+        case chatllm::MsgRole::User:
+            return user_prompt;
+        case chatllm::MsgRole::Tool:
+            return "Tool";
+        default:
+            return "????";
+        }
+    };
 
     DEF_GenerationConfig(gen_config, args);
-    std::vector<std::string> history;
+    chatllm::Messages history;
 
     show_banner(pipeline, args.interactive && args.show_banner, &streamer);
 
@@ -666,7 +680,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 
     if (!args.interactive)
     {
-        history.push_back(args.prompt);
+        history.push_back(args.prompt, chatllm::MsgRole::User);
         pipeline.chat(history, gen_config, &streamer);
         show_stat(pipeline, streamer);
         return;
@@ -685,17 +699,21 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
     {
         CHATLLM_CHECK(pipeline.load_session(history, args.load_session, nullptr) == 0) << "failed to load session file";
 
-        for (size_t i = 0; i < history.size(); i++)
+        for (int i = 0; i < (int)history.size(); i++)
         {
-            streamer.cout << std::setw(prompt_len) << std::left
-                          << ((i % 2) == 0 ? user_prompt : ai_prompt)
+            auto &m = history[i];
+            streamer.cout << show_msg_role(m.role)
                           << " > "
-                          << history[i] << std::endl << std::flush;
+                          << m.content << std::endl << std::flush;
         }
-        if ((history.size() % 2) == 1)
+        if (history.size() > 0)
         {
-            std::string output = pipeline.chat(history, gen_config, &streamer);
-            history.emplace_back(std::move(output));
+            auto &last = history[history.size() - 1];
+            if (last.role != chatllm::MsgRole::Assistant)
+            {
+                std::string output = pipeline.chat(history, gen_config, &streamer);
+                history.push_back(output, chatllm::MsgRole::Assistant);
+            }
         }
     }
 
@@ -708,7 +726,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
             break;
         }
 
-        streamer.cout << std::setw(prompt_len) << std::left << user_prompt << " > " << std::flush;
+        streamer.cout << user_prompt << " > " << std::flush;
         std::string input;
         if (!get_utf8_line(input, args.multi_line))
         {
@@ -717,10 +735,10 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
         }
         if (input.empty()) continue;
 
-        history.emplace_back(std::move(input));
-        streamer.cout << std::setw(prompt_len) << std::left << ai_prompt << " > " << std::flush;
+        history.push_back(input, chatllm::MsgRole::User);
+        streamer.cout << ai_prompt << " > " << std::flush;
         std::string output = pipeline.chat(history, gen_config, &streamer);
-        history.emplace_back(std::move(output));
+        history.push_back(output, chatllm::MsgRole::Assistant);
     }
     streamer.cout << "Bye\n";
 }
@@ -933,7 +951,7 @@ public:
 
 public:
     std::vector<std::string> params;
-    std::vector<std::string> history;
+    chatllm::Messages history;
     chatllm::BaseStreamer *streamer;
     chatllm::Pipeline *pipeline;
     chatllm::GenerationConfig gen_config;
@@ -1099,11 +1117,11 @@ static void chatllm_continue_chat(Chat *chat)
 
     int last_id = (int)chat->history.size() - 1;
 
-    chat->history[last_id] = chat->history[last_id] + external_ai;
+    chat->history[last_id].content = chat->history[last_id].content + external_ai;
 
     std::string output = chat->pipeline->chat(chat->history, chat->gen_config, streamer);
 
-    chat->history[last_id] = chat->history[last_id] + output;
+    chat->history[last_id].content = chat->history[last_id].content + output;
 }
 
 int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
@@ -1116,11 +1134,11 @@ int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
     if (chat->pipeline->is_loaded() && (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Chat))
         return -1;
 
-    chat->history.push_back(utf8_str);
+    chat->history.push_back(utf8_str, chatllm::MsgRole::User);
 
 generate:
     std::string output = chat->pipeline->chat(chat->history, chat->gen_config, streamer);
-    chat->history.emplace_back(std::move(output));
+    chat->history.push_back(output, chatllm::MsgRole::Assistant);
 
     if (chat->tool_completion.size() > 0)
         chatllm_continue_chat(chat);
@@ -1133,9 +1151,8 @@ generate:
 
     if (chat->tool_input.size() > 0)
     {
-        auto s = chat->tool_input;
+        chat->history.push_back(chat->tool_input.c_str(), chatllm::MsgRole::Tool);
         chat->tool_input.clear();
-        chat->history.push_back(s.c_str());
         goto generate;
     }
 
@@ -1218,7 +1235,7 @@ void chatllm_restart(struct chatllm_obj *obj)
     if (chat->sess_hist_len > 0)
     {
         if (chat->history.size() > (size_t)chat->sess_hist_len)
-            chat->history.erase(chat->history.begin() + chat->sess_hist_len, chat->history.end());
+            chat->history.history.erase(chat->history.history.begin() + chat->sess_hist_len, chat->history.history.end());
         chat->pipeline->rewind(chat->sess_n_past);
     }
     else

@@ -5,11 +5,10 @@ namespace neo
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
-        void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override
         {
             auto *tok = tokenizer;
-            append_user(round_idx, user, ids);
-
+            append_ai_opening(round_idx, ids);
             tok->encode(ai, ids);
             ids.push_back(tok->eos_token_id);
         }
@@ -25,14 +24,19 @@ namespace neo
             }
         }
 
-        void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
         {
             auto *tok = tokenizer;
 
             std::ostringstream oss;
             oss << "[INST] " << user << " [/INST]";
-            ids.push_back(tok->bos_token_id);
             tok->encode(oss.str(), ids);
+        }
+
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override
+        {
+            auto *tok = tokenizer;
+            ids.push_back(tok->bos_token_id);
         }
     };
 

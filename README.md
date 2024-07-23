@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-07-23: Llama-3-Groq with tool calling
 * 2024-07-17: Mistral Nemo
 * 2024-07-17: SmolLM
 * 2024-07-14: [ggml updated](https://github.com/ggerganov/ggml/tree/3e7e5e26f90fecf4f7c2808df7d94454630b219c)

@@ -7,7 +7,9 @@ struct Config : public glm::v2::Config
 class ChatHistoryEncoder : public BaseHistoryEncoder
 {
 public:
-    void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
 };
 
 static ChatHistoryEncoder _chat_encoder;
@@ -31,11 +33,20 @@ public:
     }
 };
 
-void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+{
+}
+
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
     std::string combined = tokenizer->get_system_prompt() + "\n" + user + "\n";
     tokenizer->encode(combined, ids);
 }
+
+void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+{
+}
+
 }
 
 namespace v4

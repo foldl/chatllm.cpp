@@ -9,8 +9,9 @@ struct Config : public llama::v2::Config
 class ChatHistoryEncoder : public BaseHistoryEncoder
 {
 public:
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override;
-    void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
 };
 
 static ChatHistoryEncoder _chat_encoder;
@@ -71,21 +72,26 @@ size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     return size;
 }
 
-void ChatHistoryEncoder::append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
 {
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-    append_user(round_idx, user, ids);
-    tok->encode(user, ids, false, false);
+    append_ai_opening(round_idx, ids);
+    tok->encode(ai, ids, false, false);
 }
 
-void ChatHistoryEncoder::do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
 {
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
     ids.push_back(tok->bos_token_id);
     ids.push_back(tok->human_token_id);
     tok->encode(user, ids, false, false);
+}
+
+void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+{
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     ids.push_back(tok->ai_token_id);
 }
 

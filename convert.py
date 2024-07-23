@@ -120,6 +120,7 @@ class ModelType(Enum):
 
     LlaMA3        = 0x1700
     SmolLM        = 0x1701
+    GroqToolUse   = 0x1702
 
     StarCoder2    = 0x1800
 
@@ -3593,6 +3594,9 @@ def main():
                 Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Llama-3-Groq-8B-Tool-Use'.lower():
+        Llama3Converter.MODEL_TYPE = ModelType.GroqToolUse
+        Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'llama-multi-token-prediction-ckpt':
         LlamaMultiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'smollm':

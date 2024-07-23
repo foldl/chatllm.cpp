@@ -29,6 +29,78 @@ namespace chatllm
         Ranker,
     };
 
+    enum MsgRole
+    {
+        Auto = 0,
+        // System = 1, // Not used.
+        User = 2,
+        Assistant = 3,
+        Tool = 4,
+    };
+
+    class Message
+    {
+    public:
+        Message(const std::string &s, MsgRole role, int round)
+          : content(s), role(role), round(round)
+        {
+        }
+
+        Message(const Message &m)
+          : content(m.content), role(m.role), round(m.round)
+        {
+        }
+
+        Message &operator =(const chatllm::Message &m);
+
+    public:
+        std::string content;
+        const MsgRole role;
+        const int round;
+    };
+
+    class Messages
+    {
+    public:
+        Messages();
+
+        void push_back(const std::string &content, MsgRole role);
+        void push_back(const Message &m);
+        void clear(void);
+
+        size_t size() const
+        {
+            return history.size();
+        }
+
+        Message & operator [](size_t index)
+        {
+            return history[index];
+        }
+
+        const Message & operator [](size_t index) const
+        {
+            return history[index];
+        }
+
+        Message & back(void)
+        {
+            return history.back();
+        }
+
+        const Message & back(void) const
+        {
+            return history.back();
+        }
+
+    public:
+        std::vector<Message> history;
+    protected:
+        std::string sep;
+        bool auto_aggregate;
+        int round;
+    };
+
     std::string to_string(ggml_tensor *tensor, bool with_data = true);
 
     struct BaseConfig
@@ -74,8 +146,8 @@ namespace chatllm
 
         virtual std::string decode(const std::vector<int> &ids) const;
 
-        virtual std::vector<int> encode_history(const std::vector<std::string> &history, int max_length, const bool incremental = false);
-        virtual std::vector<int> encode_history(BaseHistoryEncoder *encoder, const std::vector<std::string> &history, int max_length, const bool incremental = false);
+        virtual std::vector<int> encode_history(const Messages &history, int max_length, const bool incremental = false);
+        virtual std::vector<int> encode_history(BaseHistoryEncoder *encoder, const Messages &history, int max_length, const bool incremental = false);
         virtual std::vector<int> encode_sys_prompt(void);
 
         void set_system_prompt(const std::string &prompt) { sys_prompt = prompt; }
@@ -96,7 +168,7 @@ namespace chatllm
         int sep_token_id;
 
     protected:
-        virtual int get_history_start(const std::vector<std::string> &history, int max_length) const;
+        virtual int get_history_start(const Messages &history, int max_length) const;
 
         virtual std::string preprocess(const std::string &text) const;
         virtual std::string postprocess(const std::string &text) const;
@@ -105,7 +177,7 @@ namespace chatllm
         tokenizer::Processor *tp;
     protected:
         std::string sys_prompt;
-        int history_offset;
+        int encode_start;
         const int max_length;
         ChatFormat format;
         BaseHistoryEncoder *chat_encoder;
@@ -121,10 +193,13 @@ namespace chatllm
         BaseHistoryEncoder() : skip_sys_prompt(false), tokenizer(nullptr) {}
 
         virtual void append_sys_prompt(std::vector<int> &ids) const;
-
-        virtual void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const;
         virtual void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const;
-        virtual void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const;
+        virtual void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const = 0;
+        virtual void append_tool(int round_idx, const std::string &tool, std::vector<int> &ids) const;
+
+        virtual void append_ai_opening(int round_idx, std::vector<int> &ids) const = 0;
+
+        virtual void append_message(const Message &msg, std::vector<int> &ids) const;
 
         void set_tokenizer(BaseTokenizer *tokenizer)
         {
@@ -718,12 +793,12 @@ namespace chatllm
         Pipeline(const std::string &path);
         Pipeline(const std::string &path, const ModelObject::extra_args &args);
 
-        std::string chat(std::vector<std::string> &history, const GenerationConfig &gen_config,
+        std::string chat(Messages &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);
         virtual void abort_generation(void);
         virtual void eval_sys_prompt(const GenerationConfig &gen_config);
 
-        std::string chat_continue(std::vector<std::string> &history, std::string &external, const GenerationConfig &gen_config,
+        std::string chat_continue(Messages &history, std::string &external, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);
 
         void set_system_prompt(const std::string &prompt);
@@ -742,10 +817,10 @@ namespace chatllm
         virtual void restart(void);
         virtual void rewind(int n_past);
 
-        virtual int save_session(const std::vector<std::string> &history, const std::string &file_name);
-        virtual int load_session(std::vector<std::string> &history, const std::string &file_name, BaseStreamer *streamer, int *n_past = nullptr);
+        virtual int save_session(const Messages &history, const std::string &file_name);
+        virtual int load_session(Messages &history, const std::string &file_name, BaseStreamer *streamer, int *n_past = nullptr);
     protected:
-        const char head_magic[16] = "CHATLLM-SESSION";
+        const char head_magic[18] = "CHATLLM-SESSION01";
 
         struct file_header
         {
@@ -764,17 +839,17 @@ namespace chatllm
         ExtendingMethod extending;
         ModelObject modelobj;
 
-        std::string chat_with_ext_completion(const std::vector<std::string> &history, std::string &external, const GenerationConfig &gen_config,
+        std::string chat_with_ext_completion(const Messages &history, std::string &external, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);
-        std::string chat_with_restart(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+        std::string chat_with_restart(const Messages &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);
-        std::string chat_with_shift(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+        std::string chat_with_shift(const Messages &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);
-        std::string chat_without_extending(const std::vector<std::string> &history, const GenerationConfig &gen_config,
+        std::string chat_without_extending(const Messages &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer);
 
-        virtual void before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer);
-        virtual void post_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer);
+        virtual void before_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer);
+        virtual void post_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer);
     };
 
     class AugmentedQueryComposer
@@ -813,8 +888,8 @@ namespace chatllm
         bool    rerank_rewrite;
 
     protected:
-        void before_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer) override;
-        void post_chat(std::vector<std::string> &history, const GenerationConfig &gen_config, BaseStreamer *streamer) override;
+        void before_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer) override;
+        void post_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer) override;
 
         CVectorStore vs;
         ModelObject embedding;

@@ -40,10 +40,10 @@ public:
 class ChatHistoryEncoder : public BaseHistoryEncoder
 {
 public:
-    void append_pair(int round_idx, const std::string &user, const std::string &ai, std::vector<int> &ids) const override
+    void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override
     {
         DolphinTokenizer *tok = dynamic_cast<DolphinTokenizer *>(tokenizer);
-        append_user(round_idx, user, ids);
+        append_ai_opening(round_idx, ids);
         tok->encode(ai, ids, false, true);
     }
 
@@ -58,7 +58,7 @@ public:
         }
     }
 
-    void do_append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
+    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
     {
         std::ostringstream oss_prompt;
 
@@ -66,8 +66,14 @@ public:
 
         oss_prompt << "user" << std::endl << user;
         tok->encode(oss_prompt.str(), ids, true, true);
+    }
 
-        oss_prompt.str("");
+    void append_ai_opening(int round_idx, std::vector<int> &ids) const override
+    {
+        std::ostringstream oss_prompt;
+
+        DolphinTokenizer *tok = dynamic_cast<DolphinTokenizer *>(tokenizer);
+
         oss_prompt << "assistant" << std::endl;
         tok->encode(oss_prompt.str(), ids, true, false);
     }

@@ -79,7 +79,7 @@ class ToolChatLLM(ChatLLM):
         s = s.strip()
         print(f"[Use Tools]: {s}")
         rsp = call_function(s)
-        self.tool_input('[TOOL_RESULTS]' + rsp + '[/TOOL_RESULTS]')
+        self.tool_input(rsp)
 
     def chat(self, user_input: str, input_id = None) -> None:
         user_input, keywords = split_input(user_input)

@@ -9,6 +9,7 @@ Demos of tool calling for these models are provided:
 * [DeepSeek-Coder v2](../scripts/tool_deepseekcoder.py) (Note: function calling is *officially* unsupported.)
 * [InternLM 2.5](../scripts//tool_internlm.py)
 * [NuminaMath](../scripts/tool_numinamath.py)
+* [LlaMA3-Groq-Tool-Use](../scripts/tool_groq.py)
 
 ## Precondition
 
@@ -249,3 +250,25 @@ Note: F16 (`-m :numinamath:f16`) performs better (correct vs wrong) than Q8.
 > The factorial of 10, denoted as \(10!\), is \(3,628,800\).
 >
 > Thus, the result of \(10!\) is \(\boxed{3628800}\).
+
+### LlaMA3-Groq
+
+```
+python tool_groq.py --temp 0 -m /path/to/llama3-groq-tool-8b.bin
+    ________          __  __    __    __  ___
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+You are served by LlaMA-Groq-Tool-Use,        /_/   /_/
+with 8030310400 (8.0B) parameters.
+
+You  > weather in beijing?
+A.I. >
+[Use Tool]: get_weather
+The current weather in Beijing is sunny with a temperature of 40°C. It feels like 46°C with a humidity of 35%.
+You  > I want to goto New York. Should I bring an umbrella?
+A.I. >
+[Use Tool]: get_weather
+The current weather in New York is partly cloudy with a temperature of 24°C. It feels like 26°C with a humidity of 79%. There's no indication of rain, so you might not need an umbrella.
+```
