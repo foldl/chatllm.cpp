@@ -121,6 +121,7 @@ class ModelType(Enum):
     LlaMA3        = 0x1700
     SmolLM        = 0x1701
     GroqToolUse   = 0x1702
+    LlaMA31       = 0x1703
 
     StarCoder2    = 0x1800
 
@@ -1062,6 +1063,39 @@ class Llama3Converter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
+
+class Llama31Converter(BaseConverter):
+    MODEL_TYPE = ModelType.LlaMA31
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return Llama3Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert isinstance(config.rope_scaling, dict), 'rope_scaling must be a dict'
+        assert config.rope_scaling['rope_type'] == 'llama3', 'rope_scaling.rope_type must be `llama3`'
+
+        if isinstance(config.eos_token_id, list):
+            config.eos_token_id = config.eos_token_id[0]
+
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        config_values = [
+            config.rope_theta,
+            config.rope_scaling['original_max_position_embeddings'],
+            config.rope_scaling['factor'],
+            config.rope_scaling['low_freq_factor'],
+            config.rope_scaling['high_freq_factor'],
+        ]
+        f.write(struct.pack("<fifff", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return Llama3Converter.get_weight_names(config)
 
 class SmolLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.SmolLM
@@ -3585,6 +3619,10 @@ def main():
     elif arch == 'InternLM2ForCausalLM':
         InternLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'LlamaForCausalLM':
+        if isinstance(config.rope_scaling, dict):
+            Llama31Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            return
+
         if tokenizer_model_file_exists:
             if ((config.num_key_value_heads is None) or (config.num_key_value_heads == config.num_attention_heads)) \
                 and ((config.rope_theta is None) or (config.rope_theta == 10000.0)):

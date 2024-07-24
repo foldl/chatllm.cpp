@@ -6,6 +6,7 @@
     * [x] All LlaMA-1 models
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
     * [x] LlaMA-3: [Instruct-8B](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct), [Instruct-70B](https://huggingface.co/meta-llama/Meta-Llama-3-70B-Instruct), other derivations such as [Llama3-8B-Chinese-Chat](https://huggingface.co/shenzhi-wang/Llama3-8B-Chinese-Chat)
+    * [x] LlaMA-3.1: [Instruct-8B](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct), [Instruct-70B](https://huggingface.co/meta-llama/Meta-Llama-3.1-70B-Instruct)
     * [x] CodeLlaMA: [Instruct-7B](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf) (`-a CodeLlaMA`)
     * [x] LLM-Compiler: [7B](https://huggingface.co/facebook/llm-compiler-7b), [7B-FTD](https://huggingface.co/facebook/llm-compiler-7b-ftd), [13B](https://huggingface.co/facebook/llm-compiler-13b), [13B-FTD](https://huggingface.co/facebook/llm-compiler-13b-ftd)
     * [x] DeepSeek: [Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat) (`-a DeepSeek`) , [Coder-6.7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct) (`-a DeepSeekCoder`), [Coder-Instruct-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-instruct) (`-a DeepSeekCoder`) 🔥
@@ -20,7 +21,7 @@
     * [x] TigerBot: [Chat-7B](https://huggingface.co/TigerResearch/tigerbot-7b-chat), [Chat-13B](https://huggingface.co/TigerResearch/tigerbot-13b-chat-v5) (`-a TigerBot`)
     * [x] CodeFuse-DeepSeek: [33B](https://huggingface.co/codefuse-ai/CodeFuse-DeepSeek-33B) (`-a CodeFuseDeepSeek`)
     * [x] MAP-Neo: [Instruct-7B](https://huggingface.co/m-a-p/neo_7b_instruct_v0.1) (`-a MAP-Neo`)
-    * [*] Index: [Chat-1.9B](https://huggingface.co/IndexTeam/Index-1.9B-Chat), [Character-1.9B](https://huggingface.co/IndexTeam/Index-1.9B-Character)
+    * [x] Index: [Chat-1.9B](https://huggingface.co/IndexTeam/Index-1.9B-Chat), [Character-1.9B](https://huggingface.co/IndexTeam/Index-1.9B-Character)
     * [x] NuminaMath: [7B-TIR](https://huggingface.co/AI-MO/NuminaMath-7B-TIR)
     * [x] SmolLM: [Instruct-7B](https://huggingface.co/HuggingFaceTB/SmolLM-1.7B-Instruct) (`-a SmolLM`)
     * [x] Groq: [Llama-3-Groq-8B-Tool-Use](https://huggingface.co/Groq/Llama-3-Groq-8B-Tool-Use) (`-a Llama-3-Groq-8B-Tool-Use`)

@@ -355,6 +355,157 @@ namespace v3
     };
 }
 
+namespace v3_1
+{
+    struct Config : public v3::Config
+    {
+        int rope_scaling_original_max_position_embeddings;
+        float rope_scaling_factor;
+        float rope_scaling_low_freq_factor;
+        float rope_scaling_high_freq_factor;
+    };
+
+    class Tokenizer : public v3::Tokenizer
+    {
+    public:
+        Tokenizer(const Config &config)
+            : v3::Tokenizer(config)
+        {}
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            size_t size = v3::Tokenizer::load(buffer, n_vocab);
+
+            eom_id          = tp->PieceToId("<|eom_id|>");
+            python_tag_id   = tp->PieceToId("<|python_tag|>");
+
+            printf("%d,%d\n", eom_id, python_tag_id);
+
+            terminate_ids.insert(eom_id);
+
+            return size;
+        }
+    public:
+        int eom_id;
+        int python_tag_id;
+    };
+
+    template <class BaseAttn> class LlamaRoPESelfAttention : public BaseAttn
+    {
+    public:
+        LlamaRoPESelfAttention() : BaseAttention() {}
+        LlamaRoPESelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool qkv_bias, bool o_bias)
+            : LlamaRoPESelfAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, qkv_bias, o_bias)
+        {
+        }
+
+        LlamaRoPESelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
+            : LlamaRoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads,  max_length, qkv_bias, o_bias)
+        {
+        }
+
+        LlamaRoPESelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
+            : BaseAttn(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias),
+              rope_dim(head_dim)
+        {
+        }
+
+        void config_rope(float theta, float scaling_factor, float scaling_low_freq_factor, float scaling_high_freq_factor, int original_max_position_embeddings)
+        {
+            rope.inv_freq.clear();
+            rope.scaling_factor = 1.0f;
+            const float base = theta;
+
+            for (int i = 0; i < rope_dim; i += 2)
+            {
+                rope.inv_freq.push_back(1.0f / (powf(base,  (float)i / rope_dim)));
+            }
+
+            const float factor = scaling_factor;
+            const float low_freq_factor  = scaling_low_freq_factor;
+            const float high_freq_factor = scaling_high_freq_factor;
+            const int   old_context_len  = original_max_position_embeddings;
+
+            const float low_freq_wavelen = old_context_len / low_freq_factor;
+            const float high_freq_wavelen = old_context_len / high_freq_factor;
+
+            for (size_t i = 0; i < rope.inv_freq.size(); i++)
+            {
+                const float freq = rope.inv_freq[i];
+                const float wavelen = 2 * std::numbers::pi_v<float> / freq;
+                if (wavelen < high_freq_wavelen)
+                {
+                    ;
+                }
+                else if (wavelen > low_freq_wavelen)
+                {
+                    rope.inv_freq[i] = freq / factor;
+                }
+                else
+                {
+                    const float smooth = (old_context_len / wavelen - low_freq_factor) / (high_freq_factor - low_freq_factor);
+                    rope.inv_freq[i] = (1 - smooth) * freq / factor + smooth * freq;
+                }
+            }
+        }
+
+    public:
+        int rope_dim;
+        CustomInvFreqScalingRope rope;
+
+    protected:
+        // input & output: [qlen, heads, head_size]
+        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
+        {
+            return ggml_map_custom2(ctx->gctx.get(), k, past, ggml_compute_forward_inv_freq_scaling_rope, GGML_N_TASKS_MAX, (void *)&rope);
+        }
+        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
+        {
+            return ggml_map_custom2(ctx->gctx.get(), q, past, ggml_compute_forward_inv_freq_scaling_rope, GGML_N_TASKS_MAX, (void *)&rope);
+        }
+    };
+
+    class Llama3_1SelfAttention : public LlamaRoPESelfAttention<BaseAttention>
+    {
+    public:
+        Llama3_1SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : LlamaRoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
+    };
+
+    class Llama3_1Block : public LMBlock1<RMSNorm, Llama3_1SelfAttention, RMSNorm, SiLUMLP>
+    {
+    public:
+        Llama3_1Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
+    class ConditionalGeneration : public v2::GenericConditionalGeneration<Llama3_1Block>
+    {
+    public:
+        ConditionalGeneration() = default;
+        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_LLAMA3_1)
+            : ConditionalGeneration(config, type, config.num_key_value_heads, config.max_length)
+        {}
+
+        ConditionalGeneration(const Config &config, ModelType type,
+                            int num_key_value_heads, int max_length)
+            : v2::GenericConditionalGeneration<Llama3_1Block>(config, type, num_key_value_heads, max_length)
+        {
+            auto transformer = Base::get_typed_transformer<ModelClass>();
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto &attention = transformer->layers[i].attention;
+                attention.config_rope(config.rope_theta,
+                                      config.rope_scaling_factor,
+                                      config.rope_scaling_low_freq_factor,
+                                      config.rope_scaling_high_freq_factor,
+                                      config.rope_scaling_original_max_position_embeddings);
+            }
+        }
+    };
+}
+
 namespace v2_plus
 {
     typedef v3::Config Config;

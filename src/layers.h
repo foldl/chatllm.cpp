@@ -2301,4 +2301,13 @@ namespace chatllm
             : LMBlock1<LayerNorm, StarCoder2SelfAttention<sliding_window_len, qvk_bias, o_bias>, LayerNorm, StarCoder2MLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };
+
+    struct CustomInvFreqScalingRope
+    {
+        float scaling_factor;
+        std::vector<float> inv_freq;
+    };
+
+    void ggml_compute_forward_inv_freq_scaling_rope(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata);
+
 } // namespace chatllm
