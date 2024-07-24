@@ -10,6 +10,7 @@ Demos of tool calling for these models are provided:
 * [InternLM 2.5](../scripts//tool_internlm.py)
 * [NuminaMath](../scripts/tool_numinamath.py)
 * [LlaMA3-Groq-Tool-Use](../scripts/tool_groq.py)
+* [LlaMA 3.1](../scripts/tool_llama3.1.py)
 
 ## Precondition
 

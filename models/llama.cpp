@@ -365,11 +365,19 @@ namespace v3_1
         float rope_scaling_high_freq_factor;
     };
 
+    class ChatHistoryEncoder : public v3::ChatHistoryEncoder
+    {
+    public:
+        void append_tool(int round_idx, const std::string &content, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
     class Tokenizer : public v3::Tokenizer
     {
     public:
         Tokenizer(const Config &config)
-            : v3::Tokenizer(config)
+            : v3::Tokenizer(config, &_chat_encoder)
         {}
 
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override
@@ -379,9 +387,9 @@ namespace v3_1
             eom_id          = tp->PieceToId("<|eom_id|>");
             python_tag_id   = tp->PieceToId("<|python_tag|>");
 
-            printf("%d,%d\n", eom_id, python_tag_id);
-
             terminate_ids.insert(eom_id);
+
+            tp->EnableReturnSpecialToken(true);
 
             return size;
         }
@@ -389,6 +397,15 @@ namespace v3_1
         int eom_id;
         int python_tag_id;
     };
+
+    void ChatHistoryEncoder::append_tool(int round_idx, const std::string &content, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::ostringstream oss;
+
+        tok->encode_header("ipython", ids);
+        tok->encode_content(content, ids);
+    }
 
     template <class BaseAttn> class LlamaRoPESelfAttention : public BaseAttn
     {
@@ -480,6 +497,48 @@ namespace v3_1
         {}
     };
 
+    class ToolCallingInterceptor : public ChunkInterceptor
+    {
+    public:
+        ToolCallingInterceptor() : ChunkInterceptor(), found_tool_call(false)
+        {}
+
+        void put_chunk(bool first, const std::string &chunk) override
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(streamer->tokenizer);
+
+            if (!found_tool_call)
+            {
+                if (chunk == "<|python_tag|>")
+                {
+                    found_tool_call = true;
+                }
+                else
+                    streamer->put_chunk(first, chunk);
+            }
+            else
+            {
+                oss << chunk;
+            }
+        }
+
+        void end() override
+        {
+            found_tool_call = false;
+            auto s = oss.str();
+            oss.str("");
+            if (s.size() > 0)
+                streamer->putln(s.c_str(), BaseStreamer::TextType::TOOL_CALLING);
+
+            ChunkInterceptor::end();
+        }
+    protected:
+        std::ostringstream oss;
+        bool found_tool_call;
+    };
+
+    static class ToolCallingInterceptor interceptor;
+
     class ConditionalGeneration : public v2::GenericConditionalGeneration<Llama3_1Block>
     {
     public:
@@ -503,6 +562,8 @@ namespace v3_1
                                       config.rope_scaling_original_max_position_embeddings);
             }
         }
+
+        ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
     };
 }
 
