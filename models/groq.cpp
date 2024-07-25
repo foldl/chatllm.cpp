@@ -59,8 +59,6 @@ public:
 
     void put_chunk(bool first, const std::string &chunk) override
     {
-        Tokenizer *tok = dynamic_cast<Tokenizer *>(streamer->tokenizer);
-
         if (!found_tool_call)
         {
             if (chunk == "<tool_call>")

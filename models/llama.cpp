@@ -47,11 +47,11 @@ If a question does not make any sense, or is not factually coherent, explain why
         typedef Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int> ModelClass;
         typedef Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int, int> ModelClass2;
     public:
-        GenericConditionalGeneration(const BaseConfig &config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12, bool tie_lm_head = false)
+        GenericConditionalGeneration(const BaseConfig &config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12, bool tie_lm_head = false, int additional_tensor = 0)
             : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config), type_class(1)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
-            const size_t num_tensors = (tie_lm_head ? 2 : 3) + config.num_hidden_layers * tensors_per_layer;
+            const size_t num_tensors = (tie_lm_head ? 2 : 3) + config.num_hidden_layers * tensors_per_layer + additional_tensor;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
@@ -134,7 +134,7 @@ If a question does not make any sense, or is not factually coherent, explain why
 
         BaseConfig config;
 
-    private:
+    protected:
         // hold ggml_context & kv_cache
         InitContext w_ctx_; // weight context
         const int type_class;
@@ -407,96 +407,6 @@ namespace v3_1
         tok->encode_content(content, ids);
     }
 
-    template <class BaseAttn> class LlamaRoPESelfAttention : public BaseAttn
-    {
-    public:
-        LlamaRoPESelfAttention() : BaseAttention() {}
-        LlamaRoPESelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool qkv_bias, bool o_bias)
-            : LlamaRoPESelfAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, qkv_bias, o_bias)
-        {
-        }
-
-        LlamaRoPESelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
-            : LlamaRoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads,  max_length, qkv_bias, o_bias)
-        {
-        }
-
-        LlamaRoPESelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
-            : BaseAttn(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias),
-              rope_dim(head_dim)
-        {
-        }
-
-        void config_rope(float theta, float scaling_factor, float scaling_low_freq_factor, float scaling_high_freq_factor, int original_max_position_embeddings)
-        {
-            rope.inv_freq.clear();
-            rope.scaling_factor = 1.0f;
-            const float base = theta;
-
-            for (int i = 0; i < rope_dim; i += 2)
-            {
-                rope.inv_freq.push_back(1.0f / (powf(base,  (float)i / rope_dim)));
-            }
-
-            const float factor = scaling_factor;
-            const float low_freq_factor  = scaling_low_freq_factor;
-            const float high_freq_factor = scaling_high_freq_factor;
-            const int   old_context_len  = original_max_position_embeddings;
-
-            const float low_freq_wavelen = old_context_len / low_freq_factor;
-            const float high_freq_wavelen = old_context_len / high_freq_factor;
-
-            for (size_t i = 0; i < rope.inv_freq.size(); i++)
-            {
-                const float freq = rope.inv_freq[i];
-                const float wavelen = 2 * std::numbers::pi_v<float> / freq;
-                if (wavelen < high_freq_wavelen)
-                {
-                    ;
-                }
-                else if (wavelen > low_freq_wavelen)
-                {
-                    rope.inv_freq[i] = freq / factor;
-                }
-                else
-                {
-                    const float smooth = (old_context_len / wavelen - low_freq_factor) / (high_freq_factor - low_freq_factor);
-                    rope.inv_freq[i] = (1 - smooth) * freq / factor + smooth * freq;
-                }
-            }
-        }
-
-    public:
-        int rope_dim;
-        CustomInvFreqScalingRope rope;
-
-    protected:
-        // input & output: [qlen, heads, head_size]
-        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
-        {
-            return ggml_map_custom2(ctx->gctx.get(), k, past, ggml_compute_forward_inv_freq_scaling_rope, GGML_N_TASKS_MAX, (void *)&rope);
-        }
-        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
-        {
-            return ggml_map_custom2(ctx->gctx.get(), q, past, ggml_compute_forward_inv_freq_scaling_rope, GGML_N_TASKS_MAX, (void *)&rope);
-        }
-    };
-
-    class Llama3_1SelfAttention : public LlamaRoPESelfAttention<BaseAttention>
-    {
-    public:
-        Llama3_1SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-            : LlamaRoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
-    };
-
-    class Llama3_1Block : public LMBlock1<RMSNorm, Llama3_1SelfAttention, RMSNorm, SiLUMLP>
-    {
-    public:
-        Llama3_1Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
-        {}
-    };
-
     class ToolCallingInterceptor : public ChunkInterceptor
     {
     public:
@@ -505,8 +415,6 @@ namespace v3_1
 
         void put_chunk(bool first, const std::string &chunk) override
         {
-            Tokenizer *tok = dynamic_cast<Tokenizer *>(streamer->tokenizer);
-
             if (!found_tool_call)
             {
                 if (chunk == "<|python_tag|>")
@@ -539,7 +447,48 @@ namespace v3_1
 
     static class ToolCallingInterceptor interceptor;
 
-    class ConditionalGeneration : public v2::GenericConditionalGeneration<Llama3_1Block>
+    static void init_llama3_freq_factors(std::vector<float> &freq_factors, int rope_dim,
+                float theta, float scaling_factor, float scaling_low_freq_factor, float scaling_high_freq_factor, int original_max_position_embeddings)
+    {
+        std::vector<float > inv_freq;
+        const float base = theta;
+
+        for (int i = 0; i < rope_dim; i += 2)
+        {
+            inv_freq.push_back(1.0f / (powf(base,  (float)i / rope_dim)));
+        }
+
+        freq_factors.clear();
+
+        const float factor = scaling_factor;
+        const float low_freq_factor  = scaling_low_freq_factor;
+        const float high_freq_factor = scaling_high_freq_factor;
+        const int   old_context_len  = original_max_position_embeddings;
+
+        const float low_freq_wavelen = old_context_len / low_freq_factor;
+        const float high_freq_wavelen = old_context_len / high_freq_factor;
+
+        for (int i = 0; i < rope_dim; i++)
+        {
+            const float freq = inv_freq[i];
+            const float wavelen = 2 * std::numbers::pi_v<float> / freq;
+            if (wavelen < high_freq_wavelen)
+            {
+                freq_factors.push_back(1.0f);
+            }
+            else if (wavelen > low_freq_wavelen)
+            {
+                freq_factors.push_back(1.0f / factor);
+            }
+            else
+            {
+                const float smooth = (old_context_len / wavelen - low_freq_factor) / (high_freq_factor - low_freq_factor);
+                freq_factors.push_back((1 - smooth) / factor + smooth);
+            }
+        }
+    }
+
+    class ConditionalGeneration : public v2::GenericConditionalGeneration<LlamaBlock>
     {
     public:
         ConditionalGeneration() = default;
@@ -549,21 +498,31 @@ namespace v3_1
 
         ConditionalGeneration(const Config &config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : v2::GenericConditionalGeneration<Llama3_1Block>(config, type, num_key_value_heads, max_length)
+            : v2::GenericConditionalGeneration<LlamaBlock>(config, type, num_key_value_heads, max_length, 12, false, 1)
         {
-            auto transformer = Base::get_typed_transformer<ModelClass>();
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                auto &attention = transformer->layers[i].attention;
-                attention.config_rope(config.rope_theta,
+            freq_factors = ggml_new_tensor_1d(w_ctx_.gctx.get(), GGML_TYPE_F32, config.hidden_size / config.num_attention_heads);
+
+            init_llama3_freq_factors(freq_factors_value, config.hidden_size / config.num_attention_heads,
+                                      config.rope_theta,
                                       config.rope_scaling_factor,
                                       config.rope_scaling_low_freq_factor,
                                       config.rope_scaling_high_freq_factor,
                                       config.rope_scaling_original_max_position_embeddings);
+            freq_factors->data = (void *)freq_factors_value.data();
+
+            auto transformer = Base::get_typed_transformer<ModelClass>();
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto &attention = transformer->layers[i].attention;
+                attention.freq_factors = freq_factors;
+                attention.freq_base    = config.rope_theta;
             }
         }
 
         ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
+    protected:
+        ggml_tensor *freq_factors;
+        std::vector<float> freq_factors_value;
     };
 }
 

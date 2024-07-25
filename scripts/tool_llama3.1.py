@@ -95,8 +95,6 @@ class ToolChatLLM(ChatLLM):
         if self.chunk_acc == '':
             if FUNCTION_CALL_START.startswith(s):
                 self.chunk_acc = s
-            if FUNCTION_CALL_START.startswith(s):
-                self.chunk_acc = s
             else:
                 super().callback_print(s)
 

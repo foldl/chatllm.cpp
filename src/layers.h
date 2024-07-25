@@ -1366,6 +1366,7 @@ namespace chatllm
               beta_fast(0.0f),
               beta_slow(0.0f),
               rope_dim(head_dim),
+              freq_factors(nullptr),
               rope_mode(RoPEMode::Interleaved)
         {
         }
@@ -1384,6 +1385,7 @@ namespace chatllm
               rope_dim(rope_dim),
               n_ctx(0),
               n_original_ctx(0),
+              freq_factors(nullptr),
               rope_mode(RoPEMode::Original)
         {
         }
@@ -1399,18 +1401,19 @@ namespace chatllm
         int   rope_dim;
         int   n_ctx;
         int   n_original_ctx;
+        ggml_tensor *freq_factors;
         RoPEMode rope_mode;
 
     protected:
         // input & output: [qlen, heads, head_size]
         ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
         {
-            return ggml_rope_ext_inplace(ctx->gctx.get(), k, past, nullptr, rope_dim, rope_mode, n_original_ctx,
+            return ggml_rope_ext_inplace(ctx->gctx.get(), k, past, freq_factors, rope_dim, rope_mode, n_original_ctx,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size]
         }
         ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
         {
-            return ggml_rope_ext_inplace(ctx->gctx.get(), q, past, nullptr, rope_dim, rope_mode, n_original_ctx,
+            return ggml_rope_ext_inplace(ctx->gctx.get(), q, past, freq_factors, rope_dim, rope_mode, n_original_ctx,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
         }
     };
@@ -2301,13 +2304,4 @@ namespace chatllm
             : LMBlock1<LayerNorm, StarCoder2SelfAttention<sliding_window_len, qvk_bias, o_bias>, LayerNorm, StarCoder2MLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };
-
-    struct CustomInvFreqScalingRope
-    {
-        float scaling_factor;
-        std::vector<float> inv_freq;
-    };
-
-    void ggml_compute_forward_inv_freq_scaling_rope(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata);
-
 } // namespace chatllm
