@@ -59,13 +59,14 @@ namespace chatllm
     }
 
     Messages::Messages()
-        : sep(""), auto_aggregate(true), round(-1)
+        : cursor(0), sep(""), auto_aggregate(true), round(-1)
     {
     }
 
     void Messages::clear(void)
     {
         history.clear();
+        cursor = 0;
     }
 
     void Messages::push_back(const Message &m)
@@ -117,6 +118,17 @@ namespace chatllm
         }
 
         history.emplace_back(content, role, round);
+    }
+
+    void Messages::move_cursor_to_end(void) const
+    {
+        // FIXME: a hack
+        const_cast<Messages *>(this)->move_cursor_to_end();
+    }
+
+    void Messages::move_cursor_to_end(void)
+    {
+        cursor = (int)history.size();
     }
 
     BaseStreamer::BaseStreamer(BaseTokenizer *tokenizer)
@@ -217,7 +229,6 @@ namespace chatllm
         sep_token_id(config.sep_token_id),
         tp(nullptr),
         sys_prompt(""),
-        encode_start(0),
         max_length(config.max_length),
         format(ChatFormat::CHAT),
         chat_encoder(chat_encoder),
@@ -312,6 +323,8 @@ namespace chatllm
     {
         std::vector<int> input_ids;
 
+        auto encode_start = history.cursor;
+
         if (!incremental)
         {
             encode_start = get_history_start(history, max_length / 2);
@@ -328,6 +341,8 @@ namespace chatllm
         }
 
         encoder->append_ai_opening(encode_start > 0 ? history[encode_start - 1].round : 0, input_ids);
+
+        history.move_cursor_to_end();
 
         return input_ids;
     }
@@ -1187,7 +1202,7 @@ namespace chatllm
                 history.push_back(s, MsgRole(role));
                 if (streamer)
                 {
-                    if ((history.size() % 2) == 0)
+                    if (MsgRole(role) == MsgRole::Assistant)
                         streamer->put_history_ai(s);
                     else
                         streamer->put_history_user(s);
@@ -1206,6 +1221,7 @@ namespace chatllm
             if (n_past != nullptr)
                 *n_past = model->get_n_past();
         }
+        history.move_cursor_to_end();
         return r;
     }
 

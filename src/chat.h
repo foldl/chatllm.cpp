@@ -93,8 +93,12 @@ namespace chatllm
             return history.back();
         }
 
+        void move_cursor_to_end(void) const;
+        void move_cursor_to_end(void);
+
     public:
         std::vector<Message> history;
+        int cursor;
     protected:
         std::string sep;
         bool auto_aggregate;
@@ -177,7 +181,6 @@ namespace chatllm
         tokenizer::Processor *tp;
     protected:
         std::string sys_prompt;
-        int encode_start;
         const int max_length;
         ChatFormat format;
         BaseHistoryEncoder *chat_encoder;
@@ -820,7 +823,7 @@ namespace chatllm
         virtual int save_session(const Messages &history, const std::string &file_name);
         virtual int load_session(Messages &history, const std::string &file_name, BaseStreamer *streamer, int *n_past = nullptr);
     protected:
-        const char head_magic[18] = "CHATLLM-SESSION01";
+        const char head_magic[18] = "CHATLLM-SESSION\x00\x01";
 
         struct file_header
         {
