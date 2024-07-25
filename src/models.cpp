@@ -833,7 +833,7 @@ namespace chatllm
             return lm_logits;
         }
 
-        int save_session(FILE *f) const
+        int save_session(FILE *f) const override
         {
             int r = BaseModel::save_session(f);
             if (r != 0)

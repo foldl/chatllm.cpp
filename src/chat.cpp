@@ -866,6 +866,25 @@ namespace chatllm
         tensor->data = t.load(nullptr);
     }
 
+    int BaseModel::save_session(FILE *f) const
+    {
+        struct state state = {.type = type_, .n_past = n_past, .n_past_offset = n_past_offset};
+        if (fwrite(&state, sizeof(state), 1, f) != 1)
+            return -1;
+        return 0;
+    }
+
+    int BaseModel::load_session(FILE *f)
+    {
+        struct state state;
+        if (fread(&state, sizeof(state), 1, f) != 1)
+            return -1;
+        if (state.type != type_) return -1;
+        n_past = state.n_past;
+        n_past_offset = state.n_past_offset;
+        return 0;
+    }
+
     ModelObject::ModelObject(const std::string &path)
         : ModelObject(path, ModelObject::extra_args())
     {
@@ -1149,7 +1168,7 @@ namespace chatllm
         if (!modelobj.loaded) return -1000;
 
         FILE *f = fopen(file_name.c_str(), "wb");
-        file_header header = {0};
+        file_header header;
         memcpy(header.magic, head_magic, sizeof(header.magic));
         header.history_len = history.size();
 
@@ -1177,7 +1196,7 @@ namespace chatllm
 
         int r = -1;
         FILE *f = fopen(file_name.c_str(), "rb");
-        file_header header = {0};
+        file_header header;
         if (fread(&header, sizeof(header), 1, f) != 1)
             return -1;
 

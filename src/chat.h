@@ -620,7 +620,7 @@ namespace chatllm
 
         void shift_memory(int keep) override { model->shift_memory(keep); }
 
-        int save_session(FILE *f) const { return model->save_session(f); }
+        int save_session(FILE *f) const override { return model->save_session(f); }
         int load_session(FILE *f) override { return model->load_session(f); }
 
         int64_t get_param_num(bool effective_only) const override { return model->get_param_num(effective_only); }
@@ -702,24 +702,9 @@ namespace chatllm
             return 0;
         }
 
-        int save_session(FILE *f) const
-        {
-            struct state state = {.type = type_, .n_past = n_past, .n_past_offset = n_past_offset};
-            if (fwrite(&state, sizeof(state), 1, f) != 1)
-                return -1;
-            return 0;
-        }
+        int save_session(FILE *f) const override;
 
-        int load_session(FILE *f) override
-        {
-            struct state state = {0};
-            if (fread(&state, sizeof(state), 1, f) != 1)
-                return -1;
-            if (state.type != type_) return -1;
-            n_past = state.n_past;
-            n_past_offset = state.n_past_offset;
-            return 0;
-        }
+        int load_session(FILE *f) override;
     private:
         struct state
         {
