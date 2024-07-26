@@ -1,4 +1,40 @@
 {
+    "llama3.1": {
+        "brief": "Llama 3.1 is a new state-of-the-art model from Meta available in 8B, 70B and 405B parameter sizes.",
+        "default": "8b",
+        "license": "LLAMA 3.1 COMMUNITY LICENSE AGREEMENT",
+        "variants": {
+            "8b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 5025629376,
+                        "url": "chatllm_quantized_240726/llama3.1-8b_q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 8538752192,
+                        "url": "chatllm_quantized_240726/llama3.1-8b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "llama3-groq-tool-use": {
+        "brief": "Llama 3 Groq Tool Use model, specifically designed for advanced tool use and function calling tasks.",
+        "default": "8b",
+        "license": "LLAMA 3.1 COMMUNITY LICENSE AGREEMENT",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8538804528,
+                        "url": "chatllm_quantized_240726/llama3-groq-tool-8b.bin"
+                    }
+                }
+            }
+        }
+    },
     "mistral-nemo": {
         "brief": "Mistral NeMo, a 12B model that offers a large context window of up to 128k tokens.",
         "default": "12b",
