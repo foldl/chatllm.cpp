@@ -197,14 +197,15 @@ WARN_FLAGS = \
 	-Wextra \
 	-Wpedantic \
 	-Wcast-qual \
-	-Wno-unused-function
+	-Wno-unused-function \
+	-Wno-unused-parameter \
+	-Wno-missing-declarations
 
 MK_CFLAGS += \
 	$(WARN_FLAGS) \
 	-Wshadow \
 	-Wstrict-prototypes \
 	-Wpointer-arith \
-	-Wmissing-prototypes \
 	-Werror=implicit-int \
 	-Werror=implicit-function-declaration
 
@@ -531,8 +532,9 @@ endif # GGML_CUDA
 
 ifdef GGML_VULKAN
 	MK_CPPFLAGS += -DGGML_USE_VULKAN
-	MK_LDFLAGS  += -lvulkan
-	OBJ_GGML    += $(OUTPUT_PATH)/ggml-vulkan.o
+	MK_LDFLAGS  += -lvulkan-1
+	OBJ_GGML    += $(OUTPUT_PATH)/ggml-vulkan.o $(OUTPUT_PATH)/ggml-vulkan-shaders.o
+	MK_CPPFLAGS += -I$(OUTPUT_PATH)
 
 ifdef GGML_VULKAN_CHECK_RESULTS
 	MK_CPPFLAGS  += -DGGML_VULKAN_CHECK_RESULTS
@@ -554,10 +556,31 @@ ifdef GGML_VULKAN_RUN_TESTS
 	MK_CPPFLAGS  += -DGGML_VULKAN_RUN_TESTS
 endif
 
+GLSLC_CMD  = glslc
+_ggml_vk_genshaders_cmd = $(OUTPUT_PATH)/vulkan-shaders-gen
+_ggml_vk_header = $(OUTPUT_PATH)/ggml-vulkan-shaders.hpp
+_ggml_vk_source = $(OUTPUT_PATH)/ggml-vulkan-shaders.cpp
+_ggml_vk_input_dir = $(GGML_SRC)/vulkan-shaders
+_ggml_vk_shader_deps = $(echo $(_ggml_vk_input_dir)/*.comp)
+
+$(_ggml_vk_header): $(_ggml_vk_source)
+
+$(_ggml_vk_source): $(_ggml_vk_shader_deps) $(OUTPUT_PATH)/vulkan-shaders-gen.exe
+	$(_ggml_vk_genshaders_cmd) \
+		--glslc      $(GLSLC_CMD) \
+		--input-dir  $(_ggml_vk_input_dir) \
+		--target-hpp $(_ggml_vk_header) \
+		--target-cpp $(_ggml_vk_source)
+
+$(OUTPUT_PATH)/vulkan-shaders-gen.exe: $(GGML_SRC)/vulkan-shaders/vulkan-shaders-gen.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $(LDFLAGS) $(GGML_SRC)/vulkan-shaders/vulkan-shaders-gen.cpp
+
 $(OUTPUT_PATH)/ggml-vulkan.o: \
 	$(GGML_SRC)/ggml-vulkan.cpp \
-	$(GGML_INC)/ggml-vulkan.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(GGML_INC)/ggml-vulkan.h \
+	$(_ggml_vk_header) $(_ggml_vk_source)
+	$(CXX) $(CXXFLAGS) $(shell pkg-config --cflags vulkan) -c $< -o $@
+
 endif # GGML_VULKAN
 
 ifdef GGML_HIPBLAS
@@ -852,7 +875,7 @@ $(OUTPUT_PATH)/main.o: src/main.cpp
 
 $(OUTPUT_PATH)/main: \
 	$(OUTPUT_PATH)/main.o $(OBJ_CHATLLM) $(COMMON_DEPS) $(OBJ_GGML)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -municode $^ -o $@ $(LDFLAGS)
 	@echo
 	@echo '====  Run ./obj/main -h for help.  ===='
 	@echo
