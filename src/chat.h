@@ -12,6 +12,7 @@
 #include "basics.h"
 #include "tokenizer.h"
 #include "vectorstore.h"
+#include "ggml-backend.h"
 
 namespace chatllm
 {
@@ -256,17 +257,33 @@ namespace chatllm
         ggml_context *gctx_;
     };
 
-    struct InitContext
+    class ComputeContext
     {
-        GGMLContext gctx;
-        ggml_type dtype;
+    public:
+        virtual struct ggml_context *get_ctx() = 0;
+        virtual ggml_backend_sched_t get_sched(void) { return nullptr; }
+        virtual ggml_backend_t get_backend(void) { return nullptr; }
+        virtual ggml_cgraph *get_cgraph(void) { return nullptr; }
     };
 
-    struct ForwardContext
+    class InitContext : public ComputeContext
     {
+    public:
+        GGMLContext gctx;
+        ggml_type dtype;
+    public:
+       struct ggml_context *get_ctx() override { return gctx.get(); }
+    };
+
+    struct ForwardContext : public ComputeContext
+    {
+    public:
         GGMLContext gctx;
         ggml_cgraph *gf;
         ggml_scratch scratch;
+    public:
+        struct ggml_context *get_ctx() override { return gctx.get(); }
+        ggml_cgraph *get_cgraph(void) override { return gf; }
     };
 
     class ChunkInterceptor;
@@ -467,6 +484,8 @@ namespace chatllm
         int num_threads;
         float presence_penalty;
         float tfs_z;
+        int main_gpu;
+        int n_gpu_layers;
         std::string sampling;
 
         GenerationConfig()
@@ -474,9 +493,11 @@ namespace chatllm
         }
 
         GenerationConfig(int max_length, int max_context_length, bool do_sample, int top_k,
-                         float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty, float tfs_z)
+                         float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty, float tfs_z,
+                         int main_gpu, int n_gpu_layers)
             : max_length(max_length), max_context_length(max_context_length), do_sample(do_sample), top_k(top_k),
               top_p(top_p), temperature(temperature), num_threads(num_threads), presence_penalty(presence_penalty), tfs_z(tfs_z),
+              main_gpu(main_gpu), n_gpu_layers(n_gpu_layers),
               sampling(sampling) {}
     };
 
@@ -517,6 +538,8 @@ namespace chatllm
     public:
         virtual ~AbstractModel()
         {}
+
+        virtual void prepare(const GenerationConfig &gen_config) = 0;
 
         virtual void set_layer_ids(const std::vector<int> &ids) = 0;
 
@@ -575,6 +598,8 @@ namespace chatllm
         {
             delete model;
         }
+
+        void prepare(const GenerationConfig &gen_config) override { model->prepare(gen_config); }
 
         void set_layer_ids(const std::vector<int> &ids) override { return model->set_layer_ids(ids); }
 
@@ -780,6 +805,8 @@ namespace chatllm
 
         Pipeline(const std::string &path);
         Pipeline(const std::string &path, const ModelObject::extra_args &args);
+
+        virtual void prepare(const GenerationConfig &gen_config);
 
         std::string chat(Messages &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);

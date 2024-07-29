@@ -42,9 +42,9 @@ protected:
         float max = 30.0f;
         ggml_tensor *r = kq;
 
-        r = ggml_scale_inplace(ctx->gctx.get(), r, 1.0f / max);
-        r = ggml_tanh_inplace(ctx->gctx.get(), r);
-        r = ggml_scale_inplace(ctx->gctx.get(), r, max);
+        r = ggml::scale_inplace(ctx, r, 1.0f / max);
+        r = ggml::inplace_act(ctx, ActFunc::Tanh, r);
+        r = ggml::scale_inplace(ctx, r, max);
         return r;
   }
 };

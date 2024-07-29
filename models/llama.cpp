@@ -500,7 +500,7 @@ namespace v3_1
                             int num_key_value_heads, int max_length)
             : v2::GenericConditionalGeneration<LlamaBlock>(config, type, num_key_value_heads, max_length, 12, false, 1)
         {
-            freq_factors = ggml_new_tensor_1d(w_ctx_.gctx.get(), GGML_TYPE_F32, config.hidden_size / config.num_attention_heads);
+            freq_factors = ggml::new_tensor_1d(&w_ctx_, GGML_TYPE_F32, config.hidden_size / config.num_attention_heads);
 
             init_llama3_freq_factors(freq_factors_value, config.hidden_size / config.num_attention_heads,
                                       config.rope_theta,
@@ -618,24 +618,24 @@ namespace multi
             {
                 // reserve scratch memory for h_truck
                 if (i <= config.num_hidden_layers - 3)
-                    ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
+                    ggml_set_scratch(ctx->get_ctx(), ctx->scratch);
                 hidden_states = get_layer(i)->forward(ctx, hidden_states, n_past);
             }
 
             auto h_trunk = hidden_states;
-            ggml_tensor *lm_logits = ggml_new_tensor_2d(ctx->gctx.get(), GGML_TYPE_F32, config.vocab_size, effective_n);
+            ggml_tensor *lm_logits = ggml::new_tensor_2d(ctx, GGML_TYPE_F32, config.vocab_size, effective_n);
 
             for (int i = 0; i < effective_n; i++)
             {
-                ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
+                ggml_set_scratch(ctx->get_ctx(), ctx->scratch);
                 ggml_tensor *tok_states = prediction_heads[i]->forward(ctx, h_trunk, n_past);
 
-                ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
+                ggml_set_scratch(ctx->get_ctx(), ctx->scratch);
 
                 ggml_tensor *logits = calc_logits(ctx, input_ids, tok_states);
-                ggml_tensor *view = ggml_view_1d(ctx->gctx.get(), lm_logits, config.vocab_size,
+                ggml_tensor *view = ggml::view_1d(ctx, lm_logits, config.vocab_size,
                                                  i * ggml_nbytes(logits));
-                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), logits, view));
+                ggml::build_forward_expand(ctx, ggml::cpy(ctx, logits, view));
             }
 
             return lm_logits;
@@ -660,14 +660,14 @@ namespace multi
         ggml_tensor *calc_logits(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
             // NOTE: only compute next_token_logits for the last token
-            hidden_states = ggml_view_2d(ctx->gctx.get(), hidden_states, config.hidden_size, 1,
-                                        config.hidden_size * ggml_element_size(hidden_states),
-                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml_element_size(hidden_states));
+            hidden_states = ggml::view_2d(ctx, hidden_states, config.hidden_size, 1,
+                                        config.hidden_size * ggml::element_size(hidden_states),
+                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml::element_size(hidden_states));
 
             ggml_tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
 
             transformer_outputs =
-                    ggml_view_1d(ctx->gctx.get(), transformer_outputs, config.hidden_size, 0);
+                    ggml::view_1d(ctx, transformer_outputs, config.hidden_size, 0);
 
             ggml_tensor *logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
                                              : word_embeddings.forward(ctx, transformer_outputs);

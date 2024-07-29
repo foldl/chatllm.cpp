@@ -63,6 +63,8 @@ struct Args
     bool show_help = false;
     bool rerank_rewrite = false;
     int save_session_rounds = -1;
+    int n_gpu_layers = 0;
+    int main_gpu = 0;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -103,7 +105,6 @@ void usage(const std::string &prog)
               << "                          `step` is optional, e.g.\n"
               << "                            --layer_spec 0:3,1:4 (3 + 3 = 6 layers are selected, layer #1/2 are used twice)\n"
               << "                                                 layer structure: 0->1->2->1->2->3\n"
-              << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
               << "  -c, --max_context_length N\n"
               << "                          max context length (default: 512)\n"
               << "  --extending EXT         context extending method (EXT = restart | shift | none)\n"
@@ -111,6 +112,10 @@ void usage(const std::string &prog)
               << "  --multi                 enabled multiple lines of input\n"
               << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n"
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
+              << "Performance options:\n"
+              << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
+              << "  -ngl, --n_gpu_layers N  number of model layers to offload to GPU (default: 0)\n"
+              << "  --main_gpu N            the GPU to use for the model (default: 0)\n"
               << "Sampling options:\n"
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
               << "                          where, tfs = Tail Free Sampling\n"
@@ -298,6 +303,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_param("--temp",                  "-t", temp,                 std::stof)
             handle_para0("--presence_penalty",            presence_penalty,     std::stof)
             handle_param("--threads",               "-n", num_threads,          std::stoi)
+            handle_param("--n_gpu_layers",          "-ngl", n_gpu_layers,       std::stoi)
             handle_para0("--seed",                        seed,                 std::stoi)
             handle_para0("--test",                        test_fn,              std::string)
             append_param("--vector_store",                vector_store,         std::string)
@@ -605,7 +611,7 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
 }
 
 #define DEF_GenerationConfig(gen_config, args) chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,    \
-                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z)
+                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z, args.main_gpu, args.n_gpu_layers)
 
 void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 {
@@ -656,6 +662,8 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
     chatllm::Messages history;
 
     show_banner(pipeline, args.interactive && args.show_banner, &streamer);
+
+    pipeline.prepare(gen_config);
 
     if (pipeline.is_loaded())
     {
@@ -806,6 +814,8 @@ static int init_vector_store(Args &args)
 
     DEF_GenerationConfig(gen_config, args);
     std::vector<float> r;
+
+    pipeline.prepare(gen_config);
 
     CVectorStore vs(args.vc, pipeline.get_text_embedding_dim(),
         [&pipeline, &gen_config, &r](const std::string &s, float *emb)
@@ -1031,6 +1041,7 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline, chatl
     pipeline.set_additional_args(args.additional);
 
     DEF_GenerationConfig(gen_config, args);
+    pipeline.prepare(gen_config);
 
     chat->gen_config = gen_config;
 

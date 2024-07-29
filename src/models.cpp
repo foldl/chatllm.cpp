@@ -18,12 +18,255 @@
 
 #include "layers.h"
 
-#ifdef GGML_USE_CLBLAST
-#include "ggml-opencl.h"
+#ifdef GGML_USE_CUDA
+#  include "ggml-cuda.h"
+#elif defined(GGML_USE_VULKAN)
+#  include "ggml-vulkan.h"
+extern void ggml_vk_print_devices_info(void);
+#elif defined(GGML_USE_SYCL)
+#  include "ggml-sycl.h"
+#elif defined(GGML_USE_KOMPUTE)
+#   include "ggml-kompute.h"
+#elif defined(GGML_USE_CANN)
+#   include "ggml-cann.h"
 #endif
+
+#ifdef GGML_USE_BLAS
+#  include "ggml-blas.h"
+#endif
+
+#ifdef GGML_USE_METAL
+#  include "ggml-metal.h"
+#endif
+
+#include "ggml-backend.h"
 
 namespace chatllm
 {
+    class ComputeManager
+    {
+    public:
+        static ggml_backend_buffer_type_t get_default_buffer_type_cpu(bool host_buffer)
+        {
+            ggml_backend_buffer_type_t buft = nullptr;
+
+        #if defined(GGML_USE_CUDA)
+            // host buffers should only be used when data is expected to be copied to/from the GPU
+            if (host_buffer) {
+                buft = ggml_backend_cuda_host_buffer_type();
+            }
+        #elif defined(GGML_USE_SYCL)
+            if (host_buffer) {
+                buft = ggml_backend_sycl_host_buffer_type();
+            }
+        #elif defined(GGML_USE_CPU_HBM)
+            buft = ggml_backend_cpu_hbm_buffer_type();
+        #elif defined(GGML_USE_VULKAN)
+            if (host_buffer) {
+                buft = ggml_backend_vk_host_buffer_type();
+            }
+        #endif
+
+            if (buft == nullptr) {
+                buft = ggml_backend_cpu_buffer_type();
+            }
+            return buft;
+        }
+
+        static int get_device_count(void)
+        {
+            int count = 1;
+        #if defined(GGML_USE_CUDA)
+            count = ggml_backend_cuda_get_device_count();
+        #elif defined(GGML_USE_SYCL)
+            count = ggml_backend_sycl_get_device_count();
+        #elif defined(GGML_USE_VULKAN)
+            count = ggml_backend_vk_get_device_count();
+        #elif defined(GGML_USE_CANN)
+            return ggml_backend_cann_get_device_count();
+        #endif
+            return count;
+        }
+
+        static ggml_backend_t init_backend_device(int index)
+        {
+        #if defined(GGML_USE_CUDA)
+            return ggml_backend_cuda_init(index);
+        #elif defined(GGML_USE_SYCL)
+            return ggml_backend_sycl_init(index);
+        #elif defined(GGML_USE_VULKAN)
+            return ggml_backend_vk_init(index);
+        #elif defined(GGML_USE_CANN)
+            return ggml_backend_cann_init(index);
+        #endif
+            return nullptr;
+        }
+
+        static ggml_backend_buffer_type_t get_default_buffer_type_offload(int gpu)
+        {
+            ggml_backend_buffer_type_t buft = nullptr;
+
+        #if defined(GGML_USE_METAL)
+            buft = ggml_backend_metal_buffer_type();
+        #elif defined(GGML_USE_CUDA)
+            buft = ggml_backend_cuda_buffer_type(gpu);
+        #elif defined(GGML_USE_VULKAN)
+            buft = ggml_backend_vk_buffer_type(gpu);
+        #elif defined(GGML_USE_SYCL)
+            buft = ggml_backend_sycl_buffer_type(gpu);
+        #elif defined(GGML_USE_CANN)
+            buft = ggml_backend_cann_buffer_type(gpu);
+        #endif
+
+            if (buft == nullptr)
+                buft = get_default_buffer_type_cpu(true);
+            return buft;
+        }
+
+        static size_t get_device_free_memory(int device, size_t *p_total = nullptr)
+        {
+            size_t total = 0;
+            size_t free = 0;
+        #if defined(GGML_USE_CUDA)
+            ggml_backend_cuda_get_device_memory(device, &free, &total);
+        #elif defined(GGML_USE_SYCL)
+            ggml_backend_sycl_get_device_memory(device, &free, &total);
+        #elif defined(GGML_USE_VULKAN)
+            ggml_backend_vk_get_device_memory(device, &free, &total);
+        #elif defined(GGML_USE_CANN)
+            ggml_backend_cann_get_device_memory(device, &free, &total);
+        #else
+            free = 1;
+        #endif
+            if (p_total) *p_total = total;
+            return free;
+        }
+
+        static int get_max_devices(void)
+        {
+        #if defined(GGML_USE_METAL)
+            return 1;
+        #elif defined(GGML_USE_CUDA)
+            return GGML_CUDA_MAX_DEVICES;
+        #elif defined(GGML_USE_SYCL)
+            return GGML_SYCL_MAX_DEVICES;
+        #elif defined(GGML_USE_VULKAN)
+            return GGML_VK_MAX_DEVICES;
+        #elif defined(GGML_USE_CANN)
+            return GGML_CANN_MAX_DEVICES;
+        #else
+            return 1;
+        #endif
+        }
+
+        static bool is_gpu_offload_supported(void)
+        {
+        #if defined(GGML_USE_CUDA) || defined(GGML_USE_METAL)   || defined(GGML_USE_VULKAN) || \
+            defined(GGML_USE_SYCL) || defined(GGML_USE_CANN)
+            // Defined when llama.cpp is compiled with support for offloading model layers to GPU.
+            return true;
+        #else
+            return false;
+        #endif
+        }
+    };
+
+    class BackendContext
+    {
+    public:
+        enum SplitMethod
+        {
+            None,
+            Layer,
+            Row,
+        };
+
+        BackendContext()
+        {
+        }
+
+        void init(int main_gpu, int n_gpu_layers, int n_threads)
+        {
+            if (ComputeManager::is_gpu_offload_supported())
+            {
+                int dev_cnt = ComputeManager::get_device_count();
+                for (int i = 0; i < dev_cnt; i++)
+                {
+                    size_t total = 0;
+                    size_t free = ComputeManager::get_device_free_memory(0, &total);
+                    printf("%d: total = %zd, free = %zd\n", i, total, free);
+                }
+
+                #if defined(GGML_USE_VULKAN)
+                ggml_vk_print_devices_info();
+                #endif
+            }
+
+        #if defined(GGML_USE_METAL)
+            if (n_gpu_layers > 0)
+            {
+                backend_metal = ggml_backend_metal_init();
+                CHATLLM_CHECK(backend_metal != nullptr) << ("%s: failed to initialize Metal backend\n", __func__);
+                backends.push_back(backend_metal);
+            }
+        #elif defined(GGML_USE_CUDA) ||  defined(GGML_USE_VULKAN) || defined(GGML_USE_SYCL) || defined(GGML_USE_CANN)
+
+            // TODO: split
+            if (main_gpu >= 0)
+            {
+                ggml_backend_t backend = ComputeManager::init_backend_device(model->main_gpu);
+                CHATLLM_CHECK(backend != nullptr) << "failed to initialize backend: #" << device;
+                backends.push_back(backend);
+            }
+            else
+            {
+                for (int device = 0; device < ComputeManager::get_device_count(); ++device)
+                {
+                    ggml_backend_t backend = ComputeManager::init_backend_device(device);
+                    CHATLLM_CHECK(backend != nullptr) << "failed to initialize backend: #" << device;
+                    backends.push_back(backend);
+                }
+            }
+        #endif
+
+        #ifdef GGML_USE_BLAS
+            backend_blas = ggml_backend_blas_init();
+            if (backend_blas)
+                backends.push_back(ctx->backend_blas);
+        #endif
+
+            backend_cpu = ggml_backend_cpu_init();
+            CHATLLM_CHECK(backend_cpu != nullptr) << "failed to initialize CPU backend";
+            backends.push_back(backend_cpu);
+        }
+
+        ~BackendContext()
+        {
+            ggml_backend_sched_free(sched);
+
+            for (ggml_backend_t backend : backends)
+                ggml_backend_free(backend);
+
+            ggml_backend_buffer_free(buf_output);
+        }
+    public:
+        std::vector<ggml_backend_t> backends;
+    #ifdef GGML_USE_METAL
+        ggml_backend_t backend_metal = nullptr;
+    #endif
+    #ifdef GGML_USE_BLAS
+        ggml_backend_t backend_blas = nullptr;
+    #endif
+        ggml_backend_t backend_cpu = nullptr;
+
+        // memory buffers used to evaluate the model
+        std::vector<uint8_t> buf_compute_meta;
+        ggml_backend_sched_t sched = nullptr;
+
+        // host buffer for the model output (logits and embeddings)
+        ggml_backend_buffer_t buf_output = nullptr;
+    };
+
     ForwardContext *dbg_ctx = nullptr;
 
     void print_tensor(ggml_tensor *tensor, int offset = 0)
@@ -61,7 +304,7 @@ namespace chatllm
     void inspect_tensor(ggml_tensor *tensor, const char *msg, ggml_tensor *temp1, ggml_tensor *temp2, ggml_tensor *temp3, ggml_tensor *temp4, ggml_tensor *temp5)
     {
         ggml_tensor *dup = ggml_dup(dbg_ctx->gctx.get(), tensor);
-        ggml_build_forward_expand(dbg_ctx->gf, dup);
+        ggml::build_forward_expand(dbg_ctx, dup);
         ggml_graph_compute_with_ctx(dbg_ctx->gctx.get(), dbg_ctx->gf, 4);
         printf("%s:\n", msg);
         print_tensor(dup);
@@ -647,9 +890,10 @@ namespace chatllm
               transformer(nullptr),
               GRAPH_SIZE(GGML_DEFAULT_GRAPH_SIZE),
               batch_input(true), logit_scale(-1.0f),
-              config_(config), mem_size_(mem_size), mem_buffer_(new char[mem_size]),
-              scratch_size_(scratch_size), scratch_buffer_(new char[scratch_size])
+              config_(config), mem_size_(mem_size),
+              scratch_size_(scratch_size)
         {
+
             for (int i = 0; i < config.num_hidden_layers; i++)
                 layer_ids.push_back(i);
         }
@@ -848,15 +1092,22 @@ namespace chatllm
             return transformer->load_session(f);
         }
 
+        void prepare(const GenerationConfig &gen_config) override
+        {
+            backend_context.init(gen_config.main_gpu, gen_config.n_gpu_layers, gen_config.num_threads);
+            mem_buffer_.resize(mem_size_);
+            scratch_buffer_.resize(scratch_size_);
+        }
+
     protected:
         virtual ggml_tensor *run_model(const std::vector<int> &input_ids,
                                        const GenerationConfig &gen_config,
                                        int past)
         {
             ForwardContext ctx;
-            ctx.gctx = GGMLContext({.mem_size = mem_size_, .mem_buffer = mem_buffer_.get(), .no_alloc = false});
-            ctx.scratch = {.offs = 0, .size = scratch_size_, .data = scratch_buffer_.get()};
-            int n_threads = input_ids.size() >= 32 && ggml_cpu_has_blas() && !ggml_cpu_has_gpublas() ? 1 : gen_config.num_threads;
+            ctx.gctx = GGMLContext({.mem_size = mem_size_, .mem_buffer = mem_buffer_.data(), .no_alloc = false});
+            ctx.scratch = {.offs = 0, .size = scratch_size_, .data = scratch_buffer_.data()};
+            int n_threads = gen_config.num_threads;
             ctx.gf = ggml_new_graph_custom(ctx.gctx.get(), GRAPH_SIZE, false);
 
             dbg_ctx = &ctx;
@@ -869,7 +1120,7 @@ namespace chatllm
             if (logit_scale > 0)
                 r = ggml_scale_inplace(ctx.gctx.get(), r, logit_scale);
 
-            ggml_build_forward_expand(ctx.gf, r);
+            ggml::build_forward_expand(&ctx, r);
             ggml_graph_compute_with_ctx(ctx.gctx.get(), ctx.gf, n_threads);
 
 #ifdef GGML_PERF
@@ -925,12 +1176,13 @@ namespace chatllm
         bool batch_input;
         float logit_scale;
         std::vector<int> layer_ids;
+        BackendContext backend_context;
     private:
         BaseConfig config_;
         size_t mem_size_;
-        std::unique_ptr<char[]> mem_buffer_; // BLAS buffer
+        std::vector<uint8_t> mem_buffer_;
         size_t scratch_size_;
-        std::unique_ptr<char[]> scratch_buffer_; // intermediate tensor buffer
+        std::vector<uint8_t> scratch_buffer_;
     };
 
     static std::string regex_replace(const std::string &input, const std::regex &regex,
@@ -982,7 +1234,7 @@ namespace chatllm
             ggml_tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
             for (auto &layer : layers)
             {
-                ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
+                ggml_set_scratch(ctx->get_ctx(), ctx->scratch);
                 hidden_states = layer->forward(ctx, hidden_states, n_past);
             }
 
@@ -1057,17 +1309,17 @@ namespace chatllm
 
         ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
-            ggml_set_scratch(ctx->gctx.get(), {.offs = 0, .size = 0, .data = nullptr});
+            ggml_set_scratch(ctx->get_ctx(), {.offs = 0, .size = 0, .data = nullptr});
 
             // NOTE: only compute next_token_logits for the last token
-            hidden_states = ggml_view_2d(ctx->gctx.get(), hidden_states, config.hidden_size, 1,
-                                        config.hidden_size * ggml_element_size(hidden_states),
-                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml_element_size(hidden_states));
+            hidden_states = ggml::view_2d(ctx, hidden_states, config.hidden_size, 1,
+                                        config.hidden_size * ggml::element_size(hidden_states),
+                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml::element_size(hidden_states));
 
             ggml_tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
 
             transformer_outputs =
-                    ggml_view_1d(ctx->gctx.get(), transformer_outputs, config.hidden_size, 0);
+                    ggml::view_1d(ctx, transformer_outputs, config.hidden_size, 0);
 
             ggml_tensor *lm_logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
                                              : word_embeddings.forward(ctx, transformer_outputs);
@@ -1158,7 +1410,7 @@ namespace chatllm
             ggml_tensor *hidden_states = Base::word_embeddings.forward(ctx, input_ids, n_past);
             for (auto &layer : BaseBase::layers)
             {
-                ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
+                ggml_set_scratch(ctx->get_ctx(), ctx->scratch);
                 hidden_states = layer->forward(ctx, hidden_states, n_past);
             }
             return final_steps(ctx, input_ids, hidden_states);
@@ -1167,7 +1419,7 @@ namespace chatllm
     protected:
         ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
-            ggml_set_scratch(ctx->gctx.get(), {.offs = 0, .size = 0, .data = nullptr});
+            ggml_set_scratch(ctx->get_ctx(), {.offs = 0, .size = 0, .data = nullptr});
 
             ggml_tensor *transformer_outputs = Base::final_layernorm.forward(ctx, hidden_states);
 

@@ -1,5 +1,6 @@
 import json
 import re, sys
+from datetime import datetime
 
 from binding import PATH_BINDS
 
@@ -25,6 +26,16 @@ def gen_prompt_for_tool(func: dict) -> str:
         "parameters": params
     }
     return f"Use the function '{func['name']}' to: {func['description']}" + '\n' + json.dumps(desc, ensure_ascii=False, indent=2)
+
+SYS_PROMPT_TEMPLATE1 = """
+
+Environment: ipython
+Tools: brave_search, wolfram_alpha
+
+Cutting Knowledge Date: December 2023
+Today Date: {date_of_today}
+
+You are a helpful Assistant."""
 
 SYS_PROMPT_TEMPLATE = """
 You have access to the following functions:
@@ -55,7 +66,9 @@ def build_system_prompt(functions: list[dict]):
 
     prompt = '\n\n'.join([gen_prompt_for_tool(f) for f in functions])
 
-    return SYS_PROMPT_TEMPLATE.replace('{tools_def}', prompt)
+    s = SYS_PROMPT_TEMPLATE.replace('{tools_def}', prompt)
+    s = s.replace('{date_of_today}', datetime.now().strftime('%d %b %Y'))
+    return s
 
 import chatllm
 from chatllm import ChatLLM

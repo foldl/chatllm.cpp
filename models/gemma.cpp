@@ -218,9 +218,9 @@ public:
 
     ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override
     {
-        input = ggml_scale_inplace(ctx->gctx.get(), input, scale_pre);
-        input = ggml_tanh_inplace(ctx->gctx.get(), input);
-        input = ggml_scale_inplace(ctx->gctx.get(), input, scale_post);
+        input = ggml::scale_inplace(ctx, input, scale_pre);
+        input = ggml::inplace_act(ctx, ActFunc::Tanh, input);
+        input = ggml::scale_inplace(ctx, input, scale_post);
         return input;
     }
 public:
