@@ -1,4 +1,29 @@
 {
+    "bluelm": {
+        "brief": "BlueLM is a large-scale open-source language model independently developed by the vivo AI Lab. This release includes 2K and 32K context length versions for both Base and Chat models.",
+        "default": "7b",
+        "license": "https://github.com/vivo-ai-lab/BlueLM/blob/main/MODEL_LICENSE.pdf",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7753748688,
+                        "url": "chatllm_quantized_bluelm/bluelm-7b.bin"
+                    }
+                }
+            },
+            "7b-32k": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7754514672,
+                        "url": "chatllm_quantized_bluelm/bluelm-7b-32k.bin"
+                    }
+                }
+            }
+        }
+    },
     "llama3.1": {
         "brief": "Llama 3.1 is a new state-of-the-art model from Meta available in 8B, 70B and 405B parameter sizes.",
         "default": "8b",
