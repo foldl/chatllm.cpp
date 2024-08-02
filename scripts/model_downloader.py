@@ -96,7 +96,7 @@ def preprocess_args(args: list[str], storage_dir) -> list[str]:
         if i < 0: continue
 
         if args[i + 1].startswith(':'):
-            args[i + 1] = get_model(args[i + 1][1:], storage_dir)
+            args[i + 1] = get_model(args[i + 1][1:].lower(), storage_dir)
 
     return args
 
