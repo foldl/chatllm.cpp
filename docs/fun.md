@@ -55,3 +55,7 @@ Before shuffling a model's layers, use `--show` to view basic information about 
 
 [Here](../scripts/crosstask.py) is a simple program to let two LLMs talk to each other. Both are willing to assist each other,
 so the conversation might go to full of "I'm here to assist you" quickly and is not quite fruitful.
+
+## Three Cobblers
+
+[Three Cobblers](../scripts/threecobblers.py) load a group of experts to chat with you, and another dedicate model to select the proper expert.
