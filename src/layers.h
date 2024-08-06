@@ -9,7 +9,7 @@
 
 #include "chat.h"
 
-#include "ggml-backend.h"
+#include "backend.h"
 
 namespace chatllm
 {

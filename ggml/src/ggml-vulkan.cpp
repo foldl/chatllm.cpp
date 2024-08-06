@@ -2048,7 +2048,10 @@ void ggml_vk_instance_init() {
             vk_instance.device_indices.push_back(0);
         }
     }
+}
 
+void ggml_vk_print_devices_info(void)
+{
     std::cerr << "ggml_vulkan: Found " << vk_instance.device_indices.size() << " Vulkan devices:" << std::endl;
 
     for (size_t i = 0; i < vk_instance.device_indices.size(); i++) {

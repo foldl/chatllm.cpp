@@ -12,7 +12,7 @@
 #include "basics.h"
 #include "tokenizer.h"
 #include "vectorstore.h"
-#include "ggml-backend.h"
+#include "backend.h"
 
 namespace chatllm
 {
@@ -257,15 +257,6 @@ namespace chatllm
         ggml_context *gctx_;
     };
 
-    class ComputeContext
-    {
-    public:
-        virtual struct ggml_context *get_ctx() = 0;
-        virtual ggml_backend_sched_t get_sched(void) { return nullptr; }
-        virtual ggml_backend_t get_backend(void) { return nullptr; }
-        virtual ggml_cgraph *get_cgraph(void) { return nullptr; }
-    };
-
     class InitContext : public ComputeContext
     {
     public:
@@ -484,9 +475,8 @@ namespace chatllm
         int num_threads;
         float presence_penalty;
         float tfs_z;
-        int main_gpu;
-        int n_gpu_layers;
         std::string sampling;
+        std::string gpu_layers;
 
         GenerationConfig()
         {
@@ -494,10 +484,10 @@ namespace chatllm
 
         GenerationConfig(int max_length, int max_context_length, bool do_sample, int top_k,
                          float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty, float tfs_z,
-                         int main_gpu, int n_gpu_layers)
+                         std::string n_gpu_layers)
             : max_length(max_length), max_context_length(max_context_length), do_sample(do_sample), top_k(top_k),
               top_p(top_p), temperature(temperature), num_threads(num_threads), presence_penalty(presence_penalty), tfs_z(tfs_z),
-              main_gpu(main_gpu), n_gpu_layers(n_gpu_layers),
+              gpu_layers(n_gpu_layers),
               sampling(sampling) {}
     };
 

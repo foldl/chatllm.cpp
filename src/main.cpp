@@ -38,6 +38,7 @@ struct Args
     std::string layer_spec;
     std::string load_session;
     std::string save_session;
+    std::string n_gpu_layers;
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -63,8 +64,6 @@ struct Args
     bool show_help = false;
     bool rerank_rewrite = false;
     int save_session_rounds = -1;
-    int n_gpu_layers = 0;
-    int main_gpu = 0;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -115,7 +114,6 @@ void usage(const std::string &prog)
               << "Performance options:\n"
               << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
               << "  -ngl, --n_gpu_layers N  number of model layers to offload to GPU (default: 0)\n"
-              << "  --main_gpu N            the GPU to use for the model (default: 0)\n"
               << "Sampling options:\n"
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
               << "                          where, tfs = Tail Free Sampling\n"
@@ -303,7 +301,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_param("--temp",                  "-t", temp,                 std::stof)
             handle_para0("--presence_penalty",            presence_penalty,     std::stof)
             handle_param("--threads",               "-n", num_threads,          std::stoi)
-            handle_param("--n_gpu_layers",          "-ngl", n_gpu_layers,       std::stoi)
+            handle_param("--n_gpu_layers",          "-ngl", n_gpu_layers,       std::string)
             handle_para0("--seed",                        seed,                 std::stoi)
             handle_para0("--test",                        test_fn,              std::string)
             append_param("--vector_store",                vector_store,         std::string)
@@ -611,7 +609,7 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
 }
 
 #define DEF_GenerationConfig(gen_config, args) chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,    \
-                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z, args.main_gpu, args.n_gpu_layers)
+                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z, args.n_gpu_layers)
 
 void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 {
