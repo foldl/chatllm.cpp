@@ -179,9 +179,18 @@
     },
     "internlm2.5": {
         "brief": "InternLM2.5 is a 7B parameter model tailored for practical scenarios with outstanding reasoning capability.",
-        "default": "7b",
+        "default": "1.8b",
         "license": "Apache License Version 2.0",
         "variants": {
+            "1.8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2008808560,
+                        "url": "chatllm_quantized_internlm2.5_1.8b/internlm2.5-1.8b.bin"
+                    }
+                }
+            },
             "7b": {
                 "default": "q8",
                 "quantized": {
