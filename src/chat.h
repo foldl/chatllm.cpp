@@ -664,6 +664,12 @@ namespace chatllm
             aborted = true;
         }
 
+        static bool is_aborted(void * data)
+        {
+            BaseModel *p = reinterpret_cast<BaseModel *>(data);
+            return p->aborted;
+        }
+
         void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                     std::vector<float> &embedding) override
         {}

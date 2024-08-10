@@ -54,20 +54,44 @@ namespace chatllm
         struct ggml_context *get_ctx() override { return gctx.get(); }
         ggml_cgraph *get_cgraph(void) override { return gf; }
 
-        void restart_scratch_alloc(void) override
-        {
-            ggml_set_scratch(get_ctx(), scratch);
-        }
-
         void move_to_layer(int layer_id)
         {
             cur_layer = layer_id;
         }
 
+        ggml_backend_sched_t get_sched(void) override
+        {
+            return backend_context->sched;
+        }
+
+        BackendBufAllocator *get_allocator(void) override
+        {
+            return &backend_context->host_allocator;
+        }
+
+        Backend *get_backend(void) override
+        {
+            return &backend_context->backends[0];
+        }
+
+        void compute(int n_threads) override
+        {
+            backend_context->compute_graph(get_cgraph(), n_threads);
+        }
+
+        void allocate(void) override
+        {
+            backend_context->alloc_graph(get_cgraph());
+        }
+
+        void reset(void) override
+        {
+            backend_context->reset();
+        }
+
     public:
         GGMLContext gctx;
         ggml_cgraph *gf;
-        ggml_scratch scratch;
     protected:
         BackendContext *backend_context;
         int cur_layer;
@@ -747,8 +771,7 @@ namespace chatllm
               transformer(nullptr),
               GRAPH_SIZE(GGML_DEFAULT_GRAPH_SIZE),
               batch_input(true), logit_scale(-1.0f),
-              config_(config),
-              scratch_size_(scratch_size + mem_size)
+              config_(config)
         {
 
             for (int i = 0; i < config.num_hidden_layers; i++)
@@ -828,7 +851,8 @@ namespace chatllm
 
             while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
             {
-                ggml_tensor *lm_logits = generate_next_token(curr_input_ids, gen_config);
+                std::vector<float> lm_logits;
+                generate_next_token(curr_input_ids, gen_config, lm_logits);
 
                 if (first_call)
                 {
@@ -842,11 +866,12 @@ namespace chatllm
                 n_past += (int)curr_input_ids.size();
                 curr_input_ids.clear();
     #endif
-                float *logits = (float *)lm_logits->data;
+                float *logits = lm_logits.data();
+                const size_t tok_num = lm_logits.size() / config_.vocab_size;
 
-                for (int64_t tok_idx = 0; (tok_idx < lm_logits->ne[1]) && !aborted; tok_idx++, logits += lm_logits->ne[0])
+                for (size_t tok_idx = 0; (tok_idx < tok_num) && !aborted; tok_idx++, logits +=  config_.vocab_size)
                 {
-                    int next_token_id = sampler->sampling(logits, (int)lm_logits->ne[0]);
+                    int next_token_id = sampler->sampling(logits,  config_.vocab_size);
 
     // printf("\nnext = %d\n", next_token_id);
 
@@ -899,39 +924,30 @@ namespace chatllm
         void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                     std::vector<float> &embedding) override
         {
-            ggml_tensor *lm = run_model(input_ids, gen_config, 0);
-            CHATLLM_CHECK(lm->type == GGML_TYPE_F32) << "lm->type must be GGML_TYPE_F32";
-
-            embedding.resize(lm->ne[0]);
-            memcpy(embedding.data(), lm->data, embedding.size() * sizeof(embedding[0]));
+            run_model(input_ids, gen_config, 0, embedding);
         }
 
         float qa_rank(const GenerationConfig &gen_config, const std::vector<int> &input_ids) override
         {
-            ggml_tensor *lm = run_model(input_ids, gen_config, 0);
-            CHATLLM_CHECK(lm->type == GGML_TYPE_F32) << "lm->type must be GGML_TYPE_F32";
+            std::vector<float> output;
+            run_model(input_ids, gen_config, 0, output);
+            CHATLLM_CHECK(output.size() == 1) << "ouput must be scaler";
 
-            CHATLLM_CHECK((lm->ne[0] == 1) && (ggml_n_dims(lm) <= 1)) << "ouput must be scaler";
-
-            return *(float *)lm->data;
+            return output[0];
         }
 
-        ggml_tensor *generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config)
+        void generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits)
         {
-            ggml_tensor *lm_logits = nullptr;
-
             if (batch_input)
             {
-                lm_logits = run_model(input_ids, gen_config, n_past + n_past_offset);
+                run_model(input_ids, gen_config, n_past + n_past_offset, lm_logits);
             }
             else
             {
                 int past = n_past + n_past_offset;
                 for (size_t i = 0 ; (i < input_ids.size()) & !aborted; i++, past++)
-                    lm_logits = run_model({input_ids[i]}, gen_config, past);
+                    run_model({input_ids[i]}, gen_config, past, lm_logits);
             }
-
-            return lm_logits;
         }
 
         int save_session(FILE *f) const override
@@ -954,25 +970,22 @@ namespace chatllm
             std::vector<BackendContext::gpu_cfg> gpu_cfgs;
             parse_gpu_layers(gpu_cfgs, gen_config.gpu_layers);
             backend_context.init(gpu_cfgs, config_.num_hidden_layers, gen_config.num_threads, GRAPH_SIZE);
-            scratch_buffer_.resize(scratch_size_);
         }
 
     protected:
-        virtual ggml_tensor *run_model(const std::vector<int> &input_ids,
+        virtual void run_model(const std::vector<int> &input_ids,
                                        const GenerationConfig &gen_config,
-                                       int past)
+                                       int past,
+                                       std::vector<float> &output)
         {
             ForwardContext ctx(&backend_context);
-            backend_context.buf_compute_meta.resize(scratch_buffer_.size());
-            ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = false});
-            ctx.scratch = {.offs = 0, .size = scratch_size_, .data = scratch_buffer_.data()};
+            ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
             int n_threads = gen_config.num_threads;
-            ctx.gf = ggml_new_graph_custom(ctx.gctx.get(), GRAPH_SIZE, false);
+            ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
             dbg_ctx = &ctx;
 
             ggml_tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, input_ids.size());
-            input_ids_tensor->data = (void *)input_ids.data();
 
             ggml_tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
 
@@ -980,13 +993,23 @@ namespace chatllm
                 r = ggml::scale_inplace(&ctx, r, logit_scale);
 
             ggml::build_forward_expand(&ctx, r);
-            ggml_graph_compute_with_ctx(ctx.gctx.get(), ctx.gf, n_threads);
 
-#ifdef GGML_PERF
-            ggml_graph_print(&ctx.gf);
-#endif
+            CHATLLM_CHECK(r->type == GGML_TYPE_F32) << "output type must be float: " << r->type;
 
-            return r;
+            output.resize(ggml_nbytes(r) / sizeof(output[0]));
+
+            //if (!ggml_backend_sched_reserve(ctx.get_sched(), ctx.get_cgraph()))
+            //{
+            //    return;
+            //}
+
+            ctx.allocate();
+            Backend::set_tensor(input_ids_tensor, input_ids.data());
+            ctx.compute(n_threads);
+
+            Backend::get_tensor(r, output.data());
+
+            ctx.reset();
         }
 
         virtual bool is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output)
@@ -1038,8 +1061,6 @@ namespace chatllm
         BackendContext backend_context;
     private:
         BaseConfig config_;
-        size_t scratch_size_;
-        std::vector<uint8_t> scratch_buffer_;
     };
 
     static std::string regex_replace(const std::string &input, const std::regex &regex,

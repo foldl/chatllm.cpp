@@ -301,12 +301,12 @@ namespace chatllm
             ggml_backend_tensor_set_async(backend, tensor, data, offset, size);
         }
 
-        void set_tensor(struct ggml_tensor * tensor, const void * data, size_t offset, size_t size)
+        static void set_tensor(struct ggml_tensor * tensor, const void * data, size_t offset, size_t size)
         {
             ggml_backend_tensor_set(tensor, data, offset, size);
         }
 
-        void set_tensor(struct ggml_tensor * tensor, const void * data)
+        static void set_tensor(struct ggml_tensor * tensor, const void * data)
         {
             ggml_backend_tensor_set(tensor, data, 0, ggml_nbytes(tensor));
         }
@@ -316,12 +316,12 @@ namespace chatllm
             ggml_backend_tensor_get_async(backend, tensor, data, offset, size);
         }
 
-        void get_tensor(struct ggml_tensor * tensor, void * data, size_t offset, size_t size)
+        static void get_tensor(struct ggml_tensor * tensor, void * data, size_t offset, size_t size)
         {
             ggml_backend_tensor_get(tensor, data, offset, size);
         }
 
-        void get_tensor(struct ggml_tensor * tensor, void * data)
+        static void get_tensor(struct ggml_tensor * tensor, void * data)
         {
             ggml_backend_tensor_get(tensor, data, 0, ggml_nbytes(tensor));
         }
@@ -446,6 +446,48 @@ namespace chatllm
 
             ggml_backend_buffer_free(buf_output);
         }
+
+        void alloc_graph(ggml_cgraph *gf)
+        {
+            ggml_backend_sched_alloc_graph(sched, gf);
+        }
+
+        void compute_graph(ggml_cgraph *gf, int n_threads)
+        {
+        #ifdef GGML_USE_METAL
+            if (ggml_backend_is_metal(backend_metal))
+            {
+                ggml_backend_metal_set_n_cb(backend_metal, n_threads);
+            }
+        #endif
+
+            if (backend_cpu != nullptr)
+            {
+                ggml_backend_cpu_set_n_threads(backend_cpu, n_threads);
+                ggml_backend_cpu_set_abort_callback(backend_cpu, abort_callback, abort_callback_data);
+            }
+
+        #ifdef GGML_USE_BLAS
+            if (backend_blas != nullptr)
+            {
+                ggml_backend_blas_set_n_threads(backend_blas, n_threads);
+            }
+        #endif
+
+            ggml_backend_sched_graph_compute_async(sched, gf);
+        }
+
+        void reset()
+        {
+            ggml_backend_sched_reset(sched);
+        }
+
+        void set_abort_callback(struct llama_context * ctx, bool (*abort_callback)(void * data), void * abort_callback_data)
+        {
+            abort_callback      = abort_callback;
+            abort_callback_data = abort_callback_data;
+        }
+
     public:
         std::vector<Backend> backends;
     #ifdef GGML_USE_METAL
@@ -467,6 +509,9 @@ namespace chatllm
         LayerBufAllocator host_allocator;
 
         int n_threads;
+    protected:
+        ggml_abort_callback abort_callback      = nullptr;
+        void *              abort_callback_data = nullptr;
     };
 
     class ComputeContext
@@ -491,7 +536,10 @@ namespace chatllm
                     ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
             }
         }
-    protected:
         virtual Backend *get_backend(void) { return nullptr; }
+
+        virtual void allocate(void) {}
+        virtual void compute(int n_threads) {}
+        virtual void reset(void) {}
     };
 }

@@ -333,6 +333,11 @@ namespace chatllm
         return tensor;
     }
 
+    struct ggml_cgraph *ggml::new_graph_custom(ComputeContext *ctx, size_t size, bool grads)
+    {
+        return ggml_new_graph_custom(ctx->get_ctx(), size, grads);
+    }
+
     void ggml::build_forward_expand(ComputeContext *ctx, struct ggml_tensor * tensor)
     {
         ggml_build_forward_expand(ctx->get_cgraph(), tensor);
