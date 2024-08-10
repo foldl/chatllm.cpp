@@ -200,6 +200,15 @@
                     }
                 }
             },
+            "20b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 11175293552,
+                        "url": "chatllm_quantized_internlm2.5_1.8b/internlm2.5-20b-q4_0.bin"
+                    }
+                }
+            },
             "7b-1m": {
                 "default": "q8",
                 "quantized": {
