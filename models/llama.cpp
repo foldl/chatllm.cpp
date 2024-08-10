@@ -611,14 +611,14 @@ namespace multi
         {
         }
 
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
+        ggml_tensor *forward(ComputeContext *ctx, ggml_tensor *input_ids, int n_past) override
         {
             ggml_tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
             for (int i = 0; i <= config.num_hidden_layers - 2; i++)
             {
                 // reserve scratch memory for h_truck
                 if (i <= config.num_hidden_layers - 3)
-                    ggml_set_scratch(ctx->get_ctx(), ctx->scratch);
+                    ctx->restart_scratch_alloc();
                 hidden_states = get_layer(i)->forward(ctx, hidden_states, n_past);
             }
 
@@ -627,10 +627,10 @@ namespace multi
 
             for (int i = 0; i < effective_n; i++)
             {
-                ggml_set_scratch(ctx->get_ctx(), ctx->scratch);
+                ctx->restart_scratch_alloc();
                 ggml_tensor *tok_states = prediction_heads[i]->forward(ctx, h_trunk, n_past);
 
-                ggml_set_scratch(ctx->get_ctx(), ctx->scratch);
+                ctx->restart_scratch_alloc();
 
                 ggml_tensor *logits = calc_logits(ctx, input_ids, tok_states);
                 ggml_tensor *view = ggml::view_1d(ctx, lm_logits, config.vocab_size,
@@ -657,7 +657,7 @@ namespace multi
             return r;
         }
 
-        ggml_tensor *calc_logits(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
+        ggml_tensor *calc_logits(ComputeContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
             // NOTE: only compute next_token_logits for the last token
             hidden_states = ggml::view_2d(ctx, hidden_states, config.hidden_size, 1,

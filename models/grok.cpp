@@ -37,7 +37,7 @@ public:
         : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias)
     {}
 protected:
-    ggml_tensor *apply_pos_embedding_kq(ForwardContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const override
+    ggml_tensor *apply_pos_embedding_kq(ComputeContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const override
     {
         float max = 30.0f;
         ggml_tensor *r = kq;

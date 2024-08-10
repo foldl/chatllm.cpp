@@ -266,17 +266,6 @@ namespace chatllm
        struct ggml_context *get_ctx() override { return gctx.get(); }
     };
 
-    struct ForwardContext : public ComputeContext
-    {
-    public:
-        GGMLContext gctx;
-        ggml_cgraph *gf;
-        ggml_scratch scratch;
-    public:
-        struct ggml_context *get_ctx() override { return gctx.get(); }
-        ggml_cgraph *get_cgraph(void) override { return gf; }
-    };
-
     class ChunkInterceptor;
 
     class BaseStreamer
@@ -475,8 +464,8 @@ namespace chatllm
         int num_threads;
         float presence_penalty;
         float tfs_z;
-        std::string sampling;
         std::string gpu_layers;
+        std::string sampling;
 
         GenerationConfig()
         {

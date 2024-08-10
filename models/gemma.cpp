@@ -216,7 +216,7 @@ class TanhScaling: public Block
 public:
     TanhScaling(float scale_pre, float scale_post) : scale_pre(scale_pre), scale_post(scale_post) {}
 
-    ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override
+    ggml_tensor *forward(ComputeContext *ctx, ggml_tensor *input) override
     {
         input = ggml::scale_inplace(ctx, input, scale_pre);
         input = ggml::inplace_act(ctx, ActFunc::Tanh, input);

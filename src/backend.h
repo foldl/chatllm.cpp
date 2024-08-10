@@ -54,13 +54,12 @@ namespace chatllm
         size_t total = 0;
     };
 
-    class BackendContext;
     class Backend;
 
     class LayerBufAllocator : public BackendBufAllocator
     {
     public:
-        friend BackendContext;
+        friend class BackendContext;
 
         LayerBufAllocator(): LayerBufAllocator(nullptr, nullptr, nullptr) {}
         LayerBufAllocator(ggml_backend_allocator alloc, Backend *backend): LayerBufAllocator(alloc, alloc, backend) {}
@@ -96,6 +95,9 @@ namespace chatllm
                 return ggml_backend_buft_get_alignment(alloc_matrix);
             case Usage::Others:
                 return ggml_backend_buft_get_alignment(alloc_others);
+            default:
+                CHATLLM_CHECK(0);
+                return 0;
             }
         }
 
@@ -107,6 +109,9 @@ namespace chatllm
                 return ggml_backend_buft_get_max_size(alloc_matrix);
             case Usage::Others:
                 return ggml_backend_buft_get_max_size(alloc_others);
+            default:
+                CHATLLM_CHECK(0);
+                return 0;
             }
         }
 
@@ -126,31 +131,6 @@ namespace chatllm
         ggml_backend_allocator alloc_others;
         std::vector<std::unique_ptr<BackendBuffer>> buffers;
         Backend * const backend;
-    };
-
-    class ComputeContext
-    {
-    public:
-        virtual struct ggml_context *get_ctx() = 0;
-        virtual ggml_backend_sched_t get_sched(void) { return nullptr; }
-        virtual ggml_cgraph *get_cgraph(void) { return nullptr; }
-        virtual BackendBufAllocator *get_allocator(void) { return nullptr; }
-        virtual void cb_new_tensor(ggml_tensor *tensor)
-        {
-            if (get_sched() && get_backend())
-                ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
-        }
-
-        virtual void cb_op_tensor(ggml_tensor *tensor)
-        {
-            if (get_sched() && get_backend())
-            {
-                if (ggml_backend_supports_op(get_backend()->backend, tensor) || ggml_backend_offload_op(get_backend()->backend, tensor))
-                    ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
-            }
-        }
-    protected:
-        virtual Backend *get_backend(void) { return nullptr; }
     };
 
     class ComputeManager
@@ -326,6 +306,11 @@ namespace chatllm
             ggml_backend_tensor_set(tensor, data, offset, size);
         }
 
+        void set_tensor(struct ggml_tensor * tensor, const void * data)
+        {
+            ggml_backend_tensor_set(tensor, data, 0, ggml_nbytes(tensor));
+        }
+
         void get_tensor_async(struct ggml_tensor * tensor, void * data, size_t offset, size_t size)
         {
             ggml_backend_tensor_get_async(backend, tensor, data, offset, size);
@@ -334,6 +319,11 @@ namespace chatllm
         void get_tensor(struct ggml_tensor * tensor, void * data, size_t offset, size_t size)
         {
             ggml_backend_tensor_get(tensor, data, offset, size);
+        }
+
+        void get_tensor(struct ggml_tensor * tensor, void * data)
+        {
+            ggml_backend_tensor_get(tensor, data, 0, ggml_nbytes(tensor));
         }
 
         void synchronize(void)
@@ -367,11 +357,13 @@ namespace chatllm
         {
         }
 
-        void init(const std::vector<gpu_cfg> &gpu_cfgs, const int n_layers, const int n_threads)
+        void init(const std::vector<gpu_cfg> &gpu_cfgs, const int n_layers, const int n_threads, const size_t graph_max_nodes_num)
         {
             int n_gpu_layers = 0;
             for (auto &cfg : gpu_cfgs) n_gpu_layers += cfg.n_layers;
             const bool use_gpu = n_gpu_layers > 0;
+
+            buf_compute_meta.resize(ggml_tensor_overhead()* graph_max_nodes_num + ggml_graph_overhead_custom(graph_max_nodes_num, false));
 
             backend_cpu = ggml_backend_cpu_init();
             CHATLLM_CHECK(backend_cpu != nullptr) << __func__ << ": failed to initialize CPU backend";
@@ -434,6 +426,15 @@ namespace chatllm
                     layer_allocators.emplace_back(backend.get_allocator(), &backend);
                 }
             }
+
+            std::vector<ggml_backend_t> gg_backends;
+            std::vector<ggml_backend_buffer_type_t> gg_bufts;
+            for (auto &b : backends)
+            {
+                gg_backends.push_back(b.backend);
+                gg_bufts.push_back(b.get_allocator());
+            }
+            sched = ggml_backend_sched_new(gg_backends.data(), gg_bufts.data(), gg_backends.size(), graph_max_nodes_num, false);
         }
 
         ~BackendContext()
@@ -466,5 +467,31 @@ namespace chatllm
         LayerBufAllocator host_allocator;
 
         int n_threads;
+    };
+
+    class ComputeContext
+    {
+    public:
+        virtual struct ggml_context *get_ctx() = 0;
+        virtual ggml_backend_sched_t get_sched(void) { return nullptr; }
+        virtual ggml_cgraph *get_cgraph(void) { return nullptr; }
+        virtual BackendBufAllocator *get_allocator(void) { return nullptr; }
+        virtual void restart_scratch_alloc(void) {}
+        virtual void cb_new_tensor(ggml_tensor *tensor)
+        {
+            if (get_sched() && get_backend())
+                ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
+        }
+
+        virtual void cb_op_tensor(ggml_tensor *tensor)
+        {
+            if (get_sched() && get_backend())
+            {
+                if (ggml_backend_supports_op(get_backend()->backend, tensor) || ggml_backend_offload_op(get_backend()->backend, tensor))
+                    ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
+            }
+        }
+    protected:
+        virtual Backend *get_backend(void) { return nullptr; }
     };
 }

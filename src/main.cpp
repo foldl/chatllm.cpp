@@ -113,7 +113,7 @@ void usage(const std::string &prog)
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
               << "Performance options:\n"
               << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
-              << "  -ngl, --n_gpu_layers N  number of model layers to offload to GPU (default: 0)\n"
+              << "  -ngl, --n_gpu_layers N  number of model layers to offload to each GPU (default: GPU not used)\n"
               << "Sampling options:\n"
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
               << "                          where, tfs = Tail Free Sampling\n"

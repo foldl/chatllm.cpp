@@ -141,7 +141,7 @@ namespace v2_light
         }
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override
+        ggml_tensor *forward(ComputeContext *ctx, ggml_tensor *hidden_states) override
         {
             ggml_tensor *tmpq = nullptr;
 
@@ -224,7 +224,7 @@ namespace v2_light
         }
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
+        ggml_tensor *forward(ComputeContext *ctx, ggml_tensor *hidden_states, int n_past) override
         {
             if (opt_speed)
                 return forward_speed(ctx, hidden_states, n_past);
@@ -233,7 +233,7 @@ namespace v2_light
         }
 
     protected:
-        ggml_tensor *forward_speed(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
+        ggml_tensor *forward_speed(ComputeContext *ctx, ggml_tensor *hidden_states, int n_past)
         {
             const int hidden_size = o_proj.in_features();
             const int qlen = (int)hidden_states->ne[1];
@@ -257,7 +257,7 @@ namespace v2_light
             return attn_output;
         }
 
-        ggml_tensor *cross_attention_speed(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
+        ggml_tensor *cross_attention_speed(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen,
                                              ggml_tensor *q, ggml_tensor *k_nope, ggml_tensor *k_pe, ggml_tensor *v)
         {
             // [qlen, heads, head_size]
@@ -296,7 +296,7 @@ namespace v2_light
             return attn_scores;
         }
 
-        ggml_tensor *forward_memory(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past)
+        ggml_tensor *forward_memory(ComputeContext *ctx, ggml_tensor *hidden_states, int n_past)
         {
             const int hidden_size = o_proj.in_features();
             const int qlen = (int)hidden_states->ne[1];
@@ -317,7 +317,7 @@ namespace v2_light
             return attn_output;
         }
 
-        ggml_tensor *cross_attention_memory(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
+        ggml_tensor *cross_attention_memory(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen,
                                              ggml_tensor *q, ggml_tensor *k_pe, ggml_tensor *kv_lora)
         {
             // [qlen, heads, head_size]
@@ -339,7 +339,7 @@ namespace v2_light
             return attn_scores;
         }
 
-        ggml_tensor *get_k_pe_from_cache(ForwardContext *ctx, const int n_past, const int qlen)
+        ggml_tensor *get_k_pe_from_cache(ComputeContext *ctx, const int n_past, const int qlen)
         {
             ggml_tensor *k_pe = nullptr;
 
@@ -350,7 +350,7 @@ namespace v2_light
             return k_pe;
         }
 
-        ggml_tensor *get_kv_lora_from_cache(ForwardContext *ctx, const int n_past, const int qlen)
+        ggml_tensor *get_kv_lora_from_cache(ComputeContext *ctx, const int n_past, const int qlen)
         {
             ggml_tensor *kv_lora = nullptr;
 
@@ -361,7 +361,7 @@ namespace v2_light
             return kv_lora;
         }
 
-        void save_lora_to_cache(ForwardContext *ctx, const int n_past, const int qlen,
+        void save_lora_to_cache(ComputeContext *ctx, const int n_past, const int qlen,
             ggml_tensor *k_pe, ggml_tensor *kv_lora)
         {
             struct ggml_tensor * pe_cache_view = ggml::view_1d(ctx, k_cache, qlen * k_hidden_size,
@@ -378,7 +378,7 @@ namespace v2_light
             ggml::build_forward_expand(ctx, ggml::cpy(ctx, kv_view, kv_cache_view));
         }
 
-        ggml_tensor *cross_attention_after_pe_memory(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen0,
+        ggml_tensor *cross_attention_after_pe_memory(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen0,
                                              ggml_tensor *query_layer, ggml_tensor *k_pe, ggml_tensor *kv_lora)
         {
             const int head_size = qk_nope_head_dim + rope_dim;

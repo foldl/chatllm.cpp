@@ -43,6 +43,36 @@ extern void ggml_vk_print_devices_info(void);
 
 namespace chatllm
 {
+    struct ForwardContext : public ComputeContext
+    {
+    public:
+        ForwardContext(BackendContext *backend_context) : backend_context(backend_context)
+        {
+            cur_layer = -1;
+        }
+
+        struct ggml_context *get_ctx() override { return gctx.get(); }
+        ggml_cgraph *get_cgraph(void) override { return gf; }
+
+        void restart_scratch_alloc(void) override
+        {
+            ggml_set_scratch(get_ctx(), scratch);
+        }
+
+        void move_to_layer(int layer_id)
+        {
+            cur_layer = layer_id;
+        }
+
+    public:
+        GGMLContext gctx;
+        ggml_cgraph *gf;
+        ggml_scratch scratch;
+    protected:
+        BackendContext *backend_context;
+        int cur_layer;
+    };
+
     ForwardContext *dbg_ctx = nullptr;
 
     void print_tensor(ggml_tensor *tensor, int offset = 0)
@@ -658,6 +688,57 @@ namespace chatllm
         virtual int load_session(FILE *f) = 0;
     };
 
+    static bool parse_gpu_cfg(BackendContext::gpu_cfg &cfg, const std::string &s)
+    {
+        cfg.id = 0;
+        cfg.n_layers = -1;
+
+        std::string t(s);
+
+        size_t pos = t.find_first_of(':');
+        std::string part = t.substr(0, pos);
+        if (part.size() > 0)
+            cfg.n_layers = atoi(part.c_str());
+        if (pos != std::string::npos)
+        {
+            t = t.substr(pos + 1);
+            cfg.id = atoi(t.c_str());
+        }
+
+        return (cfg.n_layers >= 0) && (cfg.id >= 0);
+    }
+
+    static int index_of_gpu_cfg(const std::vector<BackendContext::gpu_cfg> &gpu_cfgs, int id)
+    {
+        for (int i = 0; i < (int)gpu_cfgs.size(); i++)
+            if (gpu_cfgs[i].id == id)
+                return i;
+        return -1;
+    }
+
+    static bool parse_gpu_layers(std::vector<BackendContext::gpu_cfg> &gpu_cfgs, const std::string &s)
+    {
+        std::string t(s);
+        while (t.size() > 0)
+        {
+            size_t pos = t.find_first_of(',');
+
+            BackendContext::gpu_cfg cfg;
+            if (parse_gpu_cfg(cfg, t.substr(0, pos)))
+            {
+                int index = index_of_gpu_cfg(gpu_cfgs, cfg.id);
+                if (index >= 0)
+                    gpu_cfgs[index].n_layers = cfg.n_layers;
+                else
+                    gpu_cfgs.push_back(cfg);
+            }
+
+            if (pos == std::string::npos) break;
+            t = t.substr(pos + 1);
+        }
+        return true;
+    }
+
     class BaseModelForConditionalGeneration : public BaseModel
     {
     public:
@@ -666,8 +747,8 @@ namespace chatllm
               transformer(nullptr),
               GRAPH_SIZE(GGML_DEFAULT_GRAPH_SIZE),
               batch_input(true), logit_scale(-1.0f),
-              config_(config), mem_size_(mem_size),
-              scratch_size_(scratch_size)
+              config_(config),
+              scratch_size_(scratch_size + mem_size)
         {
 
             for (int i = 0; i < config.num_hidden_layers; i++)
@@ -870,8 +951,9 @@ namespace chatllm
 
         void prepare(const GenerationConfig &gen_config) override
         {
-            backend_context.init(gen_config, config_.num_hidden_layers, gen_config.num_threads);
-            mem_buffer_.resize(mem_size_);
+            std::vector<BackendContext::gpu_cfg> gpu_cfgs;
+            parse_gpu_layers(gpu_cfgs, gen_config.gpu_layers);
+            backend_context.init(gpu_cfgs, config_.num_hidden_layers, gen_config.num_threads, GRAPH_SIZE);
             scratch_buffer_.resize(scratch_size_);
         }
 
@@ -880,21 +962,22 @@ namespace chatllm
                                        const GenerationConfig &gen_config,
                                        int past)
         {
-            ForwardContext ctx;
-            ctx.gctx = GGMLContext({.mem_size = mem_size_, .mem_buffer = mem_buffer_.data(), .no_alloc = false});
+            ForwardContext ctx(&backend_context);
+            backend_context.buf_compute_meta.resize(scratch_buffer_.size());
+            ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = false});
             ctx.scratch = {.offs = 0, .size = scratch_size_, .data = scratch_buffer_.data()};
             int n_threads = gen_config.num_threads;
             ctx.gf = ggml_new_graph_custom(ctx.gctx.get(), GRAPH_SIZE, false);
 
             dbg_ctx = &ctx;
 
-            ggml_tensor *input_ids_tensor = ggml_new_tensor_1d(ctx.gctx.get(), GGML_TYPE_I32, input_ids.size());
-            memcpy(input_ids_tensor->data, input_ids.data(), ggml_nbytes(input_ids_tensor));
+            ggml_tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, input_ids.size());
+            input_ids_tensor->data = (void *)input_ids.data();
 
             ggml_tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
 
             if (logit_scale > 0)
-                r = ggml_scale_inplace(ctx.gctx.get(), r, logit_scale);
+                r = ggml::scale_inplace(&ctx, r, logit_scale);
 
             ggml::build_forward_expand(&ctx, r);
             ggml_graph_compute_with_ctx(ctx.gctx.get(), ctx.gf, n_threads);
@@ -955,8 +1038,6 @@ namespace chatllm
         BackendContext backend_context;
     private:
         BaseConfig config_;
-        size_t mem_size_;
-        std::vector<uint8_t> mem_buffer_;
         size_t scratch_size_;
         std::vector<uint8_t> scratch_buffer_;
     };
@@ -1005,12 +1086,12 @@ namespace chatllm
                 buffer = layer->set_cache_buffer(buffer);
         }
 
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
+        ggml_tensor *forward(ComputeContext *ctx, ggml_tensor *input_ids, int n_past) override
         {
             ggml_tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
             for (auto &layer : layers)
             {
-                ggml_set_scratch(ctx->get_ctx(), ctx->scratch);
+                ctx->restart_scratch_alloc();
                 hidden_states = layer->forward(ctx, hidden_states, n_past);
             }
 
@@ -1083,9 +1164,9 @@ namespace chatllm
             return r;
         }
 
-        ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
+        ggml_tensor *final_steps(ComputeContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
-            ggml_set_scratch(ctx->get_ctx(), {.offs = 0, .size = 0, .data = nullptr});
+            ctx->restart_scratch_alloc();
 
             // NOTE: only compute next_token_logits for the last token
             hidden_states = ggml::view_2d(ctx, hidden_states, config.hidden_size, 1,
@@ -1181,19 +1262,19 @@ namespace chatllm
         {
         }
 
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
+        ggml_tensor *forward(ComputeContext *ctx, ggml_tensor *input_ids, int n_past) override
         {
             ggml_tensor *hidden_states = Base::word_embeddings.forward(ctx, input_ids, n_past);
             for (auto &layer : BaseBase::layers)
             {
-                ggml_set_scratch(ctx->get_ctx(), ctx->scratch);
+                ctx->restart_scratch_alloc();
                 hidden_states = layer->forward(ctx, hidden_states, n_past);
             }
             return final_steps(ctx, input_ids, hidden_states);
         }
 
     protected:
-        ggml_tensor *final_steps(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
+        ggml_tensor *final_steps(ComputeContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
         {
             ggml_set_scratch(ctx->get_ctx(), {.offs = 0, .size = 0, .data = nullptr});
 
