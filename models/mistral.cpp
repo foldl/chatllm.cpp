@@ -126,8 +126,8 @@ namespace mistral
     public:
         ConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config, ModelType type)
-            : llama::v2::GenericConditionalGeneration<MistralBlock<SLIDING_WINDOW_LEN>>(config, type,
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+            : llama::v2::GenericConditionalGeneration<MistralBlock<SLIDING_WINDOW_LEN>>(config, runtime_config, type,
                 config.num_key_value_heads, config.max_length, 13)
         {
             CHATLLM_CHECK((config.sliding_window <= 0) || (config.sliding_window == SLIDING_WINDOW_LEN))
@@ -142,8 +142,8 @@ namespace mistral
             batch_input = false;
         }
 
-        ConditionalGeneration(const Config &config)
-            : ConditionalGeneration(config, MODEL_TYPE_MISTRAL)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : ConditionalGeneration(config, runtime_config, MODEL_TYPE_MISTRAL)
         {
         }
 
@@ -276,8 +276,8 @@ namespace mixtral
     public:
         _ConditionalGeneration() = default;
 
-        _ConditionalGeneration(const Config &config)
-        : Base(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+        _ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : Base(type, config, runtime_config), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = 3 + config.num_hidden_layers * (11 + 3);
@@ -335,14 +335,7 @@ namespace mixtral
         }
 
     public:
-        static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 244ull * 1024 * 1024;
-
         Config config;
-
-    private:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
     };
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
@@ -418,8 +411,8 @@ namespace mistral2
     public:
         ConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_MISTRAL2)
-            : llama::v2::GenericConditionalGeneration<MistralBlock<mistral::SLIDING_WINDOW_LEN>>(config, type,
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_MISTRAL2)
+            : llama::v2::GenericConditionalGeneration<MistralBlock<mistral::SLIDING_WINDOW_LEN>>(config, runtime_config, type,
                 config.num_key_value_heads, config.head_dim, config.max_length, 13, false)
         {
             CHATLLM_CHECK((config.sliding_window <= 0) || (config.sliding_window == mistral::SLIDING_WINDOW_LEN))

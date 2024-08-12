@@ -76,8 +76,8 @@ public:
     typedef Model<BaseConfig, Embedding, RMSNorm, GemmaBlock, int, int, int, int, int, int> ModelClass;
 
 public:
-    ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_GEMMA)
-        : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA)
+        : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 2 + config.num_hidden_layers * 12;
@@ -123,14 +123,7 @@ public:
     }
 
 public:
-    static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 244ull * 1024 * 1024;
-
     BaseConfig config;
-
-private:
-    // hold ggml_context & kv_cache
-    InitContext w_ctx_; // weight context
 };
 
 void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
@@ -259,8 +252,8 @@ class ConditionalGeneration : public BaseModelForConditionalGeneration
 public:
     typedef HeterogeneousModel<BaseConfig, Embedding, RMSNorm> ModelClass;
 public:
-    ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_GEMMA2)
-        : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config),
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA2)
+        : BaseModelForConditionalGeneration(type, config, runtime_config), config(config),
           logits_pp(1.0f / config.final_logit_soft_capping / sqrtf((float)config.hidden_size), config.final_logit_soft_capping),
           attn_scores_pp(1.0f / config.attn_logit_soft_capping, config.attn_logit_soft_capping)
     {
@@ -339,15 +332,8 @@ public:
     }
 
 public:
-    static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 844ull * 1024 * 1024;
-
     BaseConfig config;
     TanhScaling logits_pp;
     TanhScaling attn_scores_pp;
-
-private:
-    // hold ggml_context & kv_cache
-    InitContext w_ctx_; // weight context
 };
 }

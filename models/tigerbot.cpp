@@ -37,8 +37,8 @@ class ConditionalGeneration : public llama::v2::ConditionalGeneration
 {
 public:
     ConditionalGeneration() = default;
-    ConditionalGeneration(const Config &config)
-        : llama::v2::ConditionalGeneration(config, MODEL_TYPE_TIGERBOT, config.num_key_value_heads, config.max_length)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : llama::v2::ConditionalGeneration(config, runtime_config, MODEL_TYPE_TIGERBOT, config.num_key_value_heads, config.max_length)
     {
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

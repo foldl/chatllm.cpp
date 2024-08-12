@@ -19,6 +19,11 @@ namespace chatllm
             return ggml_backend_buffer_get_base(buf);
         }
 
+        size_t get_size(void) const
+        {
+            return ggml_backend_buffer_get_size(buf);
+        }
+
         bool is_host(void)
         {
             return ggml_backend_buffer_is_host(buf);
@@ -27,6 +32,12 @@ namespace chatllm
         ~BackendBuffer()
         {
             ggml_backend_buffer_free(buf);
+        }
+
+        void assign_to(ggml_tensor *tensor, size_t offset = 0)
+        {
+            uint8_t *data = (uint8_t *)get_base() + offset;
+            ggml_backend_tensor_alloc(buf, tensor, data);
         }
 
     protected:
@@ -357,7 +368,7 @@ namespace chatllm
         {
         }
 
-        void init(const std::vector<gpu_cfg> &gpu_cfgs, const int n_layers, const int n_threads, const size_t graph_max_nodes_num)
+        void init(const std::vector<gpu_cfg> &gpu_cfgs, const int n_layers, const size_t graph_max_nodes_num)
         {
             int n_gpu_layers = 0;
             for (auto &cfg : gpu_cfgs) n_gpu_layers += cfg.n_layers;
@@ -368,8 +379,6 @@ namespace chatllm
             backend_cpu = ggml_backend_cpu_init();
             CHATLLM_CHECK(backend_cpu != nullptr) << __func__ << ": failed to initialize CPU backend";
             backends.emplace_back(backend_cpu, n_layers - n_gpu_layers, use_gpu);
-
-            this->n_threads = n_threads;
 
             if (ComputeManager::is_gpu_offload_supported())
             {
@@ -434,7 +443,7 @@ namespace chatllm
                 gg_backends.push_back(b.backend);
                 gg_bufts.push_back(b.get_allocator());
             }
-            sched = ggml_backend_sched_new(gg_backends.data(), gg_bufts.data(), gg_backends.size(), graph_max_nodes_num, false);
+            sched = ggml_backend_sched_new(gg_backends.data(), gg_bufts.data(), (int)gg_backends.size(), graph_max_nodes_num, false);
         }
 
         ~BackendContext()
@@ -445,6 +454,11 @@ namespace chatllm
                 ggml_backend_free(backend.backend);
 
             ggml_backend_buffer_free(buf_output);
+        }
+
+        bool reserve_memory(ggml_cgraph *gf)
+        {
+            return ggml_backend_sched_reserve(sched, gf);
         }
 
         void alloc_graph(ggml_cgraph *gf)
@@ -488,6 +502,20 @@ namespace chatllm
             abort_callback_data = abort_callback_data;
         }
 
+        void show_buffer_sizes(void)
+        {
+            for (size_t i = 0; i < backends.size(); i++)
+            {
+                auto &backend = backends[i];
+                ggml_backend_buffer_type_t buft = backend.get_allocator();
+                size_t size = ggml_backend_sched_get_buffer_size(sched, backend.backend);
+                if (size > 1)
+                {
+                    printf("%s: %10s compute buffer size = %8.2f MiB\n", __func__, ggml_backend_buft_name(buft), size / 1024.0 / 1024.0);
+                }
+            }
+        }
+
     public:
         std::vector<Backend> backends;
     #ifdef GGML_USE_METAL
@@ -508,7 +536,6 @@ namespace chatllm
         std::vector<LayerBufAllocator> layer_allocators;
         LayerBufAllocator host_allocator;
 
-        int n_threads;
     protected:
         ggml_abort_callback abort_callback      = nullptr;
         void *              abort_callback_data = nullptr;
@@ -517,11 +544,13 @@ namespace chatllm
     class ComputeContext
     {
     public:
+        ComputeContext(BackendContext *backend_context) : backend_context(backend_context), cur_layer(MiscLayer::Prolog)
+        {
+        }
+
         virtual struct ggml_context *get_ctx() = 0;
-        virtual ggml_backend_sched_t get_sched(void) { return nullptr; }
         virtual ggml_cgraph *get_cgraph(void) { return nullptr; }
-        virtual BackendBufAllocator *get_allocator(void) { return nullptr; }
-        virtual void restart_scratch_alloc(void) {}
+
         virtual void cb_new_tensor(ggml_tensor *tensor)
         {
             if (get_sched() && get_backend())
@@ -536,10 +565,91 @@ namespace chatllm
                     ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
             }
         }
-        virtual Backend *get_backend(void) { return nullptr; }
 
-        virtual void allocate(void) {}
-        virtual void compute(int n_threads) {}
-        virtual void reset(void) {}
+        virtual ggml_backend_sched_t get_sched(void)
+        {
+            return backend_context->sched;
+        }
+
+        virtual Backend *get_backend(void)
+        {
+            auto id = get_mapped_layer_id(cur_layer);
+            return backend_context->layer_allocators[id].get_backend();
+        }
+
+        virtual void compute(int n_threads)
+        {
+            backend_context->compute_graph(get_cgraph(), n_threads);
+        }
+
+        virtual void allocate(void)
+        {
+            backend_context->alloc_graph(get_cgraph());
+        }
+
+        virtual bool reserve_memory(void)
+        {
+            return backend_context->reserve_memory(get_cgraph());
+        }
+
+        virtual void reset(void)
+        {
+            backend_context->reset();
+        }
+
+    public:
+        enum MiscLayer
+        {
+            Prolog = -1,
+            Epilog = -2,
+        };
+
+        void set_misc_layer_backend_mapping(int prolog, int epilog)
+        {
+            prolog_layer_backend_map_to_layer_id = prolog;
+            epilog_layer_backend_map_to_layer_id = epilog;
+        }
+
+        void move_to_layer(int layer_id)
+        {
+            cur_layer = layer_id;
+        }
+
+        virtual BackendBufAllocator *get_allocator(void)
+        {
+            auto id = get_mapped_layer_id(cur_layer);
+            return &backend_context->layer_allocators[id];
+        }
+
+    protected:
+        int get_mapped_layer_id(int layer_id)
+        {
+            int id = layer_id;
+            switch (id)
+            {
+            case MiscLayer::Prolog:
+                id = prolog_layer_backend_map_to_layer_id;
+                break;
+            case MiscLayer::Epilog:
+                id = epilog_layer_backend_map_to_layer_id;
+                break;
+            default:
+                break;
+            }
+            return id;
+        }
+    protected:
+        int cur_layer;
+        BackendContext *backend_context;
+        int prolog_layer_backend_map_to_layer_id = 0;
+        int epilog_layer_backend_map_to_layer_id = 0;
+    public:
+        // obsoleted
+        virtual void restart_scratch_alloc(void) {}
+    private:
+        void set_backend_context(BackendContext *backend_context)
+        {
+            this->backend_context = backend_context;
+        }
     };
 }

@@ -260,10 +260,12 @@ namespace chatllm
     class InitContext : public ComputeContext
     {
     public:
+        InitContext(BackendContext *backend_context = nullptr) : ComputeContext(backend_context)
+        {}
+       struct ggml_context *get_ctx() override { return gctx.get(); }
+    public:
         GGMLContext gctx;
         ggml_type dtype;
-    public:
-       struct ggml_context *get_ctx() override { return gctx.get(); }
     };
 
     class ChunkInterceptor;
@@ -518,8 +520,6 @@ namespace chatllm
         virtual ~AbstractModel()
         {}
 
-        virtual void prepare(const GenerationConfig &gen_config) = 0;
-
         virtual void set_layer_ids(const std::vector<int> &ids) = 0;
 
         virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
@@ -577,8 +577,6 @@ namespace chatllm
         {
             delete model;
         }
-
-        void prepare(const GenerationConfig &gen_config) override { model->prepare(gen_config); }
 
         void set_layer_ids(const std::vector<int> &ids) override { return model->set_layer_ids(ids); }
 
@@ -741,8 +739,11 @@ namespace chatllm
         {
             int   max_length;
             std::string layer_spec;
-            extra_args(int max_length, const std::string &layer_spec) : max_length(max_length), layer_spec(layer_spec) {}
-            extra_args() : extra_args(-1, "") {}
+            std::string gpu_layers;
+            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers = "")
+                : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers)
+            {}
+            extra_args() : extra_args(-1, "", "") {}
         };
 
         ModelObject(const std::string &path);
@@ -790,8 +791,6 @@ namespace chatllm
 
         Pipeline(const std::string &path);
         Pipeline(const std::string &path, const ModelObject::extra_args &args);
-
-        virtual void prepare(const GenerationConfig &gen_config);
 
         std::string chat(Messages &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);

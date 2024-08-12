@@ -48,8 +48,8 @@ class ConditionalGeneration : public mistral::mistral::ConditionalGeneration
 public:
     ConditionalGeneration() = default;
 
-    ConditionalGeneration(const Config &config)
-        : mistral::mistral::ConditionalGeneration(config, MODEL_TYPE_NEURALBEAGLE)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : mistral::mistral::ConditionalGeneration(config, runtime_config, MODEL_TYPE_NEURALBEAGLE)
     {
     }
 

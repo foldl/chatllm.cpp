@@ -28,13 +28,13 @@ public:
 class ConditionalGeneration : public mistral::mistral::ConditionalGeneration
 {
 public:
-    ConditionalGeneration(const Config &config)
-        : ConditionalGeneration(config, MODEL_TYPE_OPENCHAT)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : ConditionalGeneration(config, runtime_config, MODEL_TYPE_OPENCHAT)
     {
     }
 
-    ConditionalGeneration(const Config &config, ModelType type)
-        : mistral::mistral::ConditionalGeneration(config, type)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : mistral::mistral::ConditionalGeneration(config, runtime_config, type)
     {
     }
 };

@@ -113,8 +113,8 @@ namespace v2
         typedef Model<BaseConfig, Embedding, LayerNorm, Phi2Block, int, int, int, int, int> ModelClass;
     public:
         Phi2ConditionalGeneration() = default;
-        Phi2ConditionalGeneration(const BaseConfig &config, ModelType type)
-            : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+        Phi2ConditionalGeneration(const BaseConfig &config, const RuntimeConfig &runtime_config, ModelType type)
+            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = 5 + config.num_hidden_layers * 17;
@@ -135,17 +135,13 @@ namespace v2
         }
 
     public:
-        static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 484ull * 1024 * 1024;
+
+
 
         BaseConfig config;
 
     protected:
         bool is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output) override;
-
-    protected:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
     };
 
     bool Phi2ConditionalGeneration::is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output)
@@ -244,20 +240,20 @@ namespace v2
         {
         public:
             ConditionalGeneration() = default;
-            ConditionalGeneration(const Config &config);
-            ConditionalGeneration(const Config &config, ModelType type);
+            ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
+            ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type);
 
             void load(ModelLoader &loader) override;
         };
 
-        ConditionalGeneration::ConditionalGeneration(const Config &config)
-            : ConditionalGeneration::ConditionalGeneration(config, ModelType::MODEL_TYPE_PHI2)
+        ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : ConditionalGeneration::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_PHI2)
         {
 
         }
 
-        ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type)
-            : Phi2ConditionalGeneration(config, type)
+        ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+            : Phi2ConditionalGeneration(config, runtime_config, type)
         {
 
         }
@@ -320,13 +316,13 @@ namespace v2
         {
         public:
             ConditionalGeneration() = default;
-            ConditionalGeneration(const Config &config);
+            ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
 
             void load(ModelLoader &loader) override;
         };
 
-        ConditionalGeneration::ConditionalGeneration(const Config &config)
-            : Phi2ConditionalGeneration(config, ModelType::MODEL_TYPE_PHI2)
+        ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : Phi2ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_PHI2)
         {
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
@@ -484,13 +480,13 @@ namespace v3
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_PHI3)
-            : ConditionalGeneration(config, type, config.num_key_value_heads, config.max_length)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_PHI3)
+            : ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
         {}
 
-        ConditionalGeneration(const Config &config, ModelType type,
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : llama::v2::GenericConditionalGeneration<Phi3Block4k>(config, type, num_key_value_heads, max_length, 13)
+            : llama::v2::GenericConditionalGeneration<Phi3Block4k>(config, runtime_config, type, num_key_value_heads, max_length, 13)
         {
             CHATLLM_CHECK(config.sliding_window == SLIDING_WINDOW_LEN - 1)
                 << "sliding_window (" << config.sliding_window << ") must be " << SLIDING_WINDOW_LEN - 1;
@@ -557,13 +553,13 @@ namespace v3_su
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_PHI3_SU)
-            : ConditionalGeneration(config, type, config.num_key_value_heads, config.max_length)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_PHI3_SU)
+            : ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
         {}
 
-        ConditionalGeneration(const Config &config, ModelType type,
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : llama::v2::GenericConditionalGeneration<Phi3SUBlock>(config, type, num_key_value_heads, max_length, 12)
+            : llama::v2::GenericConditionalGeneration<Phi3SUBlock>(config, runtime_config, type, num_key_value_heads, max_length, 12)
         {
             CHATLLM_CHECK(config.sliding_window >= config.max_length)
                 << "sliding_window (" << config.sliding_window << ") must >= " << config.max_length;

@@ -1038,12 +1038,6 @@ namespace chatllm
         return;
     }
 
-    void Pipeline::prepare(const GenerationConfig &gen_config)
-    {
-        if (modelobj.loaded)
-            modelobj.model->prepare(gen_config);
-    }
-
     std::string Pipeline::chat(Messages &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer)
     {

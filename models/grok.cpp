@@ -91,19 +91,12 @@ public:
 public:
     ConditionalGeneration() = default;
 
-    ConditionalGeneration(const Config &config);
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
 
     void load(ModelLoader &loader) override;
 
 public:
-    static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 244ull * 1024 * 1024;
-
     Config config;
-
-private:
-    // hold ggml_context & kv_cache
-    InitContext w_ctx_; // weight context
 };
 
 size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
@@ -113,8 +106,8 @@ size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     return size;
 }
 
-ConditionalGeneration::ConditionalGeneration(const Config &config)
-    : BaseModelForConditionalGeneration(MODEL_TYPE_GROK_1, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+    : BaseModelForConditionalGeneration(MODEL_TYPE_GROK_1, config, runtime_config), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
     const size_t num_tensors = 2 + config.num_hidden_layers * (12 + 3);

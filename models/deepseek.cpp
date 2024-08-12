@@ -37,8 +37,8 @@ namespace v1
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config)
-            : llama::v2::ConditionalGeneration(config, MODEL_TYPE_DEEPSEEK)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : llama::v2::ConditionalGeneration(config, runtime_config, MODEL_TYPE_DEEPSEEK)
         {
         }
     };
@@ -500,11 +500,11 @@ namespace v2_light
     public:
         ConditionalGeneration0() = default;
 
-        ConditionalGeneration0(const Config &config) : ConditionalGeneration0(config, MODEL_TYPE_DEEPSEEK_V2_LIGHT, -1)
+        ConditionalGeneration0(const Config &config, const RuntimeConfig &runtime_config) : ConditionalGeneration0(config, runtime_config, MODEL_TYPE_DEEPSEEK_V2_LIGHT, -1)
         {}
 
-        ConditionalGeneration0(const Config &config, ModelType type, int q_lora_rank)
-            : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE),
+        ConditionalGeneration0(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int q_lora_rank)
+            : BaseModelForConditionalGeneration(type, config, runtime_config),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -647,18 +647,12 @@ namespace v2_light
         }
 
     public:
-        static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 1844ull * 1024 * 1024;
-
         Config config;
 
         bool is_layer_moe(int layer_index)
         {
             return (layer_index >= config.first_k_dense_replace) && (layer_index % config.moe_layer_freq == 0);
         }
-    private:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
     };
 
     const int NUM_EXPERTS                   =  64;
@@ -684,8 +678,8 @@ namespace v2
     public:
         ConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config)
-            : v2_light::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK, EXPERTS_PER_TOK>(config, MODEL_TYPE_DEEPSEEK_V2, config.q_lora_rank)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : v2_light::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK, EXPERTS_PER_TOK>(config, runtime_config, MODEL_TYPE_DEEPSEEK_V2, config.q_lora_rank)
         {
         }
     };

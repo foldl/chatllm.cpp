@@ -63,8 +63,8 @@ namespace neo
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config)
-            : yi::ConditionalGeneration(config, ModelType::MODEL_TYPE_MAP_NEO)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : yi::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_MAP_NEO)
         {}
     };
 }

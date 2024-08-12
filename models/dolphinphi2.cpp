@@ -100,8 +100,8 @@ namespace v1
     class ConditionalGeneration : public phi::v2::v1::ConditionalGeneration
     {
     public:
-        ConditionalGeneration(const Config &config)
-            : phi::v2::v1::ConditionalGeneration(config, MODEL_TYPE_DOLPHINPHI2)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : phi::v2::v1::ConditionalGeneration(config, runtime_config, MODEL_TYPE_DOLPHINPHI2)
         {}
     protected:
         bool is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output) override

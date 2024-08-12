@@ -40,8 +40,8 @@ namespace _7b
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config)
-            : llama::v2::ConditionalGeneration(config, MODEL_TYPE_BAICHUANLLAMA)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : llama::v2::ConditionalGeneration(config, runtime_config, MODEL_TYPE_BAICHUANLLAMA)
         {
         }
     };
@@ -99,13 +99,13 @@ namespace larger
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_BAICHUAN)
-            : ConditionalGeneration(config, type, config.num_attention_heads, config.max_length)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_BAICHUAN)
+            : ConditionalGeneration(config, runtime_config, type, config.num_attention_heads, config.max_length)
         {}
 
-        ConditionalGeneration(const Config &config, ModelType type,
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : llama::v2::GenericConditionalGeneration<BaichuanBlock>(config, type, num_key_value_heads, max_length)
+            : llama::v2::GenericConditionalGeneration<BaichuanBlock>(config, runtime_config, type, num_key_value_heads, max_length)
         {}
     };
 }

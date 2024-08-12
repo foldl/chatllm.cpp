@@ -5,12 +5,12 @@ public:
     typedef Model<BaseConfig, Embedding, RMSNorm, InternLMBlock<bias>, int, int, int, int, int> TransformerClass;
 
     GenericConditionalGeneration() = default;
-    GenericConditionalGeneration(const BaseConfig &config, ModelType type)
-        : GenericConditionalGeneration(config, type, config.num_attention_heads, 10000, 1.0)
+    GenericConditionalGeneration(const BaseConfig &config, const RuntimeConfig &runtime_config, ModelType type)
+        : GenericConditionalGeneration(config, runtime_config, type, config.num_attention_heads, 10000, 1.0)
     {}
 
-    GenericConditionalGeneration(const BaseConfig &config, ModelType type, int num_key_value_heads, float rope_theta, float rope_scaling)
-        : Base(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+    GenericConditionalGeneration(const BaseConfig &config, const RuntimeConfig &runtime_config, ModelType type, int num_key_value_heads, float rope_theta, float rope_scaling)
+        : Base(type, config, runtime_config), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 3 + config.num_hidden_layers * (bias ? 16 : 12);
@@ -71,14 +71,7 @@ public:
     }
 
 public:
-    static constexpr size_t MEM_SIZE = 1512ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 244ull * 1024 * 1024;
-
     BaseConfig config;
-
-private:
-    // hold ggml_context & kv_cache
-    InitContext w_ctx_; // weight context
 };
 
 class InternLMTokenizer : public BaseTokenizer
@@ -183,8 +176,8 @@ public:
     class ConditionalGeneration: public GenericConditionalGeneration<false>
     {
     public:
-        ConditionalGeneration(const Config &config)
-            : GenericConditionalGeneration(config, MODEL_TYPE_INTERNLM2, config.num_key_value_heads, config.rope_theta, config.rope_scaling)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : GenericConditionalGeneration(config, runtime_config, MODEL_TYPE_INTERNLM2, config.num_key_value_heads, config.rope_theta, config.rope_scaling)
         {
             // ready for 20B
             GRAPH_SIZE = 4096;
@@ -211,8 +204,8 @@ namespace v1
     class ConditionalGeneration: public GenericConditionalGeneration<true>
     {
     public:
-        ConditionalGeneration(const Config &config)
-            : GenericConditionalGeneration(config, MODEL_TYPE_INTERNLM)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : GenericConditionalGeneration(config, runtime_config, MODEL_TYPE_INTERNLM)
         {
         }
     };
@@ -357,8 +350,8 @@ namespace v3
     class ConditionalGeneration: public GenericConditionalGeneration<false>
     {
     public:
-        ConditionalGeneration(const Config &config)
-            : GenericConditionalGeneration(config, MODEL_TYPE_INTERNLM3, config.num_key_value_heads, config.rope_theta, config.rope_scaling)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : GenericConditionalGeneration(config, runtime_config, MODEL_TYPE_INTERNLM3, config.num_key_value_heads, config.rope_theta, config.rope_scaling)
         {
             // ready for 20B
             GRAPH_SIZE = 4096;

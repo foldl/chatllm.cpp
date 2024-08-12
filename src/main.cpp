@@ -661,8 +661,6 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 
     show_banner(pipeline, args.interactive && args.show_banner, &streamer);
 
-    pipeline.prepare(gen_config);
-
     if (pipeline.is_loaded())
     {
         switch (pipeline.model->get_purpose())
@@ -812,8 +810,6 @@ static int init_vector_store(Args &args)
 
     DEF_GenerationConfig(gen_config, args);
     std::vector<float> r;
-
-    pipeline.prepare(gen_config);
 
     CVectorStore vs(args.vc, pipeline.get_text_embedding_dim(),
         [&pipeline, &gen_config, &r](const std::string &s, float *emb)
@@ -1039,7 +1035,6 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline, chatl
     pipeline.set_additional_args(args.additional);
 
     DEF_GenerationConfig(gen_config, args);
-    pipeline.prepare(gen_config);
 
     chat->gen_config = gen_config;
 

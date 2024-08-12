@@ -33,13 +33,13 @@ namespace deepseek
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_CODEFUSE_DEEPSEEK)
-            : ConditionalGeneration(config, type, config.num_key_value_heads, config.max_length)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_CODEFUSE_DEEPSEEK)
+            : ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
         {}
 
-        ConditionalGeneration(const Config &config, ModelType type,
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : llama::v2::GenericConditionalGeneration<LlamaBlock>(config, type, num_key_value_heads, max_length),
+            : llama::v2::GenericConditionalGeneration<LlamaBlock>(config, runtime_config, type, num_key_value_heads, max_length),
               config(config)
         {
             for (int i = 0; i < config.num_hidden_layers; i++)

@@ -43,58 +43,40 @@ extern void ggml_vk_print_devices_info(void);
 
 namespace chatllm
 {
-    struct ForwardContext : public ComputeContext
+    struct RuntimeConfig
+    {
+        std::string gpu_layers;
+    };
+
+    class ForwardContext : public ComputeContext
     {
     public:
-        ForwardContext(BackendContext *backend_context) : backend_context(backend_context)
+        ForwardContext(BackendContext *backend_context) : ComputeContext(backend_context)
         {
-            cur_layer = -1;
         }
 
         struct ggml_context *get_ctx() override { return gctx.get(); }
         ggml_cgraph *get_cgraph(void) override { return gf; }
 
-        void move_to_layer(int layer_id)
-        {
-            cur_layer = layer_id;
-        }
-
-        ggml_backend_sched_t get_sched(void) override
-        {
-            return backend_context->sched;
-        }
-
-        BackendBufAllocator *get_allocator(void) override
-        {
-            return &backend_context->host_allocator;
-        }
-
-        Backend *get_backend(void) override
-        {
-            return &backend_context->backends[0];
-        }
-
-        void compute(int n_threads) override
-        {
-            backend_context->compute_graph(get_cgraph(), n_threads);
-        }
-
-        void allocate(void) override
-        {
-            backend_context->alloc_graph(get_cgraph());
-        }
-
-        void reset(void) override
-        {
-            backend_context->reset();
-        }
-
     public:
         GGMLContext gctx;
         ggml_cgraph *gf;
-    protected:
-        BackendContext *backend_context;
-        int cur_layer;
+    };
+
+    class LayerMover
+    {
+    public:
+        LayerMover(InitContext *ctx, int layer_id): ctx(ctx)
+        {
+            ctx->move_to_layer(layer_id);
+        }
+
+        operator InitContext *() const
+        {
+            return ctx;
+        }
+    private:
+        InitContext *ctx;
     };
 
     ForwardContext *dbg_ctx = nullptr;
@@ -766,14 +748,15 @@ namespace chatllm
     class BaseModelForConditionalGeneration : public BaseModel
     {
     public:
-        BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, size_t mem_size, size_t scratch_size)
+        BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, RuntimeConfig runtime_config)
             : BaseModel(model_type, to_string(model_type), to_native_string(model_type), get_model_purpose(model_type)),
               transformer(nullptr),
-              GRAPH_SIZE(GGML_DEFAULT_GRAPH_SIZE),
+              GRAPH_SIZE(4096),
               batch_input(true), logit_scale(-1.0f),
+              w_ctx_(&backend_context),
               config_(config)
         {
-
+            prepare(runtime_config);
             for (int i = 0; i < config.num_hidden_layers; i++)
                 layer_ids.push_back(i);
         }
@@ -965,19 +948,59 @@ namespace chatllm
             return transformer->load_session(f);
         }
 
-        void prepare(const GenerationConfig &gen_config) override
+        void prepare(const RuntimeConfig &rt_config)
         {
             std::vector<BackendContext::gpu_cfg> gpu_cfgs;
-            parse_gpu_layers(gpu_cfgs, gen_config.gpu_layers);
-            backend_context.init(gpu_cfgs, config_.num_hidden_layers, gen_config.num_threads, GRAPH_SIZE);
+            parse_gpu_layers(gpu_cfgs, rt_config.gpu_layers);
+            backend_context.init(gpu_cfgs, config_.num_hidden_layers, GRAPH_SIZE);
         }
 
     protected:
+        virtual void do_build_graph(ForwardContext &ctc, const std::vector<int> &input_ids,
+                                       const GenerationConfig &gen_config,
+                                       int past)
+        {
+
+        }
+
+        virtual bool before_initial_run(const std::vector<int> &input_ids,
+                                       const GenerationConfig &gen_config,
+                                       int past)
+        {
+            ForwardContext ctx(&backend_context);
+            ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
+            int n_threads = gen_config.num_threads;
+            ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
+
+            ggml_tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, input_ids.size());
+
+            ggml_tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
+
+            if (logit_scale > 0)
+                r = ggml::scale_inplace(&ctx, r, logit_scale);
+
+            ggml::build_forward_expand(&ctx, r);
+
+            bool s = ctx.reserve_memory();
+
+            backend_context.show_buffer_sizes();
+
+            return s;
+        }
+
         virtual void run_model(const std::vector<int> &input_ids,
                                        const GenerationConfig &gen_config,
                                        int past,
                                        std::vector<float> &output)
         {
+            if (!initial_run)
+            {
+                initial_run = true;
+                int past = gen_config.max_length - (int)input_ids.size();
+                if (past < 0) past = 0;
+                before_initial_run(input_ids, gen_config, past);
+            }
+
             ForwardContext ctx(&backend_context);
             ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
             int n_threads = gen_config.num_threads;
@@ -997,11 +1020,6 @@ namespace chatllm
             CHATLLM_CHECK(r->type == GGML_TYPE_F32) << "output type must be float: " << r->type;
 
             output.resize(ggml_nbytes(r) / sizeof(output[0]));
-
-            //if (!ggml_backend_sched_reserve(ctx.get_sched(), ctx.get_cgraph()))
-            //{
-            //    return;
-            //}
 
             ctx.allocate();
             Backend::set_tensor(input_ids_tensor, input_ids.data());
@@ -1059,8 +1077,10 @@ namespace chatllm
         float logit_scale;
         std::vector<int> layer_ids;
         BackendContext backend_context;
+        InitContext w_ctx_; // weight context
     private:
         BaseConfig config_;
+        bool initial_run = false;
     };
 
     static std::string regex_replace(const std::string &input, const std::regex &regex,
@@ -1083,28 +1103,30 @@ namespace chatllm
         HeterogeneousModel() = default;
 
         HeterogeneousModel(InitContext *ctx, const Config &config, bool lm_head_bias, std::function<Block *(InitContext *, int)> create_layer)
-                : HeterogeneousModel(ctx, config, new Linear(ctx, config.hidden_size, config.vocab_size, lm_head_bias), create_layer)
+                : HeterogeneousModel(ctx, config, new Linear(LayerMover(ctx, ComputeContext::MiscLayer::Epilog), config.hidden_size, config.vocab_size, lm_head_bias), create_layer)
         {}
 
         HeterogeneousModel(InitContext *ctx, const Config &config, Block *lm_head, std::function<Block *(InitContext *, int)> create_layer)
         : config(config),
-          word_embeddings(ctx, config.vocab_size, config.hidden_size, config.max_length),
-          final_layernorm(ctx, config.hidden_size),
+          word_embeddings(LayerMover(ctx, ComputeContext::MiscLayer::Prolog), config.vocab_size, config.hidden_size, config.max_length),
+          final_layernorm(LayerMover(ctx, ComputeContext::MiscLayer::Epilog), config.hidden_size),
           lm_head(lm_head), logits_pp(nullptr),
           cache_size(0)
         {
             layers.reserve(config.num_hidden_layers);
             for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
             {
+                ctx->move_to_layer(layer_id);
                 auto layer = create_layer(ctx, layer_id);
                 layers.emplace_back(layer);
+
                 layer->set_id(layer_id);
                 cache_size += layer->get_cache_size();
+
+                auto allocator = ctx->get_allocator();
+                auto buf = allocator->alloc(layer->get_cache_size(), BackendBufAllocator::Usage::Matrix);
+                layer->set_cache_buffer(buf);
             }
-            cache_buffer = new char[cache_size];
-            void *buffer = cache_buffer;
-            for (auto layer: layers)
-                buffer = layer->set_cache_buffer(buffer);
         }
 
         ggml_tensor *forward(ComputeContext *ctx, ggml_tensor *input_ids, int n_past) override
@@ -1149,12 +1171,13 @@ namespace chatllm
             return layers[index];
         }
 
+        // TODO:
         int save_session(FILE *f) override
         {
             struct state state = {.cache_size = cache_size };
             if (fwrite(&state, sizeof(state), 1, f) != 1)
                 return -1;
-            if (fwrite(cache_buffer, 1, cache_size, f) != cache_size)
+            //if (fwrite(cache_buffer, 1, cache_size, f) != cache_size)
                 return -3;
             return 0;
         }
@@ -1166,8 +1189,8 @@ namespace chatllm
                 return -10;
             if (state.cache_size != cache_size)
                 return -1;
-            if (fread(cache_buffer, 1, cache_size, f) != cache_size)
-                return -2;
+            //if (fread(cache_buffer, 1, cache_size, f) != cache_size)
+            //    return -2;
             return 0;
         }
 
@@ -1215,7 +1238,6 @@ namespace chatllm
     protected:
         // std::vector<std::unique_ptr<Block>> layers;
         std::vector<Block *> layers;
-        void *cache_buffer;
         size_t cache_size;
     };
 
@@ -1591,8 +1613,10 @@ namespace chatllm
             config.num_hidden_layers = (int)layers.size();
         }
 
+        RuntimeConfig rt_config;
+
         // load model
-        ConditionalGeneration *model = new ConditionalGeneration(config);
+        ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);
         if (layers.size() > 0)
             model->set_layer_ids(layers);
         model->load(loader);

@@ -45,8 +45,8 @@ private:
     typedef BaseModelForConditionalGeneration Base;
     typedef Model<Config, Embedding, LayerNorm, OrionBlock, int, int, int, int, int> ModelClass;
 public:
-    ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_ORION)
-        : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_ORION)
+        : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 4 + config.num_hidden_layers * 14;
@@ -89,14 +89,7 @@ public:
     }
 
 public:
-    static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 244ull * 1024 * 1024;
-
     Config config;
-
-private:
-    // hold ggml_context & kv_cache
-    InitContext w_ctx_; // weight context
 };
 
 size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)

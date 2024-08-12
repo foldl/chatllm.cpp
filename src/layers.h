@@ -142,7 +142,7 @@ namespace chatllm
         }
 
         virtual size_t get_cache_size(void) const { return 0; }
-        virtual void  *set_cache_buffer(void *buffer) { return buffer; }
+        virtual void   set_cache_buffer(BackendBuffer *buf) { }
 
     protected:
         ggml_prec prec;
@@ -449,12 +449,10 @@ namespace chatllm
             return ggml_nbytes(k_cache) + ggml_nbytes(v_cache);
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
-            uint8_t *b = (uint8_t *)buffer;
-            k_cache->data = b; b += ggml_nbytes(k_cache);
-            v_cache->data = b; b += ggml_nbytes(v_cache);
-            return b;
+            buffer->assign_to(k_cache, 0);
+            buffer->assign_to(v_cache, ggml_nbytes(k_cache));
         }
 
     public:
@@ -500,7 +498,7 @@ namespace chatllm
             return attention.get_cache_size();
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
             return attention.set_cache_buffer(buffer);
         }
@@ -647,7 +645,7 @@ namespace chatllm
             return attention.get_cache_size();
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
             return attention.set_cache_buffer(buffer);
         }
@@ -752,7 +750,7 @@ namespace chatllm
             return attention.get_cache_size();
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
             return attention.set_cache_buffer(buffer);
         }
@@ -866,20 +864,18 @@ namespace chatllm
             return r;
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
-            uint8_t *b = (uint8_t *)buffer;
+            size_t offset = 0;
             if (k_cache)
             {
-                k_cache->data = b;
-                b += ggml_nbytes(k_cache);
+                buffer->assign_to(k_cache, offset);
+                offset += ggml_nbytes(k_cache);
             }
             if (v_cache)
             {
-                v_cache->data = b;
-                b += ggml_nbytes(v_cache);
+                buffer->assign_to(v_cache, offset);
             }
-            return b;
         }
 
     protected:
@@ -1956,7 +1952,7 @@ namespace chatllm
             return attention.get_cache_size();
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
             return attention.set_cache_buffer(buffer);
         }
