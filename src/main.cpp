@@ -609,7 +609,7 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
 }
 
 #define DEF_GenerationConfig(gen_config, args) chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,    \
-                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z, args.n_gpu_layers)
+                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z)
 
 void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 {
@@ -891,7 +891,7 @@ int main(int argc, const char **argv)
 
     try
     {
-        chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec);
+        chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers);
         if (args.embedding_model_path.size() < 1)
         {
             chatllm::Pipeline pipeline(args.model_path, pipe_args);

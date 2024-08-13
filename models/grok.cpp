@@ -37,10 +37,10 @@ public:
         : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias)
     {}
 protected:
-    ggml_tensor *apply_pos_embedding_kq(ComputeContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const override
+    ggml::tensor *apply_pos_embedding_kq(ComputeContext *ctx, ggml::tensor *kq, int hidden_size, int qlen, ggml::tensor *past) const override
     {
         float max = 30.0f;
-        ggml_tensor *r = kq;
+        ggml::tensor *r = kq;
 
         r = ggml::scale_inplace(ctx, r, 1.0f / max);
         r = ggml::inplace_act(ctx, ActFunc::Tanh, r);
@@ -166,7 +166,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
 
     loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
 
-    CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+    CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
         << "corrupted model weights";
 }
 }

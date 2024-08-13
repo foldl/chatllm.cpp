@@ -130,7 +130,7 @@ namespace v2
             {
                 get_typed_transformer<ModelClass>()->layers[i].set_id(i);
                 get_typed_transformer<ModelClass>()->layers[i].attention.set_id(i);
-                get_typed_transformer<ModelClass>()->layers[i].attention.set_prec(ggml_prec::GGML_PREC_F32);
+                get_typed_transformer<ModelClass>()->layers[i].attention.set_prec(ggml::prec::GGML_PREC_F32);
             }
         }
 
@@ -290,7 +290,7 @@ namespace v2
             loader.read_tensor("lm_head.linear.bias", dynamic_cast<Linear *>(transformer->lm_head)->bias);
             loader.read_tensor("lm_head.linear.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
     }
@@ -363,7 +363,7 @@ namespace v2
             loader.read_tensor("lm_head.bias", dynamic_cast<Linear *>(transformer->lm_head)->bias);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
     }

@@ -113,7 +113,7 @@ namespace embedding
                 loader.read_tensor(layer_prefix + "output.LayerNorm.bias",      transformer->layers[i].mlp.output.norm.bias);
             }
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 
@@ -234,7 +234,7 @@ namespace ranker
             loader.read_tensor("classifier.out_proj.weight",    transformer->final_layernorm.out_proj.weight);
             loader.read_tensor("classifier.out_proj.bias",      transformer->final_layernorm.out_proj.bias);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 

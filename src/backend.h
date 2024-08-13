@@ -4,6 +4,24 @@
 
 namespace chatllm
 {
+    namespace ggml
+    {
+        typedef ggml_tensor tensor;
+        typedef ggml_type   type;
+
+        tensor *init_tensor(ggml::tensor  *tensor,
+                            ggml::type     type,
+                            int            n_dims,
+                            const int64_t *ne);
+
+        size_t element_size(const ggml::tensor *tensor);
+        size_t nbytes(const ggml::tensor *tensor);
+
+        int n_dims(const ggml::tensor * tensor);
+
+        void set_name(tensor *tensor, const char *name);
+    }
+
     // Is `ggml_backend_buffer_type_t` a good name?
     typedef ggml_backend_buffer_type_t  ggml_backend_allocator;
 
@@ -34,7 +52,7 @@ namespace chatllm
             ggml_backend_buffer_free(buf);
         }
 
-        void assign_to(ggml_tensor *tensor, size_t offset = 0)
+        void assign_to(ggml::tensor *tensor, size_t offset = 0)
         {
             uint8_t *data = (uint8_t *)get_base() + offset;
             ggml_backend_tensor_alloc(buf, tensor, data);
@@ -307,34 +325,34 @@ namespace chatllm
             }
         }
 
-        void set_tensor_async(struct ggml_tensor * tensor, const void * data, size_t offset, size_t size)
+        void set_tensor_async(struct ggml::tensor * tensor, const void * data, size_t offset, size_t size)
         {
             ggml_backend_tensor_set_async(backend, tensor, data, offset, size);
         }
 
-        static void set_tensor(struct ggml_tensor * tensor, const void * data, size_t offset, size_t size)
+        static void set_tensor(struct ggml::tensor * tensor, const void * data, size_t offset, size_t size)
         {
             ggml_backend_tensor_set(tensor, data, offset, size);
         }
 
-        static void set_tensor(struct ggml_tensor * tensor, const void * data)
+        static void set_tensor(struct ggml::tensor * tensor, const void * data)
         {
-            ggml_backend_tensor_set(tensor, data, 0, ggml_nbytes(tensor));
+            ggml_backend_tensor_set(tensor, data, 0, ggml::nbytes(tensor));
         }
 
-        void get_tensor_async(struct ggml_tensor * tensor, void * data, size_t offset, size_t size)
+        void get_tensor_async(struct ggml::tensor * tensor, void * data, size_t offset, size_t size)
         {
             ggml_backend_tensor_get_async(backend, tensor, data, offset, size);
         }
 
-        static void get_tensor(struct ggml_tensor * tensor, void * data, size_t offset, size_t size)
+        static void get_tensor(struct ggml::tensor * tensor, void * data, size_t offset, size_t size)
         {
             ggml_backend_tensor_get(tensor, data, offset, size);
         }
 
-        static void get_tensor(struct ggml_tensor * tensor, void * data)
+        static void get_tensor(struct ggml::tensor * tensor, void * data)
         {
-            ggml_backend_tensor_get(tensor, data, 0, ggml_nbytes(tensor));
+            ggml_backend_tensor_get(tensor, data, 0, ggml::nbytes(tensor));
         }
 
         void synchronize(void)
@@ -551,13 +569,13 @@ namespace chatllm
         virtual struct ggml_context *get_ctx() = 0;
         virtual ggml_cgraph *get_cgraph(void) { return nullptr; }
 
-        virtual void cb_new_tensor(ggml_tensor *tensor)
+        virtual void cb_new_tensor(ggml::tensor *tensor)
         {
             if (get_sched() && get_backend())
                 ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
         }
 
-        virtual void cb_op_tensor(ggml_tensor *tensor)
+        virtual void cb_op_tensor(ggml::tensor *tensor)
         {
             if (get_sched() && get_backend())
             {
@@ -595,6 +613,16 @@ namespace chatllm
         virtual void reset(void)
         {
             backend_context->reset();
+        }
+
+        virtual size_t get_used_mem(void)
+        {
+            return ggml_used_mem(get_ctx());
+        }
+
+        virtual size_t get_mem_size(void)
+        {
+            return ggml_get_mem_size(get_ctx());
         }
 
     public:

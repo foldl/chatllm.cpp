@@ -209,7 +209,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
     loader.read_tensor("transformer.final_layernorm.weight", transformer->final_layernorm.weight);
     loader.read_tensor("transformer.final_layernorm.bias", transformer->final_layernorm.bias);
 
-    CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+    CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
         << "corrupted model weights";
 }
 }
@@ -355,7 +355,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
     loader.read_tensor("transformer.encoder.final_layernorm.weight", transformer->final_layernorm.weight);
     loader.read_tensor("transformer.output_layer.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-    CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+    CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
         << "corrupted model weights";
 }
 }

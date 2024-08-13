@@ -67,7 +67,7 @@ namespace v1
                 auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
                 attention.freq_base = config.rope_theta;
                 attention.freq_scale = 1 / config.rope_scaling;
-                attention.set_prec(ggml_prec::GGML_PREC_F32);
+                attention.set_prec(ggml::prec::GGML_PREC_F32);
 
                 get_typed_transformer<ModelClass>()->layers[i].hidden_scaling = config.scale_depth;
             }
@@ -99,7 +99,7 @@ namespace v1
             if (transformer->lm_head)
                 loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 
@@ -312,7 +312,7 @@ namespace moe
                 auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
                 attention.freq_base = config.rope_theta;
                 attention.freq_scale = 1 / config.rope_scaling;
-                attention.set_prec(ggml_prec::GGML_PREC_F32);
+                attention.set_prec(ggml::prec::GGML_PREC_F32);
 
                 get_typed_transformer<ModelClass>()->layers[i].hidden_scaling = config.scale_depth;
             }
@@ -344,7 +344,7 @@ namespace moe
             }
             loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 

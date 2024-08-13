@@ -118,7 +118,7 @@ public:
         }
         loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
 
-        CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
     }
 
@@ -209,7 +209,7 @@ class TanhScaling: public Block
 public:
     TanhScaling(float scale_pre, float scale_post) : scale_pre(scale_pre), scale_post(scale_post) {}
 
-    ggml_tensor *forward(ComputeContext *ctx, ggml_tensor *input) override
+    ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override
     {
         input = ggml::scale_inplace(ctx, input, scale_pre);
         input = ggml::inplace_act(ctx, ActFunc::Tanh, input);
@@ -320,7 +320,7 @@ public:
         }
         loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
 
-        CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
     }
 

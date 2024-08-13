@@ -46,6 +46,7 @@ namespace chatllm
     struct RuntimeConfig
     {
         std::string gpu_layers;
+        RuntimeConfig(const std::string &gpu_layers): gpu_layers(gpu_layers) {}
     };
 
     class ForwardContext : public ComputeContext
@@ -81,7 +82,7 @@ namespace chatllm
 
     ForwardContext *dbg_ctx = nullptr;
 
-    void print_tensor(ggml_tensor *tensor, int offset = 0)
+    void print_tensor(ggml::tensor *tensor, int offset = 0)
     {
         printf("\n%s (%p): [%zd, %zd, %zd] [%zd, %zd, %zd]\n", tensor->name, tensor->data, tensor->ne[0], tensor->ne[1], tensor->ne[2],
                                                                              tensor->nb[0], tensor->nb[1], tensor->nb[2]);
@@ -90,7 +91,7 @@ namespace chatllm
         case GGML_TYPE_F32:
             {
                 float * p = (float *)tensor->data;
-                for (size_t i = 0; i < ggml_nbytes(tensor) / sizeof(float); i++)
+                for (size_t i = 0; i < ggml::nbytes(tensor) / sizeof(float); i++)
                 {
                     printf("[%3d] = %.15e\n", (int)i, p[i]);
                 }
@@ -101,7 +102,7 @@ namespace chatllm
             {
                 char * p = (char *)tensor->data;
                 p += offset;
-                for (size_t i = 0; i < ggml_nbytes(tensor); i++)
+                for (size_t i = 0; i < ggml::nbytes(tensor); i++)
                 {
                     if ((i & 0xf) == 0) printf("\n%05d: ", (int)i);
                     printf("%5d", p[i]);
@@ -113,9 +114,9 @@ namespace chatllm
         printf("\n");
     }
 
-    void inspect_tensor(ggml_tensor *tensor, const char *msg, ggml_tensor *temp1, ggml_tensor *temp2, ggml_tensor *temp3, ggml_tensor *temp4, ggml_tensor *temp5)
+    void inspect_tensor(ggml::tensor *tensor, const char *msg, ggml::tensor *temp1, ggml::tensor *temp2, ggml::tensor *temp3, ggml::tensor *temp4, ggml::tensor *temp5)
     {
-        ggml_tensor *dup = ggml_dup(dbg_ctx->gctx.get(), tensor);
+        ggml::tensor *dup = ggml_dup(dbg_ctx->gctx.get(), tensor);
         ggml::build_forward_expand(dbg_ctx, dup);
         ggml_graph_compute_with_ctx(dbg_ctx->gctx.get(), dbg_ctx->gf, 4);
         printf("%s:\n", msg);
@@ -748,7 +749,7 @@ namespace chatllm
     class BaseModelForConditionalGeneration : public BaseModel
     {
     public:
-        BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, RuntimeConfig runtime_config)
+        BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, const RuntimeConfig &runtime_config)
             : BaseModel(model_type, to_string(model_type), to_native_string(model_type), get_model_purpose(model_type)),
               transformer(nullptr),
               GRAPH_SIZE(4096),
@@ -972,9 +973,9 @@ namespace chatllm
             int n_threads = gen_config.num_threads;
             ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
-            ggml_tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, input_ids.size());
+            ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, input_ids.size());
 
-            ggml_tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
+            ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
 
             if (logit_scale > 0)
                 r = ggml::scale_inplace(&ctx, r, logit_scale);
@@ -1008,9 +1009,9 @@ namespace chatllm
 
             dbg_ctx = &ctx;
 
-            ggml_tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, input_ids.size());
+            ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, input_ids.size());
 
-            ggml_tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
+            ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
 
             if (logit_scale > 0)
                 r = ggml::scale_inplace(&ctx, r, logit_scale);
@@ -1019,7 +1020,7 @@ namespace chatllm
 
             CHATLLM_CHECK(r->type == GGML_TYPE_F32) << "output type must be float: " << r->type;
 
-            output.resize(ggml_nbytes(r) / sizeof(output[0]));
+            output.resize(ggml::nbytes(r) / sizeof(output[0]));
 
             ctx.allocate();
             Backend::set_tensor(input_ids_tensor, input_ids.data());
@@ -1129,9 +1130,9 @@ namespace chatllm
             }
         }
 
-        ggml_tensor *forward(ComputeContext *ctx, ggml_tensor *input_ids, int n_past) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) override
         {
-            ggml_tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
+            ggml::tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
             for (auto &layer : layers)
             {
                 ctx->restart_scratch_alloc();
@@ -1208,7 +1209,7 @@ namespace chatllm
             return r;
         }
 
-        ggml_tensor *final_steps(ComputeContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
+        ggml::tensor *final_steps(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
         {
             ctx->restart_scratch_alloc();
 
@@ -1217,12 +1218,12 @@ namespace chatllm
                                         config.hidden_size * ggml::element_size(hidden_states),
                                         (input_ids->ne[0] - 1) * config.hidden_size * ggml::element_size(hidden_states));
 
-            ggml_tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
+            ggml::tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
 
             transformer_outputs =
                     ggml::view_1d(ctx, transformer_outputs, config.hidden_size, 0);
 
-            ggml_tensor *lm_logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
+            ggml::tensor *lm_logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
                                              : word_embeddings.forward(ctx, transformer_outputs);
 
             if (logits_pp)
@@ -1305,9 +1306,9 @@ namespace chatllm
         {
         }
 
-        ggml_tensor *forward(ComputeContext *ctx, ggml_tensor *input_ids, int n_past) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) override
         {
-            ggml_tensor *hidden_states = Base::word_embeddings.forward(ctx, input_ids, n_past);
+            ggml::tensor *hidden_states = Base::word_embeddings.forward(ctx, input_ids, n_past);
             for (auto &layer : BaseBase::layers)
             {
                 ctx->restart_scratch_alloc();
@@ -1317,11 +1318,13 @@ namespace chatllm
         }
 
     protected:
-        ggml_tensor *final_steps(ComputeContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
+        ggml::tensor *final_steps(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
         {
-            ggml_set_scratch(ctx->get_ctx(), {.offs = 0, .size = 0, .data = nullptr});
+            // TODO:
+            //ggml_set_scratch(ctx->get_ctx(), {.offs = 0, .size = 0, .data = nullptr});
+            ctx->restart_scratch_alloc();
 
-            ggml_tensor *transformer_outputs = Base::final_layernorm.forward(ctx, hidden_states);
+            ggml::tensor *transformer_outputs = Base::final_layernorm.forward(ctx, hidden_states);
 
             return transformer_outputs;
         }
@@ -1613,7 +1616,7 @@ namespace chatllm
             config.num_hidden_layers = (int)layers.size();
         }
 
-        RuntimeConfig rt_config;
+        RuntimeConfig rt_config(args.gpu_layers);
 
         // load model
         ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);

@@ -75,7 +75,7 @@ ConditionalGeneration::ConditionalGeneration(const Config &config, const Runtime
     {
         auto &layer = get_typed_transformer<ModelClass>()->layers[i];
         layer.attention.freq_base = config.rope_theta;
-        layer.attention.set_prec(ggml_prec::GGML_PREC_F32);
+        layer.attention.set_prec(ggml::prec::GGML_PREC_F32);
     }
 }
 
@@ -106,7 +106,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
     loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
     loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-    CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+    CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
         << "corrupted model weights";
 }
 

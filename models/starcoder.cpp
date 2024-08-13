@@ -102,7 +102,7 @@ namespace v2
         loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
         loader.read_tensor("model.norm.bias",   transformer->final_layernorm.bias);
 
-        CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
     }
 }

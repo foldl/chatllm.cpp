@@ -124,7 +124,7 @@ If a question does not make any sense, or is not factually coherent, explain why
             if (transformer->lm_head)
                 loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 
@@ -516,7 +516,7 @@ namespace v3_1
 
         ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
     protected:
-        ggml_tensor *freq_factors;
+        ggml::tensor *freq_factors;
         std::vector<float> freq_factors_value;
     };
 }
@@ -605,9 +605,9 @@ namespace multi
         {
         }
 
-        ggml_tensor *forward(ComputeContext *ctx, ggml_tensor *input_ids, int n_past) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) override
         {
-            ggml_tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
+            ggml::tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
             for (int i = 0; i <= config.num_hidden_layers - 2; i++)
             {
                 // reserve scratch memory for h_truck
@@ -617,18 +617,18 @@ namespace multi
             }
 
             auto h_trunk = hidden_states;
-            ggml_tensor *lm_logits = ggml::new_tensor_2d(ctx, GGML_TYPE_F32, config.vocab_size, effective_n);
+            ggml::tensor *lm_logits = ggml::new_tensor_2d(ctx, GGML_TYPE_F32, config.vocab_size, effective_n);
 
             for (int i = 0; i < effective_n; i++)
             {
                 ctx->restart_scratch_alloc();
-                ggml_tensor *tok_states = prediction_heads[i]->forward(ctx, h_trunk, n_past);
+                ggml::tensor *tok_states = prediction_heads[i]->forward(ctx, h_trunk, n_past);
 
                 ctx->restart_scratch_alloc();
 
-                ggml_tensor *logits = calc_logits(ctx, input_ids, tok_states);
-                ggml_tensor *view = ggml::view_1d(ctx, lm_logits, config.vocab_size,
-                                                 i * ggml_nbytes(logits));
+                ggml::tensor *logits = calc_logits(ctx, input_ids, tok_states);
+                ggml::tensor *view = ggml::view_1d(ctx, lm_logits, config.vocab_size,
+                                                 i * ggml::nbytes(logits));
                 ggml::build_forward_expand(ctx, ggml::cpy(ctx, logits, view));
             }
 
@@ -651,19 +651,19 @@ namespace multi
             return r;
         }
 
-        ggml_tensor *calc_logits(ComputeContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
+        ggml::tensor *calc_logits(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
         {
             // NOTE: only compute next_token_logits for the last token
             hidden_states = ggml::view_2d(ctx, hidden_states, config.hidden_size, 1,
                                         config.hidden_size * ggml::element_size(hidden_states),
                                         (input_ids->ne[0] - 1) * config.hidden_size * ggml::element_size(hidden_states));
 
-            ggml_tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
+            ggml::tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
 
             transformer_outputs =
                     ggml::view_1d(ctx, transformer_outputs, config.hidden_size, 0);
 
-            ggml_tensor *logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
+            ggml::tensor *logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
                                              : word_embeddings.forward(ctx, transformer_outputs);
 
             if (logits_pp)
@@ -737,7 +737,7 @@ namespace multi
             loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 

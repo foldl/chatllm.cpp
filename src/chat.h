@@ -106,12 +106,12 @@ namespace chatllm
         int round;
     };
 
-    std::string to_string(ggml_tensor *tensor, bool with_data = true);
+    std::string to_string(ggml::tensor *tensor, bool with_data = true);
 
     struct BaseConfig
     {
         // common attributes
-        ggml_type dtype;
+        ggml::type dtype;
         int vocab_size;
         int hidden_size;
         int num_attention_heads;
@@ -265,7 +265,7 @@ namespace chatllm
        struct ggml_context *get_ctx() override { return gctx.get(); }
     public:
         GGMLContext gctx;
-        ggml_type dtype;
+        ggml::type dtype;
     };
 
     class ChunkInterceptor;
@@ -374,7 +374,7 @@ namespace chatllm
     class TensorInfo
     {
     public:
-        TensorInfo(enum ggml_type type, int n_dim, const int64_t *ne, size_t _offset);
+        TensorInfo(enum ggml::type type, int n_dim, const int64_t *ne, size_t _offset);
         ~TensorInfo();
 
         void *load(tokenizer::DataReader *reader);
@@ -385,7 +385,7 @@ namespace chatllm
         size_t aligned_size(void);
 
     public:
-        ggml_tensor tensor;
+        ggml::tensor tensor;
         const size_t _offset;
         void *data;
     };
@@ -421,11 +421,11 @@ namespace chatllm
             return s;
         }
 
-        void read_tensor(const std::string &name, ggml_tensor *tensor);
-        void read_tensor(const std::string &name, const std::vector<std::string> &concat_list, ggml_tensor *tensor);
+        void read_tensor(const std::string &name, ggml::tensor *tensor);
+        void read_tensor(const std::string &name, const std::vector<std::string> &concat_list, ggml::tensor *tensor);
         void read_tensor(const std::string &name,
                         const std::string &layer_prefix, int num, const std::string &suffix,
-                        ggml_tensor *tensor);
+                        ggml::tensor *tensor);
 
         void load_all_tensors(void);
 
@@ -466,7 +466,6 @@ namespace chatllm
         int num_threads;
         float presence_penalty;
         float tfs_z;
-        std::string gpu_layers;
         std::string sampling;
 
         GenerationConfig()
@@ -474,11 +473,9 @@ namespace chatllm
         }
 
         GenerationConfig(int max_length, int max_context_length, bool do_sample, int top_k,
-                         float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty, float tfs_z,
-                         std::string n_gpu_layers)
+                         float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty, float tfs_z)
             : max_length(max_length), max_context_length(max_context_length), do_sample(do_sample), top_k(top_k),
               top_p(top_p), temperature(temperature), num_threads(num_threads), presence_penalty(presence_penalty), tfs_z(tfs_z),
-              gpu_layers(n_gpu_layers),
               sampling(sampling) {}
     };
 
@@ -740,7 +737,7 @@ namespace chatllm
             int   max_length;
             std::string layer_spec;
             std::string gpu_layers;
-            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers = "")
+            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers)
                 : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers)
             {}
             extra_args() : extra_args(-1, "", "") {}

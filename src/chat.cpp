@@ -479,9 +479,9 @@ namespace chatllm
         }
     }
 
-    static std::string shape_to_string(ggml_tensor *tensor)
+    static std::string shape_to_string(ggml::tensor *tensor)
     {
-        int n_dims = ggml_n_dims(tensor);
+        int n_dims = ggml::n_dims(tensor);
         std::ostringstream oss;
         oss << '[';
         for (int i = n_dims - 1; i >= 0; i--)
@@ -492,9 +492,9 @@ namespace chatllm
         return oss.str();
     }
 
-    static std::string strides_to_string(ggml_tensor *tensor)
+    static std::string strides_to_string(ggml::tensor *tensor)
     {
-        int n_dims = ggml_n_dims(tensor);
+        int n_dims = ggml::n_dims(tensor);
         std::ostringstream oss;
         oss << '[';
         for (int i = n_dims - 1; i >= 0; i--)
@@ -505,11 +505,11 @@ namespace chatllm
         return oss.str();
     }
 
-    std::string to_string(ggml_tensor *tensor, bool with_data)
+    std::string to_string(ggml::tensor *tensor, bool with_data)
     {
         std::ostringstream oss;
-        int n_dims = ggml_n_dims(tensor);
-        oss << "ggml_tensor(";
+        int n_dims = ggml::n_dims(tensor);
+        oss << "ggml::tensor(";
 
         if (with_data)
         {
@@ -669,51 +669,10 @@ namespace chatllm
         return fread(output, 1, len, f);
     }
 
-    struct ggml_tensor * ggml_init_tensor(struct ggml_tensor *tensor,
-        enum   ggml_type      type,
-        int                   n_dims,
-        const int64_t       * ne)
-    {
-        struct ggml_tensor *result = tensor;
-
-
-
-        *result = ggml_tensor {
-            /*.type         =*/ type,
-            /*.backend      =*/ GGML_BACKEND_TYPE_CPU,
-            /*.buffer       =*/ NULL,
-            /*.ne           =*/ { 1, 1, 1, 1 },
-            /*.nb           =*/ { 0, 0, 0, 0 },
-            /*.op           =*/ GGML_OP_NONE,
-            /*.op_params    =*/ { 0 },
-            /*.flags        =*/ 0,
-            /*.grad         =*/ NULL,
-            /*.src          =*/ { NULL },
-            /*.view_src     =*/ NULL,
-            /*.view_offs    =*/ 0,
-            /*.data         =*/ NULL,
-            /*.name         =*/ { 0 },
-            /*.extra        =*/ NULL,
-            ///*.padding      =*/ { 0 },
-        };
-
-        for (int i = 0; i < n_dims; i++) {
-            result->ne[i] = ne[i];
-        }
-
-        result->nb[0] = ggml_type_size(type);
-        result->nb[1] = result->nb[0]*(result->ne[0]/ggml_blck_size(type));
-        for (int i = 2; i < GGML_MAX_DIMS; i++) {
-            result->nb[i] = result->nb[i - 1]*result->ne[i - 1];
-        }
-
-        return result;
-    }
-
-    TensorInfo::TensorInfo(enum ggml_type type, int n_dim, const int64_t *ne, size_t _offset)
+    TensorInfo::TensorInfo(enum ggml::type type, int n_dim, const int64_t *ne, size_t _offset)
         : _offset(_offset), data(nullptr)
     {
-        ggml_init_tensor(&tensor, type, n_dim, ne);
+        ggml::init_tensor(&tensor, type, n_dim, ne);
     }
 
     TensorInfo::~TensorInfo()
@@ -731,7 +690,7 @@ namespace chatllm
 
     size_t TensorInfo::aligned_size()
     {
-        return (aligned_data_start(_offset) - _offset) + ggml_nbytes(&tensor);
+        return (aligned_data_start(_offset) - _offset) + ggml::nbytes(&tensor);
     }
 
     void *TensorInfo::load(tokenizer::DataReader *reader)
@@ -739,20 +698,20 @@ namespace chatllm
         if (data) return tensor.data;
 
         constexpr int64_t MEM_ALIGNED = 16;
-        data = malloc(ggml_nbytes(&tensor) + MEM_ALIGNED);
+        data = malloc(ggml::nbytes(&tensor) + MEM_ALIGNED);
         tensor.data = (void *)aligned_data_start((size_t)data);
 
         if (reader)
         {
             reader->seek(aligned_data_start(_offset), SEEK_SET);
-            reader->read_buffer(tensor.data, ggml_nbytes(&tensor));
+            reader->read_buffer(tensor.data, ggml::nbytes(&tensor));
         }
         return tensor.data;
     }
 
     size_t TensorInfo::read_data(tokenizer::DataReader *reader, void *data, size_t data_size)
     {
-        size_t size = ggml_nbytes(&tensor);
+        size_t size = ggml::nbytes(&tensor);
         CHATLLM_CHECK(size <= data_size) << "TensorInfo::read_data: " << " data buffer too small, required at least " << size << ", actual " << data_size;
 
         reader->seek(aligned_data_start(_offset), SEEK_SET);
@@ -785,7 +744,7 @@ namespace chatllm
             }
 
             // read and check tensor dtype
-            ggml_type dtype = (ggml_type)read_basic<int>();
+            ggml::type dtype = (ggml::type)read_basic<int>();
 
             tensor_dict.emplace(weight_name, TensorInfo(dtype, ndim, ne, tell()));
 
@@ -795,12 +754,12 @@ namespace chatllm
         }
     }
 
-    void ModelLoader::read_tensor(const std::string &name, ggml_tensor *tensor)
+    void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor)
     {
         auto search = tensor_dict.find(name);
         CHATLLM_CHECK(search != tensor_dict.end()) << "tensor not exist: " << name;
 
-        ggml_set_name(tensor, name.c_str());
+        ggml::set_name(tensor, name.c_str());
         TensorInfo &t = search->second;
 
         CHATLLM_CHECK(t.tensor.type == tensor->type)
@@ -808,8 +767,8 @@ namespace chatllm
 
         // read and check tensor shape
         {
-            int ndim = ggml_n_dims(&t.tensor);
-            int n_dims = ggml_n_dims(tensor);
+            int ndim = ggml::n_dims(&t.tensor);
+            int n_dims = ggml::n_dims(tensor);
 
             // a quick fix
             if ((n_dims == 1) && (ndim == 2) && (tensor->ne[1] == 1))
@@ -830,7 +789,7 @@ namespace chatllm
 
     void ModelLoader::read_tensor(const std::string &name,
         const std::string &layer_prefix, int num, const std::string &suffix,
-        ggml_tensor *tensor)
+        ggml::tensor *tensor)
     {
         std::vector<std::string> names;
         for (int j = 0; j < num; j++)
@@ -840,7 +799,7 @@ namespace chatllm
         read_tensor(name, names, tensor);
     }
 
-    void ModelLoader::read_tensor(const std::string &name, const std::vector<std::string> &concat_list, ggml_tensor *tensor)
+    void ModelLoader::read_tensor(const std::string &name, const std::vector<std::string> &concat_list, ggml::tensor *tensor)
     {
         auto search = tensor_dict.find(name);
         if (search != tensor_dict.end())

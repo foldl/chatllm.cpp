@@ -26,14 +26,14 @@ static float qwen_get_ntk_alpha(int true_seq_len, int seq_length)
     return MAX(ntk_alpha, 1.0f);
 }
 
-static void ggml_compute_forward_mat_scale_f32(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_mat_scale_f32(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
 {
-    const struct ggml_tensor *src0 = a;
-    const struct ggml_tensor *src1 = b;
+    const struct ggml::tensor *src0 = a;
+    const struct ggml::tensor *src1 = b;
 
     GGML_TENSOR_BINARY_OP_LOCALS
 
-    const int nr = (int)ggml_nrows(dst);
+    const int nr = (int)ggml::nrows(dst);
 
     // rows per thread
     const int dr = (nr + nth - 1)/nth;
@@ -66,7 +66,7 @@ static void ggml_compute_forward_mat_scale_f32(struct ggml_tensor * dst , const 
     }
 }
 
-static void ggml_compute_forward_mat_scale(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_mat_scale(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
 {
     switch (a->type)
     {
@@ -79,18 +79,18 @@ static void ggml_compute_forward_mat_scale(struct ggml_tensor * dst , const stru
     }
 }
 
-static void ggml_compute_forward_ntk_dynamic_rope_f32(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_dynamic_rope_f32(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
 {
     QWenSelfAttention *data = reinterpret_cast<QWenSelfAttention *>(userdata);
 
-    const struct ggml_tensor *src0 = a;
-    const struct ggml_tensor *src1 = b;
+    const struct ggml::tensor *src0 = a;
+    const struct ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
     int n_dims = data->rope_dim;
 
-    const int nr = (int)ggml_nrows(dst);
+    const int nr = (int)ggml::nrows(dst);
 
     GGML_ASSERT(n_dims <= ne0);
     GGML_ASSERT(n_dims % 2 == 0);
@@ -152,18 +152,18 @@ static void ggml_compute_forward_ntk_dynamic_rope_f32(struct ggml_tensor * dst ,
     }
 }
 
-static void ggml_compute_forward_ntk_dynamic_rope_f16(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_dynamic_rope_f16(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
 {
     QWenSelfAttention *data = reinterpret_cast<QWenSelfAttention *>(userdata);
 
-    const struct ggml_tensor *src0 = a;
-    const struct ggml_tensor *src1 = b;
+    const struct ggml::tensor *src0 = a;
+    const struct ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
     int n_dims = data->rope_dim;
 
-    const int nr = (int)ggml_nrows(dst);
+    const int nr = (int)ggml::nrows(dst);
 
     GGML_ASSERT(n_dims <= ne0);
     GGML_ASSERT(n_dims % 2 == 0);
@@ -225,7 +225,7 @@ static void ggml_compute_forward_ntk_dynamic_rope_f16(struct ggml_tensor * dst ,
     }
 }
 
-static void ggml_compute_forward_ntk_dynamic_rope(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_dynamic_rope(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
 {
     switch (a->type)
     {
@@ -241,18 +241,18 @@ static void ggml_compute_forward_ntk_dynamic_rope(struct ggml_tensor * dst , con
     }
 }
 
-static void ggml_compute_forward_ntk_mix_rope_f32(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_mix_rope_f32(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
 {
     BlueLMSelfAttention *data = reinterpret_cast<BlueLMSelfAttention *>(userdata);
 
-    const struct ggml_tensor *src0 = a;
-    const struct ggml_tensor *src1 = b;
+    const struct ggml::tensor *src0 = a;
+    const struct ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
     int n_dims = data->rope_dim;
 
-    const int nr = (int)ggml_nrows(dst);
+    const int nr = (int)ggml::nrows(dst);
 
     GGML_ASSERT(n_dims <= ne0);
     GGML_ASSERT(n_dims % 2 == 0);
@@ -297,18 +297,18 @@ static void ggml_compute_forward_ntk_mix_rope_f32(struct ggml_tensor * dst , con
     }
 }
 
-static void ggml_compute_forward_ntk_mix_rope_f16(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_mix_rope_f16(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
 {
     BlueLMSelfAttention *data = reinterpret_cast<BlueLMSelfAttention *>(userdata);
 
-    const struct ggml_tensor *src0 = a;
-    const struct ggml_tensor *src1 = b;
+    const struct ggml::tensor *src0 = a;
+    const struct ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
     int n_dims = data->rope_dim;
 
-    const int nr = (int)ggml_nrows(dst);
+    const int nr = (int)ggml::nrows(dst);
 
     GGML_ASSERT(n_dims <= ne0);
     GGML_ASSERT(n_dims % 2 == 0);
@@ -353,7 +353,7 @@ static void ggml_compute_forward_ntk_mix_rope_f16(struct ggml_tensor * dst , con
     }
 }
 
-static void ggml_compute_forward_ntk_mix_rope(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_mix_rope(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
 {
     switch (a->type)
     {
@@ -382,7 +382,7 @@ static void build_ntk_mixed_inv_freq(int dim, std::vector<float> &inv_freq,
     }
 }
 
-static void ggml_compute_forward_simple_norm_f32(struct ggml_tensor * dst , const struct ggml_tensor * src0, int ith, int nth, void * userdata) {
+static void ggml_compute_forward_simple_norm_f32(struct ggml::tensor * dst , const struct ggml::tensor * src0, int ith, int nth, void * userdata) {
     GGML_ASSERT(ggml_are_same_shape(src0, dst));
 
     GGML_ASSERT(src0->nb[0] == sizeof(float));
@@ -416,7 +416,7 @@ static void ggml_compute_forward_simple_norm_f32(struct ggml_tensor * dst , cons
     }
 }
 
-static void ggml_compute_forward_simple_norm(struct ggml_tensor * dst , const struct ggml_tensor * src, int ith, int nth, void * userdata) {
+static void ggml_compute_forward_simple_norm(struct ggml::tensor * dst , const struct ggml::tensor * src, int ith, int nth, void * userdata) {
     switch (src->type) {
         case GGML_TYPE_F32:
             {
@@ -429,7 +429,7 @@ static void ggml_compute_forward_simple_norm(struct ggml_tensor * dst , const st
     }
 }
 
-static void ggml_compute_forward_sigmoid_f32(struct ggml_tensor * dst , const struct ggml_tensor * src0, int ith, int nth, void * userdata) {
+static void ggml_compute_forward_sigmoid_f32(struct ggml::tensor * dst , const struct ggml::tensor * src0, int ith, int nth, void * userdata) {
     GGML_ASSERT(ggml_are_same_shape(src0, dst));
 
     GGML_ASSERT(dst->type == GGML_TYPE_F32);
@@ -456,7 +456,7 @@ static void ggml_compute_forward_sigmoid_f32(struct ggml_tensor * dst , const st
     }
 }
 
-void ggml_compute_forward_sigmoid(struct ggml_tensor * dst , const struct ggml_tensor * src, int ith, int nth, void * userdata) {
+void ggml_compute_forward_sigmoid(struct ggml::tensor * dst , const struct ggml::tensor * src, int ith, int nth, void * userdata) {
     switch (src->type) {
         case GGML_TYPE_F32:
             {
@@ -469,18 +469,18 @@ void ggml_compute_forward_sigmoid(struct ggml_tensor * dst , const struct ggml_t
     }
 }
 
-static void ggml_compute_forward_su_rope_f16(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_su_rope_f16(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
 {
     Phi3SUSelfAttention *data = reinterpret_cast<Phi3SUSelfAttention *>(userdata);
 
-    const struct ggml_tensor *src0 = a;
-    const struct ggml_tensor *src1 = b;
+    const struct ggml::tensor *src0 = a;
+    const struct ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
     int n_dims = data->rope_dim;
 
-    const int nr = (int)ggml_nrows(dst);
+    const int nr = (int)ggml::nrows(dst);
 
     GGML_ASSERT(n_dims <= ne0);
     GGML_ASSERT(n_dims % 2 == 0);
@@ -526,18 +526,18 @@ static void ggml_compute_forward_su_rope_f16(struct ggml_tensor * dst , const st
     }
 }
 
-static void ggml_compute_forward_su_rope_f32(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_su_rope_f32(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
 {
     Phi3SUSelfAttention *data = reinterpret_cast<Phi3SUSelfAttention *>(userdata);
 
-    const struct ggml_tensor *src0 = a;
-    const struct ggml_tensor *src1 = b;
+    const struct ggml::tensor *src0 = a;
+    const struct ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
     int n_dims = data->rope_dim;
 
-    const int nr = (int)ggml_nrows(dst);
+    const int nr = (int)ggml::nrows(dst);
 
     GGML_ASSERT(n_dims <= ne0);
     GGML_ASSERT(n_dims % 2 == 0);
@@ -583,7 +583,7 @@ static void ggml_compute_forward_su_rope_f32(struct ggml_tensor * dst , const st
     }
 }
 
-static void ggml_compute_forward_su_rope(struct ggml_tensor * dst , const struct ggml_tensor * a, const struct ggml_tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_su_rope(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
 {
     switch (a->type)
     {
@@ -599,9 +599,9 @@ static void ggml_compute_forward_su_rope(struct ggml_tensor * dst , const struct
     }
 }
 
-static void ggml_compute_forward_custom_alibi_f32(struct ggml_tensor * dst , const struct ggml_tensor * a, int ith, int nth, const alibi_ctx *userdata)
+static void ggml_compute_forward_custom_alibi_f32(struct ggml::tensor * dst , const struct ggml::tensor * a, int ith, int nth, const alibi_ctx *userdata)
 {
-    const struct ggml_tensor * src0 = a;
+    const struct ggml::tensor * src0 = a;
 
     //const int n_past = ((int32_t *) dst->op_params)[0];
     const int n_head = userdata->n_head;
@@ -612,7 +612,7 @@ static void ggml_compute_forward_custom_alibi_f32(struct ggml_tensor * dst , con
     const int64_t ne2 = src0->ne[2]; // n_head -> this is k
     //const int64_t ne3 = src0->ne[3]; // 1 -> bsz
 
-    const int64_t n  = ggml_nrows(src0);
+    const int64_t n  = ggml::nrows(src0);
     const int64_t ne2_ne3 = n/ne1; // ne2*ne3
 
     const size_t nb0 = src0->nb[0];
@@ -655,9 +655,9 @@ static void ggml_compute_forward_custom_alibi_f32(struct ggml_tensor * dst , con
     }
 }
 
-static void ggml_compute_forward_custom_alibi_f16(struct ggml_tensor * dst , const struct ggml_tensor * a, int ith, int nth, const alibi_ctx *userdata)
+static void ggml_compute_forward_custom_alibi_f16(struct ggml::tensor * dst , const struct ggml::tensor * a, int ith, int nth, const alibi_ctx *userdata)
 {
-    const struct ggml_tensor * src0 = a;
+    const struct ggml::tensor * src0 = a;
 
     //const int n_past = ((int32_t *) dst->op_params)[0];
     const int n_head = userdata->n_head;
@@ -668,7 +668,7 @@ static void ggml_compute_forward_custom_alibi_f16(struct ggml_tensor * dst , con
     const int64_t ne2 = src0->ne[2]; // n_head -> this is k
     //const int ne3 = src0->ne[3]; // 1 -> bsz
 
-    const int64_t n  = ggml_nrows(src0);
+    const int64_t n  = ggml::nrows(src0);
     const int64_t ne2_ne3 = n/ne1; // ne2*ne3
 
     const size_t nb0 = src0->nb[0];
@@ -714,9 +714,9 @@ static void ggml_compute_forward_custom_alibi_f16(struct ggml_tensor * dst , con
     }
 }
 
-static void ggml_compute_forward_custom_alibi(struct ggml_tensor * dst , const struct ggml_tensor * a, int ith, int nth, void *userdata) {
+static void ggml_compute_forward_custom_alibi(struct ggml::tensor * dst , const struct ggml::tensor * a, int ith, int nth, void *userdata) {
 
-    const struct ggml_tensor * src0 = dst->src[0];
+    const struct ggml::tensor * src0 = dst->src[0];
 
     switch (src0->type)
     {
