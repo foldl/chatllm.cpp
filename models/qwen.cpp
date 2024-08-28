@@ -57,19 +57,12 @@ namespace v1
     public:
         typedef Model<Config, Embedding, RMSNorm, QWenBlock, int, int, int, int> ModelClass;
     public:
-        ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_QWEN);
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_QWEN);
 
         void load(ModelLoader &loader) override;
 
     public:
-        static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 844ull * 1024 * 1024;
-
         Config config;
-
-    private:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
     };
 
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
@@ -159,8 +152,8 @@ namespace v1
         return (id == pad_token_id) || (id == im_start_token_id) || (id == im_end_token_id);
     }
 
-    ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type)
-        : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 3 + config.num_hidden_layers * 16;
@@ -211,7 +204,7 @@ namespace v1
         loader.read_tensor("transformer.ln_f.weight", transformer->final_layernorm.weight);
         loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-        CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
     }
 }
@@ -256,32 +249,27 @@ namespace v2
     public:
         typedef Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int> ModelClass;
     public:
-        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_QWEN2, bool tie_embeddings = false);
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_QWEN2, bool tie_embeddings = false);
 
         void load(ModelLoader &loader) override;
 
     public:
-        static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 444ull * 1024 * 1024;
-
         Config config;
 
     private:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
         const bool tie_embeddings;
     };
 
-    ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type, bool tie_embeddings)
-        : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE),
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, bool tie_embeddings)
+        : BaseModelForConditionalGeneration(type, config, runtime_config),
         config(config), tie_embeddings(tie_embeddings)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 3 + config.num_hidden_layers * 15 + (tie_embeddings ? -1 : 0);
         const size_t ctx_size = num_tensors * tensor_ovhd;
+
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
-
 
         if (tie_embeddings)
         {
@@ -316,6 +304,7 @@ namespace v2
         loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
+            loader.move_to_layer(layer_ids[i]);
             std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
 
             loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
@@ -333,11 +322,14 @@ namespace v2
             loader.read_tensor(layer_prefix + "mlp.up_proj.weight",   transformer->layers[i].mlp.up_proj.weight);
             loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer->layers[i].mlp.gate_proj.weight);
         }
+
+        loader.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
+
         loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
         if (!tie_embeddings)
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-        CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
     }
 }
@@ -350,8 +342,8 @@ namespace v2_tie
     class ConditionalGeneration : public v2::ConditionalGeneration
     {
     public:
-        ConditionalGeneration(const Config &config)
-            : v2::ConditionalGeneration(config, ModelType::MODEL_TYPE_QWEN2TIE, true)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : v2::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_QWEN2TIE, true)
         {}
     };
 }
@@ -392,8 +384,8 @@ namespace v2_moe
     public:
         GenericConditionalGeneration() = default;
 
-        GenericConditionalGeneration(const Config &config)
-            : BaseModelForConditionalGeneration(MODEL_TYPE_QWEN2MoE, config, MEM_SIZE, SCRATCH_SIZE),
+        GenericConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : BaseModelForConditionalGeneration(MODEL_TYPE_QWEN2MoE, config, runtime_config),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -457,19 +449,12 @@ namespace v2_moe
             loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 
     public:
-        static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 1844ull * 1024 * 1024;
-
         Config config;
-
-    private:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
     };
 
     template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class QWenSparseMoE : public BaseSparseMLP
@@ -495,12 +480,13 @@ namespace v2_moe
         public:
             ConditionalGeneration() = default;
 
-            ConditionalGeneration(const Config &config) : GenericConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, EFFECTIVE_EXPERTS_PER_TOK, MoEBlock>(config) {}
+            ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+                : GenericConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, EFFECTIVE_EXPERTS_PER_TOK, MoEBlock>(config, runtime_config) {}
         };
 
-        static AbstractModel *create(const Config &config)
+        static AbstractModel *create(const Config &config, const RuntimeConfig &runtime_config)
         {
-            return new ConditionalGeneration(config);
+            return new ConditionalGeneration(config, runtime_config);
         }
     };
 
@@ -531,15 +517,15 @@ namespace v2_moe
     public:
         ConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config) : ModelProxy()
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config) : ModelProxy()
         {
             switch (config.num_experts)
             {
             case experts_60::NUM_EXPERTS:
-                set_proxy_model(experts_60::ConditionalGeneration::create(config));
+                set_proxy_model(experts_60::ConditionalGeneration::create(config, runtime_config));
                 break;
             case experts_64::NUM_EXPERTS:
-                set_proxy_model(experts_64::ConditionalGeneration::create(config));
+                set_proxy_model(experts_64::ConditionalGeneration::create(config, runtime_config));
                 break;
             default:
                 CHATLLM_CHECK(false) << "unsupported MoE param: num_experts = " << config.num_experts;

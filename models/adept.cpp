@@ -44,19 +44,12 @@ namespace persimmon
     public:
         typedef Model<Config, Embedding, LayerNorm, PersimmonBlock, int, int, int, int> ModelClass;
     public:
-        ConditionalGeneration(const Config &config);
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
 
         void load(ModelLoader &loader) override;
 
     public:
-        static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 444ull * 1024 * 1024;
-
         Config config;
-
-    private:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
     };
 
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
@@ -108,8 +101,8 @@ namespace persimmon
         tok->encode("adept: ", ids, true, false);
     }
 
-    ConditionalGeneration::ConditionalGeneration(const Config &config)
-        : BaseModelForConditionalGeneration(MODEL_TYPE_PERSIMMON, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : BaseModelForConditionalGeneration(MODEL_TYPE_PERSIMMON, config, runtime_config), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 4 + config.num_hidden_layers * 23;
@@ -168,7 +161,7 @@ namespace persimmon
         loader.read_tensor("model.final_layernorm.bias",   transformer->final_layernorm.bias);
         loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-        CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
     }
 }

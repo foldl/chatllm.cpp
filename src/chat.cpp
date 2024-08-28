@@ -479,9 +479,9 @@ namespace chatllm
         }
     }
 
-    static std::string shape_to_string(ggml_tensor *tensor)
+    static std::string shape_to_string(ggml::tensor *tensor)
     {
-        int n_dims = ggml_n_dims(tensor);
+        int n_dims = ggml::n_dims(tensor);
         std::ostringstream oss;
         oss << '[';
         for (int i = n_dims - 1; i >= 0; i--)
@@ -492,9 +492,9 @@ namespace chatllm
         return oss.str();
     }
 
-    static std::string strides_to_string(ggml_tensor *tensor)
+    static std::string strides_to_string(ggml::tensor *tensor)
     {
-        int n_dims = ggml_n_dims(tensor);
+        int n_dims = ggml::n_dims(tensor);
         std::ostringstream oss;
         oss << '[';
         for (int i = n_dims - 1; i >= 0; i--)
@@ -505,11 +505,11 @@ namespace chatllm
         return oss.str();
     }
 
-    std::string to_string(ggml_tensor *tensor, bool with_data)
+    std::string to_string(ggml::tensor *tensor, bool with_data)
     {
         std::ostringstream oss;
-        int n_dims = ggml_n_dims(tensor);
-        oss << "ggml_tensor(";
+        int n_dims = ggml::n_dims(tensor);
+        oss << "ggml::tensor(";
 
         if (with_data)
         {
@@ -669,51 +669,11 @@ namespace chatllm
         return fread(output, 1, len, f);
     }
 
-    struct ggml_tensor * ggml_init_tensor(struct ggml_tensor *tensor,
-        enum   ggml_type      type,
-        int                   n_dims,
-        const int64_t       * ne)
-    {
-        struct ggml_tensor *result = tensor;
-
-
-
-        *result = ggml_tensor {
-            /*.type         =*/ type,
-            /*.backend      =*/ GGML_BACKEND_TYPE_CPU,
-            /*.buffer       =*/ NULL,
-            /*.ne           =*/ { 1, 1, 1, 1 },
-            /*.nb           =*/ { 0, 0, 0, 0 },
-            /*.op           =*/ GGML_OP_NONE,
-            /*.op_params    =*/ { 0 },
-            /*.flags        =*/ 0,
-            /*.grad         =*/ NULL,
-            /*.src          =*/ { NULL },
-            /*.view_src     =*/ NULL,
-            /*.view_offs    =*/ 0,
-            /*.data         =*/ NULL,
-            /*.name         =*/ { 0 },
-            /*.extra        =*/ NULL,
-            ///*.padding      =*/ { 0 },
-        };
-
-        for (int i = 0; i < n_dims; i++) {
-            result->ne[i] = ne[i];
-        }
-
-        result->nb[0] = ggml_type_size(type);
-        result->nb[1] = result->nb[0]*(result->ne[0]/ggml_blck_size(type));
-        for (int i = 2; i < GGML_MAX_DIMS; i++) {
-            result->nb[i] = result->nb[i - 1]*result->ne[i - 1];
-        }
-
-        return result;
-    }
-
-    TensorInfo::TensorInfo(enum ggml_type type, int n_dim, const int64_t *ne, size_t _offset)
+    TensorInfo::TensorInfo(ggml::type type, int n_dim, const int64_t *ne, size_t _offset)
         : _offset(_offset), data(nullptr)
     {
-        ggml_init_tensor(&tensor, type, n_dim, ne);
+        ggml::init_tensor(&tensor, type, n_dim, ne);
+        usage = ggml::n_dims(&tensor) > 1 ? BackendBufAllocator::Usage::Matrix : BackendBufAllocator::Usage::Others;
     }
 
     TensorInfo::~TensorInfo()
@@ -731,33 +691,61 @@ namespace chatllm
 
     size_t TensorInfo::aligned_size()
     {
-        return (aligned_data_start(_offset) - _offset) + ggml_nbytes(&tensor);
+        return (aligned_data_start(_offset) - _offset) + ggml::nbytes(&tensor);
     }
 
-    void *TensorInfo::load(tokenizer::DataReader *reader)
+    size_t TensorInfo::get_nbytes(void)
     {
-        if (data) return tensor.data;
+        return ggml::nbytes(&tensor);
+    }
 
-        constexpr int64_t MEM_ALIGNED = 16;
-        data = malloc(ggml_nbytes(&tensor) + MEM_ALIGNED);
-        tensor.data = (void *)aligned_data_start((size_t)data);
+    bool TensorInfo::load(tokenizer::DataReader *reader, LayerBufAllocator *alloc)
+    {
+        if (data) return true;
+
+        data = alloc->alloc(ggml::nbytes(&tensor), usage);
+        data->assign_to(&tensor);
+        this->alloc = alloc;
 
         if (reader)
-        {
-            reader->seek(aligned_data_start(_offset), SEEK_SET);
-            reader->read_buffer(tensor.data, ggml_nbytes(&tensor));
-        }
-        return tensor.data;
+            read_tensor_data(reader, _offset, 0, ggml::nbytes(&tensor));
+
+        return true;
     }
 
-    size_t TensorInfo::read_data(tokenizer::DataReader *reader, void *data, size_t data_size)
+    size_t TensorInfo::read_tensor_data(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size)
     {
-        size_t size = ggml_nbytes(&tensor);
-        CHATLLM_CHECK(size <= data_size) << "TensorInfo::read_data: " << " data buffer too small, required at least " << size << ", actual " << data_size;
+        CHATLLM_CHECK(data) << "backend buffer still not allocated!";
+        CHATLLM_CHECK(data->get_size() >= write_offset + data_size) << "read_tensor_data(): write data exceeds tensor data size";
 
-        reader->seek(aligned_data_start(_offset), SEEK_SET);
-        reader->read_buffer(data, size);
-        return size;
+        reader->seek(aligned_data_start(read_offset), SEEK_SET);
+
+        if (data->is_host())
+            reader->read_buffer((uint8_t *)data->get_base() + write_offset, data_size);
+        else
+        {
+            const int BUF_SIZE = 1024 * 1000;
+            std::vector<uint8_t> buf;
+            buf.resize(BUF_SIZE);
+            size_t remain = data_size;
+            size_t offset = write_offset;
+            while (remain > 0)
+            {
+                size_t block = remain > buf.size() ? buf.size() : remain;
+                reader->read_buffer(buf.data(), block);
+                alloc->get_backend()->write_tensor_data(&tensor, buf.data(), offset, block);
+
+                remain -= block;
+                offset += block;
+            }
+        }
+
+        return data_size;
+    }
+
+    void TensorInfo::assign_to(ggml::tensor *tensor)
+    {
+        data->assign_to(tensor);
     }
 
     void ModelLoader::load_all_tensors(void)
@@ -785,7 +773,7 @@ namespace chatllm
             }
 
             // read and check tensor dtype
-            ggml_type dtype = (ggml_type)read_basic<int>();
+            ggml::type dtype = (ggml::type)read_basic<int>();
 
             tensor_dict.emplace(weight_name, TensorInfo(dtype, ndim, ne, tell()));
 
@@ -795,12 +783,24 @@ namespace chatllm
         }
     }
 
-    void ModelLoader::read_tensor(const std::string &name, ggml_tensor *tensor)
+    void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor)
+    {
+        read_tensor(name, tensor, alloc_manager->get_allocator());
+    }
+
+    void ModelLoader::read_tensor(const std::string &name,
+                    const std::string &layer_prefix, int num, const std::string &suffix,
+                    ggml::tensor *tensor)
+    {
+        read_tensor(name, layer_prefix, num, suffix, tensor, alloc_manager->get_allocator());
+    }
+
+    void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator)
     {
         auto search = tensor_dict.find(name);
         CHATLLM_CHECK(search != tensor_dict.end()) << "tensor not exist: " << name;
 
-        ggml_set_name(tensor, name.c_str());
+        ggml::set_name(tensor, name.c_str());
         TensorInfo &t = search->second;
 
         CHATLLM_CHECK(t.tensor.type == tensor->type)
@@ -808,8 +808,8 @@ namespace chatllm
 
         // read and check tensor shape
         {
-            int ndim = ggml_n_dims(&t.tensor);
-            int n_dims = ggml_n_dims(tensor);
+            int ndim = ggml::n_dims(&t.tensor);
+            int n_dims = ggml::n_dims(tensor);
 
             // a quick fix
             if ((n_dims == 1) && (ndim == 2) && (tensor->ne[1] == 1))
@@ -825,45 +825,54 @@ namespace chatllm
             }
         }
 
-        tensor->data = t.load(_file.get());
+        CHATLLM_CHECK(t.load(_file.get(), allocator)) << "failed to load tensor: " << name;
+
+        t.assign_to(tensor);
     }
 
     void ModelLoader::read_tensor(const std::string &name,
         const std::string &layer_prefix, int num, const std::string &suffix,
-        ggml_tensor *tensor)
+        ggml::tensor *tensor, LayerBufAllocator *allocator)
     {
         std::vector<std::string> names;
         for (int j = 0; j < num; j++)
         {
             names.push_back(layer_prefix + std::to_string(j) + suffix);
         }
-        read_tensor(name, names, tensor);
+        read_tensor(name, names, tensor, allocator);
     }
 
-    void ModelLoader::read_tensor(const std::string &name, const std::vector<std::string> &concat_list, ggml_tensor *tensor)
+    void ModelLoader::read_tensor(const std::string &name, const std::vector<std::string> &concat_list,
+                                  ggml::tensor *tensor, LayerBufAllocator *allocator)
     {
         auto search = tensor_dict.find(name);
         if (search != tensor_dict.end())
-            return read_tensor(name, tensor);
+        {
+            read_tensor(name, tensor, allocator);
+            return;
+        }
 
         tensor_dict.emplace(name, TensorInfo(tensor->type, 4, tensor->ne, 0));
 
         TensorInfo &t = tensor_dict.at(name);
-        uint8_t *buffer = (uint8_t *)t.load(nullptr);
+        t.load(nullptr, allocator);
 
-        size_t total_size = t.aligned_size();
+        size_t total_size = t.get_nbytes();
+        size_t write_offset = 0;
         for (size_t i = 0; i < concat_list.size(); i++)
         {
             auto search = tensor_dict.find(concat_list[i]);
             CHATLLM_CHECK(search != tensor_dict.end()) << "tensor " << concat_list[i] << " not exists.";
 
-            size_t size = search->second.read_data(_file.get(), buffer, total_size);
-            buffer += size;
+            size_t size = search->second.get_nbytes();
+            t.read_tensor_data(_file.get(), search->second._offset, write_offset, size);
+
+            write_offset += size;
             total_size -= size;
         }
         CHATLLM_CHECK(total_size == 0) << "tensor " << name << " not fully loaded.";
 
-        tensor->data = t.load(nullptr);
+        t.assign_to(tensor);
     }
 
     int BaseModel::save_session(FILE *f) const

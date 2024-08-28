@@ -29,8 +29,8 @@ namespace lm
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config)
-            : llama::v2::ConditionalGeneration(config, MODEL_TYPE_WIZARDLM)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : llama::v2::ConditionalGeneration(config, runtime_config, MODEL_TYPE_WIZARDLM)
         {
         }
     };
@@ -110,12 +110,12 @@ namespace coder
     public:
         ConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config, ModelType type)
-            : codellama::ConditionalGeneration(config, type)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+            : codellama::ConditionalGeneration(config, runtime_config, type)
         {}
 
-        ConditionalGeneration(const Config &config)
-            : ConditionalGeneration(config, MODEL_TYPE_WIZARDCODER)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : ConditionalGeneration(config, runtime_config, MODEL_TYPE_WIZARDCODER)
         {
         }
     };
@@ -186,8 +186,8 @@ namespace math
     class ConditionalGeneration : public mistral::mistral::ConditionalGeneration
     {
     public:
-        ConditionalGeneration(const Config &config)
-            : mistral::mistral::ConditionalGeneration(config, MODEL_TYPE_WIZARDMATH)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : mistral::mistral::ConditionalGeneration(config, runtime_config, MODEL_TYPE_WIZARDMATH)
         {
         }
     };

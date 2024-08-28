@@ -41,19 +41,12 @@ public:
     typedef Model<Config, Embedding, RMSNorm, LlamaBlock, int, int, int, int, int> ModelClass;
 public:
     ConditionalGeneration() = default;
-    ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_YI);
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_YI);
 
     void load(ModelLoader &loader) override;
 
 public:
-    static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 844ull * 1024 * 1024;
-
     Config config;
-
-private:
-    // hold ggml_context & kv_cache
-    InitContext w_ctx_; // weight context
 };
 
 size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
@@ -119,8 +112,8 @@ bool Tokenizer::is_special_id(int id) const
             || (id == im_sep_token_id);
 }
 
-ConditionalGeneration::ConditionalGeneration(const Config &config, ModelType type)
-    : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+    : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
     const size_t num_tensors = 3 + config.num_hidden_layers * 12;
@@ -166,6 +159,6 @@ void ConditionalGeneration::load(ModelLoader &loader)
     loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
     loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-    CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+    CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
         << "corrupted model weights";
 }

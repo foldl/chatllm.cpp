@@ -97,8 +97,8 @@ static class ToolCallingInterceptor interceptor;
 class ConditionalGeneration : public llama::v3::ConditionalGeneration
 {
 public:
-    ConditionalGeneration(const Config &config)
-        : llama::v3::ConditionalGeneration(config, ModelType::MODEL_TYPE_LLAMA3_GROQ_TOOL)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : llama::v3::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_LLAMA3_GROQ_TOOL)
     {}
 
     ChunkInterceptor *get_interceptor(void) override { return &interceptor; }

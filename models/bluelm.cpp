@@ -38,13 +38,12 @@ class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<Blu
 {
 public:
     ConditionalGeneration() = default;
-    ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_BLUELM)
-        : ConditionalGeneration(config, type, config.num_attention_heads, config.max_length)
+    ConditionalGeneration(const Config &config, RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_BLUELM)
+        : ConditionalGeneration(config, runtime_config, type, config.num_attention_heads, config.max_length)
     {}
 
-    ConditionalGeneration(const Config &config, ModelType type,
-                          int num_key_value_heads, int max_length)
-        : llama::v2::GenericConditionalGeneration<BlueLMBlock>(config, type, num_key_value_heads, max_length)
+    ConditionalGeneration(const Config &config, RuntimeConfig &runtime_config, ModelType type, int num_key_value_heads, int max_length)
+        : llama::v2::GenericConditionalGeneration<BlueLMBlock>(config, runtime_config, type, num_key_value_heads, max_length)
     {
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

@@ -49,23 +49,16 @@ class ConditionalGeneration : public BaseModelForConditionalGeneration
 public:
     typedef Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int> ModelClass;
 public:
-    ConditionalGeneration(const Config &config);
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
 
     void load(ModelLoader &loader) override;
 
 public:
-    static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 444ull * 1024 * 1024;
-
     Config config;
-
-private:
-    // hold ggml_context & kv_cache
-    InitContext w_ctx_; // weight context
 };
 
-ConditionalGeneration::ConditionalGeneration(const Config &config)
-    : BaseModelForConditionalGeneration(MODEL_TYPE_ZHINAO, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+    : BaseModelForConditionalGeneration(MODEL_TYPE_ZHINAO, config, runtime_config), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
     const size_t num_tensors = 3 + config.num_hidden_layers * 15;
@@ -82,7 +75,7 @@ ConditionalGeneration::ConditionalGeneration(const Config &config)
     {
         auto &layer = get_typed_transformer<ModelClass>()->layers[i];
         layer.attention.freq_base = config.rope_theta;
-        layer.attention.set_prec(ggml_prec::GGML_PREC_F32);
+        layer.attention.set_prec(ggml::prec::GGML_PREC_F32);
     }
 }
 
@@ -113,7 +106,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
     loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
     loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-    CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+    CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
         << "corrupted model weights";
 }
 

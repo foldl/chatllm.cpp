@@ -12,6 +12,7 @@
 #include "basics.h"
 #include "tokenizer.h"
 #include "vectorstore.h"
+#include "backend.h"
 
 namespace chatllm
 {
@@ -105,12 +106,12 @@ namespace chatllm
         int round;
     };
 
-    std::string to_string(ggml_tensor *tensor, bool with_data = true);
+    std::string to_string(ggml::tensor *tensor, bool with_data = true);
 
     struct BaseConfig
     {
         // common attributes
-        ggml_type dtype;
+        ggml::type dtype;
         int vocab_size;
         int hidden_size;
         int num_attention_heads;
@@ -256,17 +257,15 @@ namespace chatllm
         ggml_context *gctx_;
     };
 
-    struct InitContext
+    class InitContext : public ComputeContext
     {
+    public:
+        InitContext(BackendContext *backend_context = nullptr) : ComputeContext(backend_context)
+        {}
+       struct ggml_context *get_ctx() override { return gctx.get(); }
+    public:
         GGMLContext gctx;
-        ggml_type dtype;
-    };
-
-    struct ForwardContext
-    {
-        GGMLContext gctx;
-        ggml_cgraph *gf;
-        ggml_scratch scratch;
+        ggml::type dtype;
     };
 
     class ChunkInterceptor;
@@ -375,20 +374,26 @@ namespace chatllm
     class TensorInfo
     {
     public:
-        TensorInfo(enum ggml_type type, int n_dim, const int64_t *ne, size_t _offset);
+        TensorInfo(ggml::type type, int n_dim, const int64_t *ne, size_t _offset);
         ~TensorInfo();
 
-        void *load(tokenizer::DataReader *reader);
+        bool load(tokenizer::DataReader *reader, LayerBufAllocator *alloc);
 
-        size_t read_data(tokenizer::DataReader *reader, void *data, size_t data_size);
+        size_t read_tensor_data(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size);
 
         size_t aligned_data_start(size_t offset);
         size_t aligned_size(void);
 
+        size_t get_nbytes(void);
+
+        void assign_to(ggml::tensor *tensor);
+
     public:
-        ggml_tensor tensor;
+        ggml::tensor tensor;
         const size_t _offset;
-        void *data;
+        BackendBufAllocator::Usage usage;
+        BackendBuffer *data;
+        LayerBufAllocator *alloc;
     };
 
     class ModelLoader
@@ -422,11 +427,20 @@ namespace chatllm
             return s;
         }
 
-        void read_tensor(const std::string &name, ggml_tensor *tensor);
-        void read_tensor(const std::string &name, const std::vector<std::string> &concat_list, ggml_tensor *tensor);
+        void set_allocator_manager(LayerAllocatorManager *alloc_manager)
+        {
+            this->alloc_manager = alloc_manager;
+        }
+
+        void move_to_layer(int layer_id)
+        {
+            this->alloc_manager->move_to_layer(layer_id);
+        }
+
+        void read_tensor(const std::string &name, ggml::tensor *tensor);
         void read_tensor(const std::string &name,
                         const std::string &layer_prefix, int num, const std::string &suffix,
-                        ggml_tensor *tensor);
+                        ggml::tensor *tensor);
 
         void load_all_tensors(void);
 
@@ -434,6 +448,15 @@ namespace chatllm
         {
             return _file.get();
         }
+
+    protected:
+        void read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator);
+        void read_tensor(const std::string &name,
+                        const std::string &layer_prefix, int num, const std::string &suffix,
+                        ggml::tensor *tensor, LayerBufAllocator *allocator);
+
+        void read_tensor(const std::string &name,
+                         const std::vector<std::string> &concat_list, ggml::tensor *tensor, LayerBufAllocator *allocator);
 
     private:
         ModelLoader(tokenizer::DataReader *mapped_file)
@@ -452,6 +475,8 @@ namespace chatllm
         int model_type;
         int version;
         std::map<std::string, TensorInfo> tensor_dict;
+    protected:
+        LayerAllocatorManager *alloc_manager = nullptr;
     };
 
     // ===== generation =====
@@ -564,6 +589,8 @@ namespace chatllm
         virtual ChunkInterceptor *get_interceptor(void) { return nullptr; }
 
         virtual void set_additional_args(const std::map<std::string, std::string> &args) {}
+
+        virtual LayerAllocatorManager *get_alloc_manager(void) = 0;
     };
 
     class ModelProxy : public AbstractModel
@@ -627,6 +654,11 @@ namespace chatllm
 
         ChunkInterceptor *get_interceptor(void) override { return model->get_interceptor(); }
 
+        LayerAllocatorManager *get_alloc_manager(void) override
+        {
+            return model->get_alloc_manager();
+        }
+
     protected:
         AbstractModel *model;
         void set_proxy_model(AbstractModel *model) { this->model = model; }
@@ -658,6 +690,12 @@ namespace chatllm
         void abort_generation(void) override
         {
             aborted = true;
+        }
+
+        static bool is_aborted(void * data)
+        {
+            BaseModel *p = reinterpret_cast<BaseModel *>(data);
+            return p->aborted;
         }
 
         void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
@@ -731,8 +769,11 @@ namespace chatllm
         {
             int   max_length;
             std::string layer_spec;
-            extra_args(int max_length, const std::string &layer_spec) : max_length(max_length), layer_spec(layer_spec) {}
-            extra_args() : extra_args(-1, "") {}
+            std::string gpu_layers;
+            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers)
+                : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers)
+            {}
+            extra_args() : extra_args(-1, "", "") {}
         };
 
         ModelObject(const std::string &path);

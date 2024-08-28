@@ -199,7 +199,8 @@ WARN_FLAGS = \
 	-Wcast-qual \
 	-Wno-unused-function \
 	-Wno-unused-parameter \
-	-Wno-missing-declarations
+	-Wno-missing-declarations \
+	-Wno-empty-body
 
 MK_CFLAGS += \
 	$(WARN_FLAGS) \
@@ -825,6 +826,11 @@ $(OUTPUT_PATH)/chat.o: \
 	src/chat.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(OUTPUT_PATH)/backend.o: \
+	src/backend.cpp \
+	src/backend.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 $(OUTPUT_PATH)/models.o: \
 	src/models.cpp \
 	src/models.h \
@@ -844,6 +850,7 @@ OBJ_CHATLLM+= \
 	$(OUTPUT_PATH)/unicode-data.o \
 	$(OUTPUT_PATH)/models.o \
 	$(OUTPUT_PATH)/chat.o \
+	$(OUTPUT_PATH)/backend.o \
 	$(OUTPUT_PATH)/vectorstore.o \
 	$(OUTPUT_PATH)/tokenizer.o \
 	$(OUTPUT_PATH)/layers.o

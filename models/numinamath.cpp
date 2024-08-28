@@ -62,8 +62,8 @@ class ConditionalGeneration : public llama::v2::ConditionalGeneration
 {
 public:
     ConditionalGeneration() = default;
-    ConditionalGeneration(const Config &config)
-        : llama::v2::ConditionalGeneration(config, MODEL_TYPE_NUMINAMATH)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : llama::v2::ConditionalGeneration(config, runtime_config, MODEL_TYPE_NUMINAMATH)
     {
     }
 };

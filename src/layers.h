@@ -9,17 +9,13 @@
 
 #include "chat.h"
 
+#include "backend.h"
+
 namespace chatllm
 {
     [[ noreturn ]]
-    void inspect_tensor(ggml_tensor *tensor, const char *msg,
-        ggml_tensor *temp1 = nullptr, ggml_tensor *temp2 = nullptr, ggml_tensor *temp3 = nullptr, ggml_tensor *temp4 = nullptr, ggml_tensor *temp5 = nullptr);
-
-    struct ggml_tensor * ggml_mul_mat_id(
-        struct ggml_context * ctx,
-        void  * as, int n_expert,
-        struct ggml_tensor  * ids, int i,
-        struct ggml_tensor  * b) ;
+    void inspect_tensor(ggml::tensor *tensor, const char *msg,
+        ggml::tensor *temp1 = nullptr, ggml::tensor *temp2 = nullptr, ggml::tensor *temp3 = nullptr, ggml::tensor *temp4 = nullptr, ggml::tensor *temp5 = nullptr);
 
     struct alibi_ctx
     {
@@ -37,26 +33,103 @@ namespace chatllm
         RELU2,  // square . relu
     };
 
-    ggml_tensor *inplace_act(ggml_context *ctx, ActFunc act, ggml_tensor *input);
+    namespace ggml
+    {
+        typedef ggml_prec prec;
+
+        ggml::tensor *new_tensor_1d(ComputeContext *ctx, ggml::type type, int64_t ne0);
+        ggml::tensor *new_tensor_2d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1);
+        ggml::tensor *new_tensor_3d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2);
+
+        ggml::tensor *cpy(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
+
+        ggml::tensor *dup(ComputeContext *ctx, ggml::tensor *a);
+
+        ggml::tensor *cont(ComputeContext *ctx, ggml::tensor *a);
+
+        ggml::tensor *transpose(ComputeContext *ctx, ggml::tensor *a);
+
+        // operators
+        ggml::tensor *get_rows(ComputeContext *ctx, ggml::tensor *a, ggml::tensor  *b);
+
+        ggml::tensor *add(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b);
+        ggml::tensor *add_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor * b);
+
+        ggml::tensor *mul_mat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor  *b);
+        ggml::tensor *mul_mat_id(ComputeContext *ctx, ggml::tensor *as, ggml::tensor *b, ggml::tensor  *ids);
+
+        ggml::tensor *mul(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
+        ggml::tensor *mul_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
+
+        ggml::tensor *div(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
+
+        ggml::tensor *sum_rows(ComputeContext *ctx, ggml::tensor *a);
+
+        ggml::tensor *top_k(ComputeContext *ctx, ggml::tensor *a, int k);
+
+        ggml::tensor *view_1d(ComputeContext *ctx, ggml::tensor  *a, int64_t ne0, size_t offset);
+        ggml::tensor *view_2d(ComputeContext *ctx, ggml::tensor  *a, int64_t ne0, int64_t ne1, size_t nb1, size_t offset);
+        ggml::tensor *view_3d(ComputeContext *ctx, ggml::tensor  *a, int64_t ne0, int64_t ne1, int64_t ne2, size_t nb1, size_t nb2, size_t offset);
+
+        ggml::tensor *reshape_1d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0);
+        ggml::tensor *reshape_2d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1);
+        ggml::tensor *reshape_3d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2);
+
+        ggml::tensor *permute(ComputeContext *ctx, ggml::tensor *a, int axis0, int axis1, int axis2, int axis3);
+
+        ggml::tensor *norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
+        ggml::tensor *rms_norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
+        ggml::tensor *rms_norm(ComputeContext *ctx, ggml::tensor *a, float eps);
+
+        ggml::tensor *rope_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int n_dims, int mode);
+        ggml::tensor *rope_ext_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c,
+                                            int   n_dims, int   mode, int   n_ctx_orig,
+                                            float freq_base, float freq_scale, float ext_factor,
+                                            float attn_factor, float beta_fast, float beta_slow);
+
+        ggml::tensor *soft_max(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *soft_max_inplace(ComputeContext *ctx, ggml::tensor *a);
+
+        ggml::tensor *diag_mask_inf_inplace(ComputeContext *ctx, ggml::tensor *a, int n_past);
+
+        ggml::tensor *inplace_act(ComputeContext *ctx, ActFunc act, ggml::tensor *input);
+
+        ggml::tensor *scale(ComputeContext *ctx, ggml::tensor *a, float  s);
+        ggml::tensor *scale_inplace(ComputeContext *ctx, ggml::tensor *a, float  s);
+
+        ggml::tensor *map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
+        ggml::tensor *map_custom2(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);
+
+        ggml::tensor *map_custom1_inplace(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
+
+        void mul_mat_set_prec(ggml::tensor *a, ggml::prec prec);
+        bool is_contiguous(const ggml::tensor *a);
+
+        int64_t nrows(const ggml::tensor *tensor);
+        int64_t nelements(const ggml::tensor *tensor);
+
+        struct ggml_cgraph *new_graph_custom(ComputeContext *ctx, size_t size, bool grads);
+        void build_forward_expand(ComputeContext *ctx, ggml::tensor * tensor);
+    };
 
     class Block
     {
     public:
-        Block(): prec(ggml_prec::GGML_PREC_DEFAULT), id(0) {}
-        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input)
+        Block(): prec(ggml::prec::GGML_PREC_DEFAULT), id(0) {}
+        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input)
         {
-            CHATLLM_THROW << "forward(ForwardContext *ctx, ggml_tensor *input): not implemented";
+            CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *input): not implemented";
             return NULL;
         }
-        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input, int n_past)
+        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int n_past)
         {
-            CHATLLM_THROW << "forward(ForwardContext *ctx, ggml_tensor *input, int n_past): not implemented";
+            CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *input, int n_past): not implemented";
             return NULL;
         }
         virtual void set_ctx(int n_ctx) { }
         virtual void shift_cache(int shift, int total) { }
 
-        virtual void set_prec(ggml_prec prec)
+        virtual void set_prec(ggml::prec prec)
         {
             this->prec = prec;
         }
@@ -72,9 +145,10 @@ namespace chatllm
         }
 
         virtual size_t get_cache_size(void) const { return 0; }
-        virtual void  *set_cache_buffer(void *buffer) { return buffer; }
+        virtual void   set_cache_buffer(BackendBuffer *buf) { }
+
     protected:
-        ggml_prec prec;
+        ggml::prec prec;
         int id;
     };
 
@@ -85,12 +159,12 @@ namespace chatllm
         Identity(InitContext *ctx, int a) {}
         Identity(InitContext *ctx, int a, int b) {}
 
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override
         {
             return input;
         }
 
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input, int n_past) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int n_past) override
         {
             return input;
         }
@@ -112,21 +186,21 @@ namespace chatllm
     public:
         Embedding() : weight(nullptr) {}
         Embedding(InitContext *ctx, int num_embeddings, int embedding_dim)
-            : weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, embedding_dim, num_embeddings)) {}
+            : weight(ggml::new_tensor_2d(ctx, ctx->dtype, embedding_dim, num_embeddings)) {}
 
         Embedding(InitContext *ctx, int num_embeddings, int embedding_dim, int pos_max)
             : Embedding(ctx, num_embeddings, embedding_dim) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
-            return ggml_nelements(weight);
+            return ggml::nelements(weight);
         }
 
     public:
-        ggml_tensor *weight;
+        ggml::tensor *weight;
     };
 
     class VisualEmbedding  : public Embedding
@@ -135,7 +209,7 @@ namespace chatllm
         VisualEmbedding(InitContext *ctx, int num_embeddings, int embedding_dim)
             : Embedding(ctx, num_embeddings, embedding_dim) {}
 
-        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *patches, int patches_per_row, ggml_tensor *text_input) = 0;
+        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *patches, int patches_per_row, ggml::tensor *text_input) = 0;
     };
 
     class Linear : public Block
@@ -143,29 +217,29 @@ namespace chatllm
     public:
         Linear() : weight(nullptr), bias(nullptr) {}
         Linear(InitContext *ctx, int in_features, int out_features, bool use_bias = true)
-            : weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, in_features, out_features)),
-              bias(use_bias ? ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, out_features) : nullptr) {}
+            : weight(ggml::new_tensor_2d(ctx, ctx->dtype, in_features, out_features)),
+              bias(use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, out_features) : nullptr) {}
 
-        Linear(InitContext *ctx, int in_features, int out_features, ggml_tensor *weight, bool use_bias = true)
-            : weight(weight != NULL ? weight : ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, in_features, out_features)),
-              bias(use_bias ? ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, out_features) : nullptr) {}
+        Linear(InitContext *ctx, int in_features, int out_features, ggml::tensor *weight, bool use_bias = true)
+            : weight(weight != NULL ? weight : ggml::new_tensor_2d(ctx, ctx->dtype, in_features, out_features)),
+              bias(use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, out_features) : nullptr) {}
 
         int in_features() const { return (int)weight->ne[0]; }
         int out_features() const { return (int)weight->ne[1]; }
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
-            int64_t r = ggml_nelements(weight);
-            if (bias) r += ggml_nelements(bias);
+            int64_t r = ggml::nelements(weight);
+            if (bias) r += ggml::nelements(bias);
             return r;
         }
 
     public:
-        ggml_tensor *weight; // [out_features, in_features]
-        ggml_tensor *bias;   // [out_features]
+        ggml::tensor *weight; // [out_features, in_features]
+        ggml::tensor *bias;   // [out_features]
     };
 
     class MultiLinear : public Block
@@ -173,21 +247,21 @@ namespace chatllm
     public:
         MultiLinear() : weight(nullptr) {}
         MultiLinear(InitContext *ctx, int in_features, int out_features, int multi)
-            : weight(ggml_new_tensor_3d(ctx->gctx.get(), ctx->dtype, in_features, out_features, multi)) {}
+            : weight(ggml::new_tensor_3d(ctx, ctx->dtype, in_features, out_features, multi)) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override { return nullptr; }
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override { return nullptr; }
 
-        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input, ggml_tensor *selected);
+        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, ggml::tensor *selected);
 
         int64_t get_param_num(bool effective_only) const override
         {
-            int64_t r = ggml_nelements(weight);
+            int64_t r = ggml::nelements(weight);
             return r;
         }
 
     public:
-        ggml_tensor *weight; // [out_features, in_features, multi]
+        ggml::tensor *weight; // [out_features, in_features, multi]
     };
 
     class LayerNorm : public Block
@@ -200,23 +274,23 @@ namespace chatllm
         }
 
         LayerNorm(InitContext *ctx, int normalized_shape, bool use_bias)
-            : weight(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape)),
-              bias(use_bias ? ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape) : nullptr),
+            : weight(ggml::new_tensor_1d(ctx, GGML_TYPE_F32, normalized_shape)),
+              bias(use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, normalized_shape) : nullptr),
               eps(1e-5f) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
-            int64_t r = ggml_nelements(weight);
-            if (bias) r += ggml_nelements(bias);
+            int64_t r = ggml::nelements(weight);
+            if (bias) r += ggml::nelements(bias);
             return r;
         }
 
     public:
-        ggml_tensor *weight; // [normalized_shape]
-        ggml_tensor *bias;   // [normalized_shape]
+        ggml::tensor *weight; // [normalized_shape]
+        ggml::tensor *bias;   // [normalized_shape]
         float eps;
     };
 
@@ -235,33 +309,34 @@ namespace chatllm
     public:
         RobertaEmbedding() : word_weight(nullptr), position_weight(nullptr) {}
         RobertaEmbedding(InitContext *ctx, int num_embeddings, int embedding_dim, int pos_max)
-            : word_weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, embedding_dim, num_embeddings)),
-              position_weight(ggml_new_tensor_2d(ctx->gctx.get(), ctx->dtype, embedding_dim, pos_max)),
-              indices(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, pos_max)),
+            : word_weight(ggml::new_tensor_2d(ctx, ctx->dtype, embedding_dim, num_embeddings)),
+              position_weight(ggml::new_tensor_2d(ctx, ctx->dtype, embedding_dim, pos_max)),
+              indices(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, pos_max)),
               ln(ctx, embedding_dim),
               pad_index(2)
         {
-            indices->data = new char[ggml_nbytes(indices)];
+            // TODO:
+            indices->data = new char[ggml::nbytes(indices)];
             int32_t *p = (int32_t *)indices->data;
             for (int i = 0; i < pos_max; i++)
                 p[i] = i;
         }
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input, int n_past) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int n_past) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = ln.get_param_num(effective_only);
-            if (word_weight)        r += ggml_nelements(word_weight);
-            if (position_weight)    r += ggml_nelements(position_weight);
+            if (word_weight)        r += ggml::nelements(word_weight);
+            if (position_weight)    r += ggml::nelements(position_weight);
             return r;
         }
 
     public:
-        ggml_tensor *word_weight;
-        ggml_tensor *position_weight;
-        ggml_tensor *indices;
+        ggml::tensor *word_weight;
+        ggml::tensor *position_weight;
+        ggml::tensor *indices;
         LayerNorm    ln;
         int          pad_index;
     };
@@ -271,20 +346,20 @@ namespace chatllm
     public:
         RMSNorm() : weight(nullptr), inplace(true) {}
         RMSNorm(InitContext *ctx, int normalized_shape, bool inplace = true)
-            : weight(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_F32, normalized_shape)),
+            : weight(ggml::new_tensor_1d(ctx, GGML_TYPE_F32, normalized_shape)),
               eps(1e-5f),
               inplace(inplace) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
-            return ggml_nelements(weight);
+            return ggml::nelements(weight);
         }
 
     public:
-        ggml_tensor *weight;
+        ggml::tensor *weight;
         float eps;
         const bool inplace;
     };
@@ -307,9 +382,9 @@ namespace chatllm
         {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
 
-        void set_prec(ggml_prec prec) override;
+        void set_prec(ggml::prec prec) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
@@ -344,18 +419,19 @@ namespace chatllm
         GLMSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
             : query_key_value(ctx, hidden_size, 3 * hidden_size), dense(ctx, hidden_size, hidden_size),
               num_attention_heads(num_attention_heads),
-              k_cache(ggml_new_tensor_3d(ctx->gctx.get(), GGML_TYPE_F16, hidden_size / num_attention_heads, max_length,
+              k_cache(ggml::new_tensor_3d(ctx, GGML_TYPE_F16, hidden_size / num_attention_heads, max_length,
                                          num_attention_heads)),
-              v_cache(ggml_new_tensor_3d(ctx->gctx.get(), GGML_TYPE_F16, max_length, hidden_size / num_attention_heads,
+              v_cache(ggml::new_tensor_3d(ctx, GGML_TYPE_F16, max_length, hidden_size / num_attention_heads,
                                          num_attention_heads)),
-              pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
+              pos(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length)),
               n_ctx(0),
               shift_pending()
         {
-            pos->data = new char[ggml_nbytes(pos)]();
+            // TODO
+            pos->data = new char[ggml::nbytes(pos)]();
         }
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
 
         void set_ctx(int n_ctx) override { this->n_ctx = n_ctx; }
         void shift_cache(int shift, int total) override
@@ -373,24 +449,22 @@ namespace chatllm
 
         size_t get_cache_size(void) const override
         {
-            return ggml_nbytes(k_cache) + ggml_nbytes(v_cache);
+            return ggml::nbytes(k_cache) + ggml::nbytes(v_cache);
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
-            uint8_t *b = (uint8_t *)buffer;
-            k_cache->data = b; b += ggml_nbytes(k_cache);
-            v_cache->data = b; b += ggml_nbytes(v_cache);
-            return b;
+            buffer->assign_to(k_cache, 0);
+            buffer->assign_to(v_cache, ggml::nbytes(k_cache));
         }
 
     public:
         Linear query_key_value;
         Linear dense;
         int num_attention_heads;
-        ggml_tensor *k_cache; // [n_head, maxlen, head_size]
-        ggml_tensor *v_cache; // [n_head, head_size, maxlen]
-        ggml_tensor *pos;
+        ggml::tensor *k_cache; // [n_head, maxlen, head_size]
+        ggml::tensor *v_cache; // [n_head, head_size, maxlen]
+        ggml::tensor *pos;
         int n_ctx;
     private:
         ShiftPending shift_pending;
@@ -408,7 +482,7 @@ namespace chatllm
               num_hidden_layers(num_hidden_layers) {}
 
         using Block::forward;
-        virtual ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
+        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
 
         void set_ctx(int n_ctx) override { attention.set_ctx(n_ctx); }
 
@@ -427,7 +501,7 @@ namespace chatllm
             return attention.get_cache_size();
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
             return attention.set_cache_buffer(buffer);
         }
@@ -448,7 +522,7 @@ namespace chatllm
               dense_4h_to_h(ctx, intermediate_size, hidden_size, false) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
@@ -525,21 +599,21 @@ namespace chatllm
               mlp(ctx, hidden_size, intermediate_size) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override
         {
-            ggml_tensor *residual = ggml_dup(ctx->gctx.get(), hidden_states);
-            ggml_build_forward_expand(ctx->gf, residual);
+            ggml::tensor *residual = ggml::dup(ctx, hidden_states);
+            ggml::build_forward_expand(ctx, residual);
 
             hidden_states = input_layernorm.forward(ctx, hidden_states);
             hidden_states = attention.forward(ctx, hidden_states, n_past);
-            hidden_states = ggml_add_inplace(ctx->gctx.get(), hidden_states, residual);
+            hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
 
-            residual = ggml_dup(ctx->gctx.get(), hidden_states);
-            ggml_build_forward_expand(ctx->gf, residual);
+            residual = ggml::dup(ctx, hidden_states);
+            ggml::build_forward_expand(ctx, residual);
 
             hidden_states = post_attention_layernorm.forward(ctx, hidden_states);
             hidden_states = mlp.forward(ctx, hidden_states);
-            hidden_states = ggml_add_inplace(ctx->gctx.get(), hidden_states, residual);
+            hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
 
             return hidden_states;
         }
@@ -574,7 +648,7 @@ namespace chatllm
             return attention.get_cache_size();
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
             return attention.set_cache_buffer(buffer);
         }
@@ -623,24 +697,24 @@ namespace chatllm
               post_mlp_layernorm(ctx, hidden_size) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override
         {
-            ggml_tensor *residual = ggml_dup(ctx->gctx.get(), hidden_states);
-            ggml_build_forward_expand(ctx->gf, residual);
+            ggml::tensor *residual = ggml::dup(ctx, hidden_states);
+            ggml::build_forward_expand(ctx, residual);
 
             hidden_states = pre_attention_layernorm.forward(ctx, hidden_states);
             hidden_states = attention.forward(ctx, hidden_states, n_past);
             hidden_states = post_attention_layernorm.forward(ctx, hidden_states);
 
-            hidden_states = ggml_add_inplace(ctx->gctx.get(), hidden_states, residual);
-            residual = ggml_cpy(ctx->gctx.get(), hidden_states, residual);
-            ggml_build_forward_expand(ctx->gf, residual);
+            hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
+            residual = ggml::cpy(ctx, hidden_states, residual);
+            ggml::build_forward_expand(ctx, residual);
 
             hidden_states = pre_mlp_layernorm.forward(ctx, hidden_states);
             hidden_states = mlp.forward(ctx, hidden_states);
             hidden_states = post_mlp_layernorm.forward(ctx, hidden_states);
 
-            hidden_states = ggml_add_inplace(ctx->gctx.get(), hidden_states, residual);
+            hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
 
             return hidden_states;
         }
@@ -679,7 +753,7 @@ namespace chatllm
             return attention.get_cache_size();
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
             return attention.set_cache_buffer(buffer);
         }
@@ -712,26 +786,24 @@ namespace chatllm
               hidden_scaling(1.0f) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override
         {
-            ggml_context * ggctx = ctx->gctx.get();
-
-            ggml_tensor *residual = ggml_dup(ggctx, hidden_states);
-            ggml_build_forward_expand(ctx->gf, residual);
+            ggml::tensor *residual = ggml::dup(ctx, hidden_states);
+            ggml::build_forward_expand(ctx, residual);
 
             hidden_states = Base::input_layernorm.forward(ctx, hidden_states);
 
             hidden_states = Base::attention.forward(ctx, hidden_states, n_past);
-            hidden_states = ggml_scale_inplace(ggctx, hidden_states, hidden_scaling);
-            hidden_states = ggml_add_inplace(ggctx, hidden_states, residual);
+            hidden_states = ggml::scale_inplace(ctx, hidden_states, hidden_scaling);
+            hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
 
-            residual = ggml_dup(ggctx, hidden_states);
-            ggml_build_forward_expand(ctx->gf, residual);
+            residual = ggml::dup(ctx, hidden_states);
+            ggml::build_forward_expand(ctx, residual);
 
             hidden_states = Base::post_attention_layernorm.forward(ctx, hidden_states);
             hidden_states = Base::mlp.forward(ctx, hidden_states);
-            hidden_states = ggml_scale_inplace(ggctx, hidden_states, hidden_scaling);
-            hidden_states = ggml_add_inplace(ggctx, hidden_states, residual);
+            hidden_states = ggml::scale_inplace(ctx, hidden_states, hidden_scaling);
+            hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
 
             return hidden_states;
         }
@@ -744,15 +816,15 @@ namespace chatllm
     public:
         CoreAttention() : num_attention_heads(0), num_kv_heads(0), max_length(0) {}
 
-        CoreAttention(InitContext *ctx, int num_attention_heads, int num_kv_heads, int max_length, ggml_type cache_type,
+        CoreAttention(InitContext *ctx, int num_attention_heads, int num_kv_heads, int max_length, ggml::type cache_type,
               int k_cache_ele_num, int v_cache_ele_num)
             : num_attention_heads(num_attention_heads),
               num_kv_heads(num_kv_heads),
-              k_cache(k_cache_ele_num > 0 ? ggml_new_tensor_1d(ctx->gctx.get(), cache_type, k_cache_ele_num)
+              k_cache(k_cache_ele_num > 0 ? ggml::new_tensor_1d(ctx, cache_type, k_cache_ele_num)
                                        : nullptr),
-              v_cache(v_cache_ele_num > 0 ? ggml_new_tensor_1d(ctx->gctx.get(), cache_type, v_cache_ele_num)
+              v_cache(v_cache_ele_num > 0 ? ggml::new_tensor_1d(ctx, cache_type, v_cache_ele_num)
                                        : nullptr),
-              pos(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, max_length)),
+              pos(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length)),
               max_length(max_length),
               attn_scaling_factor(-1.0f),
               attn_scores_pp(nullptr),
@@ -763,13 +835,13 @@ namespace chatllm
         {
             if (k_cache_ele_num > 0)
             {
-                ggml_set_name(k_cache, "k_cache");
+                ggml::set_name(k_cache, "k_cache");
             }
             if (v_cache_ele_num > 0)
             {
-                ggml_set_name(v_cache, "v_cache");
+                ggml::set_name(v_cache, "v_cache");
             }
-            pos->data = new char[ggml_nbytes(pos)]();
+            pos->data = new char[ggml::nbytes(pos)]();
         }
 
         void shift_cache(int shift, int total) override
@@ -789,63 +861,61 @@ namespace chatllm
         {
             size_t r = 0;
             if (k_cache)
-                r += ggml_nbytes(k_cache);
+                r += ggml::nbytes(k_cache);
             if (v_cache)
-                r += ggml_nbytes(v_cache);
+                r += ggml::nbytes(v_cache);
             return r;
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
-            uint8_t *b = (uint8_t *)buffer;
+            size_t offset = 0;
             if (k_cache)
             {
-                k_cache->data = b;
-                b += ggml_nbytes(k_cache);
+                buffer->assign_to(k_cache, offset);
+                offset += ggml::nbytes(k_cache);
             }
             if (v_cache)
             {
-                v_cache->data = b;
-                b += ggml_nbytes(v_cache);
+                buffer->assign_to(v_cache, offset);
             }
-            return b;
         }
 
     protected:
         // k: [heads, qlen, head_size]
         // q: [heads, qlen, head_size]
         // v: [heads, head_size, klen]
-        virtual ggml_tensor *calc_attn_scores(ForwardContext *ctx, int hidden_size, const int n_past, const int qlen,
-                                              ggml_tensor *key_layer, ggml_tensor *query_layer, ggml_tensor *value_layer);
+        virtual ggml::tensor *calc_attn_scores(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
+                                              ggml::tensor *key_layer, ggml::tensor *query_layer, ggml::tensor *value_layer);
 
         // input & output: [qlen, heads, head_size]
-        virtual ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const { return k; }
-        virtual ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const { return q; }
-        virtual ggml_tensor *apply_pos_embedding_kq(ForwardContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const { return kq; }
+        virtual ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const { return k; }
+        virtual ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const { return q; }
+        virtual ggml::tensor *apply_pos_embedding_kq(ComputeContext *ctx, ggml::tensor *kq, int hidden_size, int qlen, ggml::tensor *past) const { return kq; }
 
-        virtual void before_forward(ForwardContext *ctx, const int n_past, const int qlen);
+        virtual void before_forward(ComputeContext *ctx, const int n_past, const int qlen);
 
         // k: [qlen, heads, head_size]
         // v: [qlen, hidden_size]
-        virtual void save_to_cache(ForwardContext *ctx, const int n_past, const int qlen, ggml_tensor *k, ggml_tensor *v) = 0;
+        virtual void save_to_cache(ComputeContext *ctx, const int n_past, const int qlen, ggml::tensor *k, ggml::tensor *v) = 0;
 
         // output: [heads, qlen, head_size]
-        virtual ggml_tensor *get_k_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) = 0;
+        virtual ggml::tensor *get_k_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) = 0;
 
         // output: [heads, head_size, klen]
-        virtual ggml_tensor *get_v_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) = 0;
+        virtual ggml::tensor *get_v_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) = 0;
 
-        virtual ggml_tensor *cross_attention_after_pe(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
-                                             ggml_tensor *query_layer, ggml_tensor *key_layer, ggml_tensor *v);
+        virtual ggml::tensor *cross_attention_after_pe(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen,
+                                             ggml::tensor *query_layer, ggml::tensor *key_layer, ggml::tensor *v);
 
-        virtual ggml_tensor *cross_attention(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
-                                             ggml_tensor *q, ggml_tensor *k, ggml_tensor *v);
+        virtual ggml::tensor *cross_attention(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen,
+                                             ggml::tensor *q, ggml::tensor *k, ggml::tensor *v);
 
         // q & k: [qlen, heads, head_size]
-        virtual ggml_tensor *cross_attention_3d(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen,
-                                             ggml_tensor *query_layer, ggml_tensor *key_layer, ggml_tensor *v);
+        virtual ggml::tensor *cross_attention_3d(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen,
+                                             ggml::tensor *query_layer, ggml::tensor *key_layer, ggml::tensor *v);
 
-        ggml_tensor *get_last_attn_scores(void)
+        ggml::tensor *get_last_attn_scores(void)
         {
             return last_attn_scores;
         }
@@ -853,9 +923,9 @@ namespace chatllm
     public:
         const int num_attention_heads;
         const int num_kv_heads;
-        ggml_tensor *k_cache;
-        ggml_tensor *v_cache;
-        ggml_tensor *pos;
+        ggml::tensor *k_cache;
+        ggml::tensor *v_cache;
+        ggml::tensor *pos;
         const int max_length;
         float attn_scaling_factor;
         Block *attn_scores_pp;
@@ -864,7 +934,7 @@ namespace chatllm
         ShiftPending shift_pending;
         bool attn_scaling;
         bool causal;
-        ggml_tensor *last_attn_scores;
+        ggml::tensor *last_attn_scores;
     };
 
     class KVCacheAttention : public CoreAttention
@@ -873,7 +943,7 @@ namespace chatllm
         KVCacheAttention() : CoreAttention(), k_hidden_size(0), v_hidden_size(0), cache_length(0) {}
 
         KVCacheAttention(InitContext *ctx, int num_attention_heads, int num_kv_heads, int k_hidden_size, int v_hidden_size, int max_length,
-                         ggml_type cache_type, int cache_length)
+                         ggml::type cache_type, int cache_length)
             : CoreAttention(ctx, num_attention_heads, num_kv_heads, max_length, cache_type,
                             k_hidden_size * cache_length,
                             v_hidden_size * cache_length),
@@ -884,17 +954,17 @@ namespace chatllm
         }
 
     protected:
-        virtual void before_forward(ForwardContext *ctx, const int n_past, const int qlen);
+        virtual void before_forward(ComputeContext *ctx, const int n_past, const int qlen);
 
         // k: [qlen, heads, head_size]
         // v: [qlen, hidden_size]
-        virtual void save_to_cache(ForwardContext *ctx, const int n_past, const int qlen, ggml_tensor *k, ggml_tensor *v);
+        virtual void save_to_cache(ComputeContext *ctx, const int n_past, const int qlen, ggml::tensor *k, ggml::tensor *v);
 
         // output: [heads, qlen, head_size]
-        virtual ggml_tensor *get_k_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen);
+        virtual ggml::tensor *get_k_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen);
 
         // output: [heads, head_size, klen]
-        virtual ggml_tensor *get_v_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen);
+        virtual ggml::tensor *get_v_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen);
 
     public:
         const int k_hidden_size;
@@ -912,7 +982,7 @@ namespace chatllm
         {}
 
         BaseConsolidatedQKVAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias,
-                                     ggml_type cache_type, int cache_length)
+                                     ggml::type cache_type, int cache_length)
             : KVCacheAttention(ctx, num_attention_heads, num_kv_heads,
                                head_dim * num_kv_heads,
                                head_dim * num_kv_heads,
@@ -923,7 +993,7 @@ namespace chatllm
         }
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
@@ -945,7 +1015,7 @@ namespace chatllm
 
         BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length,
                       bool qkv_bias, bool o_bias,
-                      ggml_type cache_type, int cache_length)
+                      ggml::type cache_type, int cache_length)
             : KVCacheAttention(ctx, num_attention_heads, num_kv_heads, head_dim * num_kv_heads, head_dim * num_kv_heads, max_length, cache_type, cache_length),
               q_proj(ctx, hidden_size, head_dim * num_attention_heads, nullptr, qkv_bias),
               k_proj(ctx, hidden_size, head_dim * num_kv_heads, nullptr, qkv_bias),
@@ -956,7 +1026,7 @@ namespace chatllm
 
         BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length,
                       bool qkv_bias, bool o_bias,
-                      ggml_type cache_type, int cache_length)
+                      ggml::type cache_type, int cache_length)
             : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length, qkv_bias, o_bias,
                             cache_type, cache_length)
         {}
@@ -982,10 +1052,10 @@ namespace chatllm
             return r;
         }
 
-        void set_prec(ggml_prec prec) override;
+        void set_prec(ggml::prec prec) override;
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
 
     public:
         Linear q_proj, k_proj, v_proj;
@@ -1008,21 +1078,20 @@ namespace chatllm
         {}
 
     protected:
-        void save_to_cache(ForwardContext *ctx, const int n_past, const int qlen, ggml_tensor *k, ggml_tensor *v) override;
+        void save_to_cache(ComputeContext *ctx, const int n_past, const int qlen, ggml::tensor *k, ggml::tensor *v) override;
 
         // output: [heads, qlen, head_size]
-        ggml_tensor *get_k_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override;
+        ggml::tensor *get_k_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) override;
 
         // output: [heads, head_size, klen]
-        ggml_tensor *get_v_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override;
+        ggml::tensor *get_v_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) override;
     private:
-        ggml_tensor *raw_k;
-        ggml_tensor *raw_v;
+        ggml::tensor *raw_k;
+        ggml::tensor *raw_v;
     };
 
-    void fill_pos_vector(ggml_tensor *pos, int n_past, int qlen);
+    void fill_pos_vector(ggml::tensor *pos, int n_past, int qlen);
 
-    // TODO: Optimize this !!! (after ggml support matrix with ring buffer?)
     // qlen must be 1.
     // This is just a proof of concept.
     template <int sliding_window_len> class BaseSlidingWindowAttentionRingCache : public BaseAttention
@@ -1031,13 +1100,13 @@ namespace chatllm
         BaseSlidingWindowAttentionRingCache(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
             : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias, GGML_TYPE_F16, sliding_window_len),
               cache_offset(0),
-              indices(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, sliding_window_len))
+              indices(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, sliding_window_len))
         {
-            indices->data = new char[ggml_nbytes(indices)];
+            indices->data = new char[ggml::nbytes(indices)];
         }
 
     protected:
-        void before_forward(ForwardContext *ctx, const int n_past, const int qlen) override
+        void before_forward(ComputeContext *ctx, const int n_past, const int qlen) override
         {
             if (n_past == 0) cache_offset = 0;
 
@@ -1051,7 +1120,7 @@ namespace chatllm
             }
         }
 
-        void save_to_cache(ForwardContext *ctx, const int n_past, const int qlen, ggml_tensor *k, ggml_tensor *v) override
+        void save_to_cache(ComputeContext *ctx, const int n_past, const int qlen, ggml::tensor *k, ggml::tensor *v) override
         {
             GGML_ASSERT(cache_length > qlen);
 
@@ -1061,35 +1130,35 @@ namespace chatllm
             const int remain = qlen - write_len;
 
             {
-                struct ggml_tensor * k_cache_view = ggml_view_1d(ctx->gctx.get(), k_cache, write_len * k_hidden_size,
-                        ggml_element_size(k_cache) * k_hidden_size * write_offset);
+                ggml::tensor * k_cache_view = ggml::view_1d(ctx, k_cache, write_len * k_hidden_size,
+                        ggml::element_size(k_cache) * k_hidden_size * write_offset);
 
-                struct ggml_tensor * v_cache_view = ggml_view_1d(ctx->gctx.get(), v_cache, write_len * v_hidden_size,
-                        ggml_element_size(v_cache) * v_hidden_size * write_offset);
+                ggml::tensor * v_cache_view = ggml::view_1d(ctx, v_cache, write_len * v_hidden_size,
+                        ggml::element_size(v_cache) * v_hidden_size * write_offset);
 
-                struct ggml_tensor * k_view = ggml_view_1d(ctx->gctx.get(), k, write_len * k_hidden_size, 0);
-                struct ggml_tensor * v_view = ggml_view_1d(ctx->gctx.get(), v, write_len * v_hidden_size, 0);
+                ggml::tensor * k_view = ggml::view_1d(ctx, k, write_len * k_hidden_size, 0);
+                ggml::tensor * v_view = ggml::view_1d(ctx, v, write_len * v_hidden_size, 0);
 
-                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_view, k_cache_view));
-                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), v_view, v_cache_view));
+                ggml::build_forward_expand(ctx, ggml::cpy(ctx, k_view, k_cache_view));
+                ggml::build_forward_expand(ctx, ggml::cpy(ctx, v_view, v_cache_view));
             }
 
             if (remain > 0)
             {
-                struct ggml_tensor * k_cache_view = ggml_view_1d(ctx->gctx.get(), k_cache, remain * k_hidden_size,
+                ggml::tensor * k_cache_view = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
                                             0);
 
-                struct ggml_tensor * v_cache_view = ggml_view_1d(ctx->gctx.get(), v_cache, remain * v_hidden_size,
+                ggml::tensor * v_cache_view = ggml::view_1d(ctx, v_cache, remain * v_hidden_size,
                                             0);
 
-                struct ggml_tensor * k_view = ggml_view_1d(ctx->gctx.get(), k, remain * k_hidden_size,
-                        write_len * k_hidden_size * ggml_element_size(k));
+                ggml::tensor * k_view = ggml::view_1d(ctx, k, remain * k_hidden_size,
+                        write_len * k_hidden_size * ggml::element_size(k));
 
-                struct ggml_tensor * v_view = ggml_view_1d(ctx->gctx.get(), v, remain * v_hidden_size,
-                        write_len * v_hidden_size * ggml_element_size(v));
+                ggml::tensor * v_view = ggml::view_1d(ctx, v, remain * v_hidden_size,
+                        write_len * v_hidden_size * ggml::element_size(v));
 
-                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_view, k_cache_view));
-                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), v_view, v_cache_view));
+                ggml::build_forward_expand(ctx, ggml::cpy(ctx, k_view, k_cache_view));
+                ggml::build_forward_expand(ctx, ggml::cpy(ctx, v_view, v_cache_view));
             }
 
             {
@@ -1103,46 +1172,47 @@ namespace chatllm
         }
 
         // output: [heads, qlen, head_size]
-        ggml_tensor *get_k_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override
+        ggml::tensor *get_k_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) override
         {
             const int head_size = hidden_size / num_attention_heads;
             const int repeat = num_attention_heads / num_kv_heads;
 
             const int total = n_past + qlen > cache_length ? cache_length : n_past + qlen;
 
-            ggml_tensor *indices_view = ggml_view_1d(ctx->gctx.get(), indices, total, 0);
-            ggml_tensor *k_cache_view = ggml_view_2d(ctx->gctx.get(), k_cache, k_hidden_size, cache_length,
-                                            k_hidden_size * ggml_element_size(k_cache), 0);
-            ggml_tensor *key_layer = ggml_get_rows(ctx->gctx.get(), k_cache_view, indices_view);
+            ggml::tensor *indices_view = ggml::view_1d(ctx, indices, total, 0);
+            ggml::tensor *k_cache_view = ggml::view_2d(ctx, k_cache, k_hidden_size, cache_length,
+                                            k_hidden_size * ggml::element_size(k_cache), 0);
+            ggml::tensor *key_layer = ggml::get_rows(ctx, k_cache_view, indices_view);
 
-            key_layer = ggml_reshape_3d(ctx->gctx.get(), key_layer, head_size, num_kv_heads, total);  // [qlen, heads, head_size]
-            key_layer = ggml_permute(ctx->gctx.get(), key_layer, 0, 2, 1, 3);                         // [heads, qlen, head_size]
+            key_layer = ggml::reshape_3d(ctx, key_layer, head_size, num_kv_heads, total);  // [qlen, heads, head_size]
+            key_layer = ggml::permute(ctx, key_layer, 0, 2, 1, 3);                         // [heads, qlen, head_size]
 
             return key_layer;
         }
 
         // output: [heads, head_size, klen]
-        ggml_tensor *get_v_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override
+        ggml::tensor *get_v_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) override
         {
             const int head_size = hidden_size / num_attention_heads;
             const int repeat = num_attention_heads / num_kv_heads;
 
             const int total = n_past + qlen > cache_length ? cache_length : n_past + qlen;
 
-            ggml_tensor *indices_view = ggml_view_1d(ctx->gctx.get(), indices, total, 0);
-            ggml_tensor *v_cache_view = ggml_view_2d(ctx->gctx.get(), v_cache, v_hidden_size, cache_length,
-                                            v_hidden_size * ggml_element_size(v_cache), 0);
-            ggml_tensor *value_layer  = ggml_get_rows(ctx->gctx.get(), v_cache_view, indices_view);
+            ggml::tensor *indices_view = ggml::view_1d(ctx, indices, total, 0);
+            ggml::tensor *v_cache_view = ggml::view_2d(ctx, v_cache, v_hidden_size, cache_length,
+                                            v_hidden_size * ggml::element_size(v_cache), 0);
+            ggml::tensor *value_layer  = ggml::get_rows(ctx, v_cache_view, indices_view);
 
-            value_layer = ggml_reshape_3d(ctx->gctx.get(), value_layer, head_size, num_kv_heads, total);  // [qlen, heads, head_size]
-            value_layer = ggml_permute(ctx->gctx.get(), value_layer, 1, 2, 0, 3);                         // [heads, head_size, klen]
-            value_layer = ggml_cont(ctx->gctx.get(), value_layer);
+            value_layer = ggml::reshape_3d(ctx, value_layer, head_size, num_kv_heads, total);  // [qlen, heads, head_size]
+            value_layer = ggml::permute(ctx, value_layer, 1, 2, 0, 3);                         // [heads, head_size, klen]
+            value_layer = ggml::cont(ctx, value_layer);
 
             return value_layer;
         }
 
+    public:
         int cache_offset;
-        ggml_tensor *indices;
+        ggml::tensor *indices;
     };
 
     template <int sliding_window_len> class BaseSlidingWindowAttentionFullCache : public BaseAttention
@@ -1155,14 +1225,14 @@ namespace chatllm
 
         BaseSlidingWindowAttentionFullCache(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
             : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, GGML_TYPE_F16, max_length),
-              indices(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, 1)) // to ensure number of tensors are the same
+              indices(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, 1)) // to ensure number of tensors are the same
         {
         }
 
     protected:
 
         // output: [heads, qlen, head_size]
-        ggml_tensor *get_k_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override
+        ggml::tensor *get_k_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) override
         {
             const int head_size = hidden_size / num_attention_heads;
             const int repeat = num_attention_heads / num_kv_heads;
@@ -1175,17 +1245,17 @@ namespace chatllm
                 len = sliding_window_len;
             }
 
-            ggml_tensor *key_layer = nullptr;
+            ggml::tensor *key_layer = nullptr;
 
-            key_layer = ggml_view_1d(ctx->gctx.get(), k_cache, len * k_hidden_size, offset * k_hidden_size * ggml_element_size(k_cache));
-            key_layer = ggml_reshape_3d(ctx->gctx.get(), key_layer, head_size, num_kv_heads, len);  // [qlen, heads, head_size]
-            key_layer = ggml_permute(ctx->gctx.get(), key_layer, 0, 2, 1, 3);                       // [heads, qlen, head_size]
+            key_layer = ggml::view_1d(ctx, k_cache, len * k_hidden_size, offset * k_hidden_size * ggml::element_size(k_cache));
+            key_layer = ggml::reshape_3d(ctx, key_layer, head_size, num_kv_heads, len);  // [qlen, heads, head_size]
+            key_layer = ggml::permute(ctx, key_layer, 0, 2, 1, 3);                       // [heads, qlen, head_size]
 
             return key_layer;
         }
 
         // output: [heads, head_size, klen]
-        ggml_tensor *get_v_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override
+        ggml::tensor *get_v_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) override
         {
             const int head_size = hidden_size / num_attention_heads;
             int64_t len = n_past + qlen;
@@ -1196,19 +1266,19 @@ namespace chatllm
                 len = sliding_window_len;
             }
 
-            ggml_tensor * value_layer = ggml_view_3d(ctx->gctx.get(),
+            ggml::tensor * value_layer = ggml::view_3d(ctx,
                             v_cache,
                             len, head_size, num_kv_heads,
-                            cache_length * ggml_element_size(v_cache),
-                            cache_length * ggml_element_size(v_cache) * head_size,
-                            offset * ggml_element_size(v_cache)); // [heads, head_size, klen]
+                            cache_length * ggml::element_size(v_cache),
+                            cache_length * ggml::element_size(v_cache) * head_size,
+                            offset * ggml::element_size(v_cache)); // [heads, head_size, klen]
             return value_layer;
         }
 
-        ggml_tensor *indices;
+    public:
+        ggml::tensor *indices;
     };
 
-    // TODO: debug this
     template <int sliding_window_len, int extra_len = 512> class BaseSlidingWindowAttentionPartialCache : public BaseAttention
     {
     public:
@@ -1219,14 +1289,14 @@ namespace chatllm
 
         BaseSlidingWindowAttentionPartialCache(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
             : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, GGML_TYPE_F16, sliding_window_len + extra_len),
-              indices(ggml_new_tensor_1d(ctx->gctx.get(), GGML_TYPE_I32, 1)), // to ensure number of tensors are the same
+              indices(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, 1)), // to ensure number of tensors are the same
               cache_offset(0)
         {
         }
 
     protected:
 
-        void before_forward(ForwardContext *ctx, const int n_past, const int qlen) override
+        void before_forward(ComputeContext *ctx, const int n_past, const int qlen) override
         {
             if (n_past == 0) cache_offset = 0;
 
@@ -1240,7 +1310,7 @@ namespace chatllm
             }
         }
 
-        void save_to_cache(ForwardContext *ctx, const int n_past, const int qlen, ggml_tensor *k, ggml_tensor *v) override
+        void save_to_cache(ComputeContext *ctx, const int n_past, const int qlen, ggml::tensor *k, ggml::tensor *v) override
         {
             CHATLLM_CHECK(qlen == 1)  << "qlen must be 1";
 
@@ -1253,49 +1323,50 @@ namespace chatllm
                     int remain = sliding_window_len - qlen;
                     int shift = cache_length - remain;
 
-                    struct ggml_tensor * k_cache_remain = ggml_view_1d(ctx->gctx.get(), k_cache, remain * k_hidden_size,
-                                                ggml_element_size(k_cache) * k_hidden_size * shift);
-                    struct ggml_tensor * k_cache_1d = ggml_view_1d(ctx->gctx.get(), k_cache, remain * k_hidden_size,
+                    ggml::tensor * k_cache_remain = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
+                                                ggml::element_size(k_cache) * k_hidden_size * shift);
+                    ggml::tensor * k_cache_1d = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
                                                 0);
 
-                    struct ggml_tensor * k_remain_dup = ggml_dup(ctx->gctx.get(), k_cache_remain);
+                    ggml::tensor * k_remain_dup = ggml::dup(ctx, k_cache_remain);
 
-                    struct ggml_tensor * v_cache_remain = ggml_view_2d(ctx->gctx.get(), v_cache, remain, v_hidden_size,
-                                                cache_length * ggml_element_size(v_cache),
-                                                shift * ggml_element_size(v_cache));
-                    struct ggml_tensor * v_cache_2d =     ggml_view_2d(ctx->gctx.get(), v_cache, remain, v_hidden_size,
-                                                cache_length * ggml_element_size(v_cache),
+                    ggml::tensor * v_cache_remain = ggml::view_2d(ctx, v_cache, remain, v_hidden_size,
+                                                cache_length * ggml::element_size(v_cache),
+                                                shift * ggml::element_size(v_cache));
+                    ggml::tensor * v_cache_2d =     ggml::view_2d(ctx, v_cache, remain, v_hidden_size,
+                                                cache_length * ggml::element_size(v_cache),
                                                 0);
 
-                    struct ggml_tensor * v_remain_dup = ggml_dup(ctx->gctx.get(), v_cache_remain);
+                    ggml::tensor * v_remain_dup = ggml::dup(ctx, v_cache_remain);
 
-                    ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_remain_dup, k_cache_1d));
-                    ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), v_remain_dup, v_cache_2d));
+                    ggml::build_forward_expand(ctx, ggml::cpy(ctx, k_remain_dup, k_cache_1d));
+                    ggml::build_forward_expand(ctx, ggml::cpy(ctx, v_remain_dup, v_cache_2d));
 
                     cache_offset -= shift;
                 }
             }
 
-            const int write_offset = cache_offset + n_past;
+            // patch n_past for memory estimation
+            const int write_offset = cache_offset + n_past < cache_length ? cache_offset + n_past : cache_length - 1;
 
             // compute the transposed [N, n_embd] V matrix
-            struct ggml_tensor * Vcur = ggml_transpose(ctx->gctx.get(), v); // ggml_reshape_2d(ctx->gctx.get(), tmpv, kv_hidden_size, qlen));
+            ggml::tensor * Vcur = ggml::transpose(ctx, v); // ggml::reshape_2d(ctx, tmpv, kv_hidden_size, qlen));
 
-            struct ggml_tensor * k_cache_view = ggml_view_1d(ctx->gctx.get(), k_cache, qlen * k_hidden_size,
-                                        ggml_element_size(k_cache) * k_hidden_size * write_offset);
+            ggml::tensor * k_cache_view = ggml::view_1d(ctx, k_cache, qlen * k_hidden_size,
+                                        ggml::element_size(k_cache) * k_hidden_size * write_offset);
 
-            struct ggml_tensor * v_cache_view = ggml_view_2d(ctx->gctx.get(), v_cache, qlen, v_hidden_size,
-                    cache_length * ggml_element_size(v_cache), write_offset * ggml_element_size(v_cache));
+            ggml::tensor * v_cache_view = ggml::view_2d(ctx, v_cache, qlen, v_hidden_size,
+                    cache_length * ggml::element_size(v_cache), write_offset * ggml::element_size(v_cache));
 
-            struct ggml_tensor * k_view = ggml_view_1d(ctx->gctx.get(), k, qlen * k_hidden_size, 0);
+            ggml::tensor * k_view = ggml::view_1d(ctx, k, qlen * k_hidden_size, 0);
 
             // important: storing RoPE-ed version of K in the KV cache!
-            ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), k_view, k_cache_view));
-            ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), Vcur, v_cache_view));
+            ggml::build_forward_expand(ctx, ggml::cpy(ctx, k_view, k_cache_view));
+            ggml::build_forward_expand(ctx, ggml::cpy(ctx, Vcur, v_cache_view));
         }
 
         // output: [heads, qlen, head_size]
-        ggml_tensor *get_k_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override
+        ggml::tensor *get_k_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) override
         {
             const int head_size = hidden_size / num_attention_heads;
             int64_t len = n_past + qlen;
@@ -1303,19 +1374,23 @@ namespace chatllm
                 len = sliding_window_len;
             int64_t offset = cache_offset + n_past + qlen - len;
 
+            // patch memory estimation
+            if (offset + len > sliding_window_len)
+                offset = 0;
+
             CHATLLM_CHECK(offset >= 0) << "offset must >= 0";
 
-            ggml_tensor *key_layer = nullptr;
+            ggml::tensor *key_layer = nullptr;
 
-            key_layer = ggml_view_1d(ctx->gctx.get(), k_cache, len * k_hidden_size, offset * k_hidden_size * ggml_element_size(k_cache));
-            key_layer = ggml_reshape_3d(ctx->gctx.get(), key_layer, head_size, num_kv_heads, len);  // [qlen, heads, head_size]
-            key_layer = ggml_permute(ctx->gctx.get(), key_layer, 0, 2, 1, 3);                       // [heads, qlen, head_size]
+            key_layer = ggml::view_1d(ctx, k_cache, len * k_hidden_size, offset * k_hidden_size * ggml::element_size(k_cache));
+            key_layer = ggml::reshape_3d(ctx, key_layer, head_size, num_kv_heads, len);  // [qlen, heads, head_size]
+            key_layer = ggml::permute(ctx, key_layer, 0, 2, 1, 3);                       // [heads, qlen, head_size]
 
             return key_layer;
         }
 
         // output: [heads, head_size, klen]
-        ggml_tensor *get_v_from_cache(ForwardContext *ctx, const int hidden_size, const int n_past, const int qlen) override
+        ggml::tensor *get_v_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) override
         {
             const int head_size = hidden_size / num_attention_heads;
             int64_t len = n_past + qlen;
@@ -1323,16 +1398,21 @@ namespace chatllm
                 len = sliding_window_len;
             int64_t offset = cache_offset + n_past + qlen - len;
 
-            ggml_tensor * value_layer = ggml_view_3d(ctx->gctx.get(),
+            // patch for memory estimation
+            if (offset + len > sliding_window_len)
+                offset = 0;
+
+            ggml::tensor * value_layer = ggml::view_3d(ctx,
                             v_cache,
                             len, head_size, num_kv_heads,
-                            cache_length * ggml_element_size(v_cache),
-                            cache_length * ggml_element_size(v_cache) * head_size,
-                            offset * ggml_element_size(v_cache)); // [heads, head_size, klen]
+                            cache_length * ggml::element_size(v_cache),
+                            cache_length * ggml::element_size(v_cache) * head_size,
+                            offset * ggml::element_size(v_cache)); // [heads, head_size, klen]
             return value_layer;
         }
 
-        ggml_tensor *indices;
+    public:
+        ggml::tensor *indices;
         int cache_offset;
     };
 
@@ -1401,19 +1481,19 @@ namespace chatllm
         int   rope_dim;
         int   n_ctx;
         int   n_original_ctx;
-        ggml_tensor *freq_factors;
+        ggml::tensor *freq_factors;
         RoPEMode rope_mode;
 
     protected:
         // input & output: [qlen, heads, head_size]
-        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
+        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override
         {
-            return ggml_rope_ext_inplace(ctx->gctx.get(), k, past, freq_factors, rope_dim, rope_mode, n_original_ctx,
+            return ggml::rope_ext_inplace(ctx, k, past, freq_factors, rope_dim, rope_mode, n_original_ctx,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size]
         }
-        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
+        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override
         {
-            return ggml_rope_ext_inplace(ctx->gctx.get(), q, past, freq_factors, rope_dim, rope_mode, n_original_ctx,
+            return ggml::rope_ext_inplace(ctx, q, past, freq_factors, rope_dim, rope_mode, n_original_ctx,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
         }
     };
@@ -1455,7 +1535,7 @@ namespace chatllm
         {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
@@ -1489,7 +1569,7 @@ namespace chatllm
         {}
     };
 
-    void ggml_compute_forward_sigmoid(struct ggml_tensor * dst , const struct ggml_tensor * src, int ith, int nth, void * userdata);
+    void ggml_compute_forward_sigmoid(ggml::tensor * dst , const ggml::tensor * src, int ith, int nth, void * userdata);
 
     template<class MLP, bool use_bias = false> class GatedMLP : public MLP
     {
@@ -1500,12 +1580,12 @@ namespace chatllm
         {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override
         {
-            ggml_tensor *scale = gate.forward(ctx, hidden_states);
-            ggml_tensor *r     = MLP::forward(ctx, hidden_states);
-            scale = ggml_map_custom1_inplace(ctx->gctx.get(), scale, ggml_compute_forward_sigmoid, 1, nullptr);
-            r = ggml_mul_inplace(ctx->gctx.get(), r, scale);
+            ggml::tensor *scale = gate.forward(ctx, hidden_states);
+            ggml::tensor *r     = MLP::forward(ctx, hidden_states);
+            scale = ggml::map_custom1_inplace(ctx, scale, ggml_compute_forward_sigmoid, 1, nullptr);
+            r = ggml::mul_inplace(ctx, r, scale);
             return r;
         }
 
@@ -1516,6 +1596,7 @@ namespace chatllm
             r += gate.get_param_num(effective_only);
             return r;
         }
+
     public:
         Linear gate;
     };
@@ -1529,11 +1610,11 @@ namespace chatllm
         {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override
         {
-            ggml_tensor *r1 = mlp1.forward(ctx, hidden_states);
-            ggml_tensor *r2 = mlp2.forward(ctx, hidden_states);
-            ggml_tensor *r = ggml_add(ctx->gctx.get(), r1, r2);
+            ggml::tensor *r1 = mlp1.forward(ctx, hidden_states);
+            ggml::tensor *r2 = mlp2.forward(ctx, hidden_states);
+            ggml::tensor *r = ggml::add(ctx, r1, r2);
             return r;
         }
 
@@ -1544,6 +1625,7 @@ namespace chatllm
             r += mlp2.get_param_num(effective_only);
             return r;
         }
+
     public:
         MLP1 mlp1;
         MLP2 mlp2;
@@ -1566,9 +1648,9 @@ namespace chatllm
         }
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
 
-        void set_prec(ggml_prec prec) override
+        void set_prec(ggml::prec prec) override
         {
             gate.set_prec(prec);
         }
@@ -1644,7 +1726,7 @@ namespace chatllm
         {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
@@ -1669,7 +1751,7 @@ namespace chatllm
         {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
@@ -1694,7 +1776,7 @@ namespace chatllm
         {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
@@ -1719,11 +1801,11 @@ namespace chatllm
 
     protected:
         // input & output: [qlen, heads, head_size]
-        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
+        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override
         {
             return k;
         }
-        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
+        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override
         {
             return q;
         }
@@ -1743,7 +1825,7 @@ namespace chatllm
               norm(ctx, hidden_size)
         {}
 
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, ggml_tensor *attention_output);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *attention_output);
 
     public:
         Linear dense;
@@ -1765,7 +1847,7 @@ namespace chatllm
         {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
 
     public:
         Linear intermediate;
@@ -1792,7 +1874,7 @@ namespace chatllm
         }
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
 
         void shift_cache(int shift, int total) override
         {
@@ -1822,7 +1904,7 @@ namespace chatllm
         Phi2MLP(InitContext *ctx, int hidden_size, int intermediate_size)
             : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true)
         {
-            // set_prec(ggml_prec::GGML_PREC_F32);
+            // set_prec(ggml::prec::GGML_PREC_F32);
         }
     };
 
@@ -1840,23 +1922,23 @@ namespace chatllm
               mlp(ctx, hidden_size, intermediate_size) {}
 
         using Block::forward;
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *hidden_states, int n_past) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override
         {
-            ggml_tensor *residual = ggml_dup(ctx->gctx.get(), hidden_states);
-            ggml_build_forward_expand(ctx->gf, residual);
+            ggml::tensor *residual = ggml::dup(ctx, hidden_states);
+            ggml::build_forward_expand(ctx, residual);
 
             hidden_states = input_layernorm.forward(ctx, hidden_states);
 
             // TODO: why `hidden_state` is overwritten somewhere?
-            ggml_tensor *dup_hidden = ggml_dup(ctx->gctx.get(), hidden_states);
-            ggml_build_forward_expand(ctx->gf, dup_hidden);
+            ggml::tensor *dup_hidden = ggml::dup(ctx, hidden_states);
+            ggml::build_forward_expand(ctx, dup_hidden);
 
-            ggml_tensor *attn_outputs = attention.forward(ctx, dup_hidden, n_past);
-            ggml_tensor *feed_forward_hidden_states = mlp.forward(ctx, dup_hidden);
+            ggml::tensor *attn_outputs = attention.forward(ctx, dup_hidden, n_past);
+            ggml::tensor *feed_forward_hidden_states = mlp.forward(ctx, dup_hidden);
 
             // CAUTION: MEMORY REUSED BETWEEN LAYERS
-            ggml_tensor *r = ggml_add_inplace(ctx->gctx.get(), feed_forward_hidden_states, residual);
-            r = ggml_add_inplace(ctx->gctx.get(), r, attn_outputs);
+            ggml::tensor *r = ggml::add_inplace(ctx, feed_forward_hidden_states, residual);
+            r = ggml::add_inplace(ctx, r, attn_outputs);
 
             return r;
         }
@@ -1880,7 +1962,7 @@ namespace chatllm
             return attention.get_cache_size();
         }
 
-        void  *set_cache_buffer(void *buffer) override
+        void  set_cache_buffer(BackendBuffer *buffer) override
         {
             return attention.set_cache_buffer(buffer);
         }
@@ -1950,10 +2032,10 @@ namespace chatllm
 
     protected:
         // input & output: [qlen, heads, head_size]
-        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
-        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
+        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override;
+        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override;
 
-        ggml_tensor *apply_pos_embedding_kq(ForwardContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const override;
+        ggml::tensor *apply_pos_embedding_kq(ComputeContext *ctx, ggml::tensor *kq, int hidden_size, int qlen, ggml::tensor *past) const override;
 
         alibi_ctx alibi;
     };
@@ -1979,15 +2061,15 @@ namespace chatllm
 
     protected:
         // input & output: [qlen, heads, head_size]
-        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
-        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
+        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override;
+        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override;
 
     public:
         int seq_length;
         bool use_dynamic_ntk;
         bool use_logn_attn;
     protected:
-        ggml_tensor *logn_list;
+        ggml::tensor *logn_list;
     };
 
     class QWenBlock : public LMBlock1<RMSNorm, QWenSelfAttention, RMSNorm, SiLUMLP>
@@ -2049,8 +2131,8 @@ namespace chatllm
 
     protected:
         // input & output: [qlen, heads, head_size]
-        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
-        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
+        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override;
+        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override;
 
         void build_inv_freq_if_needed(int hidden_size);
     };
@@ -2146,13 +2228,13 @@ namespace chatllm
 
     protected:
         // input & output: [qlen, heads, head_size]
-        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override
+        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override
         {
             k = const_cast<QKNormedAttention *>(this)->k_layernorm.forward(ctx, k);
             return RoPESelfAttention<BaseAttn>::apply_pos_embedding_k(ctx, k, hidden_size, qlen, past);    // [qlen, heads, head_size]
         }
 
-        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override
+        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override
         {
             q = const_cast<QKNormedAttention *>(this)->q_layernorm.forward(ctx, q);
             return RoPESelfAttention<BaseAttn>::apply_pos_embedding_q(ctx, q, hidden_size, qlen, past);    // [qlen, heads, head_size];
@@ -2230,7 +2312,7 @@ namespace chatllm
             : VisualEmbedding(ctx, num_embeddings, embedding_dim),
               image_new_line_tok_id(0) {}
 
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *patches, int patches_per_row, ggml_tensor *text_input) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *patches, int patches_per_row, ggml::tensor *text_input) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
@@ -2260,8 +2342,8 @@ namespace chatllm
 
     protected:
         // input & output: [qlen, heads, head_size]
-        ggml_tensor *apply_pos_embedding_k(ForwardContext *ctx, ggml_tensor *k, int hidden_size, int qlen, ggml_tensor * past) const override;
-        ggml_tensor *apply_pos_embedding_q(ForwardContext *ctx, ggml_tensor *q, int hidden_size, int qlen, ggml_tensor * past) const override;
+        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override;
+        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override;
 
     public:
         int original_max_position_embeddings;

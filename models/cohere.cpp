@@ -80,8 +80,8 @@ public:
     typedef Model<BaseConfig, Embedding, LayerNormNoBias, CohereBlock, int, int, int, int, int> ModelClass;
 
 public:
-    ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_COHERE_COMMAND_R)
-        : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_COHERE_COMMAND_R)
+        : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
         const size_t num_tensors = 2 + config.num_hidden_layers * 11;
@@ -125,19 +125,12 @@ public:
         }
         loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
 
-        CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
     }
 
 public:
-    static constexpr size_t MEM_SIZE = 2048ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 1024ull * 1024 * 1024;
-
     BaseConfig config;
-
-private:
-    // hold ggml_context & kv_cache
-    InitContext w_ctx_; // weight context
 };
 
 void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
@@ -186,6 +179,7 @@ typedef command_r::Tokenizer Tokenizer;
 class ConditionalGeneration : public command_r::ConditionalGeneration
 {
 public:
-    ConditionalGeneration(const Config &config) : command_r::ConditionalGeneration(config, MODEL_TYPE_COHERE_AYA_23) {}
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : command_r::ConditionalGeneration(config, runtime_config, MODEL_TYPE_COHERE_AYA_23) {}
 };
 }

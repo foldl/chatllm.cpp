@@ -37,14 +37,14 @@ public:
         : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias)
     {}
 protected:
-    ggml_tensor *apply_pos_embedding_kq(ForwardContext *ctx, ggml_tensor *kq, int hidden_size, int qlen, ggml_tensor *past) const override
+    ggml::tensor *apply_pos_embedding_kq(ComputeContext *ctx, ggml::tensor *kq, int hidden_size, int qlen, ggml::tensor *past) const override
     {
         float max = 30.0f;
-        ggml_tensor *r = kq;
+        ggml::tensor *r = kq;
 
-        r = ggml_scale_inplace(ctx->gctx.get(), r, 1.0f / max);
-        r = ggml_tanh_inplace(ctx->gctx.get(), r);
-        r = ggml_scale_inplace(ctx->gctx.get(), r, max);
+        r = ggml::scale_inplace(ctx, r, 1.0f / max);
+        r = ggml::inplace_act(ctx, ActFunc::Tanh, r);
+        r = ggml::scale_inplace(ctx, r, max);
         return r;
   }
 };
@@ -91,19 +91,12 @@ public:
 public:
     ConditionalGeneration() = default;
 
-    ConditionalGeneration(const Config &config);
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
 
     void load(ModelLoader &loader) override;
 
 public:
-    static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-    static constexpr size_t SCRATCH_SIZE = 244ull * 1024 * 1024;
-
     Config config;
-
-private:
-    // hold ggml_context & kv_cache
-    InitContext w_ctx_; // weight context
 };
 
 size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
@@ -113,8 +106,8 @@ size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     return size;
 }
 
-ConditionalGeneration::ConditionalGeneration(const Config &config)
-    : BaseModelForConditionalGeneration(MODEL_TYPE_GROK_1, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+    : BaseModelForConditionalGeneration(MODEL_TYPE_GROK_1, config, runtime_config), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
     const size_t num_tensors = 2 + config.num_hidden_layers * (12 + 3);
@@ -173,7 +166,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
 
     loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
 
-    CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+    CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
         << "corrupted model weights";
 }
 }

@@ -9,12 +9,12 @@ namespace embedding
     public:
         ConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config)
-            : bce::embedding::ConditionalGeneration(config, MODEL_TYPE_BGE_M3, MEM_SIZE, SCRATCH_SIZE)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : bce::embedding::ConditionalGeneration(config, runtime_config, MODEL_TYPE_BGE_M3)
         {}
     public:
-        static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 544ull * 1024 * 1024;
+
+
     };
 }
 
@@ -29,11 +29,11 @@ namespace ranker
     public:
         ConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config)
-            : bce::ranker::ConditionalGeneration(config, MODEL_TYPE_BGE_ReRanker_M3, MEM_SIZE, SCRATCH_SIZE)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : bce::ranker::ConditionalGeneration(config, runtime_config, MODEL_TYPE_BGE_ReRanker_M3)
         {}
     public:
-        static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 544ull * 1024 * 1024;
+
+
     };
 }

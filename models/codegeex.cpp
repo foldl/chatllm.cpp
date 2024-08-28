@@ -27,8 +27,8 @@ class ConditionalGeneration : public glm::v2::ConditionalGeneration
 {
 public:
     ConditionalGeneration() = default;
-    ConditionalGeneration(const Config &config)
-        : glm::v2::ConditionalGeneration(config, MODEL_TYPE_CODEGEEX2)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : glm::v2::ConditionalGeneration(config, runtime_config, MODEL_TYPE_CODEGEEX2)
     {
     }
 };
@@ -83,8 +83,8 @@ public:
 class ConditionalGeneration : public glm::v4::ConditionalGeneration
 {
 public:
-    ConditionalGeneration(const Config &config)
-        : glm::v4::ConditionalGeneration(config, MODEL_TYPE_CODEGEEX4)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : glm::v4::ConditionalGeneration(config, runtime_config, MODEL_TYPE_CODEGEEX4)
     {
     }
 

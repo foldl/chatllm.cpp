@@ -62,8 +62,8 @@ namespace embedding
     public:
         ConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config, ModelType type, size_t mem_size, size_t scratch_size)
-            : BaseModelForConditionalGeneration(type, config, mem_size, scratch_size),
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+            : BaseModelForConditionalGeneration(type, config, runtime_config),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -77,8 +77,8 @@ namespace embedding
                                         config.intermediate_size, config.num_attention_heads, config.max_length);
         }
 
-        ConditionalGeneration(const Config &config)
-            : ConditionalGeneration(config, MODEL_TYPE_BCE_Embedding, MEM_SIZE, SCRATCH_SIZE)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : ConditionalGeneration(config, runtime_config, MODEL_TYPE_BCE_Embedding)
         {}
 
         void load(ModelLoader &loader) override
@@ -113,7 +113,7 @@ namespace embedding
                 loader.read_tensor(layer_prefix + "output.LayerNorm.bias",      transformer->layers[i].mlp.output.norm.bias);
             }
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 
@@ -123,14 +123,7 @@ namespace embedding
         }
 
     public:
-        static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 44ull * 1024 * 1024;
-
         Config config;
-
-    private:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
     };
 }
 
@@ -185,12 +178,12 @@ namespace ranker
     public:
         ConditionalGeneration() = default;
 
-        ConditionalGeneration(const Config &config)
-            : ConditionalGeneration(config, MODEL_TYPE_BCE_ReRanker, MEM_SIZE, SCRATCH_SIZE)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : ConditionalGeneration(config, runtime_config, MODEL_TYPE_BCE_ReRanker)
         {}
 
-        ConditionalGeneration(const Config &config, ModelType type, size_t mem_size, size_t scratch_size)
-            : BaseModelForConditionalGeneration(type, config, mem_size, scratch_size),
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+            : BaseModelForConditionalGeneration(type, config, runtime_config),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -241,18 +234,11 @@ namespace ranker
             loader.read_tensor("classifier.out_proj.weight",    transformer->final_layernorm.out_proj.weight);
             loader.read_tensor("classifier.out_proj.bias",      transformer->final_layernorm.out_proj.bias);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 
     public:
-        static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 44ull * 1024 * 1024;
-
         Config config;
-
-    private:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
     };
 }

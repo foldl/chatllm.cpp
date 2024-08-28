@@ -40,8 +40,8 @@ namespace v1
     public:
         typedef Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int> ModelClass;
     public:
-        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_MINICPM, bool tie_word_embeddings = true)
-            : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_MINICPM, bool tie_word_embeddings = true)
+            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = (tie_word_embeddings ? 2 : 3) + config.num_hidden_layers * 12;
@@ -67,7 +67,7 @@ namespace v1
                 auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
                 attention.freq_base = config.rope_theta;
                 attention.freq_scale = 1 / config.rope_scaling;
-                attention.set_prec(ggml_prec::GGML_PREC_F32);
+                attention.set_prec(ggml::prec::GGML_PREC_F32);
 
                 get_typed_transformer<ModelClass>()->layers[i].hidden_scaling = config.scale_depth;
             }
@@ -99,19 +99,12 @@ namespace v1
             if (transformer->lm_head)
                 loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 
     public:
-        static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 1344ull * 1024 * 1024;
-
         Config config;
-
-    private:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
     };
 
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
@@ -218,8 +211,8 @@ namespace v2
     class ConditionalGeneration : public v1::ConditionalGeneration
     {
     public:
-        ConditionalGeneration(const Config &config)
-            : v1::ConditionalGeneration(config, ModelType::MODEL_TYPE_MINICPM2, false)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : v1::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_MINICPM2, false)
         {}
     };
 
@@ -298,8 +291,8 @@ namespace moe
     public:
         typedef Model<Config, Embedding, RMSNorm, MiniCPMBlock, int, int, int, int, int> ModelClass;
     public:
-        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_MINICPM_MoE)
-            : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_MINICPM_MoE)
+            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = 2 + config.num_hidden_layers * (10 + 3);
@@ -319,7 +312,7 @@ namespace moe
                 auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
                 attention.freq_base = config.rope_theta;
                 attention.freq_scale = 1 / config.rope_scaling;
-                attention.set_prec(ggml_prec::GGML_PREC_F32);
+                attention.set_prec(ggml::prec::GGML_PREC_F32);
 
                 get_typed_transformer<ModelClass>()->layers[i].hidden_scaling = config.scale_depth;
             }
@@ -351,18 +344,11 @@ namespace moe
             }
             loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 
     public:
-        static constexpr size_t MEM_SIZE = 812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 1344ull * 1024 * 1024;
-
         Config config;
-
-    private:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
     };
 }

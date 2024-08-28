@@ -38,6 +38,7 @@ struct Args
     std::string layer_spec;
     std::string load_session;
     std::string save_session;
+    std::string n_gpu_layers;
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -103,7 +104,6 @@ void usage(const std::string &prog)
               << "                          `step` is optional, e.g.\n"
               << "                            --layer_spec 0:3,1:4 (3 + 3 = 6 layers are selected, layer #1/2 are used twice)\n"
               << "                                                 layer structure: 0->1->2->1->2->3\n"
-              << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
               << "  -c, --max_context_length N\n"
               << "                          max context length (default: 512)\n"
               << "  --extending EXT         context extending method (EXT = restart | shift | none)\n"
@@ -111,6 +111,9 @@ void usage(const std::string &prog)
               << "  --multi                 enabled multiple lines of input\n"
               << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n"
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
+              << "Performance options:\n"
+              << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
+              << "  -ngl, --n_gpu_layers N  number of model layers to offload to each GPU (default: GPU not used)\n"
               << "Sampling options:\n"
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
               << "                          where, tfs = Tail Free Sampling\n"
@@ -298,6 +301,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_param("--temp",                  "-t", temp,                 std::stof)
             handle_para0("--presence_penalty",            presence_penalty,     std::stof)
             handle_param("--threads",               "-n", num_threads,          std::stoi)
+            handle_param("--n_gpu_layers",          "-ngl", n_gpu_layers,       std::string)
             handle_para0("--seed",                        seed,                 std::stoi)
             handle_para0("--test",                        test_fn,              std::string)
             append_param("--vector_store",                vector_store,         std::string)
@@ -839,7 +843,7 @@ int wmain(int argc, const wchar_t **wargv)
     // Set console code page to UTF-8 so console known how to interpret string data
     SetConsoleOutputCP(CP_UTF8);
     // Enable buffering to prevent VS from chopping up UTF-8 byte sequences
-    setvbuf(stdout, nullptr, _IOFBF, 1000);
+    //setvbuf(stdout, nullptr, _IOFBF, 1000);
 
 #else
 int main(int argc, const char **argv)
@@ -887,7 +891,7 @@ int main(int argc, const char **argv)
 
     try
     {
-        chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec);
+        chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers);
         if (args.embedding_model_path.size() < 1)
         {
             chatllm::Pipeline pipeline(args.model_path, pipe_args);

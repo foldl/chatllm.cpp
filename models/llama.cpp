@@ -47,8 +47,8 @@ If a question does not make any sense, or is not factually coherent, explain why
         typedef Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int> ModelClass;
         typedef Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int, int> ModelClass2;
     public:
-        GenericConditionalGeneration(const BaseConfig &config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12, bool tie_lm_head = false, int additional_tensor = 0)
-            : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config), type_class(1)
+        GenericConditionalGeneration(const BaseConfig &config, const RuntimeConfig &runtime_config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12, bool tie_lm_head = false, int additional_tensor = 0)
+            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config), type_class(1)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = (tie_lm_head ? 2 : 3) + config.num_hidden_layers * tensors_per_layer + additional_tensor;
@@ -67,8 +67,8 @@ If a question does not make any sense, or is not factually coherent, explain why
             Base::GRAPH_SIZE = 4096 * 2;
         }
 
-        GenericConditionalGeneration(const BaseConfig &config, ModelType type, int num_key_value_heads, int head_dim, int max_length, int tensors_per_layer, bool tie_lm_head)
-            : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config), type_class(2)
+        GenericConditionalGeneration(const BaseConfig &config, const RuntimeConfig &runtime_config, ModelType type, int num_key_value_heads, int head_dim, int max_length, int tensors_per_layer, bool tie_lm_head)
+            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config), type_class(2)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = (tie_lm_head ? 2 : 3) + config.num_hidden_layers * tensors_per_layer;
@@ -124,19 +124,14 @@ If a question does not make any sense, or is not factually coherent, explain why
             if (transformer->lm_head)
                 loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 
     public:
-        static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 2844ull * 1024 * 1024;
-
         BaseConfig config;
 
     protected:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
         const int type_class;
     };
 
@@ -144,13 +139,13 @@ If a question does not make any sense, or is not factually coherent, explain why
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_LLAMA2)
-            : ConditionalGeneration(config, type, config.num_attention_heads, config.max_length)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_LLAMA2)
+            : ConditionalGeneration(config, runtime_config, type, config.num_attention_heads, config.max_length)
         {}
 
-        ConditionalGeneration(const Config &config, ModelType type,
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : GenericConditionalGeneration<LlamaBlock>(config, type, num_key_value_heads, max_length)
+            : GenericConditionalGeneration<LlamaBlock>(config, runtime_config, type, num_key_value_heads, max_length)
         {}
     };
 
@@ -337,13 +332,13 @@ namespace v3
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_LLAMA3)
-            : ConditionalGeneration(config, type, config.num_key_value_heads, config.max_length)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_LLAMA3)
+            : ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
         {}
 
-        ConditionalGeneration(const Config &config, ModelType type,
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : v2::GenericConditionalGeneration<LlamaBlock>(config, type, num_key_value_heads, max_length)
+            : v2::GenericConditionalGeneration<LlamaBlock>(config, runtime_config, type, num_key_value_heads, max_length)
         {
             auto transformer = Base::get_typed_transformer<ModelClass>();
             for (int i = 0; i < config.num_hidden_layers; i++)
@@ -492,15 +487,15 @@ namespace v3_1
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_LLAMA3_1)
-            : ConditionalGeneration(config, type, config.num_key_value_heads, config.max_length)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_LLAMA3_1)
+            : ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
         {}
 
-        ConditionalGeneration(const Config &config, ModelType type,
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : v2::GenericConditionalGeneration<LlamaBlock>(config, type, num_key_value_heads, max_length, 12, false, 1)
+            : v2::GenericConditionalGeneration<LlamaBlock>(config, runtime_config, type, num_key_value_heads, max_length, 12, false, 1)
         {
-            freq_factors = ggml_new_tensor_1d(w_ctx_.gctx.get(), GGML_TYPE_F32, config.hidden_size / config.num_attention_heads);
+            freq_factors = ggml::new_tensor_1d(&w_ctx_, GGML_TYPE_F32, config.hidden_size / config.num_attention_heads);
 
             init_llama3_freq_factors(freq_factors_value, config.hidden_size / config.num_attention_heads,
                                       config.rope_theta,
@@ -521,7 +516,7 @@ namespace v3_1
 
         ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
     protected:
-        ggml_tensor *freq_factors;
+        ggml::tensor *freq_factors;
         std::vector<float> freq_factors_value;
     };
 }
@@ -535,8 +530,8 @@ namespace v2_plus
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, ModelType type = ModelType::MODEL_TYPE_LLAMA2)
-            : v3::ConditionalGeneration(config, type)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_LLAMA2)
+            : v3::ConditionalGeneration(config, runtime_config, type)
         {}
     };
 }
@@ -584,7 +579,6 @@ namespace multi
                     ctx, config, false, hidden_size, num_attention_heads, intermediate_size, num_key_value_heads, max_length),
               n_future_tokens(n_future_tokens)
         {
-            size_t extra_cache_size = 0;
             effective_n = n_future_tokens;
 
             for (int i = 0; i < n_future_tokens - 1; i++)
@@ -592,18 +586,18 @@ namespace multi
                 auto layer = new LlamaBlockNonInplace(ctx, hidden_size, num_attention_heads, intermediate_size, num_key_value_heads, max_length);
                 extra_heads.push_back(layer);
                 layer->set_id(config.num_hidden_layers + i);
-                extra_cache_size += layer->get_cache_size();;
             }
-
-            extra_cache.resize(extra_cache_size);
-            void *buffer = (void *)extra_cache.data();
 
             prediction_heads.push_back(get_layer(config.num_hidden_layers - 1));
             for (int i = 0; i < n_future_tokens - 1; i++)
             {
                 auto layer = extra_heads[i];
-                buffer = layer->set_cache_buffer(buffer);
                 prediction_heads.push_back(layer);
+
+                ctx->move_to_layer(i);
+                auto allocator = ctx->get_allocator();
+                auto buf = allocator->alloc(layer->get_cache_size(), BackendBufAllocator::Usage::Matrix);
+                layer->set_cache_buffer(buf);
             }
         }
 
@@ -611,31 +605,31 @@ namespace multi
         {
         }
 
-        ggml_tensor *forward(ForwardContext *ctx, ggml_tensor *input_ids, int n_past) override
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) override
         {
-            ggml_tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
+            ggml::tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
             for (int i = 0; i <= config.num_hidden_layers - 2; i++)
             {
                 // reserve scratch memory for h_truck
                 if (i <= config.num_hidden_layers - 3)
-                    ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
+                    ctx->restart_scratch_alloc();
                 hidden_states = get_layer(i)->forward(ctx, hidden_states, n_past);
             }
 
             auto h_trunk = hidden_states;
-            ggml_tensor *lm_logits = ggml_new_tensor_2d(ctx->gctx.get(), GGML_TYPE_F32, config.vocab_size, effective_n);
+            ggml::tensor *lm_logits = ggml::new_tensor_2d(ctx, GGML_TYPE_F32, config.vocab_size, effective_n);
 
             for (int i = 0; i < effective_n; i++)
             {
-                ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
-                ggml_tensor *tok_states = prediction_heads[i]->forward(ctx, h_trunk, n_past);
+                ctx->restart_scratch_alloc();
+                ggml::tensor *tok_states = prediction_heads[i]->forward(ctx, h_trunk, n_past);
 
-                ggml_set_scratch(ctx->gctx.get(), ctx->scratch);
+                ctx->restart_scratch_alloc();
 
-                ggml_tensor *logits = calc_logits(ctx, input_ids, tok_states);
-                ggml_tensor *view = ggml_view_1d(ctx->gctx.get(), lm_logits, config.vocab_size,
-                                                 i * ggml_nbytes(logits));
-                ggml_build_forward_expand(ctx->gf, ggml_cpy(ctx->gctx.get(), logits, view));
+                ggml::tensor *logits = calc_logits(ctx, input_ids, tok_states);
+                ggml::tensor *view = ggml::view_1d(ctx, lm_logits, config.vocab_size,
+                                                 i * ggml::nbytes(logits));
+                ggml::build_forward_expand(ctx, ggml::cpy(ctx, logits, view));
             }
 
             return lm_logits;
@@ -657,19 +651,19 @@ namespace multi
             return r;
         }
 
-        ggml_tensor *calc_logits(ForwardContext *ctx, ggml_tensor *input_ids, ggml_tensor *hidden_states)
+        ggml::tensor *calc_logits(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
         {
             // NOTE: only compute next_token_logits for the last token
-            hidden_states = ggml_view_2d(ctx->gctx.get(), hidden_states, config.hidden_size, 1,
-                                        config.hidden_size * ggml_element_size(hidden_states),
-                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml_element_size(hidden_states));
+            hidden_states = ggml::view_2d(ctx, hidden_states, config.hidden_size, 1,
+                                        config.hidden_size * ggml::element_size(hidden_states),
+                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml::element_size(hidden_states));
 
-            ggml_tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
+            ggml::tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
 
             transformer_outputs =
-                    ggml_view_1d(ctx->gctx.get(), transformer_outputs, config.hidden_size, 0);
+                    ggml::view_1d(ctx, transformer_outputs, config.hidden_size, 0);
 
-            ggml_tensor *logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
+            ggml::tensor *logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
                                              : word_embeddings.forward(ctx, transformer_outputs);
 
             if (logits_pp)
@@ -680,7 +674,6 @@ namespace multi
         const int n_future_tokens;
         std::vector<LlamaBlockNonInplace *> extra_heads;
         std::vector<Block *> prediction_heads;
-        std::vector<uint8_t> extra_cache;
     private:
         int effective_n;
     };
@@ -691,9 +684,9 @@ namespace multi
     private:
         typedef BaseModelForConditionalGeneration Base;
     public:
-        ConditionalGeneration(const Config &config, ModelType type = MODEL_TYPE_LLAMA_MULTI,
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_LLAMA_MULTI,
                                      int tensors_per_layer = 12)
-            : BaseModelForConditionalGeneration(type, config, MEM_SIZE, SCRATCH_SIZE), config(config)
+            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = 3 + (config.num_hidden_layers + config.n_future_tokens - 1) * tensors_per_layer;
@@ -744,7 +737,7 @@ namespace multi
             loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
-            CHATLLM_CHECK(ggml_used_mem(w_ctx_.gctx.get()) == ggml_get_mem_size(w_ctx_.gctx.get()))
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
         }
 
@@ -762,13 +755,6 @@ namespace multi
         }
 
     public:
-        static constexpr size_t MEM_SIZE = 1812ull * 1024 * 1024;
-        static constexpr size_t SCRATCH_SIZE = 2844ull * 1024 * 1024;
-
         Config config;
-
-    private:
-        // hold ggml_context & kv_cache
-        InitContext w_ctx_; // weight context
     };
 }
