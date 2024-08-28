@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-07-24: Phi-3.5 Mini & MoE
 * 2024-07-24: Llama 3.1
 * 2024-07-23: Llama-3-Groq with tool calling
 * 2024-07-17: Mistral Nemo

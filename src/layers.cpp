@@ -1072,20 +1072,32 @@ namespace chatllm
         }
     }
 
-    void Phi3SUSelfAttention::config(int original_max_position_embeddings, float rope_theta, float scaling_factor, int factor_len, const float *short_factor, const float *long_factor)
+    void Phi3SUSelfAttention::config(int original_max_position_embeddings, float rope_theta, float short_scaling_factor, float long_scaling_factor, int factor_len, const float *short_factor, const float *long_factor)
     {
         this->original_max_position_embeddings = original_max_position_embeddings;
         this->freq_base = rope_theta;
-        this->scaling_factor = scaling_factor;
+        this->short_scaling_factor = short_scaling_factor;
+        this->long_scaling_factor  = long_scaling_factor;
         build_inv_freq_from_factors(this->inv_freq_short, factor_len * 2, short_factor, freq_base);
         build_inv_freq_from_factors(this->inv_freq_long,  factor_len * 2, long_factor,  freq_base);
+
+        if (max_length > original_max_position_embeddings)
+        {
+            inv_freq = inv_freq_long.data();
+            this->scaling_factor = long_scaling_factor;
+        }
+        else
+        {
+            inv_freq = inv_freq_short.data();
+            this->scaling_factor = short_scaling_factor;
+        }
     }
 
     const float *Phi3SUSelfAttention::get_inv_freq(int pos)
     {
         // This does not work.
         // pos > original_max_position_embeddings ? inv_freq_long.data() : inv_freq_short.data();
-        return max_length > original_max_position_embeddings ? inv_freq_long.data() : inv_freq_short.data();
+        return inv_freq;
     }
 
     ggml::tensor *Phi3SUSelfAttention::apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const

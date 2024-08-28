@@ -91,9 +91,9 @@
 
     * [x] [Dolphin Phi-2](https://huggingface.co/cognitivecomputations/dolphin-2_6-phi-2/tree/a084bb141f99f67e8ff56a654e29ddd53a0b4d7a) (`-a DolphinPhi2`) 🐬
 
-    * [x] Phi-3 Mini: [Instruct-4k](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct), [Instruct-128k](https://huggingface.co/microsoft/Phi-3-mini-128k-instruct)
+    * [x] Phi-3: [Mini-Instruct-4k](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct), [Mini-Instruct-128k](https://huggingface.co/microsoft/Phi-3-mini-128k-instruct), [Medium-Instruct-4k](https://huggingface.co/microsoft/Phi-3-medium-4k-instruct), [Medium-Instruct-128k](https://huggingface.co/microsoft/Phi-3-medium-128k-instruct)
 
-    * [x] Phi-3 Medium: [Instruct-4k](https://huggingface.co/microsoft/Phi-3-medium-4k-instruct), [Instruct-128k](https://huggingface.co/microsoft/Phi-3-medium-128k-instruct)
+    * [x] Phi-3.5: [Mini-Instruct](https://huggingface.co/microsoft/Phi-3.5-mini-instruct), [MoE-Instruct](https://huggingface.co/microsoft/Phi-3.5-MoE-instruct)
 
 * QWen (`QWenLMHeadModel`, `Qwen2ForCausalLM`, `Qwen2MoeForCausalLM`)
     * [x] v1: [Chat-7B](https://huggingface.co/Qwen/Qwen-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen-14B-Chat), [QAnything-7B](https://huggingface.co/netease-youdao/Qwen-7B-QAnything)

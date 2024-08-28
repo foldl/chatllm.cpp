@@ -81,6 +81,8 @@ class ModelType(Enum):
     Phi3                = 0x520
     Phi3_ScalingSU      = 0x521
     Phi3_ScalingSU2     = 0x522
+    Phi3_ScalingSU3     = 0x523
+    Phi3MoE_ScalingSU   = 0x530
 
     Mistral = 0x600
     Mixtral = 0x601
@@ -2345,6 +2347,90 @@ class Phi3SUConverter(BaseConverter):
     def get_weight_names(config):
         return Phi3Converter.get_weight_names(config)
 
+class Phi3SU3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Phi3_ScalingSU3
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        return Phi3SUConverter.state_dict_pp(config, state_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        Phi3SUConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.rope_scaling['short_mscale'],
+            config.rope_scaling['long_mscale'],
+        ]
+        f.write(struct.pack('<' + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return Phi3SUConverter.get_weight_names(config)
+
+class Phi3MoESUConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Phi3MoE_ScalingSU
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        elif name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        else:
+            return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.lm_head_bias, 'lm_head_bias must be True'
+
+        Phi3SU3Converter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_experts_per_tok,
+            config.num_local_experts,
+        ]
+        f.write(struct.pack('<' + "i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.input_layernorm.bias",
+            ]
+
+            for j in range(config.num_local_experts):
+                weight_names += [
+                    f"model.layers.{i}.block_sparse_moe.experts.{j}.w1.weight",
+                    f"model.layers.{i}.block_sparse_moe.experts.{j}.w2.weight",
+                    f"model.layers.{i}.block_sparse_moe.experts.{j}.w3.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.block_sparse_moe.gate.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.bias",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.k_proj.bias",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.bias",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.bias",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.bias",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "model.norm.bias",
+            "lm_head.weight",
+            "lm_head.bias"
+        ]
+
+        return weight_names
+
 class QWenConverter(BaseConverter):
     MODEL_TYPE = ModelType.QWen
     FILE_VERSION = 2
@@ -3677,9 +3763,14 @@ def main():
                 config.rope_scaling['type'] = 'longrope'
 
             if config.rope_scaling['type'] == 'longrope':
-                Phi3SUConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+                if 'long_mscale' in config.rope_scaling:
+                    Phi3SU3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+                else:
+                    Phi3SUConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
             else:
                 raise Exception(config.rope_scaling['type'])
+    elif arch == 'PhiMoEForCausalLM':
+        Phi3MoESUConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'dolphinphi2':
         Phi2Converter.MODEL_TYPE = ModelType.DolphinPhi2_v2 if config.hidden_act is not None else ModelType.DolphinPhi2
         Phi2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

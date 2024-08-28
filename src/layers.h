@@ -2331,12 +2331,17 @@ namespace chatllm
     {
     public:
         Phi3SUSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-            : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
+            : Phi3SUSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
+        {
+        }
+
+        Phi3SUSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
+            : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias)
         {
         }
 
         void config(int original_max_position_embeddings,
-            float rope_theta, float scaling_factor, int factor_len, const float *short_factor, const float *long_factor);
+            float rope_theta, float short_scaling_factor, float long_scaling_factor, int factor_len, const float *short_factor, const float *long_factor);
 
         const float *get_inv_freq(int pos);
 
@@ -2347,7 +2352,10 @@ namespace chatllm
 
     public:
         int original_max_position_embeddings;
+        float short_scaling_factor;
+        float long_scaling_factor;
         float scaling_factor;
+        const float *inv_freq;
         std::vector<float> inv_freq_short;
         std::vector<float> inv_freq_long;
     };

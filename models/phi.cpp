@@ -386,6 +386,8 @@ namespace v3
         void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
         void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
         void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+    public:
+        bool add_bos = true;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -414,6 +416,15 @@ namespace v3
             assistant_token_id  = tp->PieceToId("<|assistant|>");
             end_token_id        = tp->PieceToId("<|end|>");
             nl_token_id         = tp->PieceToId("\n");
+
+            if (-1 == system_token_id)
+            {
+                CHATLLM_CHECK(tp->GetPieceSize() == 32000) << " unsupported tokenizer";
+                system_token_id     = 32006;
+                user_token_id       = 32010;
+                assistant_token_id  = 32001;
+                end_token_id        = 32007;
+            }
 
             pad_token_id = eos_token_id;
 
@@ -512,7 +523,9 @@ namespace v3
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        ids.push_back(tok->bos_token_id);
+        if (add_bos)
+            ids.push_back(tok->bos_token_id);
+
         if (tok->get_system_prompt().size() > 0)
             tok->encode(tok->get_system_prompt(), ids, tok->system_token_id, tok->end_token_id);
     }
@@ -578,6 +591,7 @@ namespace v3_su
                 auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
                 attention.config(config.original_max_position_embeddings, config.rope_theta,
                                  scaling_factor,
+                                 scaling_factor,
                                  config.hidden_size / config.num_attention_heads / 2,
                                  config.short_factor,
                                  config.long_factor);
@@ -590,54 +604,174 @@ namespace v3_su2
 {
     typedef v3_su::Config Config;
 
-    class ChatHistoryEncoder : public BaseHistoryEncoder
-    {
-    public:
-        void append_sys_prompt(std::vector<int> &ids) const override;
-        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
-        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
-    };
-
-    static ChatHistoryEncoder _chat_encoder;
-
     class Tokenizer : public v3::Tokenizer
     {
     public:
-        Tokenizer(const BaseConfig &config) : v3::Tokenizer(config, &_chat_encoder)
+        Tokenizer(const BaseConfig &config) : v3::Tokenizer(config, &v3::_chat_encoder)
         {
             append_nl_after_end_tok = true;
+            v3::_chat_encoder.add_bos = false;
         }
     };
 
     typedef v3_su::ConditionalGeneration ConditionalGeneration;
+}
 
-    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+namespace v3_su3
+{
+    struct Config : public v3_su2::Config
     {
-        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        append_ai_opening(round_idx, ids);
-        tok->encode(ai, ids, -1, tok->end_token_id);
-    }
+        float short_mscale;
+        float long_mscale;
+    };
 
-    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    typedef v3_su2::Tokenizer Tokenizer;
+
+    class ConditionalGeneration : public v3_su2::ConditionalGeneration
     {
-        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+    public:
+        ConditionalGeneration() = default;
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_PHI3_SU3)
+            : v3_su2::ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
+        {
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
+                attention.config(config.original_max_position_embeddings, config.rope_theta,
+                                 config.short_mscale,
+                                 config.long_mscale,
+                                 config.hidden_size / config.num_attention_heads / 2,
+                                 config.short_factor,
+                                 config.long_factor);
+            }
+        }
+    };
+}
 
-        if (tok->get_system_prompt().size() > 0)
-            tok->encode(tok->get_system_prompt(), ids, tok->system_token_id, tok->end_token_id);
-    }
-
-    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+namespace v3_moe
+{
+    struct Config : public v3_su3::Config
     {
-        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        int num_experts_per_tok;
+        int num_local_experts;
+    };
 
-        tok->encode(user, ids, tok->user_token_id, tok->end_token_id);
-    }
+    typedef v3_su3::Tokenizer Tokenizer;
 
-    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class Phi3SparseMoE : public BaseSparseMLP
     {
-        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+    public:
+        Phi3SparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
+            : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, false)
+        {
+        }
+    };
 
-        tok->encode("", ids, tok->assistant_token_id, -1);
-    }
+    class Phi3SUSelfAttentionBiased : public Phi3SUSelfAttention
+    {
+    public:
+        Phi3SUSelfAttentionBiased(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : Phi3SUSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, true)
+        {}
+    };
+
+    template<int num_local_experts, int num_experts_per_tok> class Phi3MoEBlock : public LMBlock1<LayerNorm, Phi3SUSelfAttentionBiased, LayerNorm,
+                        Phi3SparseMoE<num_local_experts, num_experts_per_tok>>
+    {
+    public:
+        Phi3MoEBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1<LayerNorm, Phi3SUSelfAttentionBiased, LayerNorm,
+                       Phi3SparseMoE<num_local_experts, num_experts_per_tok>>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
+    template<int _NUM_EXPERTS, int _EXPERTS_PER_TOK, ModelType type> class _ConditionalGeneration : public BaseModelForConditionalGeneration
+    {
+    public:
+        typedef BaseModelForConditionalGeneration Base;
+        typedef Model<Config, Embedding, LayerNorm, Phi3MoEBlock<_NUM_EXPERTS, _EXPERTS_PER_TOK>, int, int, int, int, int> ModelClass;
+    public:
+        _ConditionalGeneration() = default;
+
+        _ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : Base(type, config, runtime_config), config(config)
+        {
+            constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+            const size_t num_tensors = 3 + 2 + config.num_hidden_layers * (11 + 3 + 5);
+            const size_t ctx_size = num_tensors * tensor_ovhd;
+            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+            w_ctx_.dtype = config.dtype;
+
+            CHATLLM_CHECK((_NUM_EXPERTS == config.num_local_experts) && (_EXPERTS_PER_TOK == config.num_experts_per_tok))
+                << "unsupported MoE param";
+
+            Base::GRAPH_SIZE = 4096 * 2;
+
+            Base::transformer = new ModelClass(
+                                &w_ctx_, config, true,
+                                config.hidden_size, config.num_attention_heads,
+                                config.intermediate_size, config.num_key_value_heads, config.max_length);
+
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto &attention = Base::get_typed_transformer<ModelClass>()->layers[i].attention;
+                attention.config(config.original_max_position_embeddings, config.rope_theta,
+                                 config.short_mscale,
+                                 config.long_mscale,
+                                 config.hidden_size / config.num_attention_heads / 2,
+                                 config.short_factor,
+                                 config.long_factor);
+            }
+
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size()) << "corrupted model weights";
+        }
+
+        void load(ModelLoader &loader) override
+        {
+            auto transformer = get_typed_transformer<ModelClass>();
+            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
+
+                loader.read_tensor(layer_prefix + "mlp.experts_down.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w2.weight", transformer->layers[i].mlp.experts_down.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_gate.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w1.weight", transformer->layers[i].mlp.experts_gate.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_up.weight",   layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w3.weight", transformer->layers[i].mlp.experts_up.weight);
+
+                loader.read_tensor(layer_prefix + "block_sparse_moe.gate.weight",
+                                transformer->layers[i].mlp.gate.weight);
+
+                loader.read_tensor(layer_prefix + "input_layernorm.weight",
+                                transformer->layers[i].input_layernorm.weight);
+                loader.read_tensor(layer_prefix + "input_layernorm.bias",
+                                transformer->layers[i].input_layernorm.bias);
+
+                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",
+                                transformer->layers[i].post_attention_layernorm.weight);
+                loader.read_tensor(layer_prefix + "post_attention_layernorm.bias",
+                                transformer->layers[i].post_attention_layernorm.bias);
+
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   transformer->layers[i].attention.k_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.bias",   transformer->layers[i].attention.o_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   transformer->layers[i].attention.q_proj.bias);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer->layers[i].attention.v_proj.bias);
+            }
+            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            loader.read_tensor("model.norm.bias",   transformer->final_layernorm.bias);
+            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
+            loader.read_tensor("lm_head.bias",   dynamic_cast<Linear *>(transformer->lm_head)->bias);
+        }
+
+    public:
+        Config config;
+    };
+
+    const int NUM_EXPERTS                   =  16;
+    const int EXPERTS_PER_TOK               =  2;
+
+    typedef _ConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, MODEL_TYPE_PHI3_MOE> ConditionalGeneration;
 }
