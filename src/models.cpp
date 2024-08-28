@@ -18,29 +18,6 @@
 
 #include "layers.h"
 
-#ifdef GGML_USE_CUDA
-#  include "ggml-cuda.h"
-#elif defined(GGML_USE_VULKAN)
-#  include "ggml-vulkan.h"
-extern void ggml_vk_print_devices_info(void);
-#elif defined(GGML_USE_SYCL)
-#  include "ggml-sycl.h"
-#elif defined(GGML_USE_KOMPUTE)
-#   include "ggml-kompute.h"
-#elif defined(GGML_USE_CANN)
-#   include "ggml-cann.h"
-#endif
-
-#ifdef GGML_USE_BLAS
-#  include "ggml-blas.h"
-#endif
-
-#ifdef GGML_USE_METAL
-#  include "ggml-metal.h"
-#endif
-
-#include "ggml-backend.h"
-
 namespace chatllm
 {
     struct RuntimeConfig
@@ -956,6 +933,11 @@ namespace chatllm
             backend_context.init(gpu_cfgs, config_.num_hidden_layers, GRAPH_SIZE);
         }
 
+        LayerAllocatorManager *get_alloc_manager(void) override
+        {
+            return &backend_context.layer_allocators;
+        }
+
     protected:
         virtual void do_build_graph(ForwardContext &ctc, const std::vector<int> &input_ids,
                                        const GenerationConfig &gen_config,
@@ -970,7 +952,6 @@ namespace chatllm
         {
             ForwardContext ctx(&backend_context);
             ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
-            int n_threads = gen_config.num_threads;
             ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
             ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, input_ids.size());
@@ -984,7 +965,7 @@ namespace chatllm
 
             bool s = ctx.reserve_memory();
 
-            backend_context.show_buffer_sizes();
+            // backend_context.show_buffer_sizes();
 
             return s;
         }
@@ -1023,10 +1004,10 @@ namespace chatllm
             output.resize(ggml::nbytes(r) / sizeof(output[0]));
 
             ctx.allocate();
-            Backend::set_tensor(input_ids_tensor, input_ids.data());
+            Backend::write_tensor_data(input_ids_tensor, input_ids.data());
             ctx.compute(n_threads);
 
-            Backend::get_tensor(r, output.data());
+            Backend::read_tensor_data(r, output.data());
 
             ctx.reset();
         }
@@ -1104,13 +1085,13 @@ namespace chatllm
         HeterogeneousModel() = default;
 
         HeterogeneousModel(InitContext *ctx, const Config &config, bool lm_head_bias, std::function<Block *(InitContext *, int)> create_layer)
-                : HeterogeneousModel(ctx, config, new Linear(LayerMover(ctx, ComputeContext::MiscLayer::Epilog), config.hidden_size, config.vocab_size, lm_head_bias), create_layer)
+                : HeterogeneousModel(ctx, config, new Linear(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, config.vocab_size, lm_head_bias), create_layer)
         {}
 
         HeterogeneousModel(InitContext *ctx, const Config &config, Block *lm_head, std::function<Block *(InitContext *, int)> create_layer)
         : config(config),
-          word_embeddings(LayerMover(ctx, ComputeContext::MiscLayer::Prolog), config.vocab_size, config.hidden_size, config.max_length),
-          final_layernorm(LayerMover(ctx, ComputeContext::MiscLayer::Epilog), config.hidden_size),
+          word_embeddings(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), config.vocab_size, config.hidden_size, config.max_length),
+          final_layernorm(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size),
           lm_head(lm_head), logits_pp(nullptr),
           cache_size(0)
         {
@@ -1622,6 +1603,7 @@ namespace chatllm
         ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);
         if (layers.size() > 0)
             model->set_layer_ids(layers);
+        loader.set_allocator_manager(model->get_alloc_manager());
         model->load(loader);
 
         return model;

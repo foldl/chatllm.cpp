@@ -669,10 +669,11 @@ namespace chatllm
         return fread(output, 1, len, f);
     }
 
-    TensorInfo::TensorInfo(enum ggml::type type, int n_dim, const int64_t *ne, size_t _offset)
+    TensorInfo::TensorInfo(ggml::type type, int n_dim, const int64_t *ne, size_t _offset)
         : _offset(_offset), data(nullptr)
     {
         ggml::init_tensor(&tensor, type, n_dim, ne);
+        usage = ggml::n_dims(&tensor) > 1 ? BackendBufAllocator::Usage::Matrix : BackendBufAllocator::Usage::Others;
     }
 
     TensorInfo::~TensorInfo()
@@ -693,30 +694,58 @@ namespace chatllm
         return (aligned_data_start(_offset) - _offset) + ggml::nbytes(&tensor);
     }
 
-    void *TensorInfo::load(tokenizer::DataReader *reader)
+    size_t TensorInfo::get_nbytes(void)
     {
-        if (data) return tensor.data;
-
-        constexpr int64_t MEM_ALIGNED = 16;
-        data = malloc(ggml::nbytes(&tensor) + MEM_ALIGNED);
-        tensor.data = (void *)aligned_data_start((size_t)data);
-
-        if (reader)
-        {
-            reader->seek(aligned_data_start(_offset), SEEK_SET);
-            reader->read_buffer(tensor.data, ggml::nbytes(&tensor));
-        }
-        return tensor.data;
+        return ggml::nbytes(&tensor);
     }
 
-    size_t TensorInfo::read_data(tokenizer::DataReader *reader, void *data, size_t data_size)
+    bool TensorInfo::load(tokenizer::DataReader *reader, LayerBufAllocator *alloc)
     {
-        size_t size = ggml::nbytes(&tensor);
-        CHATLLM_CHECK(size <= data_size) << "TensorInfo::read_data: " << " data buffer too small, required at least " << size << ", actual " << data_size;
+        if (data) return true;
 
-        reader->seek(aligned_data_start(_offset), SEEK_SET);
-        reader->read_buffer(data, size);
-        return size;
+        data = alloc->alloc(ggml::nbytes(&tensor), usage);
+        data->assign_to(&tensor);
+        this->alloc = alloc;
+
+        if (reader)
+            read_tensor_data(reader, _offset, 0, ggml::nbytes(&tensor));
+
+        return true;
+    }
+
+    size_t TensorInfo::read_tensor_data(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size)
+    {
+        CHATLLM_CHECK(data) << "backend buffer still not allocated!";
+        CHATLLM_CHECK(data->get_size() >= write_offset + data_size) << "read_tensor_data(): write data exceeds tensor data size";
+
+        reader->seek(aligned_data_start(read_offset), SEEK_SET);
+
+        if (data->is_host())
+            reader->read_buffer((uint8_t *)data->get_base() + write_offset, data_size);
+        else
+        {
+            const int BUF_SIZE = 1024 * 1000;
+            std::vector<uint8_t> buf;
+            buf.resize(BUF_SIZE);
+            size_t remain = data_size;
+            size_t offset = write_offset;
+            while (remain > 0)
+            {
+                size_t block = remain > buf.size() ? buf.size() : remain;
+                reader->read_buffer(buf.data(), block);
+                alloc->get_backend()->write_tensor_data(&tensor, buf.data(), offset, block);
+
+                remain -= block;
+                offset += block;
+            }
+        }
+
+        return data_size;
+    }
+
+    void TensorInfo::assign_to(ggml::tensor *tensor)
+    {
+        data->assign_to(tensor);
     }
 
     void ModelLoader::load_all_tensors(void)
@@ -756,6 +785,18 @@ namespace chatllm
 
     void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor)
     {
+        read_tensor(name, tensor, alloc_manager->get_allocator());
+    }
+
+    void ModelLoader::read_tensor(const std::string &name,
+                    const std::string &layer_prefix, int num, const std::string &suffix,
+                    ggml::tensor *tensor)
+    {
+        read_tensor(name, layer_prefix, num, suffix, tensor, alloc_manager->get_allocator());
+    }
+
+    void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator)
+    {
         auto search = tensor_dict.find(name);
         CHATLLM_CHECK(search != tensor_dict.end()) << "tensor not exist: " << name;
 
@@ -784,45 +825,54 @@ namespace chatllm
             }
         }
 
-        tensor->data = t.load(_file.get());
+        CHATLLM_CHECK(t.load(_file.get(), allocator)) << "failed to load tensor: " << name;
+
+        t.assign_to(tensor);
     }
 
     void ModelLoader::read_tensor(const std::string &name,
         const std::string &layer_prefix, int num, const std::string &suffix,
-        ggml::tensor *tensor)
+        ggml::tensor *tensor, LayerBufAllocator *allocator)
     {
         std::vector<std::string> names;
         for (int j = 0; j < num; j++)
         {
             names.push_back(layer_prefix + std::to_string(j) + suffix);
         }
-        read_tensor(name, names, tensor);
+        read_tensor(name, names, tensor, allocator);
     }
 
-    void ModelLoader::read_tensor(const std::string &name, const std::vector<std::string> &concat_list, ggml::tensor *tensor)
+    void ModelLoader::read_tensor(const std::string &name, const std::vector<std::string> &concat_list,
+                                  ggml::tensor *tensor, LayerBufAllocator *allocator)
     {
         auto search = tensor_dict.find(name);
         if (search != tensor_dict.end())
-            return read_tensor(name, tensor);
+        {
+            read_tensor(name, tensor, allocator);
+            return;
+        }
 
         tensor_dict.emplace(name, TensorInfo(tensor->type, 4, tensor->ne, 0));
 
         TensorInfo &t = tensor_dict.at(name);
-        uint8_t *buffer = (uint8_t *)t.load(nullptr);
+        t.load(nullptr, allocator);
 
-        size_t total_size = t.aligned_size();
+        size_t total_size = t.get_nbytes();
+        size_t write_offset = 0;
         for (size_t i = 0; i < concat_list.size(); i++)
         {
             auto search = tensor_dict.find(concat_list[i]);
             CHATLLM_CHECK(search != tensor_dict.end()) << "tensor " << concat_list[i] << " not exists.";
 
-            size_t size = search->second.read_data(_file.get(), buffer, total_size);
-            buffer += size;
+            size_t size = search->second.get_nbytes();
+            t.read_tensor_data(_file.get(), search->second._offset, write_offset, size);
+
+            write_offset += size;
             total_size -= size;
         }
         CHATLLM_CHECK(total_size == 0) << "tensor " << name << " not fully loaded.";
 
-        tensor->data = t.load(nullptr);
+        t.assign_to(tensor);
     }
 
     int BaseModel::save_session(FILE *f) const

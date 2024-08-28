@@ -108,7 +108,7 @@ namespace v1
 
 namespace v2_light
 {
-    extern "C" void _compute_forward_zero(struct ggml::tensor * dst , const struct ggml::tensor * a, int ith, int nth, void * userdata)
+    extern "C" void _compute_forward_zero(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, void * userdata)
     {
         memset(dst->data, 0, ggml::nbytes(dst));
     }
@@ -364,14 +364,14 @@ namespace v2_light
         void save_lora_to_cache(ComputeContext *ctx, const int n_past, const int qlen,
             ggml::tensor *k_pe, ggml::tensor *kv_lora)
         {
-            struct ggml::tensor * pe_cache_view = ggml::view_1d(ctx, k_cache, qlen * k_hidden_size,
+            ggml::tensor * pe_cache_view = ggml::view_1d(ctx, k_cache, qlen * k_hidden_size,
                                         ggml::element_size(k_cache) * k_hidden_size * n_past);
 
-            struct ggml::tensor * kv_cache_view = ggml::view_1d(ctx, v_cache, qlen * v_hidden_size,
+            ggml::tensor * kv_cache_view = ggml::view_1d(ctx, v_cache, qlen * v_hidden_size,
                                         ggml::element_size(v_cache) * v_hidden_size * n_past);
 
-            struct ggml::tensor * pe_view = ggml::view_1d(ctx, k_pe,    qlen * k_hidden_size, 0);
-            struct ggml::tensor * kv_view = ggml::view_1d(ctx, kv_lora, qlen * v_hidden_size, 0);
+            ggml::tensor * pe_view = ggml::view_1d(ctx, k_pe,    qlen * k_hidden_size, 0);
+            ggml::tensor * kv_view = ggml::view_1d(ctx, kv_lora, qlen * v_hidden_size, 0);
 
             // important: storing RoPE-ed version of K in the KV cache!
             ggml::build_forward_expand(ctx, ggml::cpy(ctx, pe_view, pe_cache_view));

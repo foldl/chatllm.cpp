@@ -304,6 +304,7 @@ namespace v2
         loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
+            loader.move_to_layer(layer_ids[i]);
             std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
 
             loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
@@ -321,6 +322,9 @@ namespace v2
             loader.read_tensor(layer_prefix + "mlp.up_proj.weight",   transformer->layers[i].mlp.up_proj.weight);
             loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer->layers[i].mlp.gate_proj.weight);
         }
+
+        loader.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
+
         loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
         if (!tie_embeddings)
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);

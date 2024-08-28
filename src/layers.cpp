@@ -29,21 +29,21 @@ namespace chatllm
 
 #include "custom_ops.cpp"
 
-    ggml::tensor *ggml::new_tensor_1d(ComputeContext *ctx, enum ggml::type type, int64_t ne0)
+    ggml::tensor *ggml::new_tensor_1d(ComputeContext *ctx, ggml::type type, int64_t ne0)
     {
         ggml::tensor *tensor = ggml_new_tensor_1d(ctx->get_ctx(), type, ne0);
         ctx->cb_new_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::new_tensor_2d(ComputeContext *ctx, enum ggml::type type, int64_t ne0, int64_t ne1)
+    ggml::tensor *ggml::new_tensor_2d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1)
     {
         ggml::tensor *tensor = ggml_new_tensor_2d(ctx->get_ctx(), type, ne0, ne1);
         ctx->cb_new_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::new_tensor_3d(ComputeContext *ctx, enum ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2)
+    ggml::tensor *ggml::new_tensor_3d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2)
     {
         ggml::tensor *tensor = ggml_new_tensor_3d(ctx->get_ctx(), type, ne0, ne1, ne2);
         ctx->cb_new_tensor(tensor);
@@ -56,11 +56,11 @@ namespace chatllm
     }
 
     ggml::tensor *ggml::init_tensor(ggml::tensor *tensor,
-        enum   ggml::type    type,
-        int                  n_dims,
-        const int64_t      * ne)
+        ggml::type    type,
+        int           n_dims,
+        const int64_t * ne)
     {
-        struct ggml::tensor *result = tensor;
+        ggml::tensor *result = tensor;
 
         *result = ggml::tensor {
             /*.type         =*/ type,
@@ -94,7 +94,7 @@ namespace chatllm
         return result;
     }
 
-    size_t ggml::element_size(const struct ggml::tensor * tensor)
+    size_t ggml::element_size(const ggml::tensor * tensor)
     {
         return ggml_element_size(tensor);
     }
@@ -143,28 +143,28 @@ namespace chatllm
         return tensor;
     }
 
-    ggml::tensor *ggml::scale(ComputeContext *ctx, struct ggml::tensor *a, float  s)
+    ggml::tensor *ggml::scale(ComputeContext *ctx, ggml::tensor *a, float  s)
     {
         ggml::tensor *tensor = ggml_scale(ctx->get_ctx(), a, s);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::scale_inplace(ComputeContext *ctx, struct ggml::tensor *a, float  s)
+    ggml::tensor *ggml::scale_inplace(ComputeContext *ctx, ggml::tensor *a, float  s)
     {
         ggml::tensor *tensor = ggml_scale_inplace(ctx->get_ctx(), a, s);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::get_rows(ComputeContext *ctx, struct ggml::tensor  * a, struct ggml::tensor  * b)
+    ggml::tensor *ggml::get_rows(ComputeContext *ctx, ggml::tensor  * a, ggml::tensor  * b)
     {
         ggml::tensor *tensor = ggml_get_rows(ctx->get_ctx(), a, b);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::mul_mat(ComputeContext *ctx, struct ggml::tensor  * a, struct ggml::tensor  * b)
+    ggml::tensor *ggml::mul_mat(ComputeContext *ctx, ggml::tensor  * a, ggml::tensor  * b)
     {
         ggml::tensor *tensor = ggml_mul_mat(ctx->get_ctx(), a, b);
         ctx->cb_op_tensor(tensor);
@@ -178,7 +178,7 @@ namespace chatllm
         return tensor;
     }
 
-    ggml::tensor *ggml::add_inplace(ComputeContext *ctx, struct ggml::tensor * a, struct ggml::tensor * b)
+    ggml::tensor *ggml::add_inplace(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b)
     {
         ggml::tensor *tensor = ggml_add_inplace(ctx->get_ctx(), a, b);
         ctx->cb_op_tensor(tensor);
@@ -206,63 +206,63 @@ namespace chatllm
         return tensor;
     }
 
-    ggml::tensor *ggml::reshape_1d(ComputeContext *ctx, struct ggml::tensor *a, int64_t ne0)
+    ggml::tensor *ggml::reshape_1d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0)
     {
         ggml::tensor *tensor = ggml_reshape_1d(ctx->get_ctx(), a, ne0);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::reshape_2d(ComputeContext *ctx, struct ggml::tensor *a, int64_t ne0, int64_t ne1)
+    ggml::tensor *ggml::reshape_2d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1)
     {
         ggml::tensor *tensor = ggml_reshape_2d(ctx->get_ctx(), a, ne0, ne1);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::reshape_3d(ComputeContext *ctx, struct ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2)
+    ggml::tensor *ggml::reshape_3d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2)
     {
         ggml::tensor *tensor = ggml_reshape_3d(ctx->get_ctx(), a, ne0, ne1, ne2);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::permute(ComputeContext *ctx, struct ggml::tensor *a, int axis0, int axis1, int axis2, int axis3)
+    ggml::tensor *ggml::permute(ComputeContext *ctx, ggml::tensor *a, int axis0, int axis1, int axis2, int axis3)
     {
         ggml::tensor *tensor = ggml_permute(ctx->get_ctx(), a, axis0, axis1, axis2, axis3);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::norm_inplace(ComputeContext *ctx, struct ggml::tensor *a, float eps)
+    ggml::tensor *ggml::norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps)
     {
         ggml::tensor *tensor = ggml_norm_inplace(ctx->get_ctx(), a, eps);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::rms_norm_inplace(ComputeContext *ctx, struct ggml::tensor *a, float eps)
+    ggml::tensor *ggml::rms_norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps)
     {
         ggml::tensor *tensor = ggml_rms_norm_inplace(ctx->get_ctx(), a, eps);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::rms_norm(ComputeContext *ctx, struct ggml::tensor *a, float eps)
+    ggml::tensor *ggml::rms_norm(ComputeContext *ctx, ggml::tensor *a, float eps)
     {
         ggml::tensor *tensor = ggml_rms_norm(ctx->get_ctx(), a, eps);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::rope_inplace(ComputeContext *ctx, struct ggml::tensor *a, struct ggml::tensor *b, int n_dims, int mode)
+    ggml::tensor *ggml::rope_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int n_dims, int mode)
     {
         ggml::tensor *tensor = ggml_rope_inplace(ctx->get_ctx(), a, b, n_dims, mode);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::rope_ext_inplace(ComputeContext *ctx, struct ggml::tensor *a, struct ggml::tensor *b, struct ggml::tensor *c,
+    ggml::tensor *ggml::rope_ext_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c,
                                             int   n_dims, int   mode, int   n_ctx_orig,
                                             float freq_base, float freq_scale, float ext_factor,
                                             float attn_factor, float beta_fast, float beta_slow)
@@ -275,112 +275,112 @@ namespace chatllm
         return tensor;
     }
 
-    ggml::tensor *ggml::soft_max(ComputeContext *ctx, struct ggml::tensor *a)
+    ggml::tensor *ggml::soft_max(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_soft_max(ctx->get_ctx(), a);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::soft_max_inplace(ComputeContext *ctx, struct ggml::tensor *a)
+    ggml::tensor *ggml::soft_max_inplace(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_soft_max_inplace(ctx->get_ctx(), a);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::diag_mask_inf_inplace(ComputeContext *ctx, struct ggml::tensor *a, int n_past)
+    ggml::tensor *ggml::diag_mask_inf_inplace(ComputeContext *ctx, ggml::tensor *a, int n_past)
     {
         ggml::tensor *tensor = ggml_diag_mask_inf_inplace(ctx->get_ctx(), a, n_past);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::mul(ComputeContext *ctx, struct ggml::tensor *a, struct ggml::tensor *b)
+    ggml::tensor *ggml::mul(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b)
     {
         ggml::tensor *tensor = ggml_mul(ctx->get_ctx(), a, b);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::div(ComputeContext *ctx, struct ggml::tensor *a, struct ggml::tensor *b)
+    ggml::tensor *ggml::div(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b)
     {
         ggml::tensor *tensor = ggml_div(ctx->get_ctx(), a, b);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::sum_rows(ComputeContext *ctx, struct ggml::tensor *a)
+    ggml::tensor *ggml::sum_rows(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_sum_rows(ctx->get_ctx(), a);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::top_k(ComputeContext *ctx, struct ggml::tensor *a, int k)
+    ggml::tensor *ggml::top_k(ComputeContext *ctx, ggml::tensor *a, int k)
     {
         ggml::tensor *tensor = ggml_top_k(ctx->get_ctx(), a, k);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::mul_inplace(ComputeContext *ctx, struct ggml::tensor *a, struct ggml::tensor *b)
+    ggml::tensor *ggml::mul_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b)
     {
         ggml::tensor *tensor = ggml_mul_inplace(ctx->get_ctx(), a, b);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::cpy(ComputeContext *ctx, struct ggml::tensor *a, struct ggml::tensor *b)
+    ggml::tensor *ggml::cpy(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b)
     {
         ggml::tensor *tensor = ggml_cpy(ctx->get_ctx(), a, b);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::dup(ComputeContext *ctx, struct ggml::tensor *a)
+    ggml::tensor *ggml::dup(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_dup(ctx->get_ctx(), a);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::cont(ComputeContext *ctx, struct ggml::tensor *a)
+    ggml::tensor *ggml::cont(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_cont(ctx->get_ctx(), a);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::transpose(ComputeContext *ctx, struct ggml::tensor *a)
+    ggml::tensor *ggml::transpose(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_transpose(ctx->get_ctx(), a);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::add(ComputeContext *ctx, struct ggml::tensor * a, struct ggml::tensor * b)
+    ggml::tensor *ggml::add(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b)
     {
         ggml::tensor *tensor = ggml_add(ctx->get_ctx(), a, b);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::map_custom1(ComputeContext *ctx, struct ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata)
+    ggml::tensor *ggml::map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata)
     {
         ggml::tensor *tensor = ggml_map_custom1(ctx->get_ctx(), a, fun, n_tasks, userdata);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::map_custom1_inplace(ComputeContext *ctx, struct ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata)
+    ggml::tensor *ggml::map_custom1_inplace(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata)
     {
         ggml::tensor *tensor = ggml_map_custom1_inplace(ctx->get_ctx(), a, fun, n_tasks, userdata);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
 
-    ggml::tensor *ggml::map_custom2(ComputeContext *ctx, struct ggml::tensor *a, struct ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata)
+    ggml::tensor *ggml::map_custom2(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata)
     {
         ggml::tensor *tensor = ggml_map_custom2(ctx->get_ctx(), a, b, fun, n_tasks, userdata);
         ctx->cb_op_tensor(tensor);
@@ -392,7 +392,7 @@ namespace chatllm
         return ggml_new_graph_custom(ctx->get_ctx(), size, grads);
     }
 
-    void ggml::build_forward_expand(ComputeContext *ctx, struct ggml::tensor * tensor)
+    void ggml::build_forward_expand(ComputeContext *ctx, ggml::tensor * tensor)
     {
         ggml_build_forward_expand(ctx->get_cgraph(), tensor);
     }
@@ -528,14 +528,14 @@ namespace chatllm
             int remain = shift_pending.total - shift_pending.shift;
             if (remain > 0)
             {
-                struct ggml::tensor * k_cache_remain = ggml::view_3d(ctx, k_cache, head_size, remain, num_attention_heads, k_cache->nb[1], k_cache->nb[2],
+                ggml::tensor * k_cache_remain = ggml::view_3d(ctx, k_cache, head_size, remain, num_attention_heads, k_cache->nb[1], k_cache->nb[2],
                          shift_pending.shift * head_size * ggml::element_size(k_cache)); // [heads, remain, head_size]
-                struct ggml::tensor * k_cache_dst    = ggml::view_3d(ctx, k_cache, head_size, remain, num_attention_heads, k_cache->nb[1], k_cache->nb[2],
+                ggml::tensor * k_cache_dst    = ggml::view_3d(ctx, k_cache, head_size, remain, num_attention_heads, k_cache->nb[1], k_cache->nb[2],
                          0); // [heads, remain, head_size]
 
-                struct ggml::tensor * v_cache_remain = ggml::view_3d(ctx, v_cache, remain, head_size, num_attention_heads, v_cache->nb[1], v_cache->nb[2],
+                ggml::tensor * v_cache_remain = ggml::view_3d(ctx, v_cache, remain, head_size, num_attention_heads, v_cache->nb[1], v_cache->nb[2],
                          shift_pending.shift * ggml::element_size(v_cache)); // [heads, head_size, remain]
-                struct ggml::tensor * v_cache_dst    = ggml::view_3d(ctx, v_cache, remain, head_size, num_attention_heads, v_cache->nb[1], v_cache->nb[2],
+                ggml::tensor * v_cache_dst    = ggml::view_3d(ctx, v_cache, remain, head_size, num_attention_heads, v_cache->nb[1], v_cache->nb[2],
                          0); // [heads, head_size, remain]
 
                 ggml::build_forward_expand(ctx, ggml::cpy(ctx, k_cache_remain, k_cache_dst));
@@ -713,11 +713,11 @@ namespace chatllm
         attn_scores = apply_pos_embedding_kq(ctx, attn_scores, hidden_size, qlen, pos);
 
         // attn_masked = mask_past(attn_scores)
-        struct ggml::tensor * attn_masked = causal ? ggml::diag_mask_inf_inplace(ctx, attn_scores, n_past)
+        ggml::tensor * attn_masked = causal ? ggml::diag_mask_inf_inplace(ctx, attn_scores, n_past)
                                                   : attn_scores;
 
         // attn_probs = soft_max(attn_masked)
-        struct ggml::tensor * attn_probs = ggml::soft_max_inplace(ctx, attn_masked);
+        ggml::tensor * attn_probs = ggml::soft_max_inplace(ctx, attn_masked);
 
         ggml::tensor *context_layer = ggml::mul_mat(ctx, value_layer, attn_probs); // [heads, qlen, head_size]
         last_attn_scores = ggml::reshape_2d(ctx,
@@ -795,15 +795,15 @@ namespace chatllm
             int remain = shift_pending.total - shift_pending.shift;
             if (remain > 0)
             {
-                struct ggml::tensor * k_cache_remain = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
+                ggml::tensor * k_cache_remain = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
                                             ggml::element_size(k_cache) * k_hidden_size * shift_pending.shift);
-                struct ggml::tensor * k_cache_1d = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
+                ggml::tensor * k_cache_1d = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
                                             0);
 
-                struct ggml::tensor * v_cache_remain = ggml::view_2d(ctx, v_cache, remain, v_hidden_size,
+                ggml::tensor * v_cache_remain = ggml::view_2d(ctx, v_cache, remain, v_hidden_size,
                                             cache_length * ggml::element_size(v_cache),
                                             shift_pending.shift * ggml::element_size(v_cache));
-                struct ggml::tensor * v_cache_2d =     ggml::view_2d(ctx, v_cache, remain, v_hidden_size,
+                ggml::tensor * v_cache_2d =     ggml::view_2d(ctx, v_cache, remain, v_hidden_size,
                                             cache_length * ggml::element_size(v_cache),
                                             0);
 
@@ -818,14 +818,14 @@ namespace chatllm
         ggml::tensor *k, ggml::tensor *v)
     {
         // compute the transposed [N, n_embd] V matrix
-        struct ggml::tensor * Vcur = ggml::transpose(ctx, v); // ggml::reshape_2d(ctx, tmpv, v_hidden_size, qlen));
-        struct ggml::tensor * v_cache_view = ggml::view_2d(ctx, v_cache, qlen, v_hidden_size,
+        ggml::tensor * Vcur = ggml::transpose(ctx, v); // ggml::reshape_2d(ctx, tmpv, v_hidden_size, qlen));
+        ggml::tensor * v_cache_view = ggml::view_2d(ctx, v_cache, qlen, v_hidden_size,
                 cache_length * ggml::element_size(v_cache), n_past * ggml::element_size(v_cache));
 
         ggml::build_forward_expand(ctx, ggml::cpy(ctx, Vcur, v_cache_view));
 
-        struct ggml::tensor * k_cache_view = nullptr;
-        struct ggml::tensor * k_view = nullptr;
+        ggml::tensor * k_cache_view = nullptr;
+        ggml::tensor * k_view = nullptr;
         if (ggml::is_contiguous(k))
         {
             k_cache_view = ggml::view_1d(ctx, k_cache, qlen * k_hidden_size,

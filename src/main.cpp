@@ -843,7 +843,7 @@ int wmain(int argc, const wchar_t **wargv)
     // Set console code page to UTF-8 so console known how to interpret string data
     SetConsoleOutputCP(CP_UTF8);
     // Enable buffering to prevent VS from chopping up UTF-8 byte sequences
-    setvbuf(stdout, nullptr, _IOFBF, 1000);
+    //setvbuf(stdout, nullptr, _IOFBF, 1000);
 
 #else
 int main(int argc, const char **argv)

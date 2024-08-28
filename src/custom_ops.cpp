@@ -26,10 +26,10 @@ static float qwen_get_ntk_alpha(int true_seq_len, int seq_length)
     return MAX(ntk_alpha, 1.0f);
 }
 
-static void ggml_compute_forward_mat_scale_f32(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_mat_scale_f32(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
-    const struct ggml::tensor *src0 = a;
-    const struct ggml::tensor *src1 = b;
+    const ggml::tensor *src0 = a;
+    const ggml::tensor *src1 = b;
 
     GGML_TENSOR_BINARY_OP_LOCALS
 
@@ -66,7 +66,7 @@ static void ggml_compute_forward_mat_scale_f32(struct ggml::tensor * dst , const
     }
 }
 
-static void ggml_compute_forward_mat_scale(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_mat_scale(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
     switch (a->type)
     {
@@ -79,12 +79,12 @@ static void ggml_compute_forward_mat_scale(struct ggml::tensor * dst , const str
     }
 }
 
-static void ggml_compute_forward_ntk_dynamic_rope_f32(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_dynamic_rope_f32(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
     QWenSelfAttention *data = reinterpret_cast<QWenSelfAttention *>(userdata);
 
-    const struct ggml::tensor *src0 = a;
-    const struct ggml::tensor *src1 = b;
+    const ggml::tensor *src0 = a;
+    const ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
@@ -152,12 +152,12 @@ static void ggml_compute_forward_ntk_dynamic_rope_f32(struct ggml::tensor * dst 
     }
 }
 
-static void ggml_compute_forward_ntk_dynamic_rope_f16(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_dynamic_rope_f16(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
     QWenSelfAttention *data = reinterpret_cast<QWenSelfAttention *>(userdata);
 
-    const struct ggml::tensor *src0 = a;
-    const struct ggml::tensor *src1 = b;
+    const ggml::tensor *src0 = a;
+    const ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
@@ -225,7 +225,7 @@ static void ggml_compute_forward_ntk_dynamic_rope_f16(struct ggml::tensor * dst 
     }
 }
 
-static void ggml_compute_forward_ntk_dynamic_rope(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_dynamic_rope(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
     switch (a->type)
     {
@@ -241,12 +241,12 @@ static void ggml_compute_forward_ntk_dynamic_rope(struct ggml::tensor * dst , co
     }
 }
 
-static void ggml_compute_forward_ntk_mix_rope_f32(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_mix_rope_f32(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
     BlueLMSelfAttention *data = reinterpret_cast<BlueLMSelfAttention *>(userdata);
 
-    const struct ggml::tensor *src0 = a;
-    const struct ggml::tensor *src1 = b;
+    const ggml::tensor *src0 = a;
+    const ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
@@ -297,12 +297,12 @@ static void ggml_compute_forward_ntk_mix_rope_f32(struct ggml::tensor * dst , co
     }
 }
 
-static void ggml_compute_forward_ntk_mix_rope_f16(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_mix_rope_f16(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
     BlueLMSelfAttention *data = reinterpret_cast<BlueLMSelfAttention *>(userdata);
 
-    const struct ggml::tensor *src0 = a;
-    const struct ggml::tensor *src1 = b;
+    const ggml::tensor *src0 = a;
+    const ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
@@ -353,7 +353,7 @@ static void ggml_compute_forward_ntk_mix_rope_f16(struct ggml::tensor * dst , co
     }
 }
 
-static void ggml_compute_forward_ntk_mix_rope(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_ntk_mix_rope(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
     switch (a->type)
     {
@@ -382,7 +382,7 @@ static void build_ntk_mixed_inv_freq(int dim, std::vector<float> &inv_freq,
     }
 }
 
-static void ggml_compute_forward_simple_norm_f32(struct ggml::tensor * dst , const struct ggml::tensor * src0, int ith, int nth, void * userdata) {
+static void ggml_compute_forward_simple_norm_f32(ggml::tensor * dst , const ggml::tensor * src0, int ith, int nth, void * userdata) {
     GGML_ASSERT(ggml_are_same_shape(src0, dst));
 
     GGML_ASSERT(src0->nb[0] == sizeof(float));
@@ -416,7 +416,7 @@ static void ggml_compute_forward_simple_norm_f32(struct ggml::tensor * dst , con
     }
 }
 
-static void ggml_compute_forward_simple_norm(struct ggml::tensor * dst , const struct ggml::tensor * src, int ith, int nth, void * userdata) {
+static void ggml_compute_forward_simple_norm(ggml::tensor * dst , const ggml::tensor * src, int ith, int nth, void * userdata) {
     switch (src->type) {
         case GGML_TYPE_F32:
             {
@@ -429,7 +429,7 @@ static void ggml_compute_forward_simple_norm(struct ggml::tensor * dst , const s
     }
 }
 
-static void ggml_compute_forward_sigmoid_f32(struct ggml::tensor * dst , const struct ggml::tensor * src0, int ith, int nth, void * userdata) {
+static void ggml_compute_forward_sigmoid_f32(ggml::tensor * dst , const ggml::tensor * src0, int ith, int nth, void * userdata) {
     GGML_ASSERT(ggml_are_same_shape(src0, dst));
 
     GGML_ASSERT(dst->type == GGML_TYPE_F32);
@@ -456,7 +456,7 @@ static void ggml_compute_forward_sigmoid_f32(struct ggml::tensor * dst , const s
     }
 }
 
-void ggml_compute_forward_sigmoid(struct ggml::tensor * dst , const struct ggml::tensor * src, int ith, int nth, void * userdata) {
+void ggml_compute_forward_sigmoid(ggml::tensor * dst , const ggml::tensor * src, int ith, int nth, void * userdata) {
     switch (src->type) {
         case GGML_TYPE_F32:
             {
@@ -469,12 +469,12 @@ void ggml_compute_forward_sigmoid(struct ggml::tensor * dst , const struct ggml:
     }
 }
 
-static void ggml_compute_forward_su_rope_f16(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_su_rope_f16(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
     Phi3SUSelfAttention *data = reinterpret_cast<Phi3SUSelfAttention *>(userdata);
 
-    const struct ggml::tensor *src0 = a;
-    const struct ggml::tensor *src1 = b;
+    const ggml::tensor *src0 = a;
+    const ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
@@ -526,12 +526,12 @@ static void ggml_compute_forward_su_rope_f16(struct ggml::tensor * dst , const s
     }
 }
 
-static void ggml_compute_forward_su_rope_f32(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_su_rope_f32(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
     Phi3SUSelfAttention *data = reinterpret_cast<Phi3SUSelfAttention *>(userdata);
 
-    const struct ggml::tensor *src0 = a;
-    const struct ggml::tensor *src1 = b;
+    const ggml::tensor *src0 = a;
+    const ggml::tensor *src1 = b;
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
@@ -583,7 +583,7 @@ static void ggml_compute_forward_su_rope_f32(struct ggml::tensor * dst , const s
     }
 }
 
-static void ggml_compute_forward_su_rope(struct ggml::tensor * dst , const struct ggml::tensor * a, const struct ggml::tensor * b, int ith, int nth, void * userdata)
+static void ggml_compute_forward_su_rope(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
     switch (a->type)
     {
@@ -599,9 +599,9 @@ static void ggml_compute_forward_su_rope(struct ggml::tensor * dst , const struc
     }
 }
 
-static void ggml_compute_forward_custom_alibi_f32(struct ggml::tensor * dst , const struct ggml::tensor * a, int ith, int nth, const alibi_ctx *userdata)
+static void ggml_compute_forward_custom_alibi_f32(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, const alibi_ctx *userdata)
 {
-    const struct ggml::tensor * src0 = a;
+    const ggml::tensor * src0 = a;
 
     //const int n_past = ((int32_t *) dst->op_params)[0];
     const int n_head = userdata->n_head;
@@ -655,9 +655,9 @@ static void ggml_compute_forward_custom_alibi_f32(struct ggml::tensor * dst , co
     }
 }
 
-static void ggml_compute_forward_custom_alibi_f16(struct ggml::tensor * dst , const struct ggml::tensor * a, int ith, int nth, const alibi_ctx *userdata)
+static void ggml_compute_forward_custom_alibi_f16(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, const alibi_ctx *userdata)
 {
-    const struct ggml::tensor * src0 = a;
+    const ggml::tensor * src0 = a;
 
     //const int n_past = ((int32_t *) dst->op_params)[0];
     const int n_head = userdata->n_head;
@@ -714,9 +714,9 @@ static void ggml_compute_forward_custom_alibi_f16(struct ggml::tensor * dst , co
     }
 }
 
-static void ggml_compute_forward_custom_alibi(struct ggml::tensor * dst , const struct ggml::tensor * a, int ith, int nth, void *userdata) {
+static void ggml_compute_forward_custom_alibi(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, void *userdata) {
 
-    const struct ggml::tensor * src0 = dst->src[0];
+    const ggml::tensor * src0 = dst->src[0];
 
     switch (src0->type)
     {
