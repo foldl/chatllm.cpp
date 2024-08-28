@@ -1071,7 +1071,7 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
 
     try
     {
-        chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec);
+        chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers);
 
         if (args.embedding_model_path.size() < 1)
         {
