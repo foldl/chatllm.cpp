@@ -60,26 +60,60 @@ namespace chatllm
     LayerBufAllocator::LayerBufAllocator(ggml_backend_allocator alloc, Backend *backend): LayerBufAllocator(alloc, alloc, backend) {}
     LayerBufAllocator::LayerBufAllocator(ggml_backend_allocator alloc_matrix, ggml_backend_allocator alloc_others, Backend *backend)
         : alloc_matrix(alloc_matrix), alloc_others(alloc_others), backend(backend)
-    {}
+    {
+        CHATLLM_CHECK(alloc_matrix == alloc_others) << " TODO: alloc_matrix must be alloc_others now.";
+    }
 
     BackendBuffer *LayerBufAllocator::alloc(size_t size, Usage usage)
     {
         total += size;
-        ggml_backend_buffer_t buf = nullptr;
-        switch (usage)
-        {
-        case Usage::Matrix:
-            buf = ggml_backend_buft_alloc_buffer(alloc_matrix, size);
-            break;
-        case Usage::Others:
-            buf = ggml_backend_buft_alloc_buffer(alloc_others, size);
-            break;
-        }
+        ggml_backend_buffer_t buf = ggml_backend_buft_alloc_buffer(get_allocator(usage), size);
+
         CHATLLM_CHECK(buf) << __FUNCTION__ << "() failed to allocate buffer";
 
         auto r = new BackendBuffer(buf);
         buffers.emplace_back(r);
         return r;
+    }
+
+    bool LayerBufAllocator::alloc(ggml::tensor *tensor)
+    {
+        BackendBuffer *buf = alloc(ggml::nbytes(tensor), detect_usage(tensor));
+        if (nullptr == buf) return false;
+
+        buf->assign_to(tensor);
+        return true;
+    }
+
+    bool LayerBufAllocator::supported_by_backend(Backend *backend, ggml::tensor *tensor)
+    {
+        ggml_backend_allocator allocator = get_allocator(tensor); return false;
+        return ggml_backend_supports_buft(backend->backend, allocator);
+    }
+
+    BackendBufAllocator::Usage LayerBufAllocator::detect_usage(ggml::tensor *tensor)
+    {
+        int dims = ggml::n_dims(tensor);
+        return dims >= 2 ? Usage::Matrix : Usage::Others;
+    }
+
+    ggml_backend_allocator LayerBufAllocator::get_allocator(Usage usage)
+    {
+        switch (usage)
+        {
+        case Usage::Matrix:
+            return alloc_matrix;
+        case Usage::Others:
+            return alloc_others;
+        default:
+            CHATLLM_CHECK(false);
+            return nullptr;
+        }
+    }
+
+    ggml_backend_allocator LayerBufAllocator::get_allocator(ggml::tensor *tensor)
+    {
+        return get_allocator(detect_usage(tensor));
     }
 
     size_t LayerBufAllocator::get_alignment(Usage usage) const
@@ -377,7 +411,7 @@ namespace chatllm
         for (auto &cfg : gpu_cfgs) n_gpu_layers += cfg.n_layers;
         const bool use_gpu = n_gpu_layers > 0;
 
-        buf_compute_meta.resize(ggml_tensor_overhead()* graph_max_nodes_num + ggml_graph_overhead_custom(graph_max_nodes_num, false));
+        buf_compute_meta.resize(ggml_tensor_overhead() * graph_max_nodes_num + ggml_graph_overhead_custom(graph_max_nodes_num, false));
 
         backend_cpu = ggml_backend_cpu_init();
         CHATLLM_CHECK(backend_cpu != nullptr) << __func__ << ": failed to initialize CPU backend";
@@ -409,7 +443,6 @@ namespace chatllm
     #elif defined(GGML_USE_CUDA) ||  defined(GGML_USE_VULKAN) || defined(GGML_USE_SYCL) || defined(GGML_USE_CANN)
         if (use_gpu)
         {
-            const int total = ComputeManager::get_device_count();
             for (auto cfg : gpu_cfgs)
             {
                 int device = cfg.id >= 0 ? cfg.id : 0;
@@ -466,9 +499,9 @@ namespace chatllm
         return ggml_backend_sched_reserve(sched, gf);
     }
 
-    void BackendContext::alloc_graph(ggml_cgraph *gf)
+    bool BackendContext::alloc_graph(ggml_cgraph *gf)
     {
-        ggml_backend_sched_alloc_graph(sched, gf);
+        return ggml_backend_sched_alloc_graph(sched, gf);
     }
 
     void BackendContext::compute_graph(ggml_cgraph *gf, int n_threads)
@@ -538,11 +571,6 @@ namespace chatllm
 
     void ComputeContext::cb_op_tensor(ggml::tensor *tensor)
     {
-        if (get_sched() && get_backend())
-        {
-            if (ggml_backend_supports_op(get_backend()->backend, tensor) || ggml_backend_offload_op(get_backend()->backend, tensor))
-                ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
-        }
     }
 
     ggml_backend_sched_t ComputeContext::get_sched(void)
@@ -570,9 +598,9 @@ namespace chatllm
         backend_context->compute_graph(get_cgraph(), n_threads);
     }
 
-    void ComputeContext::allocate(void)
+    bool ComputeContext::allocate(void)
     {
-        backend_context->alloc_graph(get_cgraph());
+        return backend_context->alloc_graph(get_cgraph());
     }
 
     bool ComputeContext::reserve_memory(void)

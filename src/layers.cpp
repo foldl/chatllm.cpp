@@ -507,12 +507,12 @@ namespace chatllm
         return output;
     }
 
-    void fill_pos_vector(ggml::tensor *pos, int n_past, int qlen)
+    void fill_pos_vector(ComputeContext *ctx, std::vector<int> &v_pos, ggml::tensor *pos, int n_past, int qlen)
     {
-        int *p = (int *)pos->data;
         for (int i = 0; i < qlen; i++)
-            p[i] = n_past + i;
+            v_pos[i] = n_past + i;
         pos->ne[0] = qlen;
+        Backend::write_tensor_data(pos, v_pos.data(), 0, qlen * sizeof(v_pos[0]));
     }
 
     ggml::tensor *GLMSelfAttention::forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past)
@@ -521,7 +521,7 @@ namespace chatllm
         int qlen = (int)hidden_states->ne[1];
         int head_size = hidden_size / num_attention_heads;
         int rope_dim = head_size / 2;
-        fill_pos_vector(pos, n_past, qlen);
+        fill_pos_vector(ctx, v_pos, pos, n_past, qlen);
 
         if (shift_pending.shift > 0)
         {
@@ -782,7 +782,7 @@ namespace chatllm
 
     void CoreAttention::before_forward(ComputeContext *ctx, const int n_past, const int qlen)
     {
-        fill_pos_vector(pos, n_past, qlen);
+        fill_pos_vector(ctx, v_pos, pos, n_past, qlen);
     }
 
     void KVCacheAttention::before_forward(ComputeContext *ctx, const int n_past, const int qlen)

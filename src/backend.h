@@ -51,6 +51,8 @@ namespace chatllm
         ggml_backend_buffer_t buf;
     };
 
+    class Backend;
+
     class BackendBufAllocator
     {
     public:
@@ -61,14 +63,19 @@ namespace chatllm
         };
 
         virtual BackendBuffer *alloc(size_t size, Usage usage = Usage::Others) = 0;
+        virtual bool alloc(ggml::tensor *tensor) = 0;
+
         virtual size_t get_alignment(Usage usage) const = 0;
         virtual size_t get_max_size(Usage usage) const = 0;
+
+        virtual bool supported_by_backend(Backend *backend, ggml::tensor *tensor)
+        {
+            return false;
+        }
 
     protected:
         size_t total = 0;
     };
-
-    class Backend;
 
     class LayerBufAllocator : public BackendBufAllocator
     {
@@ -80,6 +87,9 @@ namespace chatllm
         LayerBufAllocator(ggml_backend_allocator alloc_matrix, ggml_backend_allocator alloc_others, Backend *backend);
 
         BackendBuffer *alloc(size_t size, Usage usage = Usage::Others) override;
+        bool alloc(ggml::tensor *tensor) override;
+
+        bool supported_by_backend(Backend *backend, ggml::tensor *tensor) override;
 
         size_t get_alignment(Usage usage) const override;
 
@@ -90,6 +100,11 @@ namespace chatllm
         Backend *get_backend(void);
 
         bool operator ==(const LayerBufAllocator &b);
+
+    protected:
+        Usage detect_usage(ggml::tensor *tensor);
+        ggml_backend_allocator get_allocator(Usage usage);
+        ggml_backend_allocator get_allocator(ggml::tensor *tensor);
 
     protected:
         ggml_backend_allocator alloc_matrix;
@@ -199,7 +214,7 @@ namespace chatllm
 
         bool reserve_memory(ggml_cgraph *gf);
 
-        void alloc_graph(ggml_cgraph *gf);
+        bool alloc_graph(ggml_cgraph *gf);
 
         void compute_graph(ggml_cgraph *gf, int n_threads);
 
@@ -245,8 +260,6 @@ namespace chatllm
         virtual void cb_new_tensor(ggml::tensor *tensor);
         virtual void cb_op_tensor(ggml::tensor *tensor);
 
-        virtual ggml_backend_sched_t get_sched(void);
-
         virtual void move_to_layer(int layer_id);
 
         BackendBufAllocator *get_allocator(void);
@@ -255,7 +268,7 @@ namespace chatllm
 
         virtual void compute(int n_threads);
 
-        virtual void allocate(void);
+        virtual bool allocate(void);
 
         virtual bool reserve_memory(void);
 
@@ -265,6 +278,8 @@ namespace chatllm
         virtual size_t get_mem_size(void);
 
     protected:
+        virtual ggml_backend_sched_t get_sched(void);
+
         BackendContext *backend_context;
     public:
         // obsoleted

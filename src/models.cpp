@@ -991,15 +991,18 @@ namespace chatllm
             }
 
             ForwardContext ctx(&backend_context);
+
             ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
-            int n_threads = gen_config.num_threads;
             ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
             dbg_ctx = &ctx;
 
+            ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
             ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, input_ids.size());
 
             ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
+
+            ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
 
             if (logit_scale > 0)
                 r = ggml::scale_inplace(&ctx, r, logit_scale);
@@ -1010,9 +1013,9 @@ namespace chatllm
 
             output.resize(ggml::nbytes(r) / sizeof(output[0]));
 
-            ctx.allocate();
+            CHATLLM_CHECK(ctx.allocate()) << "failed to allocate memory for graph";
             Backend::write_tensor_data(input_ids_tensor, input_ids.data());
-            ctx.compute(n_threads);
+            ctx.compute(gen_config.num_threads);
 
             Backend::read_tensor_data(r, output.data());
 

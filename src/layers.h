@@ -315,11 +315,13 @@ namespace chatllm
               ln(ctx, embedding_dim),
               pad_index(2)
         {
-            // TODO:
-            indices->data = new char[ggml::nbytes(indices)];
-            int32_t *p = (int32_t *)indices->data;
+            std::vector<int> v_indices;
+            v_indices.resize(pos_max);
             for (int i = 0; i < pos_max; i++)
-                p[i] = i;
+                v_indices[i] = i;
+
+            ctx->get_allocator()->alloc(indices);
+            Backend::write_tensor_data(indices, v_indices.data());
         }
 
         using Block::forward;
@@ -427,8 +429,9 @@ namespace chatllm
               n_ctx(0),
               shift_pending()
         {
-            // TODO
-            pos->data = new char[ggml::nbytes(pos)]();
+            v_pos.resize(max_length);
+
+            ctx->get_allocator()->alloc(pos);
         }
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
@@ -468,6 +471,7 @@ namespace chatllm
         int n_ctx;
     private:
         ShiftPending shift_pending;
+        std::vector<int> v_pos;
     };
 
     class GLMBlock : public Block
@@ -841,7 +845,10 @@ namespace chatllm
             {
                 ggml::set_name(v_cache, "v_cache");
             }
-            pos->data = new char[ggml::nbytes(pos)]();
+
+            v_pos.resize(max_length);
+
+            ctx->get_allocator()->alloc(pos);
         }
 
         void shift_cache(int shift, int total) override
@@ -935,6 +942,7 @@ namespace chatllm
         bool attn_scaling;
         bool causal;
         ggml::tensor *last_attn_scores;
+        std::vector<int> v_pos;
     };
 
     class KVCacheAttention : public CoreAttention
@@ -1090,7 +1098,7 @@ namespace chatllm
         ggml::tensor *raw_v;
     };
 
-    void fill_pos_vector(ggml::tensor *pos, int n_past, int qlen);
+    void fill_pos_vector(ComputeContext *ctx, std::vector<int> &v_pos, ggml::tensor *pos, int n_past, int qlen);
 
     // qlen must be 1.
     // This is just a proof of concept.
@@ -1102,7 +1110,9 @@ namespace chatllm
               cache_offset(0),
               indices(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, sliding_window_len))
         {
-            indices->data = new char[ggml::nbytes(indices)];
+            v_indices.resize(sliding_window_len);
+
+            ctx->get_allocator()->alloc(indices);
         }
 
     protected:
@@ -1110,7 +1120,7 @@ namespace chatllm
         {
             if (n_past == 0) cache_offset = 0;
 
-            fill_pos_vector(pos, n_past, qlen);
+            fill_pos_vector(ctx, v_pos, pos, n_past, qlen);
 
             // shift cache
             if (shift_pending.shift > 0)
@@ -1165,9 +1175,10 @@ namespace chatllm
                 const int total = n_past + qlen > cache_length ? cache_length : n_past + qlen;
                 const int start = (cache_offset + n_past + qlen - total) % cache_length;
 
-                int32_t *p = (int32_t *)indices->data;
                 for (int i = 0; i < total; i++)
-                    p[i] = (start + i) % cache_length;
+                    v_indices[i] = (start + i) % cache_length;
+
+                Backend::write_tensor_data(indices, v_indices.data(), 0, total * sizeof(v_indices[0]));
             }
         }
 
@@ -1213,6 +1224,7 @@ namespace chatllm
     public:
         int cache_offset;
         ggml::tensor *indices;
+        std::vector<int> v_indices;
     };
 
     template <int sliding_window_len> class BaseSlidingWindowAttentionFullCache : public BaseAttention
@@ -1300,7 +1312,7 @@ namespace chatllm
         {
             if (n_past == 0) cache_offset = 0;
 
-            fill_pos_vector(pos, n_past, qlen);
+            fill_pos_vector(ctx, v_pos, pos, n_past, qlen);
 
             // shift cache
             if (shift_pending.shift > 0)
