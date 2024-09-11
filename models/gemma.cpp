@@ -296,9 +296,6 @@ public:
         }
 
         batch_input = false;
-
-        if (transformer->get_param_num(false) > 20000000)
-            GRAPH_SIZE = 4096;
     }
 
     void load(ModelLoader &loader) override

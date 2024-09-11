@@ -57,27 +57,41 @@ namespace chatllm
         InitContext *ctx;
     };
 
-    ForwardContext *dbg_ctx = nullptr;
+    static ForwardContext *dbg_ctx = nullptr;
+    static std::set<ggml::tensor *> inspected_set;
+    static std::string dbg_msg;
 
     void print_tensor(ggml::tensor *tensor, int offset = 0)
     {
         printf("\n%s (%p): [%zd, %zd, %zd] [%zd, %zd, %zd]\n", tensor->name, tensor->data, tensor->ne[0], tensor->ne[1], tensor->ne[2],
                                                                              tensor->nb[0], tensor->nb[1], tensor->nb[2]);
+        std::vector<uint8_t > data;
+        data.resize(ggml::nbytes(tensor));
+        Backend::read_tensor_data(tensor, data.data());
+
         switch (tensor->type)
         {
         case GGML_TYPE_F32:
             {
-                float * p = (float *)tensor->data;
+                float * p = (float *)data.data();
                 for (size_t i = 0; i < ggml::nbytes(tensor) / sizeof(float); i++)
                 {
                     printf("[%3d] = %.15e\n", (int)i, p[i]);
                 }
             }
             break;
-
+        case GGML_TYPE_F16:
+            {
+                ggml_fp16_t * p = (ggml_fp16_t *)data.data();
+                for (size_t i = 0; i < ggml::nbytes(tensor) / sizeof(ggml_fp16_t); i++)
+                {
+                    printf("[%3d] = %.15e\n", (int)i,  ggml_fp16_to_fp32(p[i]));
+                }
+            }
+            break;
         default:
             {
-                char * p = (char *)tensor->data;
+                char * p = (char *)data.data();
                 p += offset;
                 for (size_t i = 0; i < ggml::nbytes(tensor); i++)
                 {
@@ -91,23 +105,36 @@ namespace chatllm
         printf("\n");
     }
 
+    static bool need_observe_tensor_evaluation_callback(ggml::tensor *tensor, void *user_data)
+    {
+        return inspected_set.find(tensor) != inspected_set.end();
+    }
+
+    static bool observe_tensor_evaluation_callback(ggml::tensor *tensor, void *user_data)
+    {
+        if (inspected_set.find(tensor) == inspected_set.end()) return true;
+
+        printf("\n--------------- %s ----------------------\n", dbg_msg.c_str());
+        print_tensor(tensor);
+
+        exit(-1);
+        return false;
+    }
+
     void inspect_tensor(ggml::tensor *tensor, const char *msg, ggml::tensor *temp1, ggml::tensor *temp2, ggml::tensor *temp3, ggml::tensor *temp4, ggml::tensor *temp5)
     {
-        ggml::tensor *dup = ggml_dup(dbg_ctx->gctx.get(), tensor);
-        ggml::build_forward_expand(dbg_ctx, dup);
-        ggml_graph_compute_with_ctx(dbg_ctx->gctx.get(), dbg_ctx->gf, 4);
-        printf("%s:\n", msg);
-        print_tensor(dup);
+        if (nullptr == dbg_ctx) return;
 
-        #define CHECK_AND_PRINT(tt, msg) do { if (tt) { printf("\n--------------- %s ----------------------\n", msg); print_tensor(tt); } } while (0)
+        if (tensor) inspected_set.insert(tensor);
+        if (temp1) inspected_set.insert(temp1);
+        if (temp2) inspected_set.insert(temp2);
+        if (temp3) inspected_set.insert(temp3);
+        if (temp4) inspected_set.insert(temp4);
+        if (temp5) inspected_set.insert(temp5);
 
-        CHECK_AND_PRINT(temp1, "1");
-        CHECK_AND_PRINT(temp2, "2");
-        CHECK_AND_PRINT(temp3, "3");
-        CHECK_AND_PRINT(temp4, "4");
-        CHECK_AND_PRINT(temp5, "5");
+        dbg_msg = std::string(msg);
 
-        exit(-3);
+        dbg_ctx->get_backend_context()->set_eval_observe_callback(need_observe_tensor_evaluation_callback, observe_tensor_evaluation_callback, nullptr);
     }
 
     enum ModelType
@@ -178,6 +205,7 @@ namespace chatllm
         MODEL_TYPE_MINICPM  = 0x1100,
         MODEL_TYPE_MINICPM2 = 0x1101,
         MODEL_TYPE_MINICPM_MoE = 0x1102,
+        MODEL_TYPE_MINICPM3 = 0x1110,
 
         MODEL_TYPE_PERSIMMON= 0x1200,
         MODEL_TYPE_FUYU     = 0x1201,
@@ -337,6 +365,8 @@ namespace chatllm
         case MODEL_TYPE_MINICPM:
         case MODEL_TYPE_MINICPM2:
             return "MiniCPM";
+        case MODEL_TYPE_MINICPM3:
+            return "MiniCPM3";
         case MODEL_TYPE_MINICPM_MoE:
             return "MiniCPM-MoE";
         case MODEL_TYPE_PERSIMMON:
@@ -733,10 +763,10 @@ namespace chatllm
     class BaseModelForConditionalGeneration : public BaseModel
     {
     public:
-        BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, const RuntimeConfig &runtime_config)
+        BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 4096)
             : BaseModel(model_type, to_string(model_type), to_native_string(model_type), get_model_purpose(model_type)),
               transformer(nullptr),
-              GRAPH_SIZE(4096),
+              GRAPH_SIZE(GRAPH_SIZE),
               batch_input(true), logit_scale(-1.0f),
               w_ctx_(&backend_context),
               config_(config)
@@ -1014,6 +1044,7 @@ namespace chatllm
             output.resize(ggml::nbytes(r) / sizeof(output[0]));
 
             CHATLLM_CHECK(ctx.allocate()) << "failed to allocate memory for graph";
+
             Backend::write_tensor_data(input_ids_tensor, input_ids.data());
             ctx.compute(gen_config.num_threads);
 
@@ -1064,7 +1095,7 @@ namespace chatllm
 
     protected:
         ModelBlock *transformer;
-        size_t GRAPH_SIZE;
+        const size_t GRAPH_SIZE;
         bool batch_input;
         float logit_scale;
         std::vector<int> layer_ids;
@@ -1771,6 +1802,7 @@ namespace chatllm
         CASE(MINICPM,               minicpm::v1, 1)             \
         CASE(MINICPM2,              minicpm::v2, 1)             \
         CASE(MINICPM_MoE,           minicpm::moe, 1)            \
+        CASE(MINICPM3,              minicpm::v3, 1)             \
                                                                 \
         CASE(PERSIMMON,             adept::persimmon, 1)        \
                                                                 \

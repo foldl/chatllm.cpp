@@ -131,9 +131,6 @@ ConditionalGeneration::ConditionalGeneration(const Config &config, const Runtime
         attention.freq_base = config.rope_theta;
         attention.freq_scale = 1 / config.rope_scaling;
     }
-
-    if (transformer->get_param_num(false) > 20000000)
-        GRAPH_SIZE = 4096;
 }
 
 void ConditionalGeneration::load(ModelLoader &loader)

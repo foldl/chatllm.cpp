@@ -504,6 +504,15 @@ namespace chatllm
         return ggml_backend_sched_alloc_graph(sched, gf);
     }
 
+    static bool _backend_sched_eval_callback(struct ggml::tensor *t, bool ask, void *user_data)
+    {
+        auto *p = reinterpret_cast<BackendContext *>(user_data);
+        if (ask)
+            return p->need_observe_tensor_callback(t, p->observe_tensor_callback_data);
+        else
+            return p->observe_tensor_callback(t, p->observe_tensor_callback_data);
+    }
+
     void BackendContext::compute_graph(ggml_cgraph *gf, int n_threads)
     {
     #ifdef GGML_USE_METAL
@@ -526,6 +535,11 @@ namespace chatllm
         }
     #endif
 
+        if (observe_tensor_callback)
+            ggml_backend_sched_set_eval_callback(sched, _backend_sched_eval_callback, this);
+        else
+            ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
+
         ggml_backend_sched_graph_compute_async(sched, gf);
     }
 
@@ -536,8 +550,16 @@ namespace chatllm
 
     void BackendContext::set_abort_callback(struct llama_context * ctx, bool (*abort_callback)(void * data), void * abort_callback_data)
     {
-        abort_callback      = abort_callback;
-        abort_callback_data = abort_callback_data;
+        this->abort_callback      = abort_callback;
+        this->abort_callback_data = abort_callback_data;
+    }
+
+    void BackendContext::set_eval_observe_callback(ggml::need_observe_tensor_evaluation_callback need_observe_tensor_callback,
+            ggml::observe_tensor_evaluation_callback observe_tensor_callback, void *user_data)
+    {
+        this->need_observe_tensor_callback = need_observe_tensor_callback;
+        this->observe_tensor_callback      = observe_tensor_callback;
+        this->observe_tensor_callback_data = user_data;
     }
 
     void BackendContext::show_buffer_sizes(void)

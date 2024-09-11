@@ -106,6 +106,7 @@ class ModelType(Enum):
     MiniCPM     = 0x1100
     MiniCPM2    = 0x1101   # updated chat template, no tie_word_embeddings=False
     MiniCPM_MoE = 0x1102
+    MiniCPM3    = 0x1110
 
     Persimmon   = 0x1200
     Fuyu        = 0x1201
@@ -1431,6 +1432,114 @@ class MiniCPMMoEConverter(BaseConverter):
         weight_names += [
             "model.norm.weight",
         ]
+
+        return weight_names
+
+class MiniCPM3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.MiniCPM3
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name == 'model.embed_tokens.weight':
+                new_dict[name] = tensor * config.scale_emb
+            elif name.endswith('kv_a_proj_with_mqa.weight'):
+
+                w_d_kv, w_k_pe = torch.split(
+                    tensor, [config.kv_lora_rank, config.qk_rope_head_dim])
+
+                new_dict[name.replace('kv_a_proj_with_mqa.weight', 'd_kv_proj.weight')] = w_d_kv
+                new_dict[name.replace('kv_a_proj_with_mqa.weight', 'k_pe_proj.weight')] = w_k_pe
+            elif name.endswith('kv_a_layernorm.weight'):
+                new_dict[name.replace('kv_a_layernorm.weight', 'kv_norm.weight')] = tensor
+            elif name.endswith('kv_b_proj.weight'):
+
+                v = tensor.reshape(config.num_attention_heads, config.qk_nope_head_dim + config.v_head_dim, config.kv_lora_rank)
+                u_k_nope_proj = v[:, :config.qk_nope_head_dim, :].reshape(config.num_attention_heads * config.qk_nope_head_dim, config.kv_lora_rank)
+                u_v_proj = v[:, config.qk_nope_head_dim:, :].reshape(config.num_attention_heads * config.v_head_dim, config.kv_lora_rank)
+
+                new_dict[name.replace('kv_b_proj.weight', 'u_k_nope_proj.weight')] = u_k_nope_proj
+                new_dict[name.replace('kv_b_proj.weight', 'u_v_proj.weight')] = u_v_proj
+            elif name.endswith('q_proj.weight'):
+                new_dict[name] = tensor
+            elif name.endswith('q_a_proj.weight'):
+                new_dict[name.replace('q_a_proj.weight', 'd_q_proj.weight')] = tensor
+            elif name.endswith('q_a_layernorm.weight'):
+                new_dict[name.replace('q_a_layernorm.weight', 'q_norm.weight')] = tensor
+            elif name.endswith('q_b_proj.weight'):
+                new_dict[name.replace('q_b_proj.weight', 'u_q_proj.weight')] = tensor
+            else:
+                new_dict[name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        assert config.rope_scaling['type'] == 'longrope', "rope_scaling['type'] must be 'longrope'"
+        assert len(config.rope_scaling['long_factor']) == 16, "length of rope_scaling['factor'] must be 16"
+
+        config.v_head_dim = config.hidden_size // config.num_attention_heads
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id[0],
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads,
+            config.kv_lora_rank,
+            config.q_lora_rank,
+            config.qk_nope_head_dim,
+            config.qk_rope_head_dim,
+            config.rope_scaling['original_max_position_embeddings'],
+            config.v_head_dim,
+            config.dim_model_base,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        config_values = [
+            config.scale_depth / math.sqrt(config.num_hidden_layers),
+        ] + config.rope_scaling['short_factor'] + config.rope_scaling['long_factor']
+
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight",
+                        "model.norm.weight"
+                        ]
+        for i in range(config.num_hidden_layers):
+
+            weight_names += [
+                f"model.layers.{i}.self_attn.d_q_proj.weight",
+                f"model.layers.{i}.self_attn.q_norm.weight",
+                f"model.layers.{i}.self_attn.u_q_proj.weight",
+
+                f"model.layers.{i}.self_attn.d_kv_proj.weight",
+                f"model.layers.{i}.self_attn.k_pe_proj.weight",
+                f"model.layers.{i}.self_attn.kv_norm.weight",
+                f"model.layers.{i}.self_attn.u_k_nope_proj.weight",
+                f"model.layers.{i}.self_attn.u_v_proj.weight",
+
+                f"model.layers.{i}.self_attn.o_proj.weight",
+
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+            ]
 
         return weight_names
 
@@ -3857,6 +3966,8 @@ def main():
             MiniCPMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             MiniCPMMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'MiniCPM3ForCausalLM':
+        MiniCPM3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'PersimmonForCausalLM':
         PersimmonConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'FuyuForCausalLM':
@@ -3877,7 +3988,6 @@ def main():
     elif arch == 'DeepseekV2ForCausalLM':
         if config.q_lora_rank is not None:
             DeepSeekV2Converter.MODEL_TYPE = ModelType.DeepSeekV2
-            print("DeelseekV2 is not fully supported yet!!!!")
         DeepSeekV2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'IndexForCausalLM':
         IndexConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

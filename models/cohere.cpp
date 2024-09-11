@@ -101,8 +101,6 @@ public:
         }
 
         logit_scale = config.logit_scale;
-
-        GRAPH_SIZE = 4096;
     }
 
     void load(ModelLoader &loader) override

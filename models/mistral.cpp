@@ -277,7 +277,7 @@ namespace mixtral
         _ConditionalGeneration() = default;
 
         _ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-        : Base(type, config, runtime_config), config(config)
+        : Base(type, config, runtime_config, 4096 * 2), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = 3 + config.num_hidden_layers * (11 + 3);
@@ -290,8 +290,6 @@ namespace mixtral
 
             CHATLLM_CHECK((mistral::SLIDING_WINDOW_LEN == config.sliding_window) || (config.sliding_window <= 0))
                 << "sliding_window (" << config.sliding_window << ") must equal to " << mistral::SLIDING_WINDOW_LEN;
-
-            Base::GRAPH_SIZE = 4096 * 2;
 
             Base::transformer = new ModelClass(
                                 &w_ctx_, config, false,

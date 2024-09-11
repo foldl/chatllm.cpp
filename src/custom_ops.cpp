@@ -471,7 +471,7 @@ void ggml_compute_forward_sigmoid(ggml::tensor * dst , const ggml::tensor * src,
 
 static void ggml_compute_forward_su_rope_f16(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
-    Phi3SUSelfAttention *data = reinterpret_cast<Phi3SUSelfAttention *>(userdata);
+    LongRoPEParam *data = reinterpret_cast<LongRoPEParam *>(userdata);
 
     const ggml::tensor *src0 = a;
     const ggml::tensor *src1 = b;
@@ -528,7 +528,7 @@ static void ggml_compute_forward_su_rope_f16(ggml::tensor * dst , const ggml::te
 
 static void ggml_compute_forward_su_rope_f32(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
 {
-    Phi3SUSelfAttention *data = reinterpret_cast<Phi3SUSelfAttention *>(userdata);
+    LongRoPEParam *data = reinterpret_cast<LongRoPEParam *>(userdata);
 
     const ggml::tensor *src0 = a;
     const ggml::tensor *src1 = b;

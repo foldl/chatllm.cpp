@@ -658,6 +658,29 @@ namespace v3_moe
 
     typedef v3_su3::Tokenizer Tokenizer;
 
+    struct mixing_param
+    {
+        float jitter;
+    };
+
+    static void _compute_forward_custom_sparsemixer_f32(ggml::tensor * dst, const ggml::tensor * a, const ggml::tensor * b, const ggml::tensor * c, int ith, int nth, const mixing_param *userdata)
+    {
+        CHATLLM_CHECK(nth == 1) << "nth must be 1";
+    }
+
+    static void _compute_forward_custom_sparsemixer(ggml::tensor * dst, const ggml::tensor * a, const ggml::tensor * b, const ggml::tensor * c, int ith, int nth, void *userdata)
+    {
+        switch (ggml::type_of(c))
+        {
+            case GGML_TYPE_F32:
+                _compute_forward_custom_sparsemixer_f32(dst, a, b, c, ith, nth, (const mixing_param *)userdata);
+                break;
+            default:
+                CHATLLM_CHECK(false) << "_compute_forward_custom_sparsemixer: unsupported type " << ggml::type_of(c);
+                break;
+        }
+    }
+
     template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class Phi3SparseMoE : public BaseSparseMLP
     {
     public:
@@ -665,6 +688,27 @@ namespace v3_moe
             : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, false)
         {
         }
+        // TODO: WIP
+#if (0)
+        using Block::forward;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override
+        {
+            const int64_t hidden_size = hidden_states->ne[0];
+            const int64_t qlen        = hidden_states->ne[1];
+            const int n_expert = num_local_experts;
+
+            ggml::tensor * scores = gate.forward(ctx, hidden_states); // [qlen, num_experts]
+
+            ggml::tensor * selected_experts = ggml::new_tensor_2d(ctx, GGML_TYPE_I32, qlen, num_experts_per_tok);  // [qlen, num_experts_per_tok]
+            ggml::tensor * weights = ggml::new_tensor_3d(ctx, ggml::type_of(scores), 1, num_experts_per_tok, qlen); // [1, num_experts_per_tok, qlen]
+
+            selected_experts = ggml::map_custom3_inplace(ctx, selected_experts, weights, scores, _compute_forward_custom_sparsemixer, 1, param);
+
+            return forward_with_experts(ctx, hidden_states, selected_experts, weights);
+        }
+#endif
+    public:
+        mixing_param *param;
     };
 
     class Phi3SUSelfAttentionBiased : public Phi3SUSelfAttention
@@ -694,7 +738,7 @@ namespace v3_moe
         _ConditionalGeneration() = default;
 
         _ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-        : Base(type, config, runtime_config), config(config)
+        : Base(type, config, runtime_config, 4096 * 2), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = 3 + 2 + config.num_hidden_layers * (11 + 3 + 5);
@@ -704,8 +748,6 @@ namespace v3_moe
 
             CHATLLM_CHECK((_NUM_EXPERTS == config.num_local_experts) && (_EXPERTS_PER_TOK == config.num_experts_per_tok))
                 << "unsupported MoE param";
-
-            Base::GRAPH_SIZE = 4096 * 2;
 
             Base::transformer = new ModelClass(
                                 &w_ctx_, config, true,

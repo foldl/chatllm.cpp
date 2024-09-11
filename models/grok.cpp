@@ -107,7 +107,7 @@ size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
 }
 
 ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-    : BaseModelForConditionalGeneration(MODEL_TYPE_GROK_1, config, runtime_config), config(config)
+    : BaseModelForConditionalGeneration(MODEL_TYPE_GROK_1, config, runtime_config, 4096 * 2), config(config)
 {
     constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
     const size_t num_tensors = 2 + config.num_hidden_layers * (12 + 3);
@@ -117,8 +117,6 @@ ConditionalGeneration::ConditionalGeneration(const Config &config, const Runtime
 
     CHATLLM_CHECK((NUM_EXPERTS == config.num_experts) && (EXPERTS_PER_TOK == config.num_selected_experts))
         << "unsupported MoE param";
-
-    GRAPH_SIZE = 4096 * 2;
 
     transformer = new ModelClass(
                         &w_ctx_, config, nullptr,

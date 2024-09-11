@@ -17,6 +17,8 @@
         [Chat-34B](https://huggingface.co/01-ai/Yi-1.5-34B-Chat),
         [Chat-9B-16K](https://huggingface.co/01-ai/Yi-1.5-9B-Chat-16K),
         [Chat-34B-16K](https://huggingface.co/01-ai/Yi-1.5-34B-Chat-16K)
+        - Coder: [Chat-1.5B](https://huggingface.co/01-ai/Yi-Coder-1.5B-Chat),
+        [Chat-9B](https://huggingface.co/01-ai/Yi-Coder-9B-Chat)
     * [x] WizardLM: [LM 7B](https://huggingface.co/WizardLM/WizardLM-7B-V1.0) (`-a WizardLM`), [LM 13B](https://huggingface.co/WizardLM/WizardLM-13B-V1.2) (`-a WizardLM`), [Coder Python-7B](https://huggingface.co/WizardLM/WizardCoder-Python-7B-V1.0) (`-a WizardCoder`)
     * [x] TigerBot: [Chat-7B](https://huggingface.co/TigerResearch/tigerbot-7b-chat), [Chat-13B](https://huggingface.co/TigerResearch/tigerbot-13b-chat-v5) (`-a TigerBot`)
     * [x] CodeFuse-DeepSeek: [33B](https://huggingface.co/codefuse-ai/CodeFuse-DeepSeek-33B) (`-a CodeFuseDeepSeek`)
@@ -109,11 +111,13 @@
 * Orion (`OrionForCausalLM`)
     * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
 
-* MiniCPM (`MiniCPMForCausalLM`)
+* MiniCPM (`MiniCPMForCausalLM`, `MiniCPM3ForCausalLM`)
     * [x] [DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16), [SFT-2B](https://huggingface.co/openbmb/MiniCPM-2B-sft-bf16),
           [SFT-1B](https://huggingface.co/openbmb/MiniCPM-1B-sft-bf16)🔥
     * [x] [2B-128k](https://huggingface.co/openbmb/MiniCPM-2B-128k) (Note: `--temp 0` is recommended.)
     * [x] [MoE-8x2B](https://huggingface.co/openbmb/MiniCPM-MoE-8x2B)
+    * [x] [4B](https://huggingface.co/openbmb/MiniCPM3-4B)
+
 
 * Adept Persimmon (`PersimmonForCausalLM`)
     * [x] [Chat-8B](https://huggingface.co/adept/persimmon-8b-chat)

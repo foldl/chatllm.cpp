@@ -261,7 +261,7 @@ namespace v2
     };
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, bool tie_embeddings)
-        : BaseModelForConditionalGeneration(type, config, runtime_config),
+        : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2),
         config(config), tie_embeddings(tie_embeddings)
     {
         constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -292,9 +292,6 @@ namespace v2
             auto &layer = get_typed_transformer<ModelClass>()->layers[i];
             layer.attention.freq_base = config.rope_theta;
         }
-
-        if (transformer->get_param_num(false) > 20000000)
-            GRAPH_SIZE = 4096 * 2;
     }
 
     void ConditionalGeneration::load(ModelLoader &loader)
@@ -385,7 +382,7 @@ namespace v2_moe
         GenericConditionalGeneration() = default;
 
         GenericConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-            : BaseModelForConditionalGeneration(MODEL_TYPE_QWEN2MoE, config, runtime_config),
+            : BaseModelForConditionalGeneration(MODEL_TYPE_QWEN2MoE, config, runtime_config, 4096 * 4),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -410,8 +407,6 @@ namespace v2_moe
                 layer.attention.freq_base = config.rope_theta;
                 layer.mlp.mlp1.norm_topk_prob = config.norm_topk_prob != 0;
             }
-
-            Base::GRAPH_SIZE = 4096 * 4;
         }
 
         void load(ModelLoader &loader) override

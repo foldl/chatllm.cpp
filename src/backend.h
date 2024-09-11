@@ -23,6 +23,9 @@ namespace chatllm
         int n_dims(const ggml::tensor * tensor);
 
         void set_name(tensor *tensor, const char *name);
+
+        typedef bool (* need_observe_tensor_evaluation_callback)(ggml::tensor *tensor, void *user_data);
+        typedef bool (* observe_tensor_evaluation_callback)(ggml::tensor *tensor, void *user_data);
     }
 
     // Is `ggml_backend_buffer_type_t` a good name?
@@ -220,7 +223,10 @@ namespace chatllm
 
         void reset();
 
-        void set_abort_callback(struct llama_context * ctx, bool (*abort_callback)(void * data), void * abort_callback_data);
+        void set_abort_callback(struct llama_context *ctx, bool (*abort_callback)(void * data), void * abort_callback_data);
+
+        void set_eval_observe_callback(ggml::need_observe_tensor_evaluation_callback need_observe_tensor_callback,
+            ggml::observe_tensor_evaluation_callback observe_tensor_callback, void *user_data);
 
         void show_buffer_sizes(void);
 
@@ -247,6 +253,11 @@ namespace chatllm
     protected:
         ggml_abort_callback abort_callback      = nullptr;
         void *              abort_callback_data = nullptr;
+
+    public:
+        ggml::need_observe_tensor_evaluation_callback need_observe_tensor_callback = nullptr;
+        ggml::observe_tensor_evaluation_callback      observe_tensor_callback = nullptr;
+        void *                                        observe_tensor_callback_data = nullptr;
     };
 
     class ComputeContext
@@ -276,6 +287,8 @@ namespace chatllm
 
         virtual size_t get_used_mem(void);
         virtual size_t get_mem_size(void);
+
+        BackendContext *get_backend_context(void) { return backend_context; }
 
     protected:
         virtual ggml_backend_sched_t get_sched(void);

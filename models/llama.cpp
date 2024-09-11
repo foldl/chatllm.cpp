@@ -48,7 +48,7 @@ If a question does not make any sense, or is not factually coherent, explain why
         typedef Model<BaseConfig, Embedding, RMSNorm, LayerBlock, int, int, int, int, int, int> ModelClass2;
     public:
         GenericConditionalGeneration(const BaseConfig &config, const RuntimeConfig &runtime_config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12, bool tie_lm_head = false, int additional_tensor = 0)
-            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config), type_class(1)
+            : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config), type_class(1)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = (tie_lm_head ? 2 : 3) + config.num_hidden_layers * tensors_per_layer + additional_tensor;
@@ -64,11 +64,10 @@ If a question does not make any sense, or is not factually coherent, explain why
                 Base::transformer = new ModelClass(&w_ctx_, config, false,
                                                     config.hidden_size, config.num_attention_heads,
                                                     config.intermediate_size, num_key_value_heads, max_length);
-            Base::GRAPH_SIZE = 4096 * 2;
         }
 
         GenericConditionalGeneration(const BaseConfig &config, const RuntimeConfig &runtime_config, ModelType type, int num_key_value_heads, int head_dim, int max_length, int tensors_per_layer, bool tie_lm_head)
-            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config), type_class(2)
+            : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config), type_class(2)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = (tie_lm_head ? 2 : 3) + config.num_hidden_layers * tensors_per_layer;
@@ -84,7 +83,6 @@ If a question does not make any sense, or is not factually coherent, explain why
                 Base::transformer = new ModelClass2(&w_ctx_, config, false,
                                                     config.hidden_size, config.num_attention_heads,
                                                     config.intermediate_size, num_key_value_heads, head_dim, max_length);
-            Base::GRAPH_SIZE = 4096 * 2;
         }
 
         void load(ModelLoader &loader) override
@@ -686,7 +684,7 @@ namespace multi
     public:
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_LLAMA_MULTI,
                                      int tensors_per_layer = 12)
-            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
+            : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
             const size_t num_tensors = 3 + (config.num_hidden_layers + config.n_future_tokens - 1) * tensors_per_layer;
@@ -698,7 +696,6 @@ namespace multi
                                                     config.hidden_size, config.num_attention_heads,
                                                     config.intermediate_size, config.num_key_value_heads, config.max_length,
                                                     config.n_future_tokens);
-            Base::GRAPH_SIZE = 4096 * 2;
         }
 
         void load(ModelLoader &loader) override

@@ -179,8 +179,6 @@ public:
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
             : GenericConditionalGeneration(config, runtime_config, MODEL_TYPE_INTERNLM2, config.num_key_value_heads, config.rope_theta, config.rope_scaling)
         {
-            // ready for 20B
-            GRAPH_SIZE = 4096;
         }
     };
 }
@@ -353,8 +351,6 @@ namespace v3
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
             : GenericConditionalGeneration(config, runtime_config, MODEL_TYPE_INTERNLM3, config.num_key_value_heads, config.rope_theta, config.rope_scaling)
         {
-            // ready for 20B
-            GRAPH_SIZE = 4096;
         }
 
         ChunkInterceptor *get_interceptor(void) override { return &interceptor; }

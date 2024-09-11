@@ -504,7 +504,7 @@ namespace v2_light
         {}
 
         ConditionalGeneration0(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int q_lora_rank)
-            : BaseModelForConditionalGeneration(type, config, runtime_config),
+            : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
               config(config)
         {
             constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
@@ -574,8 +574,6 @@ namespace v2_light
                     config_rope(layer->attention);
                 }
             }
-
-            GRAPH_SIZE = 4096 * 4;
         }
 
         void load(ModelLoader &loader) override

@@ -29,6 +29,11 @@ namespace chatllm
 
 #include "custom_ops.cpp"
 
+    ggml::type ggml::type_of(const ggml::tensor *a)
+    {
+        return a->type;
+    }
+
     ggml::tensor *ggml::new_tensor_1d(ComputeContext *ctx, ggml::type type, int64_t ne0)
     {
         ggml::tensor *tensor = ggml_new_tensor_1d(ctx->get_ctx(), type, ne0);
@@ -153,6 +158,20 @@ namespace chatllm
     ggml::tensor *ggml::scale_inplace(ComputeContext *ctx, ggml::tensor *a, float  s)
     {
         ggml::tensor *tensor = ggml_scale_inplace(ctx->get_ctx(), a, s);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::abs(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_abs(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max)
+    {
+        ggml::tensor *tensor = ggml_clamp(ctx->get_ctx(), a, min, max);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -383,6 +402,27 @@ namespace chatllm
     ggml::tensor *ggml::map_custom2(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata)
     {
         ggml::tensor *tensor = ggml_map_custom2(ctx->get_ctx(), a, b, fun, n_tasks, userdata);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::map_custom2_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata)
+    {
+        ggml::tensor *tensor = ggml_map_custom2_inplace(ctx->get_ctx(), a, b, fun, n_tasks, userdata);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::map_custom3(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c, const ggml_custom3_op_t fun, int n_tasks, void *userdata)
+    {
+        ggml::tensor *tensor = ggml_map_custom3(ctx->get_ctx(), a, b, c, fun, n_tasks, userdata);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::map_custom3_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c, const ggml_custom3_op_t fun, int n_tasks, void *userdata)
+    {
+        ggml::tensor *tensor = ggml_map_custom3_inplace(ctx->get_ctx(), a, b, c, fun, n_tasks, userdata);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -1061,10 +1101,10 @@ namespace chatllm
         return nullptr;
     }
 
-    static void build_inv_freq_from_factors(std::vector<float> &inv_freq, int dim, const float *factors, float base)
+    void build_inv_freq_from_factors(std::vector<float> &inv_freq, int dim, const float *factors, float base)
     {
         inv_freq.clear();
-        inv_freq.reserve(dim / 2);
+        inv_freq.reserve(dim);
         for (int i = 0; i < dim; i += 2)
         {
             double v = 1.0 / (factors[i / 2] * pow(base, (double)i / dim));
@@ -1083,31 +1123,22 @@ namespace chatllm
 
         if (max_length > original_max_position_embeddings)
         {
-            inv_freq = inv_freq_long.data();
-            this->scaling_factor = long_scaling_factor;
+            long_rope.reset(new SimpleLongRoPEParam(rope_dim, long_scaling_factor, inv_freq_long.data()));
         }
         else
         {
-            inv_freq = inv_freq_short.data();
-            this->scaling_factor = short_scaling_factor;
+            long_rope.reset(new SimpleLongRoPEParam(rope_dim, short_scaling_factor, inv_freq_short.data()));
         }
-    }
-
-    const float *Phi3SUSelfAttention::get_inv_freq(int pos)
-    {
-        // This does not work.
-        // pos > original_max_position_embeddings ? inv_freq_long.data() : inv_freq_short.data();
-        return inv_freq;
     }
 
     ggml::tensor *Phi3SUSelfAttention::apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const
     {
-        return ggml::map_custom2(ctx, k, past, ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, const_cast<Phi3SUSelfAttention *>(this));
+        return ggml::map_custom2(ctx, k, past, ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, long_rope.get());
     }
 
     ggml::tensor *Phi3SUSelfAttention::apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const
     {
-        return ggml::map_custom2(ctx, q, past, ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, const_cast<Phi3SUSelfAttention *>(this));
+        return ggml::map_custom2(ctx, q, past, ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, long_rope.get());
     }
 
     ggml::tensor *BaseSparseMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
@@ -1134,6 +1165,19 @@ namespace chatllm
             weights = ggml::div(ctx, weights, weights_sum); // [num_experts_per_tok, n_tokens]
             weights = ggml::reshape_3d(ctx, weights, 1, num_experts_per_tok, qlen);
         }
+
+        return forward_with_experts(ctx, hidden_states, selected_experts, weights);
+    }
+
+    // selected_experts: [qlen, num_experts_per_tok]
+    // weights:          [1, num_experts_per_tok, qlen]
+    ggml::tensor *BaseSparseMLP::forward_with_experts(ComputeContext *ctx, ggml::tensor *hidden_states,
+            ggml::tensor *selected_experts,
+            ggml::tensor *weights)
+    {
+        const int64_t hidden_size = hidden_states->ne[0];
+        const int64_t qlen        = hidden_states->ne[1];
+        const int n_expert = num_local_experts;
 
         hidden_states = ggml::reshape_3d(ctx, hidden_states, hidden_size, 1, qlen);
         ggml::tensor *gated = experts_gate.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]

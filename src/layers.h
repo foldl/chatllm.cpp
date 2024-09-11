@@ -13,7 +13,6 @@
 
 namespace chatllm
 {
-    [[ noreturn ]]
     void inspect_tensor(ggml::tensor *tensor, const char *msg,
         ggml::tensor *temp1 = nullptr, ggml::tensor *temp2 = nullptr, ggml::tensor *temp3 = nullptr, ggml::tensor *temp4 = nullptr, ggml::tensor *temp5 = nullptr);
 
@@ -40,6 +39,8 @@ namespace chatllm
         ggml::tensor *new_tensor_1d(ComputeContext *ctx, ggml::type type, int64_t ne0);
         ggml::tensor *new_tensor_2d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1);
         ggml::tensor *new_tensor_3d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2);
+
+        ggml::type    type_of(const ggml::tensor *a);
 
         ggml::tensor *cpy(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
 
@@ -97,10 +98,16 @@ namespace chatllm
         ggml::tensor *scale(ComputeContext *ctx, ggml::tensor *a, float  s);
         ggml::tensor *scale_inplace(ComputeContext *ctx, ggml::tensor *a, float  s);
 
+        ggml::tensor *abs(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max);
+
         ggml::tensor *map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom2(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);
+        ggml::tensor *map_custom3(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c, const ggml_custom3_op_t fun, int n_tasks, void *userdata);
 
         ggml::tensor *map_custom1_inplace(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
+        ggml::tensor *map_custom2_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);
+        ggml::tensor *map_custom3_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c, const ggml_custom3_op_t fun, int n_tasks, void *userdata);
 
         void mul_mat_set_prec(ggml::tensor *a, ggml::prec prec);
         bool is_contiguous(const ggml::tensor *a);
@@ -137,6 +144,11 @@ namespace chatllm
         virtual void set_id(int id)
         {
             this->id = id;
+        }
+
+        int get_id(void) const
+        {
+            return id;
         }
 
         virtual int64_t get_param_num(bool effective_only) const
@@ -610,6 +622,12 @@ namespace chatllm
 
             hidden_states = input_layernorm.forward(ctx, hidden_states);
             hidden_states = attention.forward(ctx, hidden_states, n_past);
+
+            if (scale_depth > 0.0f)
+            {
+                hidden_states = ggml::scale_inplace(ctx, hidden_states, scale_depth);
+            }
+
             hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
 
             residual = ggml::dup(ctx, hidden_states);
@@ -617,6 +635,12 @@ namespace chatllm
 
             hidden_states = post_attention_layernorm.forward(ctx, hidden_states);
             hidden_states = mlp.forward(ctx, hidden_states);
+
+            if (scale_depth > 0.0f)
+            {
+                hidden_states = ggml::scale_inplace(ctx, hidden_states, scale_depth);
+            }
+
             hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
 
             return hidden_states;
@@ -662,6 +686,7 @@ namespace chatllm
         AttentionBlock attention;
         PostNormBlock post_attention_layernorm;
         MLPBlock mlp;
+        float scale_depth = -1.0;
     };
 
     template <class PreAttnNormBlock,
@@ -769,50 +794,6 @@ namespace chatllm
         PreMLPNormBlock pre_mlp_layernorm;
         MLPBlock mlp;
         PostMLPNormBlock post_mlp_layernorm;
-    };
-
-    template <class InputNormBlock,
-              class AttentionBlock,
-              class PostNormBlock,
-              class MLPBlock> class LMBlock3 : public LMBlock1<InputNormBlock, AttentionBlock, PostNormBlock, MLPBlock>
-    {
-    public:
-        typedef LMBlock1<InputNormBlock, AttentionBlock, PostNormBlock, MLPBlock> Base;
-        LMBlock3() = default;
-        LMBlock3(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
-                  int max_length)
-            : Base::LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, max_length),
-              hidden_scaling(1.0f) {}
-
-        LMBlock3(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
-                  int max_length)
-            : Base::LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length),
-              hidden_scaling(1.0f) {}
-
-        using Block::forward;
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override
-        {
-            ggml::tensor *residual = ggml::dup(ctx, hidden_states);
-            ggml::build_forward_expand(ctx, residual);
-
-            hidden_states = Base::input_layernorm.forward(ctx, hidden_states);
-
-            hidden_states = Base::attention.forward(ctx, hidden_states, n_past);
-            hidden_states = ggml::scale_inplace(ctx, hidden_states, hidden_scaling);
-            hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
-
-            residual = ggml::dup(ctx, hidden_states);
-            ggml::build_forward_expand(ctx, residual);
-
-            hidden_states = Base::post_attention_layernorm.forward(ctx, hidden_states);
-            hidden_states = Base::mlp.forward(ctx, hidden_states);
-            hidden_states = ggml::scale_inplace(ctx, hidden_states, hidden_scaling);
-            hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
-
-            return hidden_states;
-        }
-    public:
-        float hidden_scaling;
     };
 
     class CoreAttention : public Block
@@ -1692,6 +1673,11 @@ namespace chatllm
         MultiLinear experts_up;
         const ActFunc act;
         bool norm_topk_prob;
+
+    protected:
+        virtual ggml::tensor *forward_with_experts(ComputeContext *ctx, ggml::tensor *hidden_states,
+            ggml::tensor *selected_experts,
+            ggml::tensor *weights);
     };
 
     template <bool bias> class InternLMBlock : public LMBlock1<RMSNorm, InternLMSelfAttention<bias>, RMSNorm, SiLUMLP>
@@ -2208,11 +2194,11 @@ namespace chatllm
         {}
     };
 
-    class MiniCPMBlock : public LMBlock3<RMSNorm, LlamaSelfAttention, RMSNorm, SiLUMLP>
+    class MiniCPMBlock : public LMBlock1<RMSNorm, LlamaSelfAttention, RMSNorm, SiLUMLP>
     {
     public:
         MiniCPMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock3(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };
 
@@ -2339,6 +2325,37 @@ namespace chatllm
         int image_new_line_tok_id;
     };
 
+    class LongRoPEParam
+    {
+    public:
+        LongRoPEParam(int rope_dim, float scaling_factor)
+            : rope_dim(rope_dim), scaling_factor(scaling_factor)
+        {}
+
+        virtual const float *get_inv_freq(int max_pos) = 0;
+
+        const int rope_dim;
+        const float scaling_factor;
+    };
+
+    class SimpleLongRoPEParam : public LongRoPEParam
+    {
+    public:
+        SimpleLongRoPEParam(int rope_dim, float scaling_factor, const float *inv_freq)
+            : LongRoPEParam(rope_dim, scaling_factor), inv_freq(inv_freq)
+        {}
+
+        const float *get_inv_freq(int max_pos) override
+        {
+            return inv_freq;
+        }
+
+    protected:
+        const float *inv_freq;
+    };
+
+    void build_inv_freq_from_factors(std::vector<float> &inv_freq, int dim, const float *factors, float base);
+
     class Phi3SUSelfAttention : public RoPESelfAttention<BaseAttention>
     {
     public:
@@ -2366,10 +2383,11 @@ namespace chatllm
         int original_max_position_embeddings;
         float short_scaling_factor;
         float long_scaling_factor;
-        float scaling_factor;
-        const float *inv_freq;
         std::vector<float> inv_freq_short;
         std::vector<float> inv_freq_long;
+
+    protected:
+        std::unique_ptr<SimpleLongRoPEParam> long_rope;
     };
 
     class Phi3SUBlock : public LMBlock1<RMSNorm, Phi3SUSelfAttention, RMSNorm, SiLUMLP>
