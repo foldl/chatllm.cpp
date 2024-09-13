@@ -147,6 +147,9 @@
 
     Note: Tokenizer's behavior is not 100% identical.
 
+* AllenAI (`OlmoeForCausalLM`)
+    * [x] OLMoE: [Instruct-7B](https://huggingface.co/allenai/OLMoE-1B-7B-0924-Instruct)
+
 ## Base Models
 
 Please use `--format completion` for these models.

@@ -13,36 +13,12 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-09-13: OLMoE
 * 2024-09-11: MiniCPM3
-* 2024-08-28: Phi-3.5 Mini & MoE
-* 2024-07-24: Llama 3.1
-* 2024-07-23: Llama-3-Groq with tool calling
-* 2024-07-17: Mistral Nemo
-* 2024-07-17: SmolLM
 * 2024-07-14: [ggml updated](https://github.com/ggerganov/ggml/tree/3e7e5e26f90fecf4f7c2808df7d94454630b219c)
-* 2024-07-12: NuminaMath
-* 2024-07-11: Meta-AI multi-token prediction models
-* 2024-07-05: CodeGeeX4
-* 2024-07-04: InternLM 2.5 with tool calling
-* 2024-07-03: Phi3 mini (June 2024 Update)
-* 2024-07-01: LLM-Compiler
-* 2024-06-28: Gemma-2
-* 2024-06-23: Index
-* 2024-06-17: DeepSeek-Coder-V2 (Instruct & Base)
 * 2024-06-15: [Tool calling](./docs/tool_calling.md)
-* 2024-06-07: Qwen2
-* 2024-06-06: GLM-4
-* 2024-06-03: XVERSE
-* 2024-06-01: Codestral
-* 2024-05-30: MAP-Neo
 * 2024-05-29: [ggml](https://github.com/ggerganov/ggml) is forked instead of submodule
-* 2024-05-26: Aya-23 from Cohere
-* 2024-05-24: DeepSeek-V2 Light
-* 2024-05-23: Mistral v0.3
-* 2024-05-22: Phi3-medium
-* 2024-05-15: StarCoder2
 * 2024-05-14: [OpenAI API](./docs/binding.md#openai-compatible-api), CodeGemma Base & Instruct supported
-* 2024-05-13: Yi 1.5 Chat models
 * 2024-05-08: [Layer shuffling](./docs/fun.md)
 
 ## Features

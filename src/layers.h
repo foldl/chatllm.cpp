@@ -1051,6 +1051,31 @@ namespace chatllm
         Linear o_proj;
     };
 
+    class BaseNormedAttention : public BaseAttention
+    {
+    public:
+        BaseNormedAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias),
+              q_norm(ctx, hidden_size),
+              k_norm(ctx, hidden_size / num_attention_heads * num_kv_heads)
+        {}
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = BaseAttention::get_param_num(effective_only);
+            r += q_norm.get_param_num(effective_only);
+            r += k_norm.get_param_num(effective_only);
+            return r;
+        }
+
+        using Block::forward;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
+
+    public:
+        RMSNorm q_norm;
+        RMSNorm k_norm;
+    };
+
     class BaseCachelessAttention : public BaseAttention
     {
     public:

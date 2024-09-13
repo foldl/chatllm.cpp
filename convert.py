@@ -132,6 +132,8 @@ class ModelType(Enum):
 
     Index         = 0x1a00
 
+    OLMoE         = 0x1b00
+
     LlaMAMulti    = 0x20000001
 
     BCE_Embedding = 0x10000100
@@ -1656,6 +1658,59 @@ class MixtralConverter(BaseConverter):
                 f"model.layers.{i}.post_attention_layernorm.weight",
                 f"model.layers.{i}.self_attn.k_proj.weight",
                 f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
+class OLMoEConverter(BaseConverter):
+    MODEL_TYPE = ModelType.OLMoE
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.output_router_logits == False, "output_router_logits must be False"
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.num_experts_per_tok,
+            config.num_experts,
+            1 if config.norm_topk_prob else 0,
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_theta,
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            for j in range(config.num_experts):
+                weight_names += [
+                    f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                    f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                    f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.mlp.gate.weight",
+
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_norm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_norm.weight",
                 f"model.layers.{i}.self_attn.q_proj.weight",
                 f"model.layers.{i}.self_attn.v_proj.weight",
             ]
@@ -3991,6 +4046,8 @@ def main():
         DeepSeekV2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'IndexForCausalLM':
         IndexConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'OlmoeForCausalLM':
+        OLMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

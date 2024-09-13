@@ -937,6 +937,27 @@ namespace chatllm
         return attn_output;
     }
 
+    ggml::tensor *BaseNormedAttention::forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past)
+    {
+        const int hidden_size = o_proj.in_features();
+        const int qlen = (int)hidden_states->ne[1];
+
+        before_forward(ctx, n_past, qlen);
+
+        ggml::tensor *tmpq = q_proj.forward(ctx, hidden_states);
+        tmpq = q_norm.forward(ctx, tmpq);
+
+        ggml::tensor *tmpk = k_proj.forward(ctx, hidden_states);
+        tmpk = k_norm.forward(ctx, tmpk);
+
+        ggml::tensor *tmpv = v_proj.forward(ctx, hidden_states);
+
+        ggml::tensor *scores = cross_attention(ctx, hidden_size, n_past, qlen, tmpq, tmpk, tmpv);
+
+        ggml::tensor *attn_output = o_proj.forward(ctx, scores);
+        return attn_output;
+    }
+
     void BaseCachelessAttention::save_to_cache(ComputeContext *ctx, const int n_past, const int qlen, ggml::tensor *k, ggml::tensor *v)
     {
         raw_k = k;

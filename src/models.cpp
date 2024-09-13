@@ -231,6 +231,8 @@ namespace chatllm
 
         MODEL_TYPE_INDEX            = 0x1a00,
 
+        MODEL_TYPE_OLMoE            = 0x1b00,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -403,6 +405,8 @@ namespace chatllm
             return "XVERSE";
         case MODEL_TYPE_INDEX:
             return "Index";
+        case MODEL_TYPE_OLMoE:
+            return "OLMoE";
         case MODEL_TYPE_LLAMA_MULTI:
             return "LlaMA-Multi";
         case MODEL_TYPE_SMOLLM:
@@ -1541,6 +1545,11 @@ namespace chatllm
         #include "../models/groq.cpp"
     }
 
+    namespace allenai
+    {
+        #include "../models/allenai.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1824,6 +1833,8 @@ namespace chatllm
                                                                 \
         CASE(SMOLLM,                smollm, 1)                  \
         CASE(LLAMA3_GROQ_TOOL,      groq, 1)                    \
+                                                                \
+        CASE(OLMoE,                 allenai::moe, 1)            \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \
