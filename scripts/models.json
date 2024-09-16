@@ -481,6 +481,22 @@
             }
         }
     },
+    "yi-coder": {
+        "brief": "Yi-Coder is a series of open-source code language models that delivers state-of-the-art coding performance with fewer than 10 billion parameters.",
+        "default": "1.5b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "1.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1569999056,
+                        "url": "chatllm_quantized_20240916/yi-coder-1.5B-chat.bin"
+                    }
+                }
+            }
+        }
+    },
     "deepseek-v2": {
         "brief": "A strong, economical, and efficient Mixture-of-Experts language model.",
         "default": "light",
@@ -717,6 +733,31 @@
                     "q8": {
                         "size": 2897542592,
                         "url": "chatllm_quantized_models/minicpm_sft_q8.bin"
+                    }
+                }
+            },
+            "moe": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 8673301984,
+                        "url": "chatllm_quantized_minicpm_moe/minicpm-moe-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "minicpm3": {
+        "brief": "MiniCPM3-4B is the 3rd generation of MiniCPM series.",
+        "default": "4b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4330719488,
+                        "url": "chatllm_quantized_20240916/minicpm3-4b.bin"
                     }
                 }
             }
