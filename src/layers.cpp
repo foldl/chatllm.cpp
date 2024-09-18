@@ -1164,7 +1164,6 @@ namespace chatllm
 
     ggml::tensor *BaseSparseMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
     {
-        const int64_t hidden_size = hidden_states->ne[0];
         const int64_t qlen        = hidden_states->ne[1];
         const int n_expert = num_local_experts;
 
@@ -1198,7 +1197,6 @@ namespace chatllm
     {
         const int64_t hidden_size = hidden_states->ne[0];
         const int64_t qlen        = hidden_states->ne[1];
-        const int n_expert = num_local_experts;
 
         hidden_states = ggml::reshape_3d(ctx, hidden_states, hidden_size, 1, qlen);
         ggml::tensor *gated = experts_gate.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]

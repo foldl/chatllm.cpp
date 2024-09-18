@@ -504,7 +504,7 @@ namespace chatllm
         return ggml_backend_sched_alloc_graph(sched, gf);
     }
 
-    static bool _backend_sched_eval_callback(struct ggml::tensor *t, bool ask, void *user_data)
+    static bool _backend_sched_eval_callback(ggml::tensor *t, bool ask, void *user_data)
     {
         auto *p = reinterpret_cast<BackendContext *>(user_data);
         if (ask)
