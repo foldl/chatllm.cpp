@@ -468,6 +468,11 @@ namespace chatllm
     ggml::tensor *RobertaEmbedding::forward(ComputeContext *ctx, ggml::tensor *input, int n_past)
     {
         int qlen = (int)input->ne[0];
+
+        // quick fix for `before_initial_run`
+        if (n_past + pad_index + qlen > indices->ne[0])
+            n_past = (int)indices->ne[0] - qlen - pad_index;
+
         ggml::tensor *idx = ggml::view_1d(ctx, indices, qlen, (n_past + pad_index) * ggml::element_size(indices));
 
         ggml::tensor *output1 = ggml::get_rows(ctx, word_weight, input);
