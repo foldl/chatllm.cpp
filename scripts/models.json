@@ -838,6 +838,63 @@
             }
         }
     },
+    "qwen2.5" : {
+        "brief": "Qwen2 is a new series of large language models from Alibaba group.",
+        "default": "1.5b",
+        "license": "All models, except for the 3B (QWen Research) and 72B (Qwen) variants, are licensed under Apache 2.0.",
+        "variants": {
+            "1.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1644897856,
+                        "url": "chatllm_quantized_qwen2.5/qwen2.5-1.5b.bin"
+                    }
+                }
+            },
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8096847472,
+                        "url": "chatllm_quantized_qwen2.5/qwen2.5-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "qwen2.5-coder" : {
+        "brief": "Qwen2 is a new series of large language models from Alibaba group.",
+        "default": "1.5b",
+        "license": "All models, except for the 3B (QWen Research) and 72B (Qwen) variants, are licensed under Apache 2.0.",
+        "variants": {
+            "1.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1644897856,
+                        "url": "chatllm_quantized_qwen2.5/qwen2.5-coder-1.5b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "qwen2.5-math" : {
+        "brief": "Qwen2 is a new series of large language models from Alibaba group.",
+        "default": "7b",
+        "license": "All models, except for the 3B (QWen Research) and 72B (Qwen) variants, are licensed under Apache 2.0.",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8096847472,
+                        "url": "chatllm_quantized_qwen2.5/qwen2.5-math-7b.bin"
+                    }
+                }
+            }
+        }
+    },
     "starling-lm": {
         "brief": "Starling is a large language model trained by reinforcement learning from AI feedback focused on improving chatbot helpfulness.",
         "default": "7b",

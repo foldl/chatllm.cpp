@@ -102,8 +102,10 @@
     * [x] v1.5: [Chat-0.5B](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat), [Chat-1.8B](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat), [Chat-4B](https://huggingface.co/Qwen/Qwen1.5-4B-Chat), [Chat-7B](https://huggingface.co/Qwen/Qwen1.5-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen1.5-14B-Chat), [CodeQwen-Chat-7B](https://huggingface.co/Qwen/CodeQwen1.5-7B-Chat) (-a `CodeQwen`)
     * [x] v1.5 MoE: [Chat-A2.7B](https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B-Chat)
     * [x] v2: [Instruct-0.5B](https://huggingface.co/Qwen/Qwen2-0.5B-Instruct), [Instruct-1.5B](https://huggingface.co/Qwen/Qwen2-1.5B-Instruct), [Instruct-7B](https://huggingface.co/Qwen/Qwen2-7B-Instruct), [Instruct-72B](https://huggingface.co/Qwen/Qwen2-72B-Instruct)
-    * [x] v2 MoE: [Instruct-57B-A2.7B](https://huggingface.co/Qwen/Qwen2-57B-A14B-Instruct) (💣 not tested)
-
+    * [x] v2 MoE: [Instruct-57B-A14B](https://huggingface.co/Qwen/Qwen2-57B-A14B-Instruct) (💣 not tested)
+    * [x] v2.5: [Instruct-0.5B](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct), [Instruct-1.5B](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct), [Instruct-7B](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct), [Instruct-14B](https://huggingface.co/Qwen/Qwen2.5-14B-Instruct), [Instruct-32B](https://huggingface.co/Qwen/Qwen2.5-32B-Instruct), [Instruct-72B](https://huggingface.co/Qwen/Qwen2.5-72B-Instruct)
+    * [x] v2.5-Coder: [Instruct-1.5B](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct), [Instruct-7B](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct)
+    * [x] v2.5-Math: [Instruct-1.5B](https://huggingface.co/Qwen/Qwen2.5-Math-1.5B-Instruct), [Instruct-7B](https://huggingface.co/Qwen/Qwen2.5-Math-7B-Instruct), [Instruct-72B](https://huggingface.co/Qwen/Qwen2.5-Math-72B-Instruct)
 
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
