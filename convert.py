@@ -125,6 +125,7 @@ class ModelType(Enum):
     SmolLM        = 0x1701
     GroqToolUse   = 0x1702
     LlaMA31       = 0x1703
+    LlaMA32       = 0x1704
 
     StarCoder2    = 0x1800
 
@@ -1101,6 +1102,31 @@ class Llama31Converter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return Llama3Converter.get_weight_names(config)
+
+class Llama32Converter(BaseConverter):
+    MODEL_TYPE = ModelType.LlaMA32
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return Llama31Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert not config.mlp_bias, '`mlp_bias` must be False'
+
+        Llama31Converter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            1 if config.tie_word_embeddings else 0,
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = Llama31Converter.get_weight_names(config)
+        if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
+            weight_names.remove('lm_head.weight')
+        return weight_names
 
 class SmolLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.SmolLM
@@ -3870,7 +3896,10 @@ def main():
         InternLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'LlamaForCausalLM':
         if isinstance(config.rope_scaling, dict):
-            Llama31Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            if config.tie_word_embeddings:
+                Llama32Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            else:
+                Llama31Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
             return
 
         if tokenizer_model_file_exists:

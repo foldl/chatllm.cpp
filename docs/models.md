@@ -7,6 +7,7 @@
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
     * [x] LlaMA-3: [Instruct-8B](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct), [Instruct-70B](https://huggingface.co/meta-llama/Meta-Llama-3-70B-Instruct), other derivations such as [Llama3-8B-Chinese-Chat](https://huggingface.co/shenzhi-wang/Llama3-8B-Chinese-Chat)
     * [x] LlaMA-3.1: [Instruct-8B](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B-Instruct), [Instruct-70B](https://huggingface.co/meta-llama/Meta-Llama-3.1-70B-Instruct)
+    * [x] LlaMA-3.2: [Instruct-1B](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct), [Instruct-3B](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct)
     * [x] CodeLlaMA: [Instruct-7B](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf) (`-a CodeLlaMA`)
     * [x] LLM-Compiler: [7B](https://huggingface.co/facebook/llm-compiler-7b), [7B-FTD](https://huggingface.co/facebook/llm-compiler-7b-ftd), [13B](https://huggingface.co/facebook/llm-compiler-13b), [13B-FTD](https://huggingface.co/facebook/llm-compiler-13b-ftd)
     * [x] DeepSeek: [Chat-7B](https://huggingface.co/deepseek-ai/deepseek-llm-7b-chat) (`-a DeepSeek`) , [Coder-6.7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-instruct) (`-a DeepSeekCoder`), [Coder-Instruct-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-instruct) (`-a DeepSeekCoder`) 🔥

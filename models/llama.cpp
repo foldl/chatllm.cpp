@@ -490,8 +490,8 @@ namespace v3_1
         {}
 
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
-                            int num_key_value_heads, int max_length)
-            : v2::GenericConditionalGeneration<LlamaBlock>(config, runtime_config, type, num_key_value_heads, max_length, 12, false, 1)
+                            int num_key_value_heads, int max_length, int tensors_per_layer = 12, bool tie_lm_head = false, int additional_tensor = 1)
+            : v2::GenericConditionalGeneration<LlamaBlock>(config, runtime_config, type, num_key_value_heads, max_length, tensors_per_layer, tie_lm_head, additional_tensor)
         {
             freq_factors = ggml::new_tensor_1d(&w_ctx_, GGML_TYPE_F32, config.hidden_size / config.num_attention_heads);
 
@@ -516,6 +516,26 @@ namespace v3_1
     protected:
         ggml::tensor *freq_factors;
         std::vector<float> freq_factors_value;
+    };
+}
+
+namespace v3_2
+{
+    struct Config : public v3_1::Config
+    {
+        int tie_word_embeddings;
+    };
+
+    typedef v3_1::Tokenizer Tokenizer;
+
+    class ConditionalGeneration : public v3_1::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration() = default;
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_LLAMA3_1)
+            : v3_1::ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length,
+                                          12, config.tie_word_embeddings != 0, 1)
+        {}
     };
 }
 

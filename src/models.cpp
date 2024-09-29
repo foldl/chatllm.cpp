@@ -224,6 +224,7 @@ namespace chatllm
         MODEL_TYPE_SMOLLM           = 0x1701,
         MODEL_TYPE_LLAMA3_GROQ_TOOL = 0x1702,
         MODEL_TYPE_LLAMA3_1         = 0x1703,
+        MODEL_TYPE_LLAMA3_2         = 0x1704,
 
         MODEL_TYPE_STARCODER2       = 0x1800,
 
@@ -391,6 +392,8 @@ namespace chatllm
             return "LlaMA3";
         case MODEL_TYPE_LLAMA3_1:
             return "LlaMA3.1";
+        case MODEL_TYPE_LLAMA3_2:
+            return "LlaMA3.2";
         case MODEL_TYPE_BCE_Embedding:
             return "BCE-Embedding";
         case MODEL_TYPE_BCE_ReRanker:
@@ -875,7 +878,7 @@ namespace chatllm
                 {
                     int next_token_id = sampler->sampling(logits,  config_.vocab_size);
 
-    // printf("\nnext = %d\n", next_token_id);
+    //printf("\n>>next = %d<<\n", next_token_id);
 
                     if (next_token_id == Sampler::ABORT)
                     {
@@ -1758,6 +1761,7 @@ namespace chatllm
         CASE(LLAMA2PLUS,            llama::v2_plus, 1)          \
         CASE(LLAMA_MULTI,           llama::multi, 1)            \
         CASE(LLAMA3_1,              llama::v3_1, 1)             \
+        CASE(LLAMA3_2,              llama::v3_2, 1)             \
                                                                 \
         CASE(DEEPSEEK,              deepseek::v1, 1)            \
         CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \

@@ -13,6 +13,8 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-09-29: LlaMA 3.2
+* 2024-09-22: Qwen 2.5
 * 2024-09-13: OLMoE
 * 2024-09-11: MiniCPM3
 * 2024-07-14: [ggml updated](https://github.com/ggerganov/ggml/tree/3e7e5e26f90fecf4f7c2808df7d94454630b219c)
