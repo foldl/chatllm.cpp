@@ -234,6 +234,8 @@ namespace chatllm
 
         MODEL_TYPE_OLMoE            = 0x1b00,
 
+        MODEL_TYPE_ALPHAGEO_LM      = 0x1c00,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -416,6 +418,8 @@ namespace chatllm
             return "SmolLM";
         case MODEL_TYPE_LLAMA3_GROQ_TOOL:
             return "LlaMA-Groq-Tool-Use";
+        case MODEL_TYPE_ALPHAGEO_LM:
+            return "AlphaGeometry-LM";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1553,6 +1557,11 @@ namespace chatllm
         #include "../models/allenai.cpp"
     }
 
+    namespace alphageo
+    {
+        #include "../models/alphageo.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1839,6 +1848,8 @@ namespace chatllm
         CASE(LLAMA3_GROQ_TOOL,      groq, 1)                    \
                                                                 \
         CASE(OLMoE,                 allenai::moe, 1)            \
+                                                                \
+        CASE(ALPHAGEO_LM,           alphageo, 1)                \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

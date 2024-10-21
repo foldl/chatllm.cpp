@@ -11,7 +11,7 @@ import io
 import pickle
 import re
 from pathlib import Path
-from enum import Enum
+from enum import Enum, IntEnum
 from pathlib import Path
 from typing import IO, Any, Iterable, List, Optional, Tuple
 import numpy as np
@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from tabulate import tabulate
 from tqdm import tqdm
+import msgpack
 
 from sentencepiece import SentencePieceProcessor  # type: ignore
 
@@ -134,6 +135,8 @@ class ModelType(Enum):
     Index         = 0x1a00
 
     OLMoE         = 0x1b00
+
+    AlphaGeometryLM = 0x1c00
 
     LlaMAMulti    = 0x20000001
 
@@ -440,9 +443,42 @@ class SentencePieceVocab:
     def __repr__(self) -> str:
         return f"<SentencePieceVocab with {self.vocab_size_base} base tokens and {len(self.added_tokens_list)} added tokens>"
 
-def s_to_bytes(s):
-    print([ord(c) for c in s])
-    return bytes([ord(c) for c in s])
+class SimpleVocab:
+    def __init__(self, fname_tokenizer: Path) -> None:
+        vocab = []
+        with open(fname_tokenizer, encoding='utf-8') as f:
+            for l in f.readlines():
+                l = l.split()
+                if len(l) != 2:
+                    break
+                vocab.append((l[0], float(l[1])))
+
+        self.vocab = vocab
+        print("vocab_size ", len(vocab))
+
+    def sentencepiece_tokens(self) -> Iterable[Tuple[bytes, float]]:
+        for (piece, score) in self.vocab:
+            if (len(piece) == 6) and (piece[0] == '<') and (piece[5] == '>'):
+                byte_value = int(piece[3:-1], 16)
+                text = struct.pack("B", byte_value)
+            else:
+                text = piece.replace("\u2581", " ").encode("utf-8")
+            yield text, score
+
+    def all_tokens(self) -> Iterable[Tuple[bytes, float]]:
+        yield from self.sentencepiece_tokens()
+
+    def write_vocab(self, fout: io.BufferedWriter) -> None:
+        for text, score in self.all_tokens():
+            fout.write(struct.pack("i", len(text)))
+            fout.write(text)
+            fout.write(struct.pack("f", score))
+
+        # marks the end of vocab
+        fout.write(struct.pack("i", -1))
+
+    def __repr__(self) -> str:
+        return f"<SimpleVocab with {self.vocab_size_base} base tokens and {len(self.added_tokens_list)} added tokens>"
 
 class UnigramTokenizerJsonVocab:
     def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
@@ -3402,6 +3438,196 @@ class Grok1Converter(BaseConverter):
 
         print(f"{Grok1Converter.MODEL_TYPE.name} GGML model saved to {save_path}")
 
+class AlphaGeometryLMConverter(BaseConverter):
+    MODEL_TYPE = ModelType.AlphaGeometryLM
+    tensor_map = []
+    file_to_name = {}
+    experts = []
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            if name == 'model.embed.embedding':
+                new = 'model.embed_tokens.weight'
+            elif name == 'model.final_layernorm.scale':
+                new = 'model.norm.weight'
+            else:
+                new:str = name.replace('model.transformer', 'model.layers.')
+                mapping = {
+                    'relative_positions.rel_embedding': 'rel_embedding.weight',
+                    'tbase._kvq.attention_scale': 'self_attn.attention_scale.weight',
+                    'tbase._kvq.keys_layer.kernel': 'self_attn.k_proj.weight',
+                    'tbase._kvq.pre_attn_layernorm.scale': 'input_layernorm.weight',
+                    'tbase._kvq.queries_layer.kernel': 'self_attn.q_proj.weight',
+                    'tbase._kvq.values_layer.kernel': 'self_attn.v_proj.weight',
+                    'tbase.ffn.hidden0.kernel': 'mlp.hidden0.weight',
+                    'tbase.ffn.output_layer.kernel': 'mlp.output_layer.weight',
+                    'tbase.post_attn_mlp.output_layer.kernel': 'self_attn.o_proj.weight',
+                    'tbase.pre_ffn_layernorm.scale': 'post_attention_layernorm.weight',
+                }
+                for k in mapping.keys():
+                    if new.endswith(k):
+                        new = new.replace(k, mapping[k])
+                        break
+            new_dict[new] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.window_length,
+            config.num_buckets,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.rel_embedding.weight",
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.self_attn.attention_scale.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.mlp.hidden0.weight",
+                f"model.layers.{i}.mlp.output_layer.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        return weight_names
+
+    class _MsgpackExtType(IntEnum):
+        """Messagepack custom type ids."""
+        ndarray = 1
+        native_complex = 2
+        npscalar = 3
+
+    def _dtype_from_name(name: str):
+        """Handle JAX bfloat16 dtype correctly."""
+        if name == b'bfloat16':
+            return np.dtypes.Float16DType
+        else:
+            return np.dtype(name)
+
+    def _ndarray_from_bytes(data: bytes) -> np.ndarray:
+        """Load ndarray from simple msgpack encoding."""
+        shape, dtype_name, buffer = msgpack.unpackb(data, raw=True)
+        return np.frombuffer(
+            buffer, dtype=AlphaGeometryLMConverter._dtype_from_name(dtype_name), count=-1, offset=0
+        ).reshape(shape, order='C')
+
+    def _msgpack_ext_unpack(code, data):
+        """Messagepack decoders for custom types."""
+        if code == AlphaGeometryLMConverter._MsgpackExtType.ndarray:
+            return AlphaGeometryLMConverter._ndarray_from_bytes(data)
+        elif code == AlphaGeometryLMConverter._MsgpackExtType.native_complex:
+            complex_tuple = msgpack.unpackb(data)
+            return complex(complex_tuple[0], complex_tuple[1])
+        elif code == AlphaGeometryLMConverter._MsgpackExtType.npscalar:
+            ar = AlphaGeometryLMConverter._ndarray_from_bytes(data)
+            return ar[()]  # unpack ndarray to scalar
+        return msgpack.ExtType(code, data)
+
+    _dict_to_tuple = lambda dct: tuple(dct[str(i)] for i in range(len(dct)))
+
+    def _unchunk(data: dict[str, any]):
+        """Convert canonical dictionary of chunked arrays back into array."""
+        assert '__msgpack_chunked_array__' in data
+        _dict_to_tuple = lambda dct: tuple(dct[str(i)] for i in range(len(dct)))
+        shape = _dict_to_tuple(data['shape'])
+        flatarr = np.concatenate(_dict_to_tuple(data['chunks']))
+        return flatarr.reshape(shape)
+
+    def _unchunk_array_leaves_in_place(d):
+        """Convert chunked array leaves back into array leaves, in place."""
+        if isinstance(d, dict):
+            if '__msgpack_chunked_array__' in d:
+                return AlphaGeometryLMConverter._unchunk(d)
+            else:
+                for k, v in d.items():
+                    if isinstance(v, dict) and '__msgpack_chunked_array__' in v:
+                        d[k] = AlphaGeometryLMConverter._unchunk(v)
+                    elif isinstance(v, dict):
+                        AlphaGeometryLMConverter._unchunk_array_leaves_in_place(v)
+        return d
+
+    def convert_weight(v, tensor_name: str) -> torch.tensor:
+        dtype = torch.float32
+        weight = torch.from_numpy(np.asarray(v).astype(np.float32)).to(dtype)
+        # Transpose linear matrix
+        if len(weight.shape) >= 2 and 'embed.embedding' not in tensor_name:
+            weight = weight.transpose(-1, -2).contiguous()
+        return weight
+
+    def extract_tensor_dict(d) -> dict:
+        r = {}
+
+        def visit(o, path: str):
+            nonlocal r
+            if isinstance(o, dict):
+                for k in o.keys():
+                    visit(o[k], path + '.' + k)
+            elif isinstance(o, np.ndarray):
+                r[path] = AlphaGeometryLMConverter.convert_weight(o, path)
+            else:
+                raise Exception(f'{path}: {type(o)}')
+
+        visit(d, 'model')
+        return r
+
+    @staticmethod
+    def load_tensor_file(tensor_name) -> Any:
+        with open(tensor_name, 'rb') as f:
+            state_dict = msgpack.unpack(f, ext_hook=AlphaGeometryLMConverter._msgpack_ext_unpack, raw=False)
+        r = AlphaGeometryLMConverter._unchunk_array_leaves_in_place(state_dict)
+        return AlphaGeometryLMConverter.extract_tensor_dict(r['optimizer']['target']['decoder'])
+
+    @staticmethod
+    def load_tensor_files(tensor_files) -> Dict:
+        assert len(tensor_files) == 1
+        return [AlphaGeometryLMConverter.load_tensor_file(tensor_files[0])]
+
+    @classmethod
+    def convert(cls, config, model_files_path, vocab: Any, ggml_type, save_path):
+
+        path = Path(model_files_path)
+        files = list(path.glob('checkpoint_*'))
+        model_files = [sorted(files)[-1]]
+
+        # convert all weights to fp16
+        with open(save_path, "wb") as f:
+            f.write(b"ggml")  # magic
+            f.write(struct.pack("ii", cls.MODEL_TYPE.value, cls.FILE_VERSION))
+            AlphaGeometryLMConverter.dump_config(f, config, ggml_type)
+            vocab.write_vocab(f)
+
+            weight_names = AlphaGeometryLMConverter.get_weight_names(config)
+            dump_state_dict(f, weight_names, model_files, ggml_type, config, AlphaGeometryLMConverter.state_dict_pp, loader_fun=AlphaGeometryLMConverter.load_tensor_files)
+
+        print(f"{AlphaGeometryLMConverter.MODEL_TYPE.name} GGML model saved to {save_path}")
+
 class ZhinaoConverter(BaseConverter):
     MODEL_TYPE = ModelType.Zhinao
 
@@ -3732,6 +3958,25 @@ def convert_grok_1_base(args, vocab, ggml_type):
     Grok1Converter.convert(AttributeDict(grok1_config), args.model_name_or_path, vocab, ggml_type, args.save_path)
     return
 
+def convert_alphageometry_lm(args, vocab, ggml_type):
+    alphageo_config = {
+        'vocab_size': 1024,
+        'hidden_act': 'gelu',
+        'pad_token_id': 0,
+        'eos_token_id': 1,
+        'bos_token_id': 2,
+        'hidden_size': 1024,
+        'intermediate_size': 4096,
+        'num_attention_heads': 8,
+        'num_hidden_layers': 12,
+        'max_position_embeddings': 1024,
+        'window_length': 1024,
+        'num_buckets': 32,
+    }
+
+    AlphaGeometryLMConverter.convert(AttributeDict(alphageo_config), args.model_name_or_path, vocab, ggml_type, args.save_path)
+    return
+
 def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
 
     def load_spm(p: Path) -> Any:
@@ -3754,6 +3999,10 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
                 return load_spm(path3)
 
         # path20 = path / "sentencepiece.bpe.model"
+
+        path5 = path / "geometry.757.vocab"
+        if path5.exists():
+            return SimpleVocab(path5)
 
         path5 = path / "qwen.tiktoken"
         if path5.exists():
@@ -3840,7 +4089,12 @@ def main():
     config_fn = 'config.json'
     if args.arch.lower() == 'llama-multi-token-prediction-ckpt':
         config_fn = 'params.json'
-    config = AttributeDict(load_config(Path(args.model_name_or_path), config_fn))
+
+    if (Path(args.model_name_or_path) / config_fn).exists():
+        config = AttributeDict(load_config(Path(args.model_name_or_path), config_fn))
+    else:
+        config = AttributeDict({})
+
     if arch == '':
         if len(config.architectures) != 1:
             raise Exception(f'unknown architectures: {config.architectures}')
@@ -3857,6 +4111,9 @@ def main():
 
     if args.arch.lower() == 'grok-1-base':
         convert_grok_1_base(args, vocab, ggml_type)
+        return
+    elif args.arch.lower() == 'alphageometry-lm':
+        convert_alphageometry_lm(args, vocab, ggml_type)
         return
 
     model_files = load_some_model(Path(args.model_name_or_path))
