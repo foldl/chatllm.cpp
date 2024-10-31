@@ -641,11 +641,11 @@
                 "quantized": {
                     "q8": {
                         "size": 2782194800,
-                        "url": "chatllm_quantized_gemma2_2b-2/gemma2-2b.bin"
+                        "url": "chatllm_quantized_gemma2_2b/gemma2-2b.bin"
                     },
                     "f16": {
                         "size": 5232913520,
-                        "url": "chatllm_quantized_gemma2_2b-2/gemma2-2b-f16.bin"
+                        "url": "chatllm_quantized_gemma2_2b/gemma2-2b-f16.bin"
                     }
                 }
             },
