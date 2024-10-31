@@ -1230,7 +1230,7 @@ int chatllm_qa_rank(struct chatllm_obj *obj, const char *utf8_str_q, const char 
     return r;
 }
 
-void chatllm_restart(struct chatllm_obj *obj)
+void chatllm_restart(struct chatllm_obj *obj, const char *utf8_sys_prompt)
 {
     Chat *chat = reinterpret_cast<Chat *>(obj);
     FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
@@ -1246,6 +1246,8 @@ void chatllm_restart(struct chatllm_obj *obj)
     {
         chat->history.clear();
         chat->pipeline->restart();
+        if (utf8_sys_prompt)
+            chat->pipeline->set_system_prompt(utf8_sys_prompt);
     }
 }
 

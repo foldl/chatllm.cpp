@@ -94,7 +94,7 @@ class LibChatLLM:
         self._chatllm_abort_generation.argtypes = [c_void_p]
 
         self._chatllm_restart.restype = None
-        self._chatllm_restart.argtypes = [c_void_p]
+        self._chatllm_restart.argtypes = [c_void_p, c_char_p]
 
         self._chatllm_set_gen_max_tokens.restype = None
         self._chatllm_set_gen_max_tokens.argtypes = [c_void_p, c_int]
@@ -176,8 +176,8 @@ class LibChatLLM:
     def abort(self, obj: c_void_p) -> None:
         self._chatllm_abort_generation(obj)
 
-    def restart(self, obj: c_void_p) -> None:
-        self._chatllm_restart(obj)
+    def restart(self, obj: c_void_p, sys_prompt: str | None = None) -> None:
+        self._chatllm_restart(obj, c_char_p(sys_prompt) if sys_prompt is not None else c_void_p(None))
 
     def set_max_gen_tokens(self, obj: c_void_p, max_gen: int) -> None:
         self._chatllm_set_gen_max_tokens(obj, max_gen)
@@ -260,8 +260,8 @@ class ChatLLM:
     def abort(self) -> None:
         self._lib.abort(self._chat)
 
-    def restart(self) -> None:
-        self._lib.restart(self._chat)
+    def restart(self, sys_prompt: str | None = None) -> None:
+        self._lib.restart(self._chat, sys_prompt)
 
     def set_max_gen_tokens(self, max_gen: int) -> None:
         self._lib.set_max_gen_tokens(self._chat, max_gen)

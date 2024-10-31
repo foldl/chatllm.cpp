@@ -105,8 +105,10 @@ DLL_DECL void API_CALL chatllm_set_gen_max_tokens(struct chatllm_obj *obj, int g
  * * Otherwise, it is restarted from the very beginning.
  *
  * @param[in] obj               model object
+ * @param[in] utf8_sys_prompt   update to a new system prompt
+ *                              if NULL, then system prompt is kept unchanged.
  */
-DLL_DECL void API_CALL chatllm_restart(struct chatllm_obj *obj);
+DLL_DECL void API_CALL chatllm_restart(struct chatllm_obj *obj, const char *utf8_sys_prompt);
 
 /**
  * @brief user input

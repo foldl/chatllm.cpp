@@ -41,7 +41,7 @@ const {
             args: [FFIType.ptr]
         },
         chatllm_restart: {
-            args: [FFIType.ptr]
+            args: [FFIType.ptr, FFIType.cstring]
         },
     },
 );
@@ -148,8 +148,9 @@ class ChatLLM {
         chatllm_abort_generation(this.obj);
     }
 
-    restart() {
-        chatllm_restart(this.obj);
+    restart(sys_prompt: string | null) {
+        // TODO: NULL pointer
+        chatllm_restart(this.obj, sys_prompt != null ? ptr(sys_prompt) : ptr(0));
     }
 };
 
