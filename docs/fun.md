@@ -68,4 +68,8 @@ Use `--ai_prefix` to steer the generation. This can be used to trigger CoT:
 --ai_prefix "let's breakdown the problem and think step by step:\n"
 ```
 
+Demo:
+
+![](gen_steering.png)
+
 This is inspired by DeepSeek's [Chat Prefix Completion](https://api-docs.deepseek.com/guides/chat_prefix_completion).
