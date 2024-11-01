@@ -59,3 +59,13 @@ so the conversation might go to full of "I'm here to assist you" quickly and is 
 ## Three Cobblers
 
 [Three Cobblers](../scripts/threecobblers.py) load a group of experts to chat with you, and another dedicate model to select the proper expert.
+
+## Generation Steering
+
+Use `--ai_prefix` to steer the generation. This can be used to trigger CoT:
+
+```
+--ai_prefix "let's breakdown the problem and think step by step:\n"
+```
+
+This is inspired by DeepSeek's [Chat Prefix Completion](https://api-docs.deepseek.com/guides/chat_prefix_completion).

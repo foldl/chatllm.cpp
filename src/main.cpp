@@ -28,6 +28,7 @@ struct Args
     std::string merge_vs = "";
     std::string system = "";
     std::string prompt = "你好";
+    std::string ai_prefix = "";
     std::string sampling = "top_p";
     chatllm::Pipeline::ExtendingMethod extending = chatllm::Pipeline::ExtendingMethod::Restart;
     std::string test_fn = "";
@@ -93,6 +94,7 @@ void usage(const std::string &prog)
               << "      --prompt_file FN    prompt from file\n"
               << "  -s, --system SYSTEM     system prompt (instruction) (default: model specific)\n"
               << "      --sys_file FN       system prompt (instruction) from file\n"
+              << "      --ai_prefix         AI prefix for generation (default: empty)\n"
               << "  -i, --interactive       run in interactive mode\n"
               << "  -l, --max_length N      max total length including prompt and output (default: model specific)\n"
               << "                          generally, this is used to reduce KV cache size.\n"
@@ -291,6 +293,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--prompt_file",                 prompt,               load_txt)
             handle_param("--system",                "-s", system,               std::string)
             handle_para0("--sys_file",                    system,               load_txt)
+            handle_para0("--ai_prefix",                   ai_prefix,            std::string)
             handle_param("--max_length",            "-l", max_length,           std::stoi)
             handle_param("--max_context_length",    "-c", max_context_length,   std::stoi)
             handle_para0("--extending",                   extending,            parse_extending_method)
@@ -609,7 +612,8 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
 }
 
 #define DEF_GenerationConfig(gen_config, args) chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,    \
-                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z)
+                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z); \
+                                         gen_config.set_ai_prefix(args.ai_prefix)
 
 void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 {

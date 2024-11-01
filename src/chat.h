@@ -493,6 +493,7 @@ namespace chatllm
         float presence_penalty;
         float tfs_z;
         std::string sampling;
+        std::string ai_prefix;
 
         GenerationConfig()
         {
@@ -502,7 +503,9 @@ namespace chatllm
                          float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty, float tfs_z)
             : max_length(max_length), max_context_length(max_context_length), do_sample(do_sample), top_k(top_k),
               top_p(top_p), temperature(temperature), num_threads(num_threads), presence_penalty(presence_penalty), tfs_z(tfs_z),
-              sampling(sampling) {}
+              sampling(sampling), ai_prefix("") {}
+
+        void set_ai_prefix(const std::string &prefix);
     };
 
     class ModelPerfInfo
@@ -867,6 +870,8 @@ namespace chatllm
         bool initializing;
         ExtendingMethod extending;
         ModelObject modelobj;
+
+        void add_ai_prefix(std::vector<int> &input_ids, const GenerationConfig &gen_config, BaseStreamer *streamer);
 
         std::string chat_with_ext_completion(const Messages &history, std::string &external, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);

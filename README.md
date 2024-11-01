@@ -13,7 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
-* 2024-11-01: GraniteMoE
+* 2024-11-01: GraniteMoE, [generation steering](./docs/fun.md#generation-steering)
 * 2024-09-29: LlaMA 3.2
 * 2024-09-22: Qwen 2.5
 * 2024-09-13: OLMoE
@@ -22,7 +22,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * 2024-06-15: [Tool calling](./docs/tool_calling.md)
 * 2024-05-29: [ggml](https://github.com/ggerganov/ggml) is forked instead of submodule
 * 2024-05-14: [OpenAI API](./docs/binding.md#openai-compatible-api), CodeGemma Base & Instruct supported
-* 2024-05-08: [Layer shuffling](./docs/fun.md)
+* 2024-05-08: [Layer shuffling](./docs/fun.md#layer-shuffling)
 
 ## Features
 

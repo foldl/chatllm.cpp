@@ -959,6 +959,7 @@ namespace chatllm
         else;
 
         input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous);
+        add_ai_prefix(input_ids, gen_config, streamer);
 
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, gen_max_tokens, streamer);
         if (!completed)
@@ -991,6 +992,7 @@ namespace chatllm
         else;
 
         input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous);
+        add_ai_prefix(input_ids, gen_config, streamer);
 
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, gen_max_tokens, streamer);
         if (!completed)
@@ -1015,6 +1017,8 @@ namespace chatllm
         else;
 
         std::vector<int> input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous);
+        add_ai_prefix(input_ids, gen_config, streamer);
+
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, gen_max_tokens, streamer);
 
         while (!completed)
@@ -1085,6 +1089,15 @@ namespace chatllm
             streamer->end();
 
         return r;
+    }
+
+    void Pipeline::add_ai_prefix(std::vector<int> &input_ids, const GenerationConfig &gen_config, BaseStreamer *streamer)
+    {
+        if (gen_config.ai_prefix.size() > 0)
+        {
+            tokenizer->encode(gen_config.ai_prefix, input_ids);
+            streamer->put_chunk(false, gen_config.ai_prefix);
+        }
     }
 
     std::string Pipeline::chat_with_ext_completion(const Messages &history, std::string &external, const GenerationConfig &gen_config,
@@ -1499,6 +1512,12 @@ namespace chatllm
     {
         replace_all(s, "\\n", "\n");
         replace_all(s, "\\t", "\t");
+    }
+
+    void GenerationConfig::set_ai_prefix(const std::string &prefix)
+    {
+        ai_prefix = prefix;
+        unescape_c_sequences(ai_prefix);
     }
 
     std::string AugmentedQueryComposer::compose_augmented_query(const std::string &query, const std::vector<std::string> augments) const
