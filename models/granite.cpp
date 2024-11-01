@@ -216,13 +216,52 @@ namespace moe
                 loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
         }
 
+        static AbstractModel *create(const Config &config, const RuntimeConfig &runtime_config)
+        {
+            return new _ConditionalGeneration(config, runtime_config);
+        }
+
     public:
         Config config;
         bool tie_embeddings;
     };
 
-    const int NUM_EXPERTS                   =  32;
-    const int EXPERTS_PER_TOK               =  8;
+    namespace experts_32
+    {
+        const int NUM_EXPERTS                   =  32;
+        const int EXPERTS_PER_TOK               =  8;
 
-    typedef _ConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, MODEL_TYPE_GRANITE_MoE> ConditionalGeneration;
+        typedef _ConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, MODEL_TYPE_GRANITE_MoE> ConditionalGeneration;
+    }
+
+    namespace experts_40
+    {
+        const int NUM_EXPERTS                   =  40;
+        const int EXPERTS_PER_TOK               =  8;
+
+        typedef _ConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, MODEL_TYPE_GRANITE_MoE> ConditionalGeneration;
+    }
+
+    class ConditionalGeneration : public ModelProxy
+    {
+    public:
+        ConditionalGeneration() = default;
+
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config) : ModelProxy()
+        {
+            switch (config.num_local_experts)
+            {
+            case experts_32::NUM_EXPERTS:
+                set_proxy_model(experts_32::ConditionalGeneration::create(config, runtime_config));
+                break;
+            case experts_40::NUM_EXPERTS:
+                set_proxy_model(experts_40::ConditionalGeneration::create(config, runtime_config));
+                break;
+            default:
+                CHATLLM_CHECK(false) << "unsupported MoE param: num_experts = " << config.num_local_experts;
+                break;
+            }
+        }
+    };
+
 }
