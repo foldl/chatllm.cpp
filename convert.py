@@ -138,6 +138,8 @@ class ModelType(Enum):
 
     AlphaGeometryLM = 0x1c00
 
+    GraniteMoE      = 0x1d00
+
     LlaMAMulti    = 0x20000001
 
     BCE_Embedding = 0x10000100
@@ -592,6 +594,8 @@ class FastTokenizerVocab:
         fout.write(struct.pack("i", -1))
 
         for s in self.merges:
+            if isinstance(s, list):
+                s = f"{s[0]} {s[1]}"
             text = s.encode('utf-8')
             fout.write(struct.pack("i", len(text)))
             fout.write(text)
@@ -1728,6 +1732,92 @@ class MixtralConverter(BaseConverter):
             "model.norm.weight",
             "lm_head.weight"
         ]
+
+        return weight_names
+
+class GraniteMoEConverter(BaseConverter):
+    MODEL_TYPE = ModelType.GraniteMoE
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        for name in state_dict:
+            tensor = state_dict[name]
+            if name == 'model.embed_tokens.weight':
+                new_dict[name] = tensor * config.embedding_multiplier
+            elif name.endswith('k_proj.weight'):
+                new_dict[name] = permute(tensor, config.num_key_value_heads)
+            elif name.endswith('q_proj.weight'):
+                new_dict[name] = permute(tensor, config.num_attention_heads)
+            elif name.endswith('block_sparse_moe.input_linear.weight'):
+                parts = [t[0] for t in torch.split(tensor, 1)]
+                for j in range(len(parts)):
+                    dim = parts[j].shape[0] // 2
+                    newname = name.replace("block_sparse_moe.input_linear.weight", f"block_sparse_moe.experts.{j}.gate_proj.weight")
+                    new_dict[newname] = parts[j][:dim]
+                    newname = name.replace("block_sparse_moe.input_linear.weight", f"block_sparse_moe.experts.{j}.up_proj.weight")
+                    new_dict[newname] = parts[j][dim:]
+            elif name.endswith('block_sparse_moe.output_linear.weight'):
+                parts = [t[0] for t in torch.split(tensor, 1)]
+                for j in range(len(parts)):
+                    newname = name.replace("block_sparse_moe.output_linear.weight", f"block_sparse_moe.experts.{j}.down_proj.weight")
+                    new_dict[newname] = parts[j]
+            else:
+                new_dict[name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.output_router_logits == False, "output_router_logits must be False"
+        assert config.attention_bias == False, 'attention_bias must be False'
+        assert config.rope_scaling is None, 'rope_scaling must be `null`'
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            1 if config.tie_word_embeddings else 0,
+            config.num_experts_per_tok,
+            config.num_local_experts,
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [
+            config.attention_multiplier,
+            config.logits_scaling,
+            config.residual_multiplier,
+            config.rope_theta,
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            for j in range(config.num_local_experts):
+                weight_names += [
+                    f"model.layers.{i}.block_sparse_moe.experts.{j}.down_proj.weight",
+                    f"model.layers.{i}.block_sparse_moe.experts.{j}.gate_proj.weight",
+                    f"model.layers.{i}.block_sparse_moe.experts.{j}.up_proj.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.block_sparse_moe.router.layer.weight",
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        if not config.tie_word_embeddings:
+            weight_names.append("lm_head.weight")
 
         return weight_names
 
@@ -4334,6 +4424,8 @@ def main():
         IndexConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OlmoeForCausalLM':
         OLMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'GraniteMoeForCausalLM':
+        GraniteMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

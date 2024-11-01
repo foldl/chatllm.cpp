@@ -236,6 +236,8 @@ namespace chatllm
 
         MODEL_TYPE_ALPHAGEO_LM      = 0x1c00,
 
+        MODEL_TYPE_GRANITE_MoE      = 0x1d00,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -420,6 +422,8 @@ namespace chatllm
             return "LlaMA-Groq-Tool-Use";
         case MODEL_TYPE_ALPHAGEO_LM:
             return "AlphaGeometry-LM";
+        case MODEL_TYPE_GRANITE_MoE:
+            return "Granite-MoE";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1562,6 +1566,11 @@ namespace chatllm
         #include "../models/alphageo.cpp"
     }
 
+    namespace granite
+    {
+        #include "../models/granite.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1850,6 +1859,8 @@ namespace chatllm
         CASE(OLMoE,                 allenai::moe, 1)            \
                                                                 \
         CASE(ALPHAGEO_LM,           alphageo, 1)                \
+                                                                \
+        CASE(GRANITE_MoE,           granite::moe, 1)            \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

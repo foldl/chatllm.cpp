@@ -182,6 +182,9 @@ Please use `--format completion` for these models.
 * Stable-LM (`StableLMEpochModel`)
     * [x] [Code-3B](https://huggingface.co/stabilityai/stable-code-3b)
 
+* Granite (`GraniteMoeForCausalLM`)
+    * [x] v3.0 [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.0-1b-a400m-instruct)
+
 ## RAG Models
 
 * Text Embedding (`XLMRobertaModel`)

@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-11-01: GraniteMoE
 * 2024-09-29: LlaMA 3.2
 * 2024-09-22: Qwen 2.5
 * 2024-09-13: OLMoE
