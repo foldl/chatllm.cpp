@@ -1113,6 +1113,13 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
     }
 }
 
+int chatllm_set_ai_prefix(struct chatllm_obj *obj, const char *utf8_str)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    chat->gen_config.set_ai_prefix(utf8_str);
+    return 0;
+}
+
 static void chatllm_continue_chat(Chat *chat)
 {
     FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);

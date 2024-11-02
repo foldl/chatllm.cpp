@@ -122,6 +122,17 @@ DLL_DECL void API_CALL chatllm_restart(struct chatllm_obj *obj, const char *utf8
 DLL_DECL int API_CALL chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str);
 
 /**
+ * @brief set prefix for AI generation
+ *
+ * This prefix is used in all following rounds..
+ *
+ * @param[in] obj               model object
+ * @param[in] utf8_str          prefix
+ * @return                      0 if succeeded
+ */
+DLL_DECL int API_CALL chatllm_set_ai_prefix(struct chatllm_obj *obj, const char *utf8_str);
+
+/**
  * @brief tool input
  *
  * - If this function is called before `chatllm_user_input` returns, this is asynchronized,
