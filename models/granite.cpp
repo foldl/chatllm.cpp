@@ -28,11 +28,11 @@ namespace moe
     class Tokenizer : public BaseTokenizer
     {
     public:
-        Tokenizer(const Config &config)
+        Tokenizer(const BaseConfig &config)
             : Tokenizer(config, &_chat_encoder)
         {}
 
-        Tokenizer(const Config &config, BaseHistoryEncoder *encoder)
+        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
             : BaseTokenizer::BaseTokenizer(config, encoder)
         {
             sys_prompt = "";
@@ -263,5 +263,44 @@ namespace moe
             }
         }
     };
+}
 
+namespace dense
+{
+    struct Config : public BaseConfig
+    {
+        int num_key_value_heads;
+        int tie_word_embeddings;
+
+        float attention_multiplier;
+        float logits_scaling;
+        float residual_multiplier;
+        float rope_theta;
+    };
+
+    typedef moe::Tokenizer Tokenizer;
+
+    class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<LlamaBlock>
+    {
+    public:
+        ConditionalGeneration() = default;
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_GRANITE)
+            : ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
+        {}
+
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
+                            int num_key_value_heads, int max_length)
+            : llama::v2::GenericConditionalGeneration<LlamaBlock>(config, runtime_config, type, num_key_value_heads, max_length, 12, config.tie_word_embeddings)
+        {
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto &layer = get_typed_transformer<ModelClass>()->layers[i];
+                layer.scale_depth                   = config.residual_multiplier;
+                layer.attention.attn_scaling_factor = config.attention_multiplier;
+                layer.attention.freq_base           = config.rope_theta;
+            }
+
+            logit_scale = config.logits_scaling;
+        }
+    };
 }

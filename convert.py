@@ -139,6 +139,7 @@ class ModelType(Enum):
     AlphaGeometryLM = 0x1c00
 
     GraniteMoE      = 0x1d00
+    Granite         = 0x1d01
 
     LlaMAMulti    = 0x20000001
 
@@ -1805,6 +1806,82 @@ class GraniteMoEConverter(BaseConverter):
             weight_names += [
                 f"model.layers.{i}.block_sparse_moe.router.layer.weight",
                 f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        if not config.tie_word_embeddings:
+            weight_names.append("lm_head.weight")
+
+        return weight_names
+
+class GraniteConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Granite
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name == 'model.embed_tokens.weight':
+            return tensor * config.embedding_multiplier
+        elif name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        elif name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        else:
+            return tensor
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        for name in state_dict:
+            tensor = state_dict[name]
+            if name == 'model.embed_tokens.weight':
+                new_dict[name] = tensor * config.embedding_multiplier
+            elif name.endswith('k_proj.weight'):
+                new_dict[name] = permute(tensor, config.num_key_value_heads)
+            elif name.endswith('q_proj.weight'):
+                new_dict[name] = permute(tensor, config.num_attention_heads)
+            else:
+                new_dict[name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.attention_bias == False, 'attention_bias must be False'
+        assert config.rope_scaling is None, 'rope_scaling must be `null`'
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            1 if config.tie_word_embeddings else 0,
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [
+            config.attention_multiplier,
+            config.logits_scaling,
+            config.residual_multiplier,
+            config.rope_theta,
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
                 f"model.layers.{i}.post_attention_layernorm.weight",
                 f"model.layers.{i}.self_attn.k_proj.weight",
                 f"model.layers.{i}.self_attn.o_proj.weight",
@@ -4424,6 +4501,8 @@ def main():
         IndexConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OlmoeForCausalLM':
         OLMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'GraniteForCausalLM':
+        GraniteConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'GraniteMoeForCausalLM':
         GraniteMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:

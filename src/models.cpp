@@ -237,6 +237,7 @@ namespace chatllm
         MODEL_TYPE_ALPHAGEO_LM      = 0x1c00,
 
         MODEL_TYPE_GRANITE_MoE      = 0x1d00,
+        MODEL_TYPE_GRANITE          = 0x1d01,
 
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
@@ -424,6 +425,8 @@ namespace chatllm
             return "AlphaGeometry-LM";
         case MODEL_TYPE_GRANITE_MoE:
             return "Granite-MoE";
+        case MODEL_TYPE_GRANITE:
+            return "Granite";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1861,6 +1864,7 @@ namespace chatllm
         CASE(ALPHAGEO_LM,           alphageo, 1)                \
                                                                 \
         CASE(GRANITE_MoE,           granite::moe, 1)            \
+        CASE(GRANITE,               granite::dense, 1)          \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \
