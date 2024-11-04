@@ -927,6 +927,56 @@
             }
         }
     },
+    "granite3-dense": {
+        "brief": "The IBM Granite 2B and 8B models are designed to support tool-based use cases and support for retrieval augmented generation (RAG), streamlining code generation, translation and bug fixing.",
+        "default": "2b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2693566832,
+                        "url": "chatllm_quantized_granite_3.0/granite-3-2b.bin"
+                    }
+                }
+            },
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8683703024,
+                        "url": "chatllm_quantized_granite_3.0/granite-3-8b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "granite3-moe": {
+        "brief": "The IBM Granite 1B and 3B models are the first mixture of experts (MoE) Granite models from IBM designed for low latency usage.",
+        "default": "1b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "1b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1419564608,
+                        "url": "chatllm_quantized_granite_3.0/granite-3-moe-1b.bin"
+                    }
+                }
+            },
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3506762528,
+                        "url": "chatllm_quantized_granite_3.0/granite-3-moe-3b.bin"
+                    }
+                }
+            }
+        }
+    },
     "bce-emb": {
         "brief": "BCEmbedding: Bilingual and Cross-lingual Embedding for RAG.",
         "default": "0.2b",
