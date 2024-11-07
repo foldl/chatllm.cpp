@@ -678,8 +678,7 @@ namespace chatllm
 
     TensorInfo::~TensorInfo()
     {
-        if (data)
-            free(data);
+        // data is freed by allocator
         data = nullptr;
     }
 

@@ -112,8 +112,7 @@ namespace chatllm
     protected:
         ggml_backend_allocator alloc_matrix;
         ggml_backend_allocator alloc_others;
-        // FIXME: free buffers after GPU works
-        std::vector<BackendBuffer *> buffers;
+        std::vector<std::unique_ptr<BackendBuffer>> buffers;
         Backend * const backend;
     };
 
