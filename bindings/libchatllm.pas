@@ -516,7 +516,7 @@ constructor TLLMPrintItem.Create(ALLM: TChatLLM; APrintType: Integer; AUTF8Str: 
 begin
   FLLM := ALLM;
   FPrintType := APrintType;
-  FStr := UTF8ToString(AUTF8Str);
+  FStr := string(UTF8ToString(AUTF8Str));
 end;
 
 procedure TLLMPrintItem.SyncedRun;

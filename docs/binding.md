@@ -99,13 +99,11 @@ bun run chatllm.ts -i -m path/to/model
 
 WARNING: Bun [looks buggy on Linux](https://github.com/oven-sh/bun/issues/10242).
 
-## Pascal (Delphi/FPC)
-
-[Writing Tools](https://github.com/foldl/WritingTools) is built on Pascal [binding](../bindings/libchatllm.pas).
-
 ## Other Languages
 
-`libchatllm` can be utilized by all languages that can call into dynamic libraries. Take C as an example:
+`libchatllm` can be utilized by all languages that can call into dynamic libraries.
+
+### C
 
 * Linux
 
@@ -127,3 +125,12 @@ WARNING: Bun [looks buggy on Linux](https://github.com/oven-sh/bun/issues/10242)
         ```
 
     1. Test `main.exe` with exactly the same command line options.
+
+## Pascal (Delphi/FPC)
+
+Pascal [binding](../bindings/libchatllm.pas) is also available.
+
+Examples:
+
+* [main.dpr](../bindings/main.dpr), which can be built by Delphi or FPC.
+* [Writing Tools](https://github.com/foldl/WritingTools).
