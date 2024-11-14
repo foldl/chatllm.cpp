@@ -284,6 +284,7 @@ namespace chatllm
             TOOL_CALLING    = 7,
             EMBEDDING       = 8,
             RANKING         = 9,
+            TOKEN_IDS       =10,
         };
         BaseStreamer(BaseTokenizer *tokenizer);
         virtual ~BaseStreamer() = default;
@@ -838,6 +839,7 @@ namespace chatllm
         virtual void set_additional_args(const std::map<std::string, std::string> &args);
 
         void text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result);
+        void text_tokenize(const std::string &input, const GenerationConfig &gen_config, std::vector<int> &result);
         float qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config);
 
         int get_text_embedding_dim(void);
@@ -903,14 +905,32 @@ namespace chatllm
         std::string query_rewritten_template;
     };
 
+    class VectorStores
+    {
+    public:
+        VectorStores(DistanceStrategy vec_cmp, const std::map<std::string, std::vector<std::string>> &vector_stores);
+        ~VectorStores();
+
+        bool select(const std::string &name);
+
+        CVectorStore *get(const std::string &name);
+        CVectorStore *get();
+
+    protected:
+        std::map<std::string, CVectorStore *> stores;
+        CVectorStore *def_store;
+    };
+
     class RAGPipeline : public Pipeline
     {
     public:
         RAGPipeline(const std::string &path, const ModelObject::extra_args &args,
-                    DistanceStrategy vec_cmp, const std::vector<std::string> &vector_stores,
+                    DistanceStrategy vec_cmp, const std::map<std::string, std::vector<std::string>> &vector_stores,
                     const std::string &embedding_model, const std::string &reranker_model = "");
 
         std::string get_additional_description(void) const override;
+
+        bool select_vector_store(const std::string &name);
 
         AugmentedQueryComposer composer;
         bool    hide_reference;
@@ -925,7 +945,7 @@ namespace chatllm
         void before_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer) override;
         void post_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer) override;
 
-        CVectorStore vs;
+        VectorStores vs;
         ModelObject embedding;
         ModelObject *reranker;
         std::vector<std::string> metainfo;

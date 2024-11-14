@@ -27,7 +27,8 @@ type
       PRINTLN_HISTORY_AI      = 6,    // print a whole line: AI output history
       PRINTLN_TOOL_CALLING    = 7,    // print a whole line: tool calling (supported by only a few models)
       PRINTLN_EMBEDDING       = 8,    // print a whole line: embedding (example: "0.1, 0.3, ...")
-      PRINTLN_RANKING         = 9     // print a whole line: ranking (example: "0.8")
+      PRINTLN_RANKING         = 9,    // print a whole line: ranking (example: "0.8")
+      PRINTLN_TOKEN_IDS       =10     // print a whole line: token ids (example: "1, 3, 5, 8, ...")
   );
 
   TChatLLMPrint = procedure(UserData: Pointer; APrintType: Integer; AUTF8Str: PAnsiChar); cdecl;
@@ -129,6 +130,17 @@ type
   function ChatLLMToolCompletion(Obj: PChatLLMObj; AUTF8Str: PAnsiChar): Integer; stdcall; external CHATLLMLIB name 'chatllm_tool_completion';
 
   {
+    @brief tokenize
+
+    embedding is emit through `PRINTLN_TOKEN_IDS`.
+
+    @param[in] obj               model object
+    @param[in] utf8_str          text
+    @return                      0 if succeeded
+  }
+  function ChatLLMTextTokenize(Obj: PChatLLMObj; AUTF8Str: PAnsiChar): Integer; stdcall; external CHATLLMLIB name 'chatllm_text_tokenize';
+
+  {
     @brief text embedding
 
     embedding is emit through `PRINTLN_EMBEDDING`.
@@ -150,6 +162,15 @@ type
     @return                      0 if succeeded
   }
   function ChatLLMQARank(Obj: PChatLLMObj; AUTF8StrQ, AUTF8StrA: PAnsiChar): Integer; stdcall; external CHATLLMLIB name 'chatllm_qa_rank';
+
+  {
+    @brief switching RAG vector store
+
+    @param[in] obj               model object
+    @param[in] name              vector store name
+    @return                      0 if succeeded
+  }
+  function ChatLLMRAGSelectStore(Obj: PChatLLMObj; AUTF8StrQ, AUTF8StrA: PAnsiChar): Integer; stdcall; external CHATLLMLIB name 'chatllm_rag_select_store';
 
   {
     @brief abort generation
@@ -556,7 +577,7 @@ end;
 function TChatLLM.Chat(const AInput: string): Integer;
 begin
   if Busy then Exit(-1);
-  
+
   Result := 0;
   SetBusy(True);
 

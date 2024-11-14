@@ -23,7 +23,6 @@ struct Args
     std::string model_path = "";
     std::string embedding_model_path = "";
     std::string reranker_model_path = "";
-    std::vector<std::string> vector_store;
     std::string vector_store_in = "";
     std::string merge_vs = "";
     std::string system = "";
@@ -40,6 +39,8 @@ struct Args
     std::string load_session;
     std::string save_session;
     std::string n_gpu_layers;
+    std::string cur_vs_name = "default";
+    std::map<std::string, std::vector<std::string>> vector_stores;
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -126,8 +127,11 @@ void usage(const std::string &prog)
               << "  --presence_penalty N    presence repetition penalty (default: 1.0, no penalty)\n"
               << "  --seed N                seed for random generator (default: random)\n"
               << "RAG options:\n"
-              << "  --vector_store FILE     append a vector store file (when at lease one is specifed, RAG is enabled)\n"
-              << "  --embedding_model PATH  embedding model path (mandatory if RAG is enabled)\n"
+              << "  --set_vs_name           set vector store name.\n"
+              << "                          all following vector store files are merged into this vector store. (optional. default: `default`)\n"
+              << "                          Note: command line RAG chat will always the first store.\n"
+              << "  --vector_store FILE     append a vector store file (when RAG enabled, at lease one is required)\n"
+              << "  --embedding_model PATH  embedding model path (when set, RAG is enabled)\n"
               << "  --distance_strategy DS  distance strategy (model dependent, default: MaxInnerProduct)\n"
               << "                          DS = EuclideanDistance | MaxInnerProduct | InnerProduct | CosineSimilarity\n"
               << "  --retrieve_top_n N      number of retrieved items using embedding model (default: 2)\n"
@@ -288,6 +292,19 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                     c += 2;
                 }
             }
+            else if (strcmp(arg, "--vector_store") == 0)
+            {
+                c++;
+                if (c + 1 < argc)
+                {
+                    if (args.vector_stores.find(args.cur_vs_name) == args.vector_stores.end())
+                    {
+                        args.vector_stores.insert(std::pair(args.cur_vs_name, std::vector<std::string>()));
+                    }
+
+                    args.vector_stores.at(args.cur_vs_name).push_back(argv[c]);
+                }
+            }
             handle_param("--model",                 "-m", model_path,           std::string)
             handle_param("--prompt",                "-p", prompt,               std::string)
             handle_para0("--prompt_file",                 prompt,               load_txt)
@@ -307,7 +324,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_param("--n_gpu_layers",          "-ngl", n_gpu_layers,       std::string)
             handle_para0("--seed",                        seed,                 std::stoi)
             handle_para0("--test",                        test_fn,              std::string)
-            append_param("--vector_store",                vector_store,         std::string)
+            handle_para0("--set_vs_name",                 cur_vs_name,          std::string)
             handle_para0("--embedding_model",             embedding_model_path, std::string)
             handle_para0("--distance_strategy",           vc,                   ParseDistanceStrategy)
             handle_para0("--retrieve_top_n",              retrieve_top_n,       std::stoi)
@@ -830,7 +847,12 @@ static int init_vector_store(Args &args)
 
 static int merge_vector_store(Args &args)
 {
-    CVectorStore vs(args.vc, args.vector_store);
+    std::vector<std::string> files;
+    for (auto x : args.vector_stores)
+    {
+        files.insert(files.end(), x.second.begin(), x.second.end());
+    }
+    CVectorStore vs(args.vc, files);
     vs.ExportDB(args.merge_vs.c_str());
     printf("Vector store saved to: %s\n", args.merge_vs.c_str());
     return 0;
@@ -905,7 +927,7 @@ int main(int argc, const char **argv)
         else
         {
             chatllm::RAGPipeline pipeline(args.model_path, pipe_args,
-                args.vc, args.vector_store,
+                args.vc, args.vector_stores,
                 args.embedding_model_path, args.reranker_model_path);
             pipeline.hide_reference = args.hide_reference;
             pipeline.retrieve_top_n = args.retrieve_top_n;
@@ -947,7 +969,7 @@ class Chat
 public:
     Chat():
         streamer(nullptr), pipeline(nullptr),
-        sess_n_past(-1), sess_hist_len(-1)
+        sess_n_past(-1), sess_hist_len(-1), is_rag(false)
     {
         append_param("...");
     }
@@ -968,6 +990,7 @@ public:
     Args args;
     std::string tool_input;
     std::string tool_completion;    // part of the output is generated by external tools
+    bool is_rag;
 };
 
 class FFIStreamer : public chatllm::BaseStreamer
@@ -1089,7 +1112,7 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
         else
         {
             auto pipeline = new chatllm::RAGPipeline(args.model_path, pipe_args,
-                args.vc, args.vector_store,
+                args.vc, args.vector_stores,
                 args.embedding_model_path, args.reranker_model_path);
             pipeline->hide_reference = args.hide_reference;
             pipeline->retrieve_top_n = args.retrieve_top_n;
@@ -1101,6 +1124,7 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
             pipeline->composer.set_context_sep(args.rag_context_sep);
             pipeline->composer.set_prompt_template(args.rag_template);
             pipeline->composer.set_rewrite_template(args.retrieve_rewrite_template);
+            chat->is_rag = true;
             auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, f_end, user_data);
             return start_chat(chat, args, *pipeline, *streamer);
         }
@@ -1219,6 +1243,43 @@ int chatllm_text_embedding(struct chatllm_obj *obj, const char *utf8_str)
     streamer->putln(oss.str(), chatllm::BaseStreamer::TextType::EMBEDDING);
 
     return r;
+}
+
+int chatllm_text_tokenize(struct chatllm_obj *obj, const char *utf8_str)
+{
+    int r = 0;
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+
+    if (!chat->pipeline->is_loaded())
+        return -1;
+
+    std::vector<int> result;
+    std::string input(utf8_str);
+    chat->pipeline->text_tokenize(input, chat->gen_config, result);
+
+    std::ostringstream oss;
+    for (size_t i = 0; i < result.size() - 1; i++)
+    {
+        if ((i > 0) && ((i % 16) == 0)) oss << std::endl;
+        oss << result[i] << ",";
+    }
+    oss << result.back();
+
+    streamer->putln(oss.str(), chatllm::BaseStreamer::TextType::TOKEN_IDS);
+
+    return r;
+}
+
+int chatllm_rag_select_store(struct chatllm_obj *obj, const char *name)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+
+    if (!chat->pipeline->is_loaded() || !chat->is_rag)
+        return -1;
+
+    auto pipeline = dynamic_cast<chatllm::RAGPipeline *>(chat->pipeline);
+    return pipeline->select_vector_store(name) ? 0 : -1;
 }
 
 int chatllm_qa_rank(struct chatllm_obj *obj, const char *utf8_str_q, const char *utf8_str_a)

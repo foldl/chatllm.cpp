@@ -1157,6 +1157,11 @@ namespace chatllm
             modelobj.model->abort_generation();
     }
 
+    void Pipeline::text_tokenize(const std::string &input, const GenerationConfig &gen_config, std::vector<int> &result)
+    {
+        tokenizer->encode(input, result);
+    }
+
     void Pipeline::text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result)
     {
         modelobj.text_embedding(input, gen_config, result);
@@ -1300,7 +1305,7 @@ namespace chatllm
     }
 
     RAGPipeline::RAGPipeline(const std::string &path, const ModelObject::extra_args &args,
-        DistanceStrategy vec_cmp, const std::vector<std::string> &vector_stores,
+        DistanceStrategy vec_cmp, const std::map<std::string, std::vector<std::string>> &vector_stores,
         const std::string &embedding_model, const std::string &reranker_model)
         : Pipeline(path, args),
           composer(),
@@ -1329,7 +1334,7 @@ namespace chatllm
         {
             std::vector<int> input_ids;
             std::string c, m;
-            vs.GetRecord(candidates[i], c, m);
+            vs.get()->GetRecord(candidates[i], c, m);
             reranker->tokenizer->encode_qa(query, c, input_ids);
             scores.push_back(reranker->model->qa_rank(gen_config, input_ids));
         }
@@ -1394,7 +1399,7 @@ namespace chatllm
 
         embedding.text_embedding(rewritten_query, gen_config, query_emb);
 
-        vs.Query(query_emb, selected, retrieve_top_n);
+        vs.get()->Query(query_emb, selected, retrieve_top_n);
 
         if (reranker != nullptr)
             rerank(rerank_rewrite ? rewritten_query : query, selected, gen_config, rerank_top_n);
@@ -1404,7 +1409,7 @@ namespace chatllm
         for (auto i : selected)
         {
             std::string c, m;
-            vs.GetRecord(i, c, m);
+            vs.get()->GetRecord(i, c, m);
             augments.push_back(c);
             metainfo.push_back(m);
 
@@ -1415,7 +1420,7 @@ namespace chatllm
                 for (auto j = i - 1; (j >= 0) && (j >= i - rag_post_extending); j--)
                 {
                     std::string c0, m0;
-                    vs.GetRecord(j, c0, m0);
+                    vs.get()->GetRecord(j, c0, m0);
                     if (m0 == m)
                         augments[last] = c0 + "\n" + augments[last];
                     else
@@ -1425,7 +1430,7 @@ namespace chatllm
                 for (auto j = i + 1; (j >= 0) && (j <= i + rag_post_extending); j++)
                 {
                     std::string c0, m0;
-                    vs.GetRecord(j, c0, m0);
+                    vs.get()->GetRecord(j, c0, m0);
                     if (m0 == m)
                         augments[last] = augments[last] + "\n" + c0;
                     else
@@ -1449,6 +1454,11 @@ namespace chatllm
         auto composed = composer.compose_augmented_query(query, augments);
 
         history[index].content = composed;
+    }
+
+    bool RAGPipeline::select_vector_store(const std::string &name)
+    {
+        return vs.select(name);
     }
 
     std::string RAGPipeline::get_additional_description(void) const
@@ -1685,6 +1695,46 @@ final:
         double r = std::chrono::duration_cast<MilliSecond>(Clock::now() - m_beg).count();
         Reset();
         return r;
+    }
+
+    VectorStores::VectorStores(DistanceStrategy vec_cmp, const std::map<std::string, std::vector<std::string>> &vector_stores)
+        : def_store(nullptr)
+    {
+        for (auto x : vector_stores)
+        {
+            auto p = new CVectorStore(vec_cmp, x.second);
+            if (nullptr == def_store) def_store = p;
+
+            stores.insert(std::pair(x.first, p));
+        }
+    }
+
+    VectorStores::~VectorStores()
+    {
+        for (auto x : stores) delete x.second;
+    }
+
+    CVectorStore *VectorStores::get(const std::string &name)
+    {
+        auto vs = stores.find(name);
+        return vs == stores.end() ? nullptr : vs->second;
+    }
+
+    bool VectorStores::select(const std::string &name)
+    {
+        auto p = get(name);
+        if (p)
+        {
+            def_store = p;
+            return true;
+        }
+
+        return false;
+    }
+
+    CVectorStore *VectorStores::get()
+    {
+        return def_store;
     }
 
 } // namespace chatllm

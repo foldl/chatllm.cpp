@@ -37,6 +37,7 @@ enum PrintType
     PRINTLN_TOOL_CALLING    = 7,    // print a whole line: tool calling (supported by only a few models)
     PRINTLN_EMBEDDING       = 8,    // print a whole line: embedding (example: "0.1, 0.3, ...")
     PRINTLN_RANKING         = 9,    // print a whole line: ranking (example: "0.8")
+    PRINTLN_TOKEN_IDS       =10,    // print a whole line: token ids (example: "1, 3, 5, 8, ...")
 };
 
 typedef void (*f_chatllm_print)(void *user_data, int print_type, const char *utf8_str);
@@ -166,6 +167,17 @@ DLL_DECL int API_CALL chatllm_tool_input(struct chatllm_obj *obj, const char *ut
 DLL_DECL int chatllm_tool_completion(struct chatllm_obj *obj, const char *utf8_str);
 
 /**
+ * @brief tokenize
+ *
+ * embedding is emit through `PRINTLN_TOKEN_IDS`.
+ *
+ * @param[in] obj               model object
+ * @param[in] utf8_str          text
+ * @return                      0 if succeeded
+ */
+DLL_DECL int chatllm_text_tokenize(struct chatllm_obj *obj, const char *utf8_str);
+
+/**
  * @brief text embedding
  *
  * embedding is emit through `PRINTLN_EMBEDDING`.
@@ -187,6 +199,15 @@ DLL_DECL int chatllm_text_embedding(struct chatllm_obj *obj, const char *utf8_st
  * @return                      0 if succeeded
  */
 DLL_DECL int chatllm_qa_rank(struct chatllm_obj *obj, const char *utf8_str_q, const char *utf8_str_a);
+
+/**
+ * @brief switching RAG vector store
+ *
+ * @param[in] obj               model object
+ * @param[in] name              vector store name
+ * @return                      0 if succeeded
+ */
+DLL_DECL int chatllm_rag_select_store(struct chatllm_obj *obj, const char *name);
 
 /**
  * @brief abort generation
