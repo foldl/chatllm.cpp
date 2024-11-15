@@ -38,6 +38,8 @@ enum PrintType
     PRINTLN_EMBEDDING       = 8,    // print a whole line: embedding (example: "0.1, 0.3, ...")
     PRINTLN_RANKING         = 9,    // print a whole line: ranking (example: "0.8")
     PRINTLN_TOKEN_IDS       =10,    // print a whole line: token ids (example: "1, 3, 5, 8, ...")
+
+    PRINT_EVT_ASYNC_COMPLETED  = 100,   // last async operation completed (utf8_str is null)
 };
 
 typedef void (*f_chatllm_print)(void *user_data, int print_type, const char *utf8_str);
@@ -250,6 +252,62 @@ DLL_DECL int API_CALL chatllm_save_session(struct chatllm_obj *obj, const char *
  * @return                      0 if succeeded
  */
 DLL_DECL int API_CALL chatllm_load_session(struct chatllm_obj *obj, const char *utf8_str);
+
+/**
+ * @brief get integer result of last async operation
+ *
+ * @param[in] obj               model object
+ * @return                      last result (if async is still ongoing, INT_MIN)
+ */
+DLL_DECL int API_CALL chatllm_get_async_result_int(struct chatllm_obj *obj);
+
+/**
+ * @brief async version of `chatllm_start`
+ *
+ * @param   ...
+ * @return                      0 if started else -1
+ */
+DLL_DECL int API_CALL chatllm_async_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_end f_end, void *user_data);
+
+/**
+ * @brief async version of `chatllm_user_input`
+
+ * @param   ...
+ * @return                      0 if started else -1
+ */
+DLL_DECL int API_CALL chatllm_async_user_input(struct chatllm_obj *obj, const char *utf8_str);
+
+/**
+ * @brief async version of `chatllm_tool_input`
+
+ * @param   ...
+ * @return                      0 if started else -1
+ */
+DLL_DECL int API_CALL chatllm_async_tool_input(struct chatllm_obj *obj, const char *utf8_str);
+
+/**
+ * @brief async version of `chatllm_tool_completion`
+
+ * @param   ...
+ * @return                      0 if started else -1
+ */
+DLL_DECL int chatllm_async_tool_completion(struct chatllm_obj *obj, const char *utf8_str);
+
+/**
+ * @brief async version of `chatllm_text_embedding`
+
+ * @param   ...
+ * @return                      0 if started else -1
+ */
+DLL_DECL int chatllm_async_text_embedding(struct chatllm_obj *obj, const char *utf8_str);
+
+/**
+ * @brief async version of `chatllm_qa_rank`
+
+ * @param   ...
+ * @return                      0 if started else -1
+ */
+DLL_DECL int chatllm_async_qa_rank(struct chatllm_obj *obj, const char *utf8_str_q, const char *utf8_str_a);
 
 #ifdef __cplusplus
 }

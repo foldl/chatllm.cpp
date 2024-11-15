@@ -15,7 +15,8 @@ begin
   case T of
     PRINT_CHAT_CHUNK: Write(UTF8ToString(AUTF8Str));
   else
-    WriteLn(UTF8ToString(AUTF8Str));
+    if Assigned(AUTF8Str) then
+      WriteLn(UTF8ToString(AUTF8Str));
   end;
 
 end;

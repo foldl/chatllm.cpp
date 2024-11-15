@@ -12,7 +12,8 @@ static void chatllm_print(void *user_data, int print_type, const char *utf8_str)
         break;
 
     default:
-        printf("%s\n", utf8_str);
+        if (utf8_str)
+            printf("%s\n", utf8_str);
         break;
     }
 
