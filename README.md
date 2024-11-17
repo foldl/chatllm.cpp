@@ -1,6 +1,6 @@
 # ChatLLM.cpp
 
-[中文版](README_zh.md)
+[中文版](README_zh.md) | [日本語](README_ja.md)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
