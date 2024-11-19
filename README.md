@@ -36,7 +36,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * [x] [Retrieval Augmented Generation](./docs/rag.md) (RAG) 🔥
 
 * [x] [LoRA](./docs/models.md#lora-models);
-* [x] Python/JavaScript/C [Bindings](./docs/binding.md), web demo, and more possibilities.
+* [x] Python/JavaScript/C/Nim [Bindings](./docs/binding.md), web demo, and more possibilities.
 
 ## Quick Start
 

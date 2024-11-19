@@ -126,7 +126,7 @@ WARNING: Bun [looks buggy on Linux](https://github.com/oven-sh/bun/issues/10242)
 
     1. Test `main.exe` with exactly the same command line options.
 
-## Pascal (Delphi/FPC)
+### Pascal (Delphi/FPC)
 
 Pascal [binding](../bindings/libchatllm.pas) is also available.
 
@@ -134,3 +134,9 @@ Examples:
 
 * [main.dpr](../bindings/main.dpr), which can be built by Delphi or FPC.
 * [Writing Tools](https://github.com/foldl/WritingTools).
+
+### Nim
+
+Examples:
+
+* [main.nim](../bindings/main.nim)

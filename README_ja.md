@@ -35,7 +35,7 @@
 * [x] [RAG](./docs/rag.md) (Retrieval Augmented Generation) 🔥
 
 * [x] [LoRA](./docs/models.md#lora-models)
-* [x] Python/JavaScript/C [バインディング](./docs/binding.md)、ウェブデモ、その他の可能性
+* [x] Python/JavaScript/C/Nim [バインディング](./docs/binding.md)、ウェブデモ、その他の可能性
 
 ## クイックスタート
 

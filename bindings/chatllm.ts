@@ -218,6 +218,7 @@ if (Bun.argv.slice(2).length > 0)
 
 let llm: ChatLLM | null = null;
 
+// FIXME: this does not work
 onmessage = function(msg) {
     console.log('Worker: ', msg.data);
 

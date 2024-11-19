@@ -22,7 +22,7 @@
 - [x] 检索增强生成（RAG） 🔥
 
 - [x] LoRA
-- [x] Python/JavaScript/C [绑定](./docs/binding.md)，网页演示，以及更多可能性。
+- [x] Python/JavaScript/C/Nim [绑定](./docs/binding.md)，网页演示，以及更多可能性。
 
 ## 快速开始
 
