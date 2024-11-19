@@ -139,4 +139,6 @@ Examples:
 
 Examples:
 
-* [main.nim](../bindings/main.nim)
+* [main.nim](../bindings/main.nim), which highlights code snippets.
+
+    ![](code_highlight.png)
