@@ -142,3 +142,7 @@ Examples:
 * [main.nim](../bindings/main.nim), which highlights code snippets.
 
     ![](code_highlight.png)
+
+### Others
+
+* [V-lang/VB.net/C#](https://github.com/foldl/chatllm.cpp/issues/41)
