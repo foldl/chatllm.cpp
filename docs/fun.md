@@ -73,3 +73,13 @@ Demo:
 ![](gen_steering.png)
 
 This is inspired by DeepSeek's [Chat Prefix Completion](https://api-docs.deepseek.com/guides/chat_prefix_completion).
+
+## Continued Generation
+
+[Yet another o1](../scripts/ya_o1.py) load two models, one for "thinking", one for summarizing.
+The "thinking" model uses `chatllm_ai_continue` to attach a suffix to the output, and let the LLM to continue the generation,
+which steers the LLM to _think deeper_.
+
+A sample session:
+
+![think deeper with continued generation](think_deeper.png)

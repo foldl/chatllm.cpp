@@ -136,6 +136,15 @@ DLL_DECL int API_CALL chatllm_user_input(struct chatllm_obj *obj, const char *ut
 DLL_DECL int API_CALL chatllm_set_ai_prefix(struct chatllm_obj *obj, const char *utf8_str);
 
 /**
+ * @brief add a suffix to ai output and continue generation
+ *
+ * @param[in] obj               model object
+ * @param[in] utf8_str          suffix
+ * @return                      0 if succeeded
+ */
+DLL_DECL int API_CALL chatllm_ai_continue(struct chatllm_obj *obj, const char *utf8_str);
+
+/**
  * @brief tool input
  *
  * - If this function is called before `chatllm_user_input` returns, this is asynchronized,

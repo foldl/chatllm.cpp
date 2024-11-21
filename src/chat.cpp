@@ -319,7 +319,8 @@ namespace chatllm
         return start + 1;
     }
 
-    std::vector<int> BaseTokenizer::encode_history(BaseHistoryEncoder *encoder, const Messages &history, int max_length, const bool incremental)
+    std::vector<int> BaseTokenizer::encode_history(BaseHistoryEncoder *encoder, const Messages &history,
+        int max_length, const bool incremental, const bool ai_opening)
     {
         std::vector<int> input_ids;
 
@@ -340,7 +341,8 @@ namespace chatllm
             encoder->append_message(history[encode_start], input_ids);
         }
 
-        encoder->append_ai_opening(encode_start > 0 ? history[encode_start - 1].round : 0, input_ids);
+        if (ai_opening)
+            encoder->append_ai_opening(encode_start > 0 ? history[encode_start - 1].round : 0, input_ids);
 
         history.move_cursor_to_end();
 
@@ -381,30 +383,30 @@ namespace chatllm
         return ids;
     }
 
-    std::vector<int> BaseTokenizer::encode_history(const Messages &history, int max_length, const bool incremental)
+    std::vector<int> BaseTokenizer::encode_history(const Messages &history, int max_length, const bool incremental, const bool ai_opening)
     {
         switch (format)
         {
         case ChatFormat::COMPLETION:
             if (completion_encoder)
-                return encode_history(completion_encoder, history, max_length, incremental);
+                return encode_history(completion_encoder, history, max_length, incremental, ai_opening);
             else;
             break;
 
         case ChatFormat::QA:
             if (qa_encoder)
-                return encode_history(qa_encoder, history, max_length, incremental);
+                return encode_history(qa_encoder, history, max_length, incremental, ai_opening);
             else if (chat_encoder)
             {
                 Messages copied;
                 copied.push_back(history[history.size() - 1]);
-                return encode_history(chat_encoder, copied, max_length, incremental);
+                return encode_history(chat_encoder, copied, max_length, incremental, ai_opening);
             }
             else;
             break;
         default:
             if (chat_encoder)
-                return encode_history(chat_encoder, history, max_length, incremental);
+                return encode_history(chat_encoder, history, max_length, incremental, ai_opening);
             else;
         }
 
@@ -967,6 +969,7 @@ namespace chatllm
             {
                 streamer->putln("\nRUN OUT OF CONTEXT. Let me forget something and try again ...\n");
                 input_ids = tokenizer->encode_history(history, gen_config.max_context_length);
+                add_ai_prefix(input_ids, gen_config, streamer);
                 output_ids = model->generate(input_ids, gen_config, false, completed, &performance, gen_max_tokens, streamer);
             }
             else
@@ -1095,18 +1098,27 @@ namespace chatllm
         if (gen_config.ai_prefix.size() > 0)
         {
             tokenizer->encode(gen_config.ai_prefix, input_ids);
-            streamer->put_chunk(false, gen_config.ai_prefix);
+            if (streamer)
+                streamer->put_chunk(false, gen_config.ai_prefix);
         }
     }
 
-    std::string Pipeline::chat_with_ext_completion(const Messages &history, std::string &external, const GenerationConfig &gen_config,
+    std::string Pipeline::chat_with_ext_completion(Messages &history, const std::string &external, const GenerationConfig &gen_config,
                          BaseStreamer *streamer)
     {
         bool continuous = true;
         bool completed = false;
         std::vector<int> input_ids;
 
+        input_ids = tokenizer->encode_history(history, gen_config.max_length, false, false);
+        rewind((int)input_ids.size());\
+        input_ids.clear();
+
         tokenizer->encode_external_text_completion(external, input_ids);
+        if (streamer)
+            streamer->put_chunk(false, external);
+
+        history[history.size() - 1].content = history[history.size() - 1].content + external;
 
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, gen_max_tokens, streamer);
         if (!completed)
@@ -1114,7 +1126,7 @@ namespace chatllm
             if (continuous)
             {
                 streamer->putln("\nRUN OUT OF CONTEXT. Let me forget something and try again ...\n");
-                input_ids = tokenizer->encode_history(history, gen_config.max_context_length);
+                input_ids = tokenizer->encode_history(history, gen_config.max_context_length, false, false);
                 output_ids = model->generate(input_ids, gen_config, false, completed, &performance, gen_max_tokens, streamer);
             }
             else
@@ -1125,10 +1137,13 @@ namespace chatllm
         return output;
     }
 
-    std::string Pipeline::chat_continue(Messages &history, std::string &external_ai, const GenerationConfig &gen_config,
+    std::string Pipeline::chat_continue(Messages &history, const std::string &external_ai, const GenerationConfig &gen_config,
                          BaseStreamer *streamer)
     {
         std::string r;
+
+        if (history.size() < 1) return r;
+        if (history[history.size() - 1].role != MsgRole::Assistant) return r;
 
         if (modelobj.loaded && streamer)
         {
@@ -1186,7 +1201,8 @@ namespace chatllm
     void Pipeline::rewind(int n_past)
     {
         if (!modelobj.loaded) return;
-        model->set_n_past(n_past);
+        if (model->get_n_past() > n_past)
+            model->set_n_past(n_past);
     }
 
     int Pipeline::save_session(const Messages &history, const std::string &file_name)

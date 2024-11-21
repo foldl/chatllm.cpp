@@ -1241,6 +1241,31 @@ int chatllm_async_user_input(struct chatllm_obj *obj, const char *utf8_str)
     ASYNC_FUN_BODY(chatllm_user_input(obj, utf8_str));
 }
 
+int chatllm_ai_continue(struct chatllm_obj *obj, const char *utf8_str)
+{
+    int r = 0;
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    if (!streamer->is_prompt) return -1;
+
+    if (chat->pipeline->is_loaded() && (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Chat))
+        return -1;
+
+    if (chat->history.size() < 1) return -2;
+    if (chat->history[chat->history.size() - 1].role != chatllm::MsgRole::Assistant) return -3;
+
+    std::string more = chat->pipeline->chat_continue(chat->history, utf8_str, chat->gen_config, streamer);
+
+    chat->history[chat->history.size() - 1].content = chat->history[chat->history.size() - 1].content + more;
+
+    return r;
+}
+
+int chatllm_async_ai_continue(struct chatllm_obj *obj, const char *utf8_str)
+{
+    ASYNC_FUN_BODY(chatllm_ai_continue(obj, utf8_str));
+}
+
 int chatllm_tool_input(struct chatllm_obj *obj, const char *utf8_str)
 {
     Chat *chat = reinterpret_cast<Chat *>(obj);
@@ -1371,7 +1396,7 @@ void chatllm_restart(struct chatllm_obj *obj, const char *utf8_sys_prompt)
     FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
     if (!streamer->is_prompt) return;
 
-    if (chat->sess_hist_len > 0)
+    if ((chat->sess_hist_len > 0) && (nullptr == utf8_sys_prompt))
     {
         if (chat->history.size() > (size_t)chat->sess_hist_len)
             chat->history.history.erase(chat->history.history.begin() + chat->sess_hist_len, chat->history.history.end());

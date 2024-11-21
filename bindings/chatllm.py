@@ -58,6 +58,7 @@ class LibChatLLM:
         self._chatllm_append_param      = self._lib.chatllm_append_param
         self._chatllm_start             = self._lib.chatllm_start
         self._chatllm_set_ai_prefix     = self._lib.chatllm_set_ai_prefix
+        self._chatllm_ai_continue       = self._lib.chatllm_ai_continue
         self._chatllm_user_input        = self._lib.chatllm_user_input
         self._chatllm_tool_input        = self._lib.chatllm_tool_input
         self._chatllm_tool_completion   = self._lib.chatllm_tool_completion
@@ -81,6 +82,9 @@ class LibChatLLM:
 
         self._chatllm_set_ai_prefix.restype = c_int
         self._chatllm_set_ai_prefix.argtypes = [c_void_p, c_char_p]
+
+        self._chatllm_ai_continue.restype = c_int
+        self._chatllm_ai_continue.argtypes = [c_void_p, c_char_p]
 
         self._chatllm_user_input.restype = c_int
         self._chatllm_user_input.argtypes = [c_void_p, c_char_p]
@@ -179,6 +183,9 @@ class LibChatLLM:
     def chat(self, obj: c_void_p, user_input: str) -> int:
         return self._chatllm_user_input(obj, c_char_p(user_input.encode()))
 
+    def ai_continue(self, obj: c_void_p, suffix: str) -> int:
+        return self._chatllm_ai_continue(obj, c_char_p(suffix.encode()))
+
     def tool_input(self, obj: c_void_p, user_input: str) -> int:
         return self._chatllm_tool_input(obj, c_char_p(user_input.encode()))
 
@@ -201,7 +208,7 @@ class LibChatLLM:
         self._chatllm_abort_generation(obj)
 
     def restart(self, obj: c_void_p, sys_prompt: str | None = None) -> None:
-        self._chatllm_restart(obj, c_char_p(sys_prompt) if sys_prompt is not None else c_void_p(None))
+        self._chatllm_restart(obj, c_char_p(sys_prompt) if sys_prompt is not None else c_char_p(None))
 
     def set_max_gen_tokens(self, obj: c_void_p, max_gen: int) -> None:
         self._chatllm_set_gen_max_tokens(obj, max_gen)
@@ -261,6 +268,13 @@ class ChatLLM:
         self.is_generating = False
         if r != 0:
             raise Exception(f'ChatLLM: failed to `chat()` with error code {r}')
+
+    def ai_continue(self, suffix: str) -> int:
+        self.is_generating = True
+        r = self._lib.ai_continue(self._chat, suffix)
+        self.is_generating = False
+        if r != 0:
+            raise Exception(f'ChatLLM: failed to `ai_continue()` with error code {r}')
 
     def tool_input(self, user_input: str, input_id = None) -> None:
         self.tool_input_id = input_id

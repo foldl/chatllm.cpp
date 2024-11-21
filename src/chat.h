@@ -151,8 +151,8 @@ namespace chatllm
 
         virtual std::string decode(const std::vector<int> &ids) const;
 
-        virtual std::vector<int> encode_history(const Messages &history, int max_length, const bool incremental = false);
-        virtual std::vector<int> encode_history(BaseHistoryEncoder *encoder, const Messages &history, int max_length, const bool incremental = false);
+        virtual std::vector<int> encode_history(const Messages &history, int max_length, const bool incremental = false, const bool ai_opening = true);
+        virtual std::vector<int> encode_history(BaseHistoryEncoder *encoder, const Messages &history, int max_length, const bool incremental = false, const bool ai_opening = true);
         virtual std::vector<int> encode_sys_prompt(void);
 
         void set_system_prompt(const std::string &prompt) { sys_prompt = prompt; }
@@ -831,7 +831,7 @@ namespace chatllm
         virtual void abort_generation(void);
         virtual void eval_sys_prompt(const GenerationConfig &gen_config);
 
-        std::string chat_continue(Messages &history, std::string &external, const GenerationConfig &gen_config,
+        std::string chat_continue(Messages &history, const std::string &external, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);
 
         void set_system_prompt(const std::string &prompt);
@@ -875,7 +875,7 @@ namespace chatllm
 
         void add_ai_prefix(std::vector<int> &input_ids, const GenerationConfig &gen_config, BaseStreamer *streamer);
 
-        std::string chat_with_ext_completion(const Messages &history, std::string &external, const GenerationConfig &gen_config,
+        std::string chat_with_ext_completion(Messages &history, const std::string &external, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);
         std::string chat_with_restart(const Messages &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);

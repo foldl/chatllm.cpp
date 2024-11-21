@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-11-21: [Continued generation](./docs/fun.md#continued-generation)
 * 2024-11-01: Granite, [generation steering](./docs/fun.md#generation-steering)
 * 2024-09-29: LlaMA 3.2
 * 2024-09-22: Qwen 2.5
