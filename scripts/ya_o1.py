@@ -113,5 +113,5 @@ if __name__ == '__main__':
     SYSTEM_PROMPT = """You are an AI assistant that answers questions by checking and summarizing the thought given by user.
 ALWAYS use the thought given by user. DO NOT answer it yourself."""
 
-    run(CallableLLM(LIB, ['-m', args[0], '--temp', '0.7', '--ai_prefix', ]),
+    run(CallableLLM(LIB, ['-m', args[0], '--temp', '0.7']),
         ChatLLM(LIB, ['-m', args[1], '--temp', '0', '--system', SYSTEM_PROMPT]))
