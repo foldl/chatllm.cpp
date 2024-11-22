@@ -62,7 +62,6 @@ class ThoughtLLM1:
 
     def think(self, prompt: str) -> str:
         self.llm.restart()
-        self.llm.restart()
         self.llm.set_ai_prefix(self.thought_procedures[0])
         print_green(f"think #1")
         self.llm.chat(prompt)
