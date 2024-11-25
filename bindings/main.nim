@@ -1,10 +1,69 @@
-import strutils
-import os
+import strutils, std/strformat, std/httpclient, os, json, asyncdispatch
 import libchatllm
 import packages/docutils/highlite, terminal
 
 import std/terminal
 import std/[os, strutils]
+
+var all_models: JsonNode = nil
+
+proc get_model_url_on_modelscope(url: seq[string]): string =
+  let proj = url[0]
+  let fn = url[1]
+  let user = if len(url) >= 3: url[2] else: "judd2024"
+
+  return fmt"https://modelscope.cn/api/v1/models/{user}/{proj}/repo?Revision=master&FilePath={fn}"
+
+proc parse_model_id(model_id: string): JsonNode =
+  let parts = model_id.split(":")
+  if all_models == nil:
+    all_models = json.parseFile("../scripts/models.json")
+
+  let model = all_models[parts[0]]
+  let variants = model["variants"]
+  let variant = variants[if len(parts) >= 2: parts[1] else: model["default"].getStr()]
+  let r = variant["quantized"][variant["default"].getStr()]
+  let url = r["url"].getStr().split("/")
+  r["url"] = json.newJString(get_model_url_on_modelscope(url))
+  r["fn"] = json.newJString(url[1])
+  return r
+
+proc print_progress_bar(iteration: BiggestInt, total: BiggestInt, prefix = "", suffix = "", decimals = 1, length = 60, fill = "█", printEnd = "\r", auto_nl = true) =
+  let percent = formatFloat(100.0 * (iteration.float / total.float), ffDecimal, decimals)
+  let filledLength = int(length.float * iteration.float / total.float)
+  let bar = fill.repeat(filledLength) & '-'.repeat(length - filledLength)
+  stdout.write(fmt"{printEnd}{prefix} |{bar}| {percent}% {suffix}")
+  if iteration == total and auto_nl:
+      echo ""
+
+proc download_file(url: string, fn: string, prefix: string) =
+  echo fmt"Downloading {prefix}"
+  let client = newAsyncHttpClient()
+  defer: client.close()
+
+  proc onProgressChanged(total, progress, speed: BiggestInt) {.async} =
+    print_progress_bar(progress, total, prefix)
+
+  client.onProgressChanged = onProgressChanged
+  client.downloadFile(url, fn).waitFor()
+
+proc get_model(model_id: string; storage_dir: string): string =
+  if not os.dirExists(storage_dir):
+    os.createDir(storage_dir)
+
+  let info = parse_model_id(model_id)
+  let fn = joinPath([storage_dir, info["fn"].getStr()])
+  if os.fileExists(fn):
+      if os.getFileSize(fn) == info["size"].getBiggestInt():
+          return fn
+      else:
+          echo(fmt"{fn} is incomplete, download again")
+
+  download_file(info["url"].getStr(), fn, model_id)
+  assert (os.fileExists(fn)) and (os.getFileSize(fn) == info["size"].getBiggestInt())
+  print_progress_bar(100, 100)
+
+  return fn
 
 type
   highlighter = object
@@ -78,10 +137,19 @@ proc chatllm_print(user_data: pointer, print_type: cint, utf8_str: cstring) {.cd
 proc chatllm_end(user_data: pointer) {.cdecl.} =
   echo ""
 
+const candidates = ["-m", "--model", "--embedding_model", "--reranker_model"]
+var storage_dir: string = "../quantized"
+
 var ht = highlighter(line_acc: "", lang: langNone)
 let chat = chatllm_create()
+
 for i in 1 .. paramCount():
-  chatllm_append_param(chat, paramStr(i).cstring)
+  if (i > 1) and (paramStr(i - 1) in candidates) and paramStr(i).startsWith(":"):
+    var m = paramStr(i)
+    m = m[1..<len(m)]
+    chatllm_append_param(chat, get_model(m, storage_dir).cstring)
+  else:
+    chatllm_append_param(chat, paramStr(i).cstring)
 
 let r = chatllm_start(chat, chatllm_print, chatllm_end, addr(ht))
 if r != 0:
