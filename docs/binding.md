@@ -141,6 +141,12 @@ Examples:
 
 * [main.nim](../bindings/main.nim), which highlights code snippets.
 
+    Build:
+
+    ```
+    nim c -d:Release -d:ssl main.nim
+    ```
+
     ![](code_highlight.png)
 
 ### Others

@@ -128,8 +128,12 @@ proc chatllm_print(user_data: pointer, print_type: cint, utf8_str: cstring) {.cd
   of PRINT_CHAT_CHUNK:
     var ht = cast[ptr highlighter](user_data)
     var s: string = $utf8_str
+    var n = 0
     for l in s.splitLines():
-      receive_chunk(ht[], l)
+      if n > 0: receive_chunk(ht[], "")
+      n += 1
+      if l != "":
+        receive_chunk(ht[], l)
   else:
     if utf8_str != nil: echo utf8_str
   stdout.flushFile()
