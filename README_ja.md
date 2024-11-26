@@ -10,19 +10,6 @@
 
 | [サポートされているモデル](./docs/models.md) | [量子化モデルのダウンロード](./docs/quick_start.md#download-quantized-models) |
 
-**新着情報:**
-
-* 2024-11-01: Granite, [生成ステアリング](./docs/fun.md#generation-steering)
-* 2024-09-29: LlaMA 3.2
-* 2024-09-22: Qwen 2.5
-* 2024-09-13: OLMoE
-* 2024-09-11: MiniCPM3
-* 2024-07-14: [ggml 更新](https://github.com/ggerganov/ggml/tree/3e7e5e26f90fecf4f7c2808df7d94454630b219c)
-* 2024-06-15: [ツール呼び出し](./docs/tool_calling.md)
-* 2024-05-29: [ggml](https://github.com/ggerganov/ggml) はサブモジュールではなくフォークされました
-* 2024-05-14: [OpenAI API](./docs/binding.md#openai-compatible-api), CodeGemma Base & Instruct 対応
-* 2024-05-08: [レイヤーシャッフル](./docs/fun.md#layer-shuffling)
-
 ## 特徴
 
 * [x] int4/int8 量子化、最適化された KV キャッシュ、並列計算によるメモリ効率の高い CPU 推論の加速

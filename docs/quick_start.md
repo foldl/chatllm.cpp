@@ -3,8 +3,8 @@
 For Windows users, the easies way is to download a release, extract it, and start chatting:
 
 ```
-python chatllm.py -i -m :qwen2:0.5b
-downloading qwen2:0.5b
+main -i -m :qwen2.5:0.5b
+Downloading qwen2:0.5b
  |████████████████████████████████████████████████████████████| 100.0%
     ________          __  __    __    __  ___ (通义千问)
    / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____

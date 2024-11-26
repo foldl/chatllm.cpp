@@ -26,7 +26,7 @@
 
 ## 快速开始
 
-只需要简单一行 `python chatllm.py -i -m :model_id`. 查看 [详情](./docs/quick_start.md).
+只需要简单一行 `main -i -m :model_id`. 查看 [详情](./docs/quick_start.md).
 
 ## 使用方法
 

@@ -147,7 +147,17 @@ var storage_dir: string = "../quantized"
 var ht = highlighter(line_acc: "", lang: langNone)
 let chat = chatllm_create()
 
+# related front end parameters are ignored by `libchatllm`
+var prompt: string = "hello"
+var interactive: bool = false
+
 for i in 1 .. paramCount():
+  if paramStr(i) in ["-i", "--interactive"]:
+    interactive = true
+
+  if (i > 1) and (paramStr(i - 1) in ["-p", "--prompt"]):
+    prompt = paramStr(i)
+
   if (i > 1) and (paramStr(i - 1) in candidates) and paramStr(i).startsWith(":"):
     var m = paramStr(i)
     m = m[1..<len(m)]
@@ -160,13 +170,18 @@ if r != 0:
   echo ">>> chatllm_start error: ", r
   quit(r)
 
-while true:
-  stdout.write("You  > ")
-  let input = stdin.readLine()
-  if input.isEmptyOrWhitespace(): continue
+if interactive:
+  while true:
+    stdout.write("You  > ")
+    let input = stdin.readLine()
+    if input.isEmptyOrWhitespace(): continue
 
-  stdout.write("A.I. > ")
-  let r = chatllm_user_input(chat, input.cstring)
-  if r != 0:
-    echo ">>> chatllm_user_input error: ", r
-    break
+    stdout.write("A.I. > ")
+    let r = chatllm_user_input(chat, input.cstring)
+    if r != 0:
+      echo ">>> chatllm_user_input error: ", r
+      break
+else:
+  discard chatllm_user_input(chat, prompt.cstring)
+
+chatllm_show_statistics(chat)

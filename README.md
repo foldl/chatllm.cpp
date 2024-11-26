@@ -42,7 +42,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 ## Quick Start
 
-As simple as `python chatllm.py -i -m :model_id`. [Check it out](./docs/quick_start.md).
+As simple as `main -i -m :model_id`. [Check it out](./docs/quick_start.md).
 
 ## Usage
 
