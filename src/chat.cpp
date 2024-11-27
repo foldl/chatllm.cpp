@@ -67,6 +67,7 @@ namespace chatllm
     {
         history.clear();
         cursor = 0;
+        round = -1;
     }
 
     void Messages::push_back(const Message &m)

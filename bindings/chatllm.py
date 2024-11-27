@@ -208,7 +208,7 @@ class LibChatLLM:
         self._chatllm_abort_generation(obj)
 
     def restart(self, obj: c_void_p, sys_prompt: str | None = None) -> None:
-        self._chatllm_restart(obj, c_char_p(sys_prompt) if sys_prompt is not None else c_char_p(None))
+        self._chatllm_restart(obj, c_char_p(sys_prompt.encode()) if sys_prompt is not None else c_char_p(None))
 
     def set_max_gen_tokens(self, obj: c_void_p, max_gen: int) -> None:
         self._chatllm_set_gen_max_tokens(obj, max_gen)

@@ -297,7 +297,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             else if (strcmp(arg, "--vector_store") == 0)
             {
                 c++;
-                if (c + 1 < argc)
+                if (c < argc)
                 {
                     if (args.vector_stores.find(args.cur_vs_name) == args.vector_stores.end())
                     {
@@ -1110,7 +1110,7 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
     {
         chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers);
 
-        if (args.embedding_model_path.size() < 1)
+        if ((args.embedding_model_path.size() < 1) || (args.vector_stores.empty()))
         {
             if (args.model_path.size() < 1)
                 return -1;
@@ -1358,7 +1358,7 @@ int chatllm_rag_select_store(struct chatllm_obj *obj, const char *name)
 {
     Chat *chat = reinterpret_cast<Chat *>(obj);
 
-    if (!chat->pipeline->is_loaded() || !chat->is_rag)
+    if (!chat->is_rag)
         return -1;
 
     auto pipeline = dynamic_cast<chatllm::RAGPipeline *>(chat->pipeline);
