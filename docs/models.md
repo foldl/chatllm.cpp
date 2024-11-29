@@ -110,6 +110,7 @@
     * [x] v2.5-Coder: [Instruct-1.5B](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct), [Instruct-7B](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct)
     * [x] v2.5-Math: [Instruct-1.5B](https://huggingface.co/Qwen/Qwen2.5-Math-1.5B-Instruct), [Instruct-7B](https://huggingface.co/Qwen/Qwen2.5-Math-7B-Instruct), [Instruct-72B](https://huggingface.co/Qwen/Qwen2.5-Math-72B-Instruct)
     * [x] [Marco-o1](https://huggingface.co/AIDC-AI/Marco-o1) (-a `Marco-o1`)
+    * [x] [QwQ-32B-Preview](https://huggingface.co/Qwen/QwQ-32B-Preview) (-a `QwQ`)
 
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)

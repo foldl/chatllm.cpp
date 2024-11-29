@@ -552,3 +552,26 @@ namespace marco_o1
         {}
     };
 }
+
+namespace qwq
+{
+    typedef v2::Config Config;
+
+    class Tokenizer : public v2::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config)
+            : v2::Tokenizer(config)
+        {
+            sys_prompt = "You are a helpful and harmless assistant. You are Qwen developed by Alibaba. You should think step-by-step.";
+        }
+    };
+
+    class ConditionalGeneration : public v2::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : v2::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_QWQ)
+        {}
+    };
+}

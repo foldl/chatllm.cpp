@@ -196,6 +196,7 @@ namespace chatllm
         MODEL_TYPE_QWEN2TIE = 0x711,
         MODEL_TYPE_QWEN2MoE = 0x750,
         MODEL_TYPE_MARCO_O1 = 0x751,
+        MODEL_TYPE_QWQ      = 0x752,
 
         MODEL_TYPE_BLUELM   = 0x800,
 
@@ -365,6 +366,8 @@ namespace chatllm
             return "QWen2-MoE";
         case MODEL_TYPE_MARCO_O1:
             return "Marco-o1";
+        case MODEL_TYPE_QWQ:
+            return "QwQ";
         case MODEL_TYPE_TIGERBOT:
             return "TigerBot";
         case MODEL_TYPE_BLUELM:
@@ -459,6 +462,7 @@ namespace chatllm
         case MODEL_TYPE_QWEN2:
         case MODEL_TYPE_QWEN2TIE:
         case MODEL_TYPE_QWEN2MoE:
+        case MODEL_TYPE_QWQ:
             return "通义千问";
         case MODEL_TYPE_TIGERBOT:
             return "虎博";
@@ -1822,6 +1826,7 @@ namespace chatllm
         CASE(QWEN2MoE,              qwen::v2_moe, 1)            \
         CASE(QWEN2TIE,              qwen::v2_tie, 1)            \
         CASE(MARCO_O1,              qwen::marco_o1, 1)          \
+        CASE(QWQ,                   qwen::qwq, 1)               \
                                                                 \
         CASE(TIGERBOT,              tigerbot, 1)                \
                                                                 \
