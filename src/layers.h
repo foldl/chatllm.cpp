@@ -133,6 +133,16 @@ namespace chatllm
             CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *input, int n_past): not implemented";
             return NULL;
         }
+        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *_)
+        {
+            CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *_): not implemented";
+            return NULL;
+        }
+        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *patches, int patches_per_row, ggml::tensor *text_input)
+        {
+            CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *patches, int patches_per_row, ggml::tensor *text_input): not implemented";
+            return NULL;
+        }
         virtual void set_ctx(int n_ctx) { }
         virtual void shift_cache(int shift, int total) { }
 
@@ -220,8 +230,6 @@ namespace chatllm
     public:
         VisualEmbedding(InitContext *ctx, int num_embeddings, int embedding_dim)
             : Embedding(ctx, num_embeddings, embedding_dim) {}
-
-        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *patches, int patches_per_row, ggml::tensor *text_input) = 0;
     };
 
     class Linear : public Block
@@ -1848,7 +1856,7 @@ namespace chatllm
               norm(ctx, hidden_size)
         {}
 
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *attention_output);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *attention_output) override;
 
     public:
         Linear dense;

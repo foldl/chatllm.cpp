@@ -211,9 +211,7 @@ MK_CFLAGS += \
 	-Werror=implicit-function-declaration
 
 MK_CXXFLAGS += \
-	$(WARN_FLAGS) \
-	-Wmissing-declarations \
-	-Wmissing-noreturn
+	$(WARN_FLAGS)
 
 ifeq ($(CHATLLM_FATAL_WARNINGS),1)
 	MK_CFLAGS   += -Werror
