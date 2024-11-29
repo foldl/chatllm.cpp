@@ -2,9 +2,6 @@ import strutils, std/strformat, std/httpclient, os, json, asyncdispatch
 import libchatllm
 import packages/docutils/highlite, terminal
 
-import std/terminal
-import std/[os, strutils]
-
 var all_models: JsonNode = nil
 
 proc get_model_url_on_modelscope(url: seq[string]): string =
@@ -18,8 +15,8 @@ proc parse_model_id(model_id: string): JsonNode =
   let parts = model_id.split(":")
   if all_models == nil:
     let fn = joinPath([parentDir(paramStr(0)), "../scripts/models.json"])
-    if not fileExists(fn): return nil
-    all_models = json.parseFile(fn)
+    const compiled_file = readFile("../scripts/models.json")
+    all_models = if fileExists(fn): json.parseFile(fn) else: json.parseJson(compiled_file)
 
   if not all_models.contains(parts[0]): return nil
   let model = all_models[parts[0]]
