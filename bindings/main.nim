@@ -17,8 +17,11 @@ proc get_model_url_on_modelscope(url: seq[string]): string =
 proc parse_model_id(model_id: string): JsonNode =
   let parts = model_id.split(":")
   if all_models == nil:
-    all_models = json.parseFile("../scripts/models.json")
+    let fn = joinPath([parentDir(paramStr(0)), "../scripts/models.json"])
+    if not fileExists(fn): return nil
+    all_models = json.parseFile(fn)
 
+  if not all_models.contains(parts[0]): return nil
   let model = all_models[parts[0]]
   let variants = model["variants"]
   let variant = variants[if len(parts) >= 2: parts[1] else: model["default"].getStr()]
@@ -52,6 +55,8 @@ proc get_model(model_id: string; storage_dir: string): string =
     os.createDir(storage_dir)
 
   let info = parse_model_id(model_id)
+  assert info != nil, fmt"unknown model id {model_id}"
+
   let fn = joinPath([storage_dir, info["fn"].getStr()])
   if os.fileExists(fn):
       if os.getFileSize(fn) == info["size"].getBiggestInt():
@@ -142,7 +147,7 @@ proc chatllm_end(user_data: pointer) {.cdecl.} =
   echo ""
 
 const candidates = ["-m", "--model", "--embedding_model", "--reranker_model"]
-var storage_dir: string = "../quantized"
+let storage_dir = joinPath([parentDir(paramStr(0)), "../quantized"])
 
 var ht = highlighter(line_acc: "", lang: langNone)
 let chat = chatllm_create()
