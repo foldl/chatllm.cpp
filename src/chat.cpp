@@ -317,11 +317,11 @@ namespace chatllm
                 break;
             start -= 2;
         }
-        return start + 1;
+        return start < 0 ? 0 : start;
     }
 
     std::vector<int> BaseTokenizer::encode_history(BaseHistoryEncoder *encoder, const Messages &history,
-        int max_length, const bool incremental, const bool ai_opening)
+        int max_length, const bool incremental, const bool ai_opening, const bool reversed_role)
     {
         std::vector<int> input_ids;
 
@@ -333,7 +333,7 @@ namespace chatllm
         }
         else
         {
-            for (; (encode_start < (int)history.size()) && (history[encode_start].role == MsgRole::Assistant); encode_start++)
+            for (; (encode_start < (int)history.size()) && (history[encode_start].role == (reversed_role ? MsgRole::User : MsgRole::Assistant)); encode_start++)
                 ;
         }
 
@@ -343,7 +343,12 @@ namespace chatllm
         }
 
         if (ai_opening)
-            encoder->append_ai_opening(encode_start > 0 ? history[encode_start - 1].round : 0, input_ids);
+        {
+            if (reversed_role)
+                encoder->append_user_opening(encode_start > 0 ? history[encode_start - 1].round : 0, input_ids);
+            else
+                encoder->append_ai_opening(encode_start > 0 ? history[encode_start - 1].round : 0, input_ids);
+        }
 
         history.move_cursor_to_end();
 
@@ -384,30 +389,31 @@ namespace chatllm
         return ids;
     }
 
-    std::vector<int> BaseTokenizer::encode_history(const Messages &history, int max_length, const bool incremental, const bool ai_opening)
+    std::vector<int> BaseTokenizer::encode_history(const Messages &history, int max_length, const bool incremental,
+                                                   const bool ai_opening, const bool reversed_role)
     {
         switch (format)
         {
         case ChatFormat::COMPLETION:
             if (completion_encoder)
-                return encode_history(completion_encoder, history, max_length, incremental, ai_opening);
+                return encode_history(completion_encoder, history, max_length, incremental, ai_opening, reversed_role);
             else;
             break;
 
         case ChatFormat::QA:
             if (qa_encoder)
-                return encode_history(qa_encoder, history, max_length, incremental, ai_opening);
+                return encode_history(qa_encoder, history, max_length, incremental, ai_opening, reversed_role);
             else if (chat_encoder)
             {
                 Messages copied;
                 copied.push_back(history[history.size() - 1]);
-                return encode_history(chat_encoder, copied, max_length, incremental, ai_opening);
+                return encode_history(chat_encoder, copied, max_length, incremental, ai_opening, reversed_role);
             }
             else;
             break;
         default:
             if (chat_encoder)
-                return encode_history(chat_encoder, history, max_length, incremental, ai_opening);
+                return encode_history(chat_encoder, history, max_length, incremental, ai_opening, reversed_role);
             else;
         }
 
@@ -449,6 +455,11 @@ namespace chatllm
     void BaseHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
     {
         CHATLLM_THROW << "BaseHistoryEncoder::append_ai no override.";
+    }
+
+    void BaseHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &ids) const
+    {
+        CHATLLM_THROW << "BaseHistoryEncoder::append_user_opening no override.";
     }
 
     void BaseHistoryEncoder::append_tool(int round_idx, const std::string &tool, std::vector<int> &ids) const
@@ -960,7 +971,7 @@ namespace chatllm
         }
         else;
 
-        input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous);
+        input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous, true, gen_config.reversed_role);
         add_ai_prefix(input_ids, gen_config, streamer);
 
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, gen_max_tokens, streamer);
@@ -969,7 +980,7 @@ namespace chatllm
             if (continuous)
             {
                 streamer->putln("\nRUN OUT OF CONTEXT. Let me forget something and try again ...\n");
-                input_ids = tokenizer->encode_history(history, gen_config.max_context_length);
+                input_ids = tokenizer->encode_history(history, gen_config.max_context_length, false, true, gen_config.reversed_role);
                 add_ai_prefix(input_ids, gen_config, streamer);
                 output_ids = model->generate(input_ids, gen_config, false, completed, &performance, gen_max_tokens, streamer);
             }
@@ -994,7 +1005,7 @@ namespace chatllm
         }
         else;
 
-        input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous);
+        input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous, true, gen_config.reversed_role);
         add_ai_prefix(input_ids, gen_config, streamer);
 
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, gen_max_tokens, streamer);
@@ -1019,7 +1030,7 @@ namespace chatllm
         }
         else;
 
-        std::vector<int> input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous);
+        std::vector<int> input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous, true, gen_config.reversed_role);
         add_ai_prefix(input_ids, gen_config, streamer);
 
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, gen_max_tokens, streamer);
@@ -1400,6 +1411,8 @@ namespace chatllm
         std::string rewritten_query(query);
         std::vector<float> query_emb;
         std::vector<int64_t> selected;
+
+        CHATLLM_CHECK(!gen_config.reversed_role) << "you can't do reversed chat with RAG";
 
         metainfo.clear();
 

@@ -67,6 +67,7 @@ struct Args
     bool show_banner = true;
     bool show_help = false;
     bool rerank_rewrite = false;
+    bool reversed_role = false;
     int save_session_rounds = -1;
 };
 
@@ -99,6 +100,7 @@ void usage(const std::string &prog)
               << "      --sys_file FN       system prompt (instruction) from file\n"
               << "      --ai_prefix         AI prefix for generation (default: empty)\n"
               << "  -i, --interactive       run in interactive mode\n"
+              << "      --reversed_role     AI becomes `user`, user becomes `AI`\n"
               << "  -l, --max_length N      max total length including prompt and output (default: model specific)\n"
               << "                          generally, this is used to reduce KV cache size.\n"
               << "                          for models that does not show its max context window in `config.json`,\n"
@@ -254,6 +256,10 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             else if (strcmp(arg, "--show") == 0)
             {
                 args.show = true;
+            }
+            else if (strcmp(arg, "--reversed_role") == 0)
+            {
+                args.reversed_role = true;
             }
             else if (strcmp(arg, "+rag_dump") == 0)
             {
@@ -630,8 +636,8 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
     streamer.cout << "Bye\n";
 }
 
-#define DEF_GenerationConfig(gen_config, args) chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.top_k,    \
-                                         args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z); \
+#define DEF_GenerationConfig(gen_config, args) chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.reversed_role, \
+                                         args.top_k, args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z); \
                                          gen_config.set_ai_prefix(args.ai_prefix)
 
 void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
@@ -744,28 +750,55 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
         }
     }
 
-    while (1)
+    if (args.reversed_role)
     {
-        if ((args.save_session_rounds > 0) && ((int)(history.size() / 2) == args.save_session_rounds))
-        {
-            std::cout << std::endl << "saving session..." << std::endl;
-            pipeline.save_session(history, args.save_session);
-            break;
-        }
+        CHATLLM_CHECK(args.save_session_rounds < 0) << "TODO: save_session_rounds for reversed_role";
 
-        streamer.cout << user_prompt << " > " << std::flush;
-        std::string input;
-        if (!get_utf8_line(input, args.multi_line))
-        {
-            streamer.cout << "FAILED to read line." << std::endl;
-            break;
-        }
-        if (input.empty()) continue;
+        streamer.cout << ai_prompt << " > " << args.prompt << std::endl << std::flush;
+        history.push_back(args.prompt, chatllm::MsgRole::User);
 
-        history.push_back(input, chatllm::MsgRole::User);
-        streamer.cout << ai_prompt << " > " << std::flush;
-        std::string output = pipeline.chat(history, gen_config, &streamer);
-        history.push_back(output, chatllm::MsgRole::Assistant);
+        while (1)
+        {
+            streamer.cout << user_prompt << " > " << std::flush;
+            std::string input;
+            if (!get_utf8_line(input, args.multi_line))
+            {
+                streamer.cout << "FAILED to read line." << std::endl;
+                break;
+            }
+            if (input.empty()) continue;
+
+            history.push_back(input, chatllm::MsgRole::Assistant);
+            streamer.cout << ai_prompt << " > " << std::flush;
+            std::string output = pipeline.chat(history, gen_config, &streamer);
+            history.push_back(output, chatllm::MsgRole::User);
+        }
+    }
+    else
+    {
+        while (1)
+        {
+            if ((args.save_session_rounds > 0) && ((int)(history.size() / 2) == args.save_session_rounds))
+            {
+                std::cout << std::endl << "saving session..." << std::endl;
+                pipeline.save_session(history, args.save_session);
+                break;
+            }
+
+            streamer.cout << user_prompt << " > " << std::flush;
+            std::string input;
+            if (!get_utf8_line(input, args.multi_line))
+            {
+                streamer.cout << "FAILED to read line." << std::endl;
+                break;
+            }
+            if (input.empty()) continue;
+
+            history.push_back(input, chatllm::MsgRole::User);
+            streamer.cout << ai_prompt << " > " << std::flush;
+            std::string output = pipeline.chat(history, gen_config, &streamer);
+            history.push_back(output, chatllm::MsgRole::Assistant);
+        }
     }
     streamer.cout << "Bye\n";
 }

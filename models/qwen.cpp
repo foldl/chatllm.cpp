@@ -15,6 +15,7 @@ namespace v1
         void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
         void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
         void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+        void append_user_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -145,6 +146,12 @@ namespace v1
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         tok->encode("assistant", ids, true, false, true);
+    }
+
+    void ChatHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode("user", ids, true, false, true);
     }
 
     bool Tokenizer::is_special_id(int id) const

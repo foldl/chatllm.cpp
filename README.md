@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-12-09: [Reversed role](./docs/fun.md#reversed-role)
 * 2024-11-29: QwQ-32B
 * 2024-11-22: Marco-o1
 * 2024-11-21: [Continued generation](./docs/fun.md#continued-generation)

@@ -83,3 +83,25 @@ which steers the LLM to _think deeper_.
 A sample session:
 
 ![think deeper with continued generation](think_deeper.png)
+
+## Reversed Role
+
+Use the _reversed role_ mode to allow the LLM to proactively participate in the conversation.
+
+Note: part of this feature is implemented in the frontend.
+
+```
+main -m qwen2.5-1.5b.bin --reversed_role -i -p "Hello"
+    ________          __  __    __    __  ___ (通义千问)
+   / ____/ /_  ____ _/ /_/ /   / /   /  |/  /_________  ____
+  / /   / __ \/ __ `/ __/ /   / /   / /|_/ // ___/ __ \/ __ \
+ / /___/ / / / /_/ / /_/ /___/ /___/ /  / // /__/ /_/ / /_/ /
+ \____/_/ /_/\__,_/\__/_____/_____/_/  /_(_)___/ .___/ .___/
+You are served by QWen2,                      /_/   /_/
+with 1543714304 (1.5B) parameters.
+
+A.I. > Hello
+You  > Hi. Nice to meet you.
+A.I. > How can I improve my public speaking skills?
+You  >
+```

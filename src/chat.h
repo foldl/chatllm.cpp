@@ -151,8 +151,14 @@ namespace chatllm
 
         virtual std::string decode(const std::vector<int> &ids) const;
 
-        virtual std::vector<int> encode_history(const Messages &history, int max_length, const bool incremental = false, const bool ai_opening = true);
-        virtual std::vector<int> encode_history(BaseHistoryEncoder *encoder, const Messages &history, int max_length, const bool incremental = false, const bool ai_opening = true);
+        virtual std::vector<int> encode_history(const Messages &history, int max_length,
+                                                const bool incremental = false,
+                                                const bool ai_opening = true,
+                                                const bool reversed_role = false);
+        virtual std::vector<int> encode_history(BaseHistoryEncoder *encoder, const Messages &history, int max_length,
+                                                const bool incremental = false,
+                                                const bool ai_opening = true,
+                                                const bool reversed_role = false);
         virtual std::vector<int> encode_sys_prompt(void);
 
         void set_system_prompt(const std::string &prompt) { sys_prompt = prompt; }
@@ -201,7 +207,8 @@ namespace chatllm
         virtual void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const = 0;
         virtual void append_tool(int round_idx, const std::string &tool, std::vector<int> &ids) const;
 
-        virtual void append_ai_opening(int round_idx, std::vector<int> &ids) const = 0;
+        virtual void append_ai_opening(int round_idx, std::vector<int> &ids) const;
+        virtual void append_user_opening(int round_idx, std::vector<int> &ids) const;
 
         virtual void append_message(const Message &msg, std::vector<int> &ids) const;
 
@@ -487,6 +494,7 @@ namespace chatllm
         int max_length;
         int max_context_length;
         bool do_sample;
+        bool reversed_role;
         int top_k;
         float top_p;
         float temperature;
@@ -500,9 +508,11 @@ namespace chatllm
         {
         }
 
-        GenerationConfig(int max_length, int max_context_length, bool do_sample, int top_k,
+        GenerationConfig(int max_length, int max_context_length, bool do_sample, bool reversed_role,
+                         int top_k,
                          float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty, float tfs_z)
-            : max_length(max_length), max_context_length(max_context_length), do_sample(do_sample), top_k(top_k),
+            : max_length(max_length), max_context_length(max_context_length),
+              do_sample(do_sample), reversed_role(reversed_role), top_k(top_k),
               top_p(top_p), temperature(temperature), num_threads(num_threads), presence_penalty(presence_penalty), tfs_z(tfs_z),
               sampling(sampling), ai_prefix("") {}
 
