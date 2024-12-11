@@ -69,8 +69,8 @@ static __global__ void quantize_mmq_q8_1(
 
     // Exchange max. abs. value between vals_per_scale/4 threads.
 #pragma unroll
-    for (int mask = vals_per_scale/8; mask > 0; mask >>= 1) {
-        amax = fmaxf(amax, __shfl_xor_sync(0xFFFFFFFF, amax, mask, WARP_SIZE));
+    for (int offset = vals_per_scale/8; offset > 0; offset >>= 1) {
+        amax = fmaxf(amax, __shfl_xor_sync(0xFFFFFFFF, amax, offset, WARP_SIZE));
     }
 
     float sum;
@@ -79,8 +79,8 @@ static __global__ void quantize_mmq_q8_1(
 
         // Exchange calculate sum across vals_per_sum/4 threads.
 #pragma unroll
-        for (int mask = vals_per_sum/8; mask > 0; mask >>= 1) {
-            sum += __shfl_xor_sync(0xFFFFFFFF, sum, mask, WARP_SIZE);
+        for (int offset = vals_per_sum/8; offset > 0; offset >>= 1) {
+            sum += __shfl_xor_sync(0xFFFFFFFF, sum, offset, WARP_SIZE);
         }
     }
 
@@ -163,7 +163,7 @@ void quantize_mmq_q8_1_cuda(
                 <<<num_blocks, block_size, 0, stream>>>(x, vy, kx0, kx1, kx0_padded);
             break;
         default:
-            GGML_ASSERT(false);
+            GGML_ABORT("fatal error");
             break;
     }
 }

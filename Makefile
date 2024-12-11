@@ -389,6 +389,8 @@ ifndef GGML_NO_LLAMAFILE
 	OBJ_GGML    += $(OUTPUT_PATH)/sgemm.o
 endif
 
+MK_CPPFLAGS += -Iggml/src/ggml-cpu
+
 ifdef GGML_RPC
 	MK_CPPFLAGS += -DGGML_USE_RPC
 	OBJ_GGML    += $(OUTPUT_PATH)/ggml-rpc.o
@@ -559,7 +561,7 @@ GLSLC_CMD  = glslc
 _ggml_vk_genshaders_cmd = $(OUTPUT_PATH)/vulkan-shaders-gen
 _ggml_vk_header = $(OUTPUT_PATH)/ggml-vulkan-shaders.hpp
 _ggml_vk_source = $(OUTPUT_PATH)/ggml-vulkan-shaders.cpp
-_ggml_vk_input_dir = $(GGML_SRC)/vulkan-shaders
+_ggml_vk_input_dir = $(GGML_SRC)/ggml-vulkan/vulkan-shaders
 _ggml_vk_shader_deps = $(echo $(_ggml_vk_input_dir)/*.comp)
 
 $(_ggml_vk_header): $(_ggml_vk_source)
@@ -571,11 +573,11 @@ $(_ggml_vk_source): $(_ggml_vk_shader_deps) $(OUTPUT_PATH)/vulkan-shaders-gen.ex
 		--target-hpp $(_ggml_vk_header) \
 		--target-cpp $(_ggml_vk_source)
 
-$(OUTPUT_PATH)/vulkan-shaders-gen.exe: $(GGML_SRC)/vulkan-shaders/vulkan-shaders-gen.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $(LDFLAGS) $(GGML_SRC)/vulkan-shaders/vulkan-shaders-gen.cpp
+$(OUTPUT_PATH)/vulkan-shaders-gen.exe: $(GGML_SRC)/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $(LDFLAGS) $(GGML_SRC)/ggml-vulkan/vulkan-shaders/vulkan-shaders-gen.cpp
 
 $(OUTPUT_PATH)/ggml-vulkan.o: \
-	$(GGML_SRC)/ggml-vulkan.cpp \
+	$(GGML_SRC)/ggml-vulkan/ggml-vulkan.cpp \
 	$(GGML_INC)/ggml-vulkan.h \
 	$(_ggml_vk_header) $(_ggml_vk_source)
 	$(CXX) $(CXXFLAGS) $(shell pkg-config --cflags vulkan) -c $< -o $@
@@ -684,8 +686,16 @@ OBJ_GGML += \
 	$(OUTPUT_PATH)/ggml.o \
 	$(OUTPUT_PATH)/ggml-alloc.o \
 	$(OUTPUT_PATH)/ggml-backend.o \
+	$(OUTPUT_PATH)/ggml-backend-reg.o \
+	$(OUTPUT_PATH)/ggml-opt.o \
 	$(OUTPUT_PATH)/ggml-quants.o \
-	$(OUTPUT_PATH)/ggml-aarch64.o
+	$(OUTPUT_PATH)/ggml-threading.o \
+	$(OUTPUT_PATH)/ggml-cpu.o \
+	$(OUTPUT_PATH)/ggml-cpu_cpp.o \
+	$(OUTPUT_PATH)/ggml-cpu-aarch64.o \
+	$(OUTPUT_PATH)/ggml-cpu-hbm.o \
+	$(OUTPUT_PATH)/ggml-cpu-quants.o \
+	$(OUTPUT_PATH)/ggml-cpu-traits.o
 
 $(OUTPUT_PATH)/ggml-cuda.o: $(GGML_SRC)/ggml-cuda.cu $(GGML_INC)/ggml-cuda.h $(GGML_INC)/ggml.h $(GGML_INC)/ggml-backend.h $(GGML_INC)/ggml-backend-impl.h $(GGML_INC)/ggml-common.h $(wildcard ggml-cuda/*.cuh)
 	$(NVCC_COMPILE)
@@ -748,41 +758,20 @@ $(info )
 
 # ggml
 
-$(OUTPUT_PATH)/ggml.o: \
-	$(GGML_SRC)/ggml.c \
-	$(GGML_INC)/ggml.h
-	$(CC)  $(CFLAGS)   -c $< -o $@
+$(OUTPUT_PATH)/%_cpp.o: $(GGML_SRC)/ggml-cpu/%.cpp
+	$(CXX) $(CXXFLAGS) -MMD -c $< -o $@
 
-$(OUTPUT_PATH)/ggml-alloc.o: \
-	$(GGML_SRC)/ggml-alloc.c \
-	$(GGML_INC)/ggml.h \
-	$(GGML_INC)/ggml-alloc.h
-	$(CC)  $(CFLAGS)   -c $< -o $@
+$(OUTPUT_PATH)/%.o: $(GGML_SRC)/%.c
+	$(CC) $(CFLAGS) -MMD -c $< -o $@
 
-$(OUTPUT_PATH)/ggml-backend.o: \
-	$(GGML_SRC)/ggml-backend.c \
-	$(GGML_INC)/ggml.h \
-	$(GGML_INC)/ggml-backend.h
-	$(CC)  $(CFLAGS)   -c $< -o $@
+$(OUTPUT_PATH)/%.o: $(GGML_SRC)/%.cpp
+	$(CXX) $(CFLAGS) -MMD -c $< -o $@
 
-$(OUTPUT_PATH)/ggml-quants.o: \
-	$(GGML_SRC)/ggml-quants.c \
-	$(GGML_INC)/ggml.h \
-	$(GGML_SRC)/ggml-quants.h \
-	$(GGML_SRC)/ggml-common.h
-	$(CC) $(CFLAGS)    -c $< -o $@
+$(OUTPUT_PATH)/%.o: $(GGML_SRC)/ggml-cpu/%.c
+	$(CC) $(CFLAGS) -MMD -c $< -o $@
 
-$(OUTPUT_PATH)/ggml-aarch64.o: \
-	$(GGML_SRC)/ggml-aarch64.c \
-	$(GGML_INC)/ggml.h \
-	$(GGML_SRC)/ggml-aarch64.h \
-	$(GGML_SRC)/ggml-common.h
-	$(CC) $(CFLAGS)    -c $< -o $@
-
-$(OUTPUT_PATH)/ggml-blas.o: \
-	$(GGML_SRC)/ggml-blas.cpp \
-	$(GGML_INC)/ggml-blas.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+$(OUTPUT_PATH)/%.o: $(GGML_SRC)/ggml-cpu/%.cpp
+	$(CXX) $(CFLAGS) -MMD -c $< -o $@
 
 ifndef GGML_NO_LLAMAFILE
 $(OUTPUT_PATH)/sgemm.o: \

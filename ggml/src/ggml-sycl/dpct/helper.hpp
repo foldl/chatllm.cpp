@@ -15,6 +15,7 @@
 
 #include <sycl/sycl.hpp>
 #include <sycl/half_type.hpp>
+#include <syclcompat/math.hpp>
 #include <oneapi/mkl.hpp>
 #include <map>
 
@@ -588,7 +589,7 @@ namespace dpct
         out = prop;
     }
 
-   /// dpct device extension
+    /// dpct device extension
     class device_ext : public sycl::device {
       typedef std::mutex mutex_type;
 
@@ -697,7 +698,7 @@ namespace dpct
         std::unique_lock<mutex_type> lock(m_mutex);
         lock.unlock();
         for (auto &q : _queues) {
-          q.wait_and_throw();
+            q.wait_and_throw();
         }
         // Guard the destruct of current_queues to make sure the ref count is
         // safe.
@@ -734,7 +735,12 @@ namespace dpct
 
       void destroy_queue(sycl::queue queue) {
         std::lock_guard<mutex_type> lock(m_mutex);
-        _queues.clear();
+        _queues.erase(std::remove_if(_queues.begin(), _queues.end(),
+                                    [=](const sycl::queue &q) -> bool
+                                    {
+                                        return q == queue;
+                                    }),
+                    _queues.end());
       }
       void set_saved_queue(sycl::queue q) {
         std::lock_guard<mutex_type> lock(m_mutex);
@@ -764,13 +770,13 @@ namespace dpct
         if (enable_exception_handler) {
           eh = exception_handler;
         }
-        auto q = sycl::queue(*this, eh,
-                             sycl::property_list(
+        _queues.push_back(sycl::queue(
+            *this, eh,
+            sycl::property_list(
 #ifdef DPCT_PROFILING_ENABLED
-                                 sycl::property::queue::enable_profiling(),
+                sycl::property::queue::enable_profiling(),
 #endif
-                                 properties...));
-        _queues.push_back(q);
+                properties...)));
 
         return _queues.back();
       }
@@ -783,8 +789,8 @@ namespace dpct
         if (enable_exception_handler) {
           eh = exception_handler;
         }
-        _queues.push_back(
-            sycl::queue(device, eh,
+        _queues.push_back(sycl::queue(
+            device, eh,
                         sycl::property_list(
 #ifdef DPCT_PROFILING_ENABLED
                             sycl::property::queue::enable_profiling(),
@@ -855,15 +861,88 @@ namespace dpct
         unsigned int get_device_id(const sycl::device &dev)
         {
             unsigned int id = 0;
-            for (auto dev_item : _devs)
+            for (auto &dev_item : _devs)
             {
                 if (*dev_item == dev)
                 {
-                    break;
+                    return id;
                 }
                 id++;
             }
-            return id;
+            return -1;
+        }
+
+        inline std::string get_preferred_gpu_platform_name() {
+            std::string result;
+
+            std::string filter = "";
+            char* env = getenv("ONEAPI_DEVICE_SELECTOR");
+            if (env) {
+                if (std::strstr(env, "level_zero")) {
+                    filter = "level-zero";
+                }
+                else if (std::strstr(env, "opencl")) {
+                    filter = "opencl";
+                }
+                else if (std::strstr(env, "cuda")) {
+                    filter = "cuda";
+                }
+                else if (std::strstr(env, "hip")) {
+                    filter = "hip";
+                }
+                else {
+                    throw std::runtime_error("invalid device filter: " + std::string(env));
+                }
+            } else {
+                auto default_device = sycl::device(sycl::default_selector_v);
+                auto default_platform_name = default_device.get_platform().get_info<sycl::info::platform::name>();
+
+                if (std::strstr(default_platform_name.c_str(), "Level-Zero") || default_device.is_cpu()) {
+                    filter = "level-zero";
+                }
+                else if (std::strstr(default_platform_name.c_str(), "CUDA")) {
+                    filter = "cuda";
+                }
+                else if (std::strstr(default_platform_name.c_str(), "HIP")) {
+                    filter = "hip";
+                }
+            }
+
+            auto platform_list = sycl::platform::get_platforms();
+
+            for (const auto& platform : platform_list) {
+                auto devices = platform.get_devices();
+                auto gpu_dev = std::find_if(devices.begin(), devices.end(), [](const sycl::device& d) {
+                    return d.is_gpu();
+                });
+
+                if (gpu_dev == devices.end()) {
+                    // cout << "platform [" << platform_name
+                    //      << "] does not contain GPU devices, skipping\n";
+                    continue;
+                }
+
+                auto platform_name = platform.get_info<sycl::info::platform::name>();
+                std::string platform_name_low_case;
+                platform_name_low_case.resize(platform_name.size());
+
+                std::transform(
+                    platform_name.begin(), platform_name.end(), platform_name_low_case.begin(), ::tolower);
+
+                if (platform_name_low_case.find(filter) == std::string::npos) {
+                    // cout << "platform [" << platform_name
+                    //      << "] does not match with requested "
+                    //      << filter << ", skipping\n";
+                    continue;
+                }
+
+                result = platform_name;
+            }
+
+            if (result.empty())
+                throw std::runtime_error("can not find preferred GPU platform");
+
+            return result;
         }
 
         template <class DeviceSelector>
@@ -910,7 +989,7 @@ namespace dpct
             if (backend == "opencl:cpu") return 4;
             if (backend == "opencl:acc") return 5;
             printf("convert_backend_index: can't handle backend=%s\n", backend.c_str());
-            GGML_ASSERT(false);
+            GGML_ABORT("fatal error");
         }
         static bool compare_backend(std::string &backend1, std::string &backend2) {
             return convert_backend_index(backend1) < convert_backend_index(backend2);
@@ -930,10 +1009,15 @@ namespace dpct
             // Keep track of the number of devices per backend
             std::map<sycl::backend, size_t> DeviceNums;
             std::map<std::string, std::vector<sycl::device>> backend_devices;
+            auto preferred_platform_name = get_preferred_gpu_platform_name();
 
             while (!Platforms.empty()) {
                 auto Platform = Platforms.back();
                 Platforms.pop_back();
+                auto platform_name = Platform.get_info<sycl::info::platform::name>();
+                if (platform_name.compare(preferred_platform_name) != 0) {
+                    continue;
+                }
                 auto devices = Platform.get_devices();
                 std::string backend_type = get_device_backend_and_type(devices[0]);
                 for (const auto &device : devices) {
@@ -1605,9 +1689,14 @@ namespace dpct
             auto data_a = get_memory<const Ta>(a);
             auto data_b = get_memory<const Tb>(b);
             auto data_c = get_memory<Tc>(c);
-            oneapi::mkl::blas::column_major::gemm(
-                q, a_trans, b_trans, m, n, k, alpha_value, data_a, lda,
-                data_b, ldb, beta_value, data_c, ldc);
+#ifdef GGML_SYCL_NVIDIA
+            oneapi::mkl::blas::column_major::gemm(oneapi::mkl::backend_selector<oneapi::mkl::backend::cublas>{ q },
+                                                  a_trans, b_trans, m, n, k, alpha_value, data_a, lda, data_b, ldb,
+                                                  beta_value, data_c, ldc);
+#else
+            oneapi::mkl::blas::column_major::gemm(q, a_trans, b_trans, m, n, k, alpha_value, data_a, lda, data_b, ldb,
+                                                  beta_value, data_c, ldc);
+#endif
         }
 
         template <typename VecT, class BinaryOperation, class = void>
@@ -1670,14 +1759,22 @@ namespace dpct
             matrix_info->ld_info[2] = ldc;
             matrix_info->groupsize_info = batch_size;
 
+#ifdef GGML_SYCL_NVIDIA
             sycl::event e = oneapi::mkl::blas::column_major::gemm_batch(
-                q, matrix_info->transpose_info, matrix_info->transpose_info + 1,
-                matrix_info->size_info, matrix_info->size_info + 1,
-                matrix_info->size_info + 2, matrix_info->value_info,
-                reinterpret_cast<const Ta **>(a), matrix_info->ld_info,
-                reinterpret_cast<const Tb **>(b), matrix_info->ld_info + 1,
-                matrix_info->value_info + 1, reinterpret_cast<Tc **>(c),
+                oneapi::mkl::backend_selector<oneapi::mkl::backend::cublas>{ q }, matrix_info->transpose_info,
+                matrix_info->transpose_info + 1, matrix_info->size_info, matrix_info->size_info + 1,
+                matrix_info->size_info + 2, matrix_info->value_info, reinterpret_cast<const Ta **>(a),
+                matrix_info->ld_info, reinterpret_cast<const Tb **>(b), matrix_info->ld_info + 1,
+                matrix_info->value_info + 1, reinterpret_cast<Tc **>(c), matrix_info->ld_info + 2, 1,
+                &(matrix_info->groupsize_info));
+#else
+            sycl::event e = oneapi::mkl::blas::column_major::gemm_batch(
+                q, matrix_info->transpose_info, matrix_info->transpose_info + 1, matrix_info->size_info,
+                matrix_info->size_info + 1, matrix_info->size_info + 2, matrix_info->value_info,
+                reinterpret_cast<const Ta **>(a), matrix_info->ld_info, reinterpret_cast<const Tb **>(b),
+                matrix_info->ld_info + 1, matrix_info->value_info + 1, reinterpret_cast<Tc **>(c),
                 matrix_info->ld_info + 2, 1, &(matrix_info->groupsize_info));
+#endif
 
             q.submit([&](sycl::handler &cgh)
                      {
@@ -1699,10 +1796,16 @@ namespace dpct
             auto data_a = get_memory<const Ta>(a);
             auto data_b = get_memory<const Tb>(b);
             auto data_c = get_memory<Tc>(c);
+#ifdef GGML_SYCL_NVIDIA
             oneapi::mkl::blas::column_major::gemm_batch(
-                q, a_trans, b_trans, m, n, k, alpha_value, data_a, lda,
-                stride_a, data_b, ldb, stride_b, beta_value,
-                data_c, ldc, stride_c, batch_size);
+                oneapi::mkl::backend_selector<oneapi::mkl::backend::cublas>{ q }, a_trans, b_trans, m, n, k,
+                alpha_value, data_a, lda, stride_a, data_b, ldb, stride_b, beta_value, data_c, ldc, stride_c,
+                batch_size);
+#else
+            oneapi::mkl::blas::column_major::gemm_batch(q, a_trans, b_trans, m, n, k, alpha_value, data_a, lda,
+                                                        stride_a, data_b, ldb, stride_b, beta_value, data_c, ldc,
+                                                        stride_c, batch_size);
+#endif
         }
 
     } // namespace detail
@@ -1747,31 +1850,10 @@ namespace dpct
                                            : id);
     }
 
-    template <typename T>
-    sycl::vec<T, 4> extract_and_sign_or_zero_extend4(T val)
-    {
-        return sycl::vec<T, 1>(val)
-            .template as<sycl::vec<
-                std::conditional_t<std::is_signed_v<T>, int8_t, uint8_t>, 4>>()
-            .template convert<T>();
-    }
-
-    template <typename T1, typename T2>
-    using dot_product_acc_t =
-        std::conditional_t<std::is_unsigned_v<T1> && std::is_unsigned_v<T2>,
-                           uint32_t, int32_t>;
-
     template <typename T1, typename T2, typename T3>
     inline auto dp4a(T1 a, T2 b, T3 c)
     {
-        dot_product_acc_t<T1, T2> res = c;
-        auto va = extract_and_sign_or_zero_extend4(a);
-        auto vb = extract_and_sign_or_zero_extend4(b);
-        res += va[0] * vb[0];
-        res += va[1] * vb[1];
-        res += va[2] * vb[2];
-        res += va[3] * vb[3];
-        return res;
+        return syclcompat::dp4a(a, b, c);
     }
 
     struct sub_sat
@@ -1987,6 +2069,11 @@ namespace dpct
     static inline device_ext &get_current_device()
     {
         return dev_mgr::instance().current_device();
+    }
+
+    static inline device_ext &get_device(unsigned int id)
+    {
+        return dev_mgr::instance().get_device(id);
     }
 
     static inline sycl::queue &get_in_order_queue()

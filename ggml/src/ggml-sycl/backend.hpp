@@ -15,6 +15,7 @@
 
 #include "concat.hpp"
 #include "common.hpp"
+#include "conv.hpp"
 #include "convert.hpp"
 #include "dequantize.hpp"
 #include "dmmv.hpp"
@@ -23,5 +24,10 @@
 #include "rope.hpp"
 #include "norm.hpp"
 #include "softmax.hpp"
+#include "tsembd.hpp"
+#include "im2col.hpp"
+#include "wkv6.hpp"
+#include "outprod.hpp"
+#include "element_wise.hpp"
 
 #endif // GGML_SYCL_BACKEND_HPP

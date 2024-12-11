@@ -8,7 +8,6 @@ static void norm_f32(const float* x, float* dst, const int ncols, const float ep
 
     const int nthreads = item_ct1.get_local_range(2);
     const int nwarps = nthreads / WARP_SIZE;
-    assert(nwarps % WARP_SIZE == 0);
     sycl::float2 mean_var = sycl::float2(0.f, 0.f);
 
     for (int col = tid; col < ncols; col += block_size) {
@@ -55,7 +54,6 @@ static void group_norm_f32(const float* x, float* dst, const int group_size, con
     int end = start + group_size;
     const int nthreads = item_ct1.get_local_range(2);
     const int nwarps = nthreads / WARP_SIZE;
-    assert(nwarps % WARP_SIZE == 0);
     start += item_ct1.get_local_id(2);
     int nreduce = nwarps / WARP_SIZE;
 
@@ -144,7 +142,6 @@ static void rms_norm_f32(const float* x, float* dst, const int ncols, const floa
     const int tid = item_ct1.get_local_id(2);
     const int nthreads = item_ct1.get_local_range(2);
     const int nwarps = nthreads / WARP_SIZE;
-    assert(nwarps % WARP_SIZE == 0);
     float tmp = 0.0f; // partial sum for thread in warp
 
     for (int col = tid; col < ncols; col += block_size) {
@@ -202,6 +199,7 @@ static void norm_f32_sycl(const float* x, float* dst, const int ncols,
     }
     else {
         const int work_group_size = ggml_sycl_info().max_work_group_sizes[device];
+        assert(work_group_size % (WARP_SIZE * WARP_SIZE) == 0);
         const sycl::range<3> block_dims(1, 1, work_group_size);
         /*
         DPCT1049:17: The work-group size passed to the SYCL kernel may exceed
@@ -225,9 +223,8 @@ static void norm_f32_sycl(const float* x, float* dst, const int ncols,
 }
 
 static void group_norm_f32_sycl(const float* x, float* dst,
-    const int num_groups, const int group_size,
+    const int num_groups, const float eps, const int group_size,
     const int ne_elements, queue_ptr stream, int device) {
-    static const float eps = 1e-6f;
     if (group_size < 1024) {
         const sycl::range<3> block_dims(1, 1, WARP_SIZE);
         stream->submit([&](sycl::handler& cgh) {
@@ -245,6 +242,7 @@ static void group_norm_f32_sycl(const float* x, float* dst,
     }
     else {
         const int work_group_size = ggml_sycl_info().max_work_group_sizes[device];
+        assert(work_group_size % (WARP_SIZE * WARP_SIZE) == 0);
         const sycl::range<3> block_dims(1, 1, work_group_size);
         /*
         DPCT1049:18: The work-group size passed to the SYCL kernel may exceed
@@ -291,6 +289,7 @@ static void rms_norm_f32_sycl(const float* x, float* dst, const int ncols,
     }
     else {
         const int work_group_size = ggml_sycl_info().max_work_group_sizes[device];
+        assert(work_group_size % (WARP_SIZE * WARP_SIZE) == 0);
         const sycl::range<3> block_dims(1, 1, work_group_size);
         /*
         DPCT1049:19: The work-group size passed to the SYCL kernel may exceed
@@ -343,8 +342,12 @@ void ggml_sycl_op_group_norm(ggml_backend_sycl_context& ctx, const ggml_tensor* 
     GGML_ASSERT(dst->type == GGML_TYPE_F32);
 
     int num_groups = dst->op_params[0];
+
+    float eps;
+    memcpy(&eps, dst->op_params + 1, sizeof(float));
+
     int group_size = src0->ne[0] * src0->ne[1] * ((src0->ne[2] + num_groups - 1) / num_groups);
-    group_norm_f32_sycl(src0_dd, dst_dd, num_groups, group_size, src0->ne[0] * src0->ne[1] * src0->ne[2], main_stream, ctx.device);
+    group_norm_f32_sycl(src0_dd, dst_dd, num_groups, eps, group_size, src0->ne[0] * src0->ne[1] * src0->ne[2], main_stream, ctx.device);
 
     (void)src1;
     (void)dst;
