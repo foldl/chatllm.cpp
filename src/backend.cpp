@@ -1,3 +1,4 @@
+#include <cstring>
 #ifdef GGML_USE_CUDA
 #  include "ggml-cuda.h"
 #elif defined(GGML_USE_VULKAN)
@@ -22,6 +23,8 @@ extern void ggml_vk_print_devices_info(void);
 #include "backend.h"
 
 #include "basics.h"
+
+#include "ggml-cpu.h"
 
 namespace chatllm
 {
@@ -56,17 +59,33 @@ namespace chatllm
         : buf(buf)
     {}
 
+    void BackendBufAllocator::show_info(void)
+    {
+        printf("%30s allocated buffer size = (%8.2f, %8.2f) MiB\n", ggml_backend_name(backend->backend), total[0] / 1024.0 / 1024.0, total[1] / 1024.0 / 1024.0);
+    }
+
+    Backend *BackendBufAllocator::get_backend(void)
+    {
+        return backend;
+    }
+
     LayerBufAllocator::LayerBufAllocator(): LayerBufAllocator(nullptr, nullptr, nullptr) {}
     LayerBufAllocator::LayerBufAllocator(ggml_backend_allocator alloc, Backend *backend): LayerBufAllocator(alloc, alloc, backend) {}
     LayerBufAllocator::LayerBufAllocator(ggml_backend_allocator alloc_matrix, ggml_backend_allocator alloc_others, Backend *backend)
-        : alloc_matrix(alloc_matrix), alloc_others(alloc_others), backend(backend)
+        : BackendBufAllocator(backend), alloc_matrix(alloc_matrix), alloc_others(alloc_others)
     {
         CHATLLM_CHECK(alloc_matrix == alloc_others) << " TODO: alloc_matrix must be alloc_others now.";
     }
 
+    void LayerBufAllocator::show_info(void)
+    {
+        BackendBufAllocator::show_info();
+        printf("\tMatrix = %s, Others = %s\n", ggml_backend_buft_name(get_allocator(Usage::Matrix)), ggml_backend_buft_name(get_allocator(Usage::Others)));
+    }
+
     BackendBuffer *LayerBufAllocator::alloc(size_t size, Usage usage)
     {
-        total += size;
+        total[usage] += size;
         ggml_backend_buffer_t buf = ggml_backend_buft_alloc_buffer(get_allocator(usage), size);
 
         CHATLLM_CHECK(buf) << __FUNCTION__ << "() failed to allocate buffer";
@@ -146,13 +165,8 @@ namespace chatllm
 
     void LayerBufAllocator::free_all_buffers(void)
     {
-        total = 0;
+        memset(&total, 0, sizeof(total));
         buffers.clear();
-    }
-
-    Backend *LayerBufAllocator::get_backend(void)
-    {
-        return backend;
     }
 
     bool LayerBufAllocator::operator ==(const LayerBufAllocator &b)
@@ -207,6 +221,7 @@ namespace chatllm
         }
         if ((id < 0) || (id >= (int)allocators.size()))
             id = (int)allocators.size() - 1;
+
         return id;
     }
 
@@ -353,9 +368,9 @@ namespace chatllm
         return ggml_backend_is_cpu(backend);
     }
 
-    ggml_backend_allocator Backend::get_allocator(void)
+    ggml_backend_allocator Backend::get_allocator(BufferType bt)
     {
-        if (is_cpu())
+        if (is_cpu() || (BufferType::Shared == bt) || !use_gpu)
         {
             // use host buffers for the CPU backend compute buffer
             return ComputeManager::get_default_allocator_cpu(true, use_gpu);
@@ -413,9 +428,6 @@ namespace chatllm
 
         buf_compute_meta.resize(ggml_tensor_overhead() * graph_max_nodes_num + ggml_graph_overhead_custom(graph_max_nodes_num, false));
 
-        backend_cpu = ggml_backend_cpu_init();
-        CHATLLM_CHECK(backend_cpu != nullptr) << __func__ << ": failed to initialize CPU backend";
-
         if (ComputeManager::is_gpu_offload_supported())
         {
             int dev_cnt = ComputeManager::get_device_count();
@@ -425,10 +437,6 @@ namespace chatllm
                 size_t free = ComputeManager::get_device_free_memory(0, &total);
                 printf("%d: total = %zd, free = %zd\n", i, total, free);
             }
-
-            #if defined(GGML_USE_VULKAN)
-            ggml_vk_print_devices_info();
-            #endif
         }
 
     #if defined(GGML_USE_METAL)
@@ -460,9 +468,11 @@ namespace chatllm
             backends.emplace_back(ctx->backend_blas, 0);
     #endif
 
+        backend_cpu = ggml_backend_cpu_init();
+        CHATLLM_CHECK(backend_cpu != nullptr) << __func__ << ": failed to initialize CPU backend";
         backends.emplace_back(backend_cpu, n_layers - n_gpu_layers, use_gpu);
 
-        host_allocator.alloc_matrix = host_allocator.alloc_others = backends[backends.size() - 1].get_allocator();
+        host_allocator.alloc_matrix = host_allocator.alloc_others = backends[backends.size() - 1].get_allocator(BufferType::Shared);
 
         int layer_id = 0;
         for (auto &backend : backends)
@@ -470,16 +480,20 @@ namespace chatllm
             for (int i = 0; (i < backend.n_layers) && (layer_id < n_layers); i++, layer_id++)
             {
                 // TODO: matrix and others
-                layer_allocators.allocators.emplace_back(backend.get_allocator(), &backend);
+                layer_allocators.allocators.emplace_back(backend.get_allocator(BufferType::Dedicated), &backend);
             }
         }
 
-        std::vector<ggml_backend_t> gg_backends;
-        std::vector<ggml_backend_buffer_type_t> gg_bufts;
+        // a "faked" layer for CPU
+        layer_allocators.allocators.emplace_back(host_allocator.alloc_matrix, &backends[backends.size() - 1]);
+
+        gg_bufts.clear();
+        gg_backends.clear();
+
         for (auto &b : backends)
         {
             gg_backends.push_back(b.backend);
-            gg_bufts.push_back(b.get_allocator());
+            gg_bufts.push_back(b.get_allocator(BufferType::Dedicated));
         }
         sched = ggml_backend_sched_new(gg_backends.data(), gg_bufts.data(), (int)gg_backends.size(), graph_max_nodes_num, false);
     }
@@ -541,6 +555,7 @@ namespace chatllm
             ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
 
         ggml_backend_sched_graph_compute_async(sched, gf);
+        ggml_backend_sched_synchronize(sched);
     }
 
     void BackendContext::reset()
@@ -564,16 +579,24 @@ namespace chatllm
 
     void BackendContext::show_buffer_sizes(void)
     {
-        for (size_t i = 0; i < backends.size(); i++)
+        for (size_t i = 0; i < layer_allocators.allocators.size(); i++)
         {
-            auto &backend = backends[i];
-            ggml_backend_buffer_type_t buft = backend.get_allocator();
-            size_t size = ggml_backend_sched_get_buffer_size(sched, backend.backend);
-            if (size > 1)
-            {
-                printf("%s: %10s compute buffer size = %8.2f MiB\n", __func__, ggml_backend_buft_name(buft), size / 1024.0 / 1024.0);
-            }
+            printf("layer #%d", (int)i);
+            layer_allocators.allocators[i].show_info();
         }
+
+        for (size_t i = 0; i < gg_backends.size(); i++)
+        {
+            ggml_backend_buffer_type_t buft = gg_bufts[i];
+            size_t size = ggml_backend_sched_get_buffer_size(sched, gg_backends[i]);
+            printf("%s: %30s compute buffer size = %8.2f MiB\n", __func__, ggml_backend_buft_name(buft), size / 1024.0 / 1024.0);
+        }
+    }
+
+    void BackendContext::synchronize(void)
+    {
+        for (auto &backend : backends)
+            backend.synchronize();
     }
 
     ComputeContext::ComputeContext(BackendContext *backend_context) : backend_context(backend_context)
@@ -618,6 +641,11 @@ namespace chatllm
     void ComputeContext::compute(int n_threads)
     {
         backend_context->compute_graph(get_cgraph(), n_threads);
+    }
+
+    void ComputeContext::synchronize(void)
+    {
+        ggml_backend_sched_synchronize(get_sched());
     }
 
     bool ComputeContext::allocate(void)

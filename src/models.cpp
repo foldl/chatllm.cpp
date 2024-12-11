@@ -60,8 +60,9 @@ namespace chatllm
     static ForwardContext *dbg_ctx = nullptr;
     static std::set<ggml::tensor *> inspected_set;
     static std::string dbg_msg;
+    static ggml::tensor *dbg_w = nullptr;
 
-    void print_tensor(ggml::tensor *tensor, int offset = 0)
+    void print_tensor(ggml::tensor *tensor, int offset)
     {
         printf("\n%s (%p): [%zd, %zd, %zd] [%zd, %zd, %zd]\n", tensor->name, tensor->data, tensor->ne[0], tensor->ne[1], tensor->ne[2],
                                                                              tensor->nb[0], tensor->nb[1], tensor->nb[2]);
@@ -76,7 +77,10 @@ namespace chatllm
                 float * p = (float *)data.data();
                 for (size_t i = 0; i < ggml::nbytes(tensor) / sizeof(float); i++)
                 {
-                    printf("[%3d] = %.15e\n", (int)i, p[i]);
+                    float t = p[i];
+                    //t = ggml_fp16_to_fp32(ggml_fp32_to_fp16(t));
+                    printf("[%3d] = %+3.18f\n", (int)i, t);
+                    //printf("[%3d] = %08x\n", (int)i, *(uint32_t *)(p + i));
                 }
             }
             break;
@@ -85,7 +89,31 @@ namespace chatllm
                 ggml_fp16_t * p = (ggml_fp16_t *)data.data();
                 for (size_t i = 0; i < ggml::nbytes(tensor) / sizeof(ggml_fp16_t); i++)
                 {
-                    printf("[%3d] = %.15e\n", (int)i,  ggml_fp16_to_fp32(p[i]));
+                    printf("[%3d] = %+3.18f\n", (int)i,  ggml_fp16_to_fp32(p[i]));
+                }
+            }
+            break;
+        case GGML_TYPE_Q8_0:
+            {
+                #define QK8_0 32
+                typedef struct {
+                    ggml_fp16_t d;       // delta
+                    int8_t  qs[QK8_0]; // quants
+                } block_q8_0;
+
+                char *pp = (char *)data.data();
+                for (size_t i = 0; i < ggml::nbytes(tensor) / sizeof(block_q8_0); i++)
+                {
+                    block_q8_0 *p = (block_q8_0 *)(pp + i * sizeof(block_q8_0));
+                    float scale = ggml_fp16_to_fp32(p->d);
+
+                    printf("[%3d] =", (int)i * QK8_0);
+
+                    for (int j = 0; j < QK8_0; j++)
+                    {
+                        printf(" %+3.15f", p->qs[j] * scale);
+                    }
+                    printf("\n");
                 }
             }
             break;
@@ -114,11 +142,23 @@ namespace chatllm
     {
         if (inspected_set.find(tensor) == inspected_set.end()) return true;
 
+        if (dbg_w)
+        {
+            printf("\n--------------- dbg_w ----------------------\n");
+            print_tensor(dbg_w);
+
+            dbg_w = nullptr;
+        }
+
         printf("\n--------------- %s ----------------------\n", dbg_msg.c_str());
         print_tensor(tensor);
 
-        exit(-1);
-        return false;
+        return true;
+    }
+
+    void dump_weight_tensor(ggml::tensor *tensor)
+    {
+        dbg_w = tensor;
     }
 
     void inspect_tensor(ggml::tensor *tensor, const char *msg, ggml::tensor *temp1, ggml::tensor *temp2, ggml::tensor *temp3, ggml::tensor *temp4, ggml::tensor *temp5)
@@ -897,6 +937,8 @@ namespace chatllm
                     int next_token_id = sampler->sampling(logits,  config_.vocab_size);
 
     //printf("\n>>next = %d<<\n", next_token_id);
+    //fflush(stdout);
+    //exit(-1);
 
                     if (next_token_id == Sampler::ABORT)
                     {
@@ -1012,6 +1054,9 @@ namespace chatllm
                                        const GenerationConfig &gen_config,
                                        int past)
         {
+            //printf("before_initial_run 1\n");
+            //backend_context.show_buffer_sizes();
+
             ForwardContext ctx(&backend_context);
             ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
             ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
@@ -1027,7 +1072,8 @@ namespace chatllm
 
             bool s = ctx.reserve_memory();
 
-            // backend_context.show_buffer_sizes();
+            //printf("before_initial_run 2\n");
+            //backend_context.show_buffer_sizes();
 
             return s;
         }
@@ -1042,7 +1088,7 @@ namespace chatllm
                 initial_run = true;
                 int past = gen_config.max_length - (int)input_ids.size();
                 if (past < 0) past = 0;
-                before_initial_run(input_ids, gen_config, past);
+                CHATLLM_CHECK(before_initial_run(input_ids, gen_config, past)) << "failed to reserve memory.";
             }
 
             ForwardContext ctx(&backend_context);
@@ -1179,13 +1225,14 @@ namespace chatllm
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) override
         {
+            ctx->move_to_layer(LayerAllocatorManager::Prolog);
             ggml::tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
             for (auto &layer : layers)
             {
-                ctx->restart_scratch_alloc();
+                ctx->move_to_layer(layer->get_id());
                 hidden_states = layer->forward(ctx, hidden_states, n_past);
             }
-
+            ctx->move_to_layer(LayerAllocatorManager::Epilog);
             return final_steps(ctx, input_ids, hidden_states);
         }
 
@@ -1258,8 +1305,6 @@ namespace chatllm
 
         ggml::tensor *final_steps(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
         {
-            ctx->restart_scratch_alloc();
-
             // NOTE: only compute next_token_logits for the last token
             hidden_states = ggml::view_2d(ctx, hidden_states, config.hidden_size, 1,
                                         config.hidden_size * ggml::element_size(hidden_states),
@@ -1358,19 +1403,16 @@ namespace chatllm
             ggml::tensor *hidden_states = Base::word_embeddings.forward(ctx, input_ids, n_past);
             for (auto &layer : BaseBase::layers)
             {
-                ctx->restart_scratch_alloc();
+                ctx->move_to_layer(layer->get_id());
                 hidden_states = layer->forward(ctx, hidden_states, n_past);
             }
+            ctx->move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
             return final_steps(ctx, input_ids, hidden_states);
         }
 
     protected:
         ggml::tensor *final_steps(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
         {
-            // TODO:
-            //ggml_set_scratch(ctx->get_ctx(), {.offs = 0, .size = 0, .data = nullptr});
-            ctx->restart_scratch_alloc();
-
             ggml::tensor *transformer_outputs = Base::final_layernorm.forward(ctx, hidden_states);
 
             return transformer_outputs;

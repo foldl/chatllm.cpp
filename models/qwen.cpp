@@ -162,7 +162,7 @@ namespace v1
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
         : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
     {
-        constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+        const size_t tensor_ovhd = ggml_tensor_overhead();
         const size_t num_tensors = 3 + config.num_hidden_layers * 16;
         const size_t ctx_size = num_tensors * tensor_ovhd;
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
@@ -271,7 +271,7 @@ namespace v2
         : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2),
         config(config), tie_embeddings(tie_embeddings)
     {
-        constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+        const size_t tensor_ovhd = ggml_tensor_overhead();
         const size_t num_tensors = 3 + config.num_hidden_layers * 15 + (tie_embeddings ? -1 : 0);
         const size_t ctx_size = num_tensors * tensor_ovhd;
 
@@ -304,7 +304,7 @@ namespace v2
     void ConditionalGeneration::load(ModelLoader &loader)
     {
         auto transformer = get_typed_transformer<ModelClass>();
-
+        loader.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
         loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
@@ -392,7 +392,7 @@ namespace v2_moe
             : BaseModelForConditionalGeneration(MODEL_TYPE_QWEN2MoE, config, runtime_config, 4096 * 4),
               config(config)
         {
-            constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+            const size_t tensor_ovhd = ggml_tensor_overhead();
             const size_t num_tensors = 3 + config.num_hidden_layers * (17 + 3);
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});

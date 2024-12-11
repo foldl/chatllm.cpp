@@ -50,7 +50,7 @@ If a question does not make any sense, or is not factually coherent, explain why
         GenericConditionalGeneration(const BaseConfig &config, const RuntimeConfig &runtime_config, ModelType type, int num_key_value_heads, int max_length, int tensors_per_layer = 12, bool tie_lm_head = false, int additional_tensor = 0)
             : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config), type_class(1)
         {
-            constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+            const size_t tensor_ovhd = ggml_tensor_overhead();
             const size_t num_tensors = (tie_lm_head ? 2 : 3) + config.num_hidden_layers * tensors_per_layer + additional_tensor;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
@@ -69,7 +69,7 @@ If a question does not make any sense, or is not factually coherent, explain why
         GenericConditionalGeneration(const BaseConfig &config, const RuntimeConfig &runtime_config, ModelType type, int num_key_value_heads, int head_dim, int max_length, int tensors_per_layer, bool tie_lm_head)
             : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config), type_class(2)
         {
-            constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+            const size_t tensor_ovhd = ggml_tensor_overhead();
             const size_t num_tensors = (tie_lm_head ? 2 : 3) + config.num_hidden_layers * tensors_per_layer;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
@@ -501,7 +501,7 @@ namespace v3_1
                                       config.rope_scaling_low_freq_factor,
                                       config.rope_scaling_high_freq_factor,
                                       config.rope_scaling_original_max_position_embeddings);
-            freq_factors->data = (void *)freq_factors_value.data();
+            Backend::write_tensor_data(freq_factors, freq_factors_value.data());
 
             auto transformer = Base::get_typed_transformer<ModelClass>();
             for (int i = 0; i < config.num_hidden_layers; i++)
@@ -628,9 +628,6 @@ namespace multi
             ggml::tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
             for (int i = 0; i <= config.num_hidden_layers - 2; i++)
             {
-                // reserve scratch memory for h_truck
-                if (i <= config.num_hidden_layers - 3)
-                    ctx->restart_scratch_alloc();
                 hidden_states = get_layer(i)->forward(ctx, hidden_states, n_past);
             }
 
@@ -639,10 +636,7 @@ namespace multi
 
             for (int i = 0; i < effective_n; i++)
             {
-                ctx->restart_scratch_alloc();
                 ggml::tensor *tok_states = prediction_heads[i]->forward(ctx, h_trunk, n_past);
-
-                ctx->restart_scratch_alloc();
 
                 ggml::tensor *logits = calc_logits(ctx, input_ids, tok_states);
                 ggml::tensor *view = ggml::view_1d(ctx, lm_logits, config.vocab_size,
@@ -706,7 +700,7 @@ namespace multi
                                      int tensors_per_layer = 12)
             : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config)
         {
-            constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+            const size_t tensor_ovhd = ggml_tensor_overhead();
             const size_t num_tensors = 3 + (config.num_hidden_layers + config.n_future_tokens - 1) * tensors_per_layer;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});

@@ -507,7 +507,7 @@ namespace v2_light
             : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
               config(config)
         {
-            constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+            const size_t tensor_ovhd = ggml_tensor_overhead();
             const size_t num_tensors = 3 + (config.num_hidden_layers - 1) * (16 + 3) + 15
                                 + (q_lora_rank > 0 ? config.num_hidden_layers * 2 : 0);
             const size_t ctx_size = num_tensors * tensor_ovhd;

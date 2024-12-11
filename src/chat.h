@@ -382,12 +382,12 @@ namespace chatllm
     class TensorInfo
     {
     public:
-        TensorInfo(ggml::type type, int n_dim, const int64_t *ne, size_t _offset);
+        TensorInfo(ggml::type type, int n_dim, const int64_t *ne, size_t _offset, const char *name);
         ~TensorInfo();
 
-        bool load(tokenizer::DataReader *reader, LayerBufAllocator *alloc);
+        bool load(tokenizer::DataReader *reader, LayerBufAllocator *alloc, ggml::type target_type);
 
-        size_t read_tensor_data(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size);
+        size_t read_tensor_data(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size, ggml::type target_type);
 
         size_t aligned_data_start(size_t offset);
         size_t aligned_size(void);
@@ -396,12 +396,16 @@ namespace chatllm
 
         void assign_to(ggml::tensor *tensor);
 
+    protected:
+        size_t read_tensor_data_f32_f16(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size);
+
     public:
         ggml::tensor tensor;
         const size_t _offset;
         BackendBufAllocator::Usage usage;
         BackendBuffer *data;
         LayerBufAllocator *alloc;
+        ggml::type original_type;
     };
 
     class ModelLoader

@@ -13,6 +13,8 @@
 
 namespace chatllm
 {
+    void dump_weight_tensor(ggml::tensor *tensor);
+    void print_tensor(ggml::tensor *tensor, int offset = 0);
     void inspect_tensor(ggml::tensor *tensor, const char *msg,
         ggml::tensor *temp1 = nullptr, ggml::tensor *temp2 = nullptr, ggml::tensor *temp3 = nullptr, ggml::tensor *temp4 = nullptr, ggml::tensor *temp5 = nullptr);
 
@@ -39,6 +41,9 @@ namespace chatllm
         ggml::tensor *new_tensor_1d(ComputeContext *ctx, ggml::type type, int64_t ne0);
         ggml::tensor *new_tensor_2d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1);
         ggml::tensor *new_tensor_3d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2);
+
+        void set_input(ggml::tensor *a);
+        void set_output(ggml::tensor *a);
 
         ggml::type    type_of(const ggml::tensor *a);
 
@@ -122,7 +127,7 @@ namespace chatllm
     class Block
     {
     public:
-        Block(): prec(ggml::prec::GGML_PREC_DEFAULT), id(0) {}
+        Block(): prec(ggml::prec::GGML_PREC_DEFAULT), id(0), debug(false) {}
         virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input)
         {
             CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *input): not implemented";
@@ -172,6 +177,8 @@ namespace chatllm
     protected:
         ggml::prec prec;
         int id;
+    public:
+        bool debug;
     };
 
     class Identity : public Block
@@ -208,7 +215,10 @@ namespace chatllm
     public:
         Embedding() : weight(nullptr) {}
         Embedding(InitContext *ctx, int num_embeddings, int embedding_dim)
-            : weight(ggml::new_tensor_2d(ctx, ctx->dtype, embedding_dim, num_embeddings)) {}
+            : weight(ggml::new_tensor_2d(ctx, ctx->dtype, embedding_dim, num_embeddings))
+        {
+            ggml::set_input(weight);
+        }
 
         Embedding(InitContext *ctx, int num_embeddings, int embedding_dim, int pos_max)
             : Embedding(ctx, num_embeddings, embedding_dim) {}
@@ -350,8 +360,8 @@ namespace chatllm
         int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = ln.get_param_num(effective_only);
-            if (word_weight)        r += ggml::nelements(word_weight);
-            if (position_weight)    r += ggml::nelements(position_weight);
+            r += ggml::nelements(word_weight);
+            r += ggml::nelements(position_weight);
             return r;
         }
 
@@ -1050,6 +1060,16 @@ namespace chatllm
         }
 
         void set_prec(ggml::prec prec) override;
+
+        void set_id(int id) override
+        {
+            Block::set_id(id);
+
+            q_proj.set_id(id);
+            k_proj.set_id(id);
+            v_proj.set_id(id);
+            o_proj.set_id(id);
+        }
 
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
@@ -2101,6 +2121,7 @@ namespace chatllm
         bool use_logn_attn;
     protected:
         ggml::tensor *logn_list;
+        std::vector<float> logn_list_data;
     };
 
     class QWenBlock : public LMBlock1<RMSNorm, QWenSelfAttention, RMSNorm, SiLUMLP>

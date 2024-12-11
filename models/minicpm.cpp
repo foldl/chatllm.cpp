@@ -43,7 +43,7 @@ namespace v1
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_MINICPM, bool tie_word_embeddings = true)
             : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
         {
-            constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+            const size_t tensor_ovhd = ggml_tensor_overhead();
             const size_t num_tensors = (tie_word_embeddings ? 2 : 3) + config.num_hidden_layers * 12;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
@@ -301,7 +301,7 @@ namespace moe
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_MINICPM_MoE)
             : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
         {
-            constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+            const size_t tensor_ovhd = ggml_tensor_overhead();
             const size_t num_tensors = 2 + config.num_hidden_layers * (10 + 3);
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
@@ -597,7 +597,7 @@ namespace v3
             : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2),
               config(config)
         {
-            constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+            const size_t tensor_ovhd = ggml_tensor_overhead();
             const size_t num_tensors = 2 + config.num_hidden_layers * 17;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});

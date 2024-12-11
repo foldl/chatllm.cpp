@@ -22,6 +22,11 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif ()
 
+# change the default for these ggml options
+if (NOT DEFINED GGML_LLAMAFILE)
+    set(GGML_LLAMAFILE_DEFAULT ON)
+endif()
+
 # third-party libraries
 include_directories(ggml/include/ggml ggml/src)
 add_subdirectory(ggml)

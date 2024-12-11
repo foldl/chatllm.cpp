@@ -22,6 +22,9 @@ namespace chatllm
 
         int n_dims(const ggml::tensor * tensor);
 
+        type type_of(const ggml::tensor *tensor);
+        type type_of(const ggml::tensor &tensor);
+
         void set_name(tensor *tensor, const char *name);
 
         typedef bool (* need_observe_tensor_evaluation_callback)(ggml::tensor *tensor, void *user_data);
@@ -63,7 +66,10 @@ namespace chatllm
         {
             Matrix,
             Others,
+            MAX
         };
+
+        BackendBufAllocator(Backend *backend): total(), backend(backend) {}
 
         virtual BackendBuffer *alloc(size_t size, Usage usage = Usage::Others) = 0;
         virtual bool alloc(ggml::tensor *tensor) = 0;
@@ -76,8 +82,14 @@ namespace chatllm
             return false;
         }
 
+        Backend *get_backend(void);
+
+        virtual void show_info(void);
+
     protected:
-        size_t total = 0;
+        size_t total[Usage::MAX];
+    public:
+        Backend * const backend;
     };
 
     class LayerBufAllocator : public BackendBufAllocator
@@ -100,7 +112,7 @@ namespace chatllm
 
         void free_all_buffers(void);
 
-        Backend *get_backend(void);
+        void show_info(void) override;
 
         bool operator ==(const LayerBufAllocator &b);
 
@@ -113,7 +125,6 @@ namespace chatllm
         ggml_backend_allocator alloc_matrix;
         ggml_backend_allocator alloc_others;
         std::vector<std::unique_ptr<BackendBuffer>> buffers;
-        Backend * const backend;
     };
 
     class LayerAllocatorManager
@@ -164,14 +175,22 @@ namespace chatllm
         static bool is_gpu_offload_supported(void);
     };
 
+    enum BufferType
+    {
+        Dedicated,  // only accessible by this backend
+        Shared,     // accessible (at least) by this backend and host (CPU)
+    };
+
     class Backend
     {
+    public:
+
     public:
         Backend(ggml_backend_t backend, int n_layers, bool use_gpu);
 
         bool is_cpu(void) const;
 
-        ggml_backend_allocator get_allocator(void);
+        ggml_backend_allocator get_allocator(BufferType bt);
 
         void write_tensor_data_async(ggml::tensor * tensor, const void * data, size_t offset, size_t size);
 
@@ -230,6 +249,8 @@ namespace chatllm
 
         void show_buffer_sizes(void);
 
+        void synchronize(void);
+
     public:
         std::vector<Backend> backends;
     #ifdef GGML_USE_METAL
@@ -253,6 +274,9 @@ namespace chatllm
     protected:
         ggml_abort_callback abort_callback      = nullptr;
         void *              abort_callback_data = nullptr;
+
+        std::vector<ggml_backend_t> gg_backends;
+        std::vector<ggml_backend_buffer_type_t> gg_bufts;
 
     public:
         ggml::need_observe_tensor_evaluation_callback need_observe_tensor_callback = nullptr;
@@ -279,6 +303,8 @@ namespace chatllm
 
         virtual void compute(int n_threads);
 
+        virtual void synchronize(void);
+
         virtual bool allocate(void);
 
         virtual bool reserve_memory(void);
@@ -294,9 +320,6 @@ namespace chatllm
         virtual ggml_backend_sched_t get_sched(void);
 
         BackendContext *backend_context;
-    public:
-        // obsoleted
-        virtual void restart_scratch_alloc(void) {}
     private:
         void set_backend_context(BackendContext *backend_context);
     };

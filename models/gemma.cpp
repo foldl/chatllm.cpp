@@ -79,7 +79,7 @@ public:
     ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA)
         : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
     {
-        constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+        const size_t tensor_ovhd = ggml_tensor_overhead();
         const size_t num_tensors = 2 + config.num_hidden_layers * 12;
         const size_t ctx_size = num_tensors * tensor_ovhd;
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
@@ -257,7 +257,7 @@ public:
           logits_pp(1.0f / config.final_logit_soft_capping / sqrtf((float)config.hidden_size), config.final_logit_soft_capping),
           attn_scores_pp(1.0f / config.attn_logit_soft_capping, config.attn_logit_soft_capping)
     {
-        constexpr size_t tensor_ovhd = GGML_TENSOR_SIZE + GGML_OBJECT_SIZE;
+        const size_t tensor_ovhd = ggml_tensor_overhead();
         const size_t num_tensors = 2 + (config.num_hidden_layers - config.num_hidden_layers / 2) * 14 + config.num_hidden_layers / 2 * 15;
         const size_t ctx_size = num_tensors * tensor_ovhd;
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});

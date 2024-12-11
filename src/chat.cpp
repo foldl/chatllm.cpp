@@ -683,11 +683,12 @@ namespace chatllm
         return fread(output, 1, len, f);
     }
 
-    TensorInfo::TensorInfo(ggml::type type, int n_dim, const int64_t *ne, size_t _offset)
-        : _offset(_offset), data(nullptr)
+    TensorInfo::TensorInfo(ggml::type type, int n_dim, const int64_t *ne, size_t _offset, const char *name)
+        : _offset(_offset), data(nullptr), original_type(ggml::type::GGML_TYPE_F32)
     {
         ggml::init_tensor(&tensor, type, n_dim, ne);
         usage = ggml::n_dims(&tensor) > 1 ? BackendBufAllocator::Usage::Matrix : BackendBufAllocator::Usage::Others;
+        ggml::set_name(&tensor, name);
     }
 
     TensorInfo::~TensorInfo()
@@ -712,29 +713,86 @@ namespace chatllm
         return ggml::nbytes(&tensor);
     }
 
-    bool TensorInfo::load(tokenizer::DataReader *reader, LayerBufAllocator *alloc)
+    bool TensorInfo::load(tokenizer::DataReader *reader, LayerBufAllocator *alloc, ggml::type target_type)
     {
-        if (data) return true;
+        if (data)
+        {
+            CHATLLM_CHECK(ggml::type_of(tensor) == target_type) << "type mismatch: " << ggml::type_of(tensor) << ", " << target_type;
+            return true;
+        }
 
+        this->original_type = ggml::type_of(tensor);
+        tensor.type = target_type;
         data = alloc->alloc(ggml::nbytes(&tensor), usage);
         data->assign_to(&tensor);
         this->alloc = alloc;
 
         if (reader)
-            read_tensor_data(reader, _offset, 0, ggml::nbytes(&tensor));
+            read_tensor_data(reader, _offset, 0, ggml::nbytes(&tensor), target_type);
 
         return true;
     }
 
-    size_t TensorInfo::read_tensor_data(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size)
+    size_t TensorInfo::read_tensor_data(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size,
+                                        ggml::type target_type)
     {
         CHATLLM_CHECK(data) << "backend buffer still not allocated!";
+        CHATLLM_CHECK(target_type == ggml::type_of(tensor)) << "tensor type mismatch!";
         CHATLLM_CHECK(data->get_size() >= write_offset + data_size) << "read_tensor_data(): write data exceeds tensor data size";
 
         reader->seek(aligned_data_start(read_offset), SEEK_SET);
 
+        if (target_type != original_type)
+        {
+            if (  (ggml::type::GGML_TYPE_F32 == original_type)
+               && (ggml::type::GGML_TYPE_F16 == target_type))
+                return read_tensor_data_f32_f16(reader, read_offset, write_offset, data_size);
+            else
+            {
+                CHATLLM_THROW << "type conversion not supported: " << original_type << ", " << target_type;
+                return 0;
+            }
+        }
+
+
         if (data->is_host())
+        {
             reader->read_buffer((uint8_t *)data->get_base() + write_offset, data_size);
+#if (0)
+            if (std::string(tensor.name).find("embed_tokens.weight") != std::string::npos)
+            {
+                int8_t *p = (int8_t *)data->get_base() + write_offset;
+                printf("patching emb (Q8_0)\n");
+
+                #define DIM 1536
+                for (int k = 0; k < 2; k++)
+                {
+                    if (tensor.type == GGML_TYPE_Q8_0)
+                    {
+                        #define GGML_QK8_0 32
+                        memset(p, 0, (DIM / GGML_QK8_0) * (GGML_QK8_0 + 2));
+                        *(ggml_fp16_t *)p = ggml_fp32_to_fp16(1.0f);
+                        p[2] = 1;
+                        p += (DIM / GGML_QK8_0) * (GGML_QK8_0 + 2);
+                    }
+                    else if (tensor.type == GGML_TYPE_F16)
+                    {
+                        memset(p, 0, DIM * sizeof(ggml_fp16_t));
+                        *(ggml_fp16_t *)p = ggml_fp32_to_fp16(1.0f);
+                        p += DIM * sizeof(ggml_fp16_t);
+                    }
+                    else if (tensor.type == GGML_TYPE_F32)
+                    {
+                        memset(p, 0, DIM * sizeof(float));
+                        *(float *)p = 1.0f;
+                        p += DIM * sizeof(float);
+                    }
+                    else
+                        CHATLLM_CHECK(false) << tensor.type;
+                }
+            }
+#endif
+        }
         else
         {
             const int BUF_SIZE = 1024 * 1000;
@@ -752,6 +810,27 @@ namespace chatllm
                 offset += block;
             }
         }
+
+        return data_size;
+    }
+
+    size_t TensorInfo::read_tensor_data_f32_f16(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size)
+    {
+        std::vector<uint8_t> buf;
+        buf.resize(data_size * 2);
+        reader->read_buffer(buf.data(), buf.size());
+
+        ggml_fp16_t *p16 = (ggml_fp16_t *)buf.data();
+           float    *p32 = (      float *)buf.data();
+        for (size_t i = 0; i < data_size / 2; i++)
+        {
+            p16[i] = ggml_fp32_to_fp16(p32[i]);
+        }
+
+        if (data->is_host())
+            memcpy((uint8_t *)data->get_base() + write_offset, buf.data(), data_size);
+        else
+            alloc->get_backend()->write_tensor_data(&tensor, buf.data(), write_offset, data_size);
 
         return data_size;
     }
@@ -788,7 +867,7 @@ namespace chatllm
             // read and check tensor dtype
             ggml::type dtype = (ggml::type)read_basic<int>();
 
-            tensor_dict.emplace(weight_name, TensorInfo(dtype, ndim, ne, tell()));
+            tensor_dict.emplace(weight_name, TensorInfo(dtype, ndim, ne, tell(), weight_name.c_str()));
 
             TensorInfo &t = tensor_dict.at(weight_name);
 
@@ -816,9 +895,6 @@ namespace chatllm
         ggml::set_name(tensor, name.c_str());
         TensorInfo &t = search->second;
 
-        CHATLLM_CHECK(t.tensor.type == tensor->type)
-                << "tensor " << name << " dtype mismatch: expect " << tensor->type << " but got " << t.tensor.type;
-
         // read and check tensor shape
         {
             int ndim = ggml::n_dims(&t.tensor);
@@ -838,7 +914,7 @@ namespace chatllm
             }
         }
 
-        CHATLLM_CHECK(t.load(_file.get(), allocator)) << "failed to load tensor: " << name;
+        CHATLLM_CHECK(t.load(_file.get(), allocator, tensor->type)) << "failed to load tensor: " << name;
 
         t.assign_to(tensor);
     }
@@ -865,10 +941,10 @@ namespace chatllm
             return;
         }
 
-        tensor_dict.emplace(name, TensorInfo(tensor->type, 4, tensor->ne, 0));
+        tensor_dict.emplace(name, TensorInfo(tensor->type, 4, tensor->ne, 0, name.c_str()));
 
         TensorInfo &t = tensor_dict.at(name);
-        t.load(nullptr, allocator);
+        t.load(nullptr, allocator, tensor->type);
 
         size_t total_size = t.get_nbytes();
         size_t write_offset = 0;
@@ -878,7 +954,7 @@ namespace chatllm
             CHATLLM_CHECK(search != tensor_dict.end()) << "tensor " << concat_list[i] << " not exists.";
 
             size_t size = search->second.get_nbytes();
-            t.read_tensor_data(_file.get(), search->second._offset, write_offset, size);
+            t.read_tensor_data(_file.get(), search->second._offset, write_offset, size, tensor->type);
 
             write_offset += size;
             total_size -= size;

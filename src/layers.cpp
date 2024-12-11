@@ -14,9 +14,7 @@
 #include <functional>
 #include "backend.h"
 
-#ifdef GGML_USE_CLBLAST
-#include "ggml-opencl.h"
-#endif
+#include "ggml-cpu.h"
 
 #undef MIN
 #undef MAX
@@ -32,6 +30,11 @@ namespace chatllm
     ggml::type ggml::type_of(const ggml::tensor *a)
     {
         return a->type;
+    }
+
+    ggml::type ggml::type_of(const ggml::tensor &a)
+    {
+        return a.type;
     }
 
     ggml::tensor *ggml::new_tensor_1d(ComputeContext *ctx, ggml::type type, int64_t ne0)
@@ -55,6 +58,16 @@ namespace chatllm
         return tensor;
     }
 
+    void ggml::set_input(ggml::tensor *a)
+    {
+        ggml_set_input(a);
+    }
+
+    void ggml::set_output(ggml::tensor *a)
+    {
+        ggml_set_output(a);
+    }
+
     void ggml::set_name(ggml::tensor *tensor, const char *name)
     {
         ggml_set_name(tensor, name);
@@ -76,14 +89,13 @@ namespace chatllm
             /*.op           =*/ GGML_OP_NONE,
             /*.op_params    =*/ { 0 },
             /*.flags        =*/ 0,
-            /*.grad         =*/ NULL,
             /*.src          =*/ { NULL },
             /*.view_src     =*/ NULL,
             /*.view_offs    =*/ 0,
             /*.data         =*/ NULL,
             /*.name         =*/ { 0 },
             /*.extra        =*/ NULL,
-            ///*.padding      =*/ { 0 },
+            /*.padding      =*/ { 0 },
         };
 
         for (int i = 0; i < n_dims; i++) {
@@ -629,6 +641,7 @@ namespace chatllm
         {
             // build attention mask for context input
             ggml::tensor *inf = ggml::new_tensor_3d(ctx, attn_scores->type, 1, qlen - 1, num_attention_heads);
+            // FIXME: CPU only
             ggml_set_f32(inf, -INFINITY);
             ggml::tensor *masked_attn_scores = ggml::view_3d(
                 ctx, attn_scores, 1, qlen - 1, num_attention_heads, qlen * ggml::element_size(attn_scores),
@@ -742,7 +755,8 @@ namespace chatllm
         // note auto-broadcasting in ggml_mul_mat for `repeat > 1`
         ggml::tensor *attn_scores = ggml::mul_mat(ctx, key_layer, query_layer); // [heads, qlen, klen]
 
-        ggml::mul_mat_set_prec(attn_scores, prec);
+        // default to F32 here
+        ggml::mul_mat_set_prec(attn_scores, GGML_PREC_F32);
 
         if (attn_scaling)
         {
@@ -920,6 +934,7 @@ namespace chatllm
 
     void BaseAttention::set_prec(ggml::prec prec)
     {
+        KVCacheAttention::set_prec(prec);
         q_proj.set_prec(prec);
         k_proj.set_prec(prec);
         v_proj.set_prec(prec);
@@ -1009,7 +1024,8 @@ namespace chatllm
             use_logn_attn(false),
             logn_list(ggml::new_tensor_1d(ctx, GGML_TYPE_F32, max_length))
     {
-        logn_list->data = new char[ggml::nbytes(logn_list)];
+        ctx->get_allocator()->alloc(logn_list);
+        logn_list_data.resize(max_length);
     }
 
     void QWenSelfAttention::config(int rope_dim, float rope_freq_base, int seq_length, bool use_dynamic_ntk, bool use_logn_attn)
@@ -1022,9 +1038,10 @@ namespace chatllm
 
         if (use_logn_attn)
         {
-            float *p = (float *)logn_list->data;
+            float *p = (float *)logn_list_data.data();
             for (int i = 0; i < max_length; i++)
                 p[i] = i > seq_length ? logf(float(i)) / logf((float)seq_length) : 1.0f;
+            Backend::write_tensor_data(logn_list, logn_list_data.data());
         }
     }
 
