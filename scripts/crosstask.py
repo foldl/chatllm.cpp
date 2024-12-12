@@ -45,22 +45,22 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, handler)
 
     args = sys.argv[1:]
-    if len(args) != 3:
+    if len(args) < 3:
         print(f"usage: python crosstalk.py path/to/model/A path/to/model/B initial_input")
         exit(-1)
 
-    model_a = ForwardChatLLM(LibChatLLM(PATH_BINDS), ['-m', args[0], '-i'], True)
+    input = args[2]
+    model_a = ForwardChatLLM(LibChatLLM(PATH_BINDS), ['-m', args[0], '-i', '-p', input] + args[3:], True)
     model_b = ForwardChatLLM(LibChatLLM(PATH_BINDS), ['-m', args[1], '-i'], True)
 
-    input = args[2]
     print('A > ' + input)
     while not aborted:
-        print('B > ', end=None)
+        print('B > ', end='')
         model_b.chat(input)
         input = model_b.get_output_acc()
 
         if aborted: break
 
-        print('A > ', end=None)
+        print('A > ', end='')
         model_a.chat(input)
         input = model_a.get_output_acc()

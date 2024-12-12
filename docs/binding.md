@@ -36,6 +36,12 @@ For example,
 
 * Windows: `python chatllm.py -i -m path/to/model`
 
+If `OSError: exception: access violation reading 0x0000000000000000` occurred, try:
+
+* Update to latest Python version;
+* Install latest [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist);
+* Remove all `msvcp140.*` from your Python directory.
+
 ### Web demo
 
 There is also a [Chatbot](../scripts/chatllm_st.py) powered by [Streamlit](https://streamlit.io/):

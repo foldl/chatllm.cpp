@@ -21,6 +21,9 @@ You  >
 
 For Linux/MacOS (and Windows) users, build [binding](binding.md) and start chatting.
 
+Note: `main` built from [`main.nim`](../bindings/main.nim) supports model id and model downloading, while the _default_ `main`
+built from [`main.cpp`](../src/main.cpp) does not.
+
 ### Download Quantized Models
 
 A [script](../scripts/model_downloader.py) is provided, which can download some quantized models on demand.

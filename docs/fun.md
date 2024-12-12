@@ -53,8 +53,16 @@ Before shuffling a model's layers, use `--show` to view basic information about 
 
 ## Talk to Each Other
 
-[Here](../scripts/crosstask.py) is a simple program to let two LLMs talk to each other. Both are willing to assist each other,
-so the conversation might go to full of "I'm here to assist you" quickly and is not quite fruitful.
+[Here](../scripts/crosstask.py) is a simple program to let two LLMs talk to each other.
+
+You may find that both are willing to assist each other, so the conversation might go to full of "I'm here to assist you"
+quickly and is not quite fruitful.
+
+Then, you can try to use a model that supports [_Reversed Role_](#reversed-role) as A like below, the conversation will become far more interesting.
+
+```
+python crosstask.py :qwen2.5:1.5b path/to/model/B "hello!" --reversed_role
+```
 
 ## Three Cobblers
 
@@ -88,7 +96,7 @@ A sample session:
 
 Use the _reversed role_ mode to allow the LLM to proactively participate in the conversation.
 
-Note: part of this feature is implemented in the frontend.
+Note: part of this feature is implemented in the frontend. Only a few models supports this (searching for `append_user_opening`).
 
 ```
 main -m qwen2.5-1.5b.bin --reversed_role -i -p "Hello"
@@ -105,3 +113,5 @@ You  > Hi. Nice to meet you.
 A.I. > How can I improve my public speaking skills?
 You  >
 ```
+
+[_Talk to Each Other_](#talk-to-each-other) is another example.

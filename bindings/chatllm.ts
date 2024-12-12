@@ -193,7 +193,10 @@ class StdIOHandler extends ChatLLMHandler {
     }
 
     end() {
-        if (this.references.length < 1) return;
+        if (this.references.length < 1) {
+            console.log('');
+            return;
+        }
         console.log("\nReferences:")
         for (let s of this.references)
             console.log(s)
