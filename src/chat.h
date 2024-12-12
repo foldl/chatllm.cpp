@@ -444,11 +444,6 @@ namespace chatllm
             this->alloc_manager = alloc_manager;
         }
 
-        void move_to_layer(int layer_id)
-        {
-            this->alloc_manager->move_to_layer(layer_id);
-        }
-
         void read_tensor(const std::string &name, ggml::tensor *tensor);
         void read_tensor(const std::string &name,
                         const std::string &layer_prefix, int num, const std::string &suffix,

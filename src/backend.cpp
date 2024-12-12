@@ -205,6 +205,16 @@ namespace chatllm
         return &allocators[id];
     }
 
+    LayerBufAllocator *LayerAllocatorManager::get_allocator(ggml::tensor *tensor)
+    {
+        return alloc_of_tensor[tensor];
+    }
+
+    void LayerAllocatorManager::register_tensor_allocator(ggml::tensor *tensor,  LayerBufAllocator *allocator)
+    {
+        alloc_of_tensor.insert_or_assign(tensor, allocator);
+    }
+
     int LayerAllocatorManager::get_mapped_layer_id(int layer_id)
     {
         int id = layer_id;
@@ -612,6 +622,7 @@ namespace chatllm
     {
         if (get_sched() && get_backend())
             ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
+        register_tensor_allocator(tensor, backend_context->layer_allocators.get_allocator());
     }
 
     void ComputeContext::cb_op_tensor(ggml::tensor *tensor)
@@ -631,6 +642,16 @@ namespace chatllm
     BackendBufAllocator *ComputeContext::get_allocator(void)
     {
         return backend_context->layer_allocators.get_allocator();
+    }
+
+    BackendBufAllocator *ComputeContext::get_allocator(ggml::tensor *tensor)
+    {
+        return backend_context->layer_allocators.get_allocator(tensor);
+    }
+
+    void ComputeContext::register_tensor_allocator(ggml::tensor *tensor,  BackendBufAllocator *allocator)
+    {
+        backend_context->layer_allocators.register_tensor_allocator(tensor, dynamic_cast<LayerBufAllocator *>(allocator));
     }
 
     Backend *ComputeContext::get_backend(void)

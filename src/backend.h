@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <memory>
+#include <map>
 
 #include "ggml-backend.h"
 
@@ -145,6 +146,9 @@ namespace chatllm
         LayerBufAllocator *get_allocator(void);
 
         LayerBufAllocator *get_allocator(int layer_id);
+        LayerBufAllocator *get_allocator(ggml::tensor *tensor);
+
+        void register_tensor_allocator(ggml::tensor *tensor,  LayerBufAllocator *allocator);
 
     protected:
         int get_mapped_layer_id(int layer_id);
@@ -154,6 +158,7 @@ namespace chatllm
         int prolog_layer_backend_map_to_layer_id = -1;
         int epilog_layer_backend_map_to_layer_id = -1;
         int cur_layer = MiscLayer::Prolog;
+        std::map<ggml::tensor *, LayerBufAllocator *> alloc_of_tensor;
     };
 
     class ComputeManager
@@ -298,6 +303,8 @@ namespace chatllm
         virtual void move_to_layer(int layer_id);
 
         BackendBufAllocator *get_allocator(void);
+        BackendBufAllocator *get_allocator(ggml::tensor *tensor);
+        void register_tensor_allocator(ggml::tensor *tensor,  BackendBufAllocator *allocator);
 
         virtual Backend *get_backend(void);
 

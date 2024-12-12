@@ -718,6 +718,7 @@ namespace chatllm
         if (data)
         {
             CHATLLM_CHECK(ggml::type_of(tensor) == target_type) << "type mismatch: " << ggml::type_of(tensor) << ", " << target_type;
+            CHATLLM_CHECK(this->alloc == alloc) << "TODO: tensor (" << tensor.name << ") loaded, but using different allocators";
             return true;
         }
 
@@ -877,14 +878,14 @@ namespace chatllm
 
     void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor)
     {
-        read_tensor(name, tensor, alloc_manager->get_allocator());
+        read_tensor(name, tensor, alloc_manager->get_allocator(tensor));
     }
 
     void ModelLoader::read_tensor(const std::string &name,
                     const std::string &layer_prefix, int num, const std::string &suffix,
                     ggml::tensor *tensor)
     {
-        read_tensor(name, layer_prefix, num, suffix, tensor, alloc_manager->get_allocator());
+        read_tensor(name, layer_prefix, num, suffix, tensor, alloc_manager->get_allocator(tensor));
     }
 
     void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator)
