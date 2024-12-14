@@ -577,23 +577,23 @@ namespace multi
         }
     };
 
-    class LlamaBlockNonInplace : public LMBlock1<RMSNormNonInplace, LlamaSelfAttention, RMSNorm, SiLUMLP>
+    class LlamaBlock : public LMBlock1<RMSNorm, LlamaSelfAttention, RMSNorm, SiLUMLP>
     {
     public:
-        LlamaBlockNonInplace(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+        LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
             : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
         {}
     };
 
     // MultiPredModel seems better to inherit from HeterogeneousModel (or move into it)
     // If there are more models use this technique, then DO IT.
-    class MultiPredModel : public Model<BaseConfig, Embedding, RMSNorm, LlamaBlockNonInplace, int, int, int, int, int>
+    class MultiPredModel : public Model<BaseConfig, Embedding, RMSNorm, LlamaBlock, int, int, int, int, int>
     {
     public:
-        typedef Model<BaseConfig, Embedding, RMSNorm, LlamaBlockNonInplace, int, int, int, int, int> Base;
+        typedef Model<BaseConfig, Embedding, RMSNorm, LlamaBlock, int, int, int, int, int> Base;
         MultiPredModel(InitContext *ctx, const Config &config, int hidden_size, int num_attention_heads, int intermediate_size,
                        int num_key_value_heads, int max_length, int n_future_tokens)
-            : Model<BaseConfig, Embedding, RMSNorm, LlamaBlockNonInplace, int, int, int, int, int>(
+            : Model<BaseConfig, Embedding, RMSNorm, LlamaBlock, int, int, int, int, int>(
                     ctx, config, false, hidden_size, num_attention_heads, intermediate_size, num_key_value_heads, max_length),
               n_future_tokens(n_future_tokens)
         {
@@ -601,7 +601,7 @@ namespace multi
 
             for (int i = 0; i < n_future_tokens - 1; i++)
             {
-                auto layer = new LlamaBlockNonInplace(ctx, hidden_size, num_attention_heads, intermediate_size, num_key_value_heads, max_length);
+                auto layer = new LlamaBlock(ctx, hidden_size, num_attention_heads, intermediate_size, num_key_value_heads, max_length);
                 extra_heads.push_back(layer);
                 layer->set_id(config.num_hidden_layers + i);
             }
@@ -684,7 +684,7 @@ namespace multi
         }
     public:
         const int n_future_tokens;
-        std::vector<LlamaBlockNonInplace *> extra_heads;
+        std::vector<LlamaBlock *> extra_heads;
         std::vector<Block *> prediction_heads;
     private:
         int effective_n;

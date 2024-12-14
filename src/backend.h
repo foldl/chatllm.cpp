@@ -28,6 +28,8 @@ namespace chatllm
 
         void set_name(tensor *tensor, const char *name);
 
+        void graph_dump_dot(ggml_backend_sched_t sched, const struct ggml_cgraph * gb, const struct ggml_cgraph * gf, const char * filename);
+
         typedef bool (* need_observe_tensor_evaluation_callback)(ggml::tensor *tensor, void *user_data);
         typedef bool (* observe_tensor_evaluation_callback)(ggml::tensor *tensor, void *user_data);
     }

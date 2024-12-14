@@ -377,7 +377,7 @@ namespace chatllm
     {
     public:
         RMSNorm() : weight(nullptr), inplace(true) {}
-        RMSNorm(InitContext *ctx, int normalized_shape, bool inplace = true)
+        RMSNorm(InitContext *ctx, int normalized_shape, bool inplace = false)
             : weight(ggml::new_tensor_1d(ctx, GGML_TYPE_F32, normalized_shape)),
               eps(1e-5f),
               inplace(inplace) {}
@@ -396,10 +396,10 @@ namespace chatllm
         const bool inplace;
     };
 
-    class RMSNormNonInplace : public RMSNorm
+    class RMSNormInplace : public RMSNorm
     {
     public:
-        RMSNormNonInplace(InitContext *ctx, int normalized_shape) : RMSNorm(ctx, normalized_shape, false) {}
+        RMSNormInplace(InitContext *ctx, int normalized_shape) : RMSNorm(ctx, normalized_shape, true) {}
     };
 
     // This is **the** feed forward network (Multi-Layer Perceptron) in _Attention Is All You Need_.

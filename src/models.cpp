@@ -1117,6 +1117,10 @@ namespace chatllm
             CHATLLM_CHECK(ctx.allocate()) << "failed to allocate memory for graph";
 
             Backend::write_tensor_data(input_ids_tensor, input_ids.data());
+
+            //ggml_backend_sched_dump_dot(backend_context.sched, ctx.get_cgraph(), "c:/tmp/gp.dot");
+            //exit(-1);
+
             ctx.compute(gen_config.num_threads);
 
             Backend::read_tensor_data(r, output.data());
@@ -1232,6 +1236,12 @@ namespace chatllm
                 ctx->move_to_layer(layer->get_id());
                 hidden_states = layer->forward(ctx, hidden_states, n_past);
             }
+            // NOTE: only compute next_token_logits for the last token
+            hidden_states = ggml::view_2d(ctx, hidden_states, config.hidden_size, 1,
+                                        config.hidden_size * ggml::element_size(hidden_states),
+                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml::element_size(hidden_states));
+
+
             ctx->move_to_layer(LayerAllocatorManager::Epilog);
             return final_steps(ctx, input_ids, hidden_states);
         }
@@ -1305,11 +1315,6 @@ namespace chatllm
 
         ggml::tensor *final_steps(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
         {
-            // NOTE: only compute next_token_logits for the last token
-            hidden_states = ggml::view_2d(ctx, hidden_states, config.hidden_size, 1,
-                                        config.hidden_size * ggml::element_size(hidden_states),
-                                        (input_ids->ne[0] - 1) * config.hidden_size * ggml::element_size(hidden_states));
-
             ggml::tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
 
             transformer_outputs =
