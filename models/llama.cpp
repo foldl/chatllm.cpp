@@ -123,7 +123,8 @@ If a question does not make any sense, or is not factually coherent, explain why
                 loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
             CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
-                << "corrupted model weights";
+                << "corrupted model weights: " << w_ctx_.get_used_mem() / ggml_tensor_overhead() << " vs "
+                << w_ctx_.get_mem_size() / ggml_tensor_overhead();
         }
 
     public:
@@ -461,7 +462,7 @@ namespace v3_1
         const float low_freq_wavelen = old_context_len / low_freq_factor;
         const float high_freq_wavelen = old_context_len / high_freq_factor;
 
-        for (int i = 0; i < rope_dim; i++)
+        for (int i = 0; i < (int)inv_freq.size(); i++)
         {
             const float freq = inv_freq[i];
             const float wavelen = 2 * std::numbers::pi_v<float> / freq;
@@ -481,7 +482,7 @@ namespace v3_1
         }
     }
 
-    class ConditionalGeneration : public v2::GenericConditionalGeneration<LlamaBlock>
+    class ConditionalGeneration : public v2::GenericConditionalGeneration<Llama31Block>
     {
     public:
         ConditionalGeneration() = default;
@@ -490,31 +491,27 @@ namespace v3_1
         {}
 
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
-                            int num_key_value_heads, int max_length, int tensors_per_layer = 12, bool tie_lm_head = false, int additional_tensor = 1)
-            : v2::GenericConditionalGeneration<LlamaBlock>(config, runtime_config, type, num_key_value_heads, max_length, tensors_per_layer, tie_lm_head, additional_tensor)
+                            int num_key_value_heads, int max_length, int tensors_per_layer = 13, bool tie_lm_head = false, int additional_tensor = 0)
+            : v2::GenericConditionalGeneration<Llama31Block>(config, runtime_config, type, num_key_value_heads, max_length, tensors_per_layer, tie_lm_head, additional_tensor)
         {
-            freq_factors = ggml::new_tensor_1d(&w_ctx_, GGML_TYPE_F32, config.hidden_size / config.num_attention_heads);
-
             init_llama3_freq_factors(freq_factors_value, config.hidden_size / config.num_attention_heads,
                                       config.rope_theta,
                                       config.rope_scaling_factor,
                                       config.rope_scaling_low_freq_factor,
                                       config.rope_scaling_high_freq_factor,
                                       config.rope_scaling_original_max_position_embeddings);
-            Backend::write_tensor_data(freq_factors, freq_factors_value.data());
 
             auto transformer = Base::get_typed_transformer<ModelClass>();
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 auto &attention = transformer->layers[i].attention;
-                attention.freq_factors = freq_factors;
                 attention.freq_base    = config.rope_theta;
+                Backend::write_tensor_data(attention.freq_factors, freq_factors_value.data());
             }
         }
 
         ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
     protected:
-        ggml::tensor *freq_factors;
         std::vector<float> freq_factors_value;
     };
 }

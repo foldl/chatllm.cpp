@@ -1766,6 +1766,32 @@ namespace chatllm
         {}
     };
 
+    class Llama31SelfAttention : public RoPESelfAttention<BaseAttention>
+    {
+    public:
+        Llama31SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+            : RoPESelfAttention(ctx, hidden_size, num_attention_heads, max_length, false, false)
+        {
+            freq_factors = ggml::new_tensor_1d(ctx, GGML_TYPE_F32, hidden_size / num_attention_heads / 2);
+            ctx->get_allocator()->alloc(freq_factors);
+        }
+
+        Llama31SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
+        {
+            freq_factors = ggml::new_tensor_1d(ctx, GGML_TYPE_F32, hidden_size / num_attention_heads / 2);
+            ctx->get_allocator()->alloc(freq_factors);
+        }
+    };
+
+    class Llama31Block : public LMBlock1<RMSNorm, Llama31SelfAttention, RMSNorm, SiLUMLP>
+    {
+    public:
+        Llama31Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
     class RobertaPooler : public Block
     {
     public:
