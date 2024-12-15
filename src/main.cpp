@@ -42,6 +42,7 @@ struct Args
     std::string save_session;
     std::string n_gpu_layers;
     std::string cur_vs_name = "default";
+    std::string dump_dot;
     std::map<std::string, std::vector<std::string>> vector_stores;
     int max_length = -1;
     int max_context_length = 512;
@@ -173,6 +174,7 @@ void usage(const std::string &prog)
               << "  --test FILE             test against inputs from a file and exit\n"
               << "  --hide_banner           hide banner\n"
               << "  --show                  show model info and quit\n"
+              << "  --dump_dot FILE         dump sched splits to a DOT file, and exit with -1\n"
               << "Additional key-value args:\n"
               << "  --kv                    start of additional args. all following options are interpreted as k-v pairs\n"
               << "  key value               a key-value pair of args\n"
@@ -347,6 +349,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--merge_vs",                    merge_vs,             std::string)
             handle_para0("--layer_spec",                  layer_spec,           std::string)
             handle_para0("--load_session",                load_session,         std::string)
+            handle_para0("--dump_dot",                    dump_dot,             std::string)
             else
                 break;
 
@@ -638,7 +641,7 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
 
 #define DEF_GenerationConfig(gen_config, args) chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.reversed_role, \
                                          args.top_k, args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z); \
-                                         gen_config.set_ai_prefix(args.ai_prefix)
+                                         gen_config.set_ai_prefix(args.ai_prefix); gen_config.dump_dot = args.dump_dot;
 
 void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 {

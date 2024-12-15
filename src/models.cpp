@@ -1118,8 +1118,11 @@ namespace chatllm
 
             Backend::write_tensor_data(input_ids_tensor, input_ids.data());
 
-            //ggml_backend_sched_dump_dot(backend_context.sched, ctx.get_cgraph(), "c:/tmp/gp.dot");
-            //exit(-1);
+            if (gen_config.dump_dot.size() > 0)
+            {
+                ggml_backend_sched_dump_dot(backend_context.sched, ctx.get_cgraph(), gen_config.dump_dot.c_str());
+                exit(-1);
+            }
 
             ctx.compute(gen_config.num_threads);
 

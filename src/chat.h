@@ -502,6 +502,7 @@ namespace chatllm
         float tfs_z;
         std::string sampling;
         std::string ai_prefix;
+        std::string dump_dot;
 
         GenerationConfig()
         {
