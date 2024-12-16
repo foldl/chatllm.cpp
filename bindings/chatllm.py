@@ -70,6 +70,8 @@ class LibChatLLM:
         self._chatllm_restart           = self._lib.chatllm_restart
         self._chatllm_set_gen_max_tokens= self._lib.chatllm_set_gen_max_tokens
         self._chatllm_show_statistics   = self._lib.chatllm_show_statistics
+        self._chatllm_save_session      = self._lib.chatllm_save_session
+        self._chatllm_load_session      = self._lib.chatllm_load_session
 
         self._chatllm_create.restype = c_void_p
         self._chatllm_create.argtypes = []
@@ -118,6 +120,11 @@ class LibChatLLM:
 
         self._chatllm_show_statistics.restype = None
         self._chatllm_show_statistics.argtypes = [c_void_p]
+
+        self._chatllm_save_session.restype = c_int
+        self._chatllm_save_session.argtypes = [c_void_p, c_char_p]
+        self._chatllm_load_session.restype = c_int
+        self._chatllm_load_session.argtypes = [c_void_p, c_char_p]
 
         self._cb_print = self._PRINTFUNC(LibChatLLM.callback_print)
         self._cb_end = self._ENDFUNC(LibChatLLM.callback_end)
@@ -215,6 +222,12 @@ class LibChatLLM:
 
     def show_statistics(self, obj: c_void_p) -> None:
         self._chatllm_show_statistics(obj)
+
+    def save_session(self, obj: c_void_p, file_name: str) -> str:
+        return self._chatllm_save_session(obj, c_char_p(file_name.encode()))
+
+    def load_session(self, obj: c_void_p, file_name: str) -> str:
+        return self._chatllm_load_session(obj, c_char_p(file_name.encode()))
 
 class LLMChatDone:
     def __init__(self, id: Any) -> None:
@@ -318,6 +331,12 @@ class ChatLLM:
 
     def show_statistics(self) -> None:
         self._lib.show_statistics(self._chat)
+
+    def save_session(self, file_name: str) -> str:
+        return self._lib.save_session(self._chat, file_name)
+
+    def load_session(self, file_name: str) -> str:
+        return self._lib.load_session(self._chat, file_name)
 
     def callback_print_reference(self, s: str) -> None:
         self.references.append(s)

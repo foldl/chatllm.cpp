@@ -173,6 +173,8 @@ namespace chatllm
 
         virtual size_t get_cache_size(void) const { return 0; }
         virtual void   set_cache_buffer(BackendBuffer *buf) { }
+        virtual size_t read_cache_data(void *buffer, size_t buffer_size) const { return 0; }
+        virtual size_t write_cache_data(const void *buffer, size_t buffer_size) { return 0; }
 
     protected:
         ggml::prec prec;
@@ -491,6 +493,9 @@ namespace chatllm
             buffer->assign_to(v_cache, ggml::nbytes(k_cache));
         }
 
+        size_t read_cache_data(void *buffer, size_t buffer_size) const override;
+        size_t write_cache_data(const void *buffer, size_t buffer_size) override;
+
     public:
         Linear query_key_value;
         Linear dense;
@@ -538,6 +543,16 @@ namespace chatllm
         void  set_cache_buffer(BackendBuffer *buffer) override
         {
             return attention.set_cache_buffer(buffer);
+        }
+
+        size_t read_cache_data(void *buffer, size_t buffer_size) const override
+        {
+            return attention.read_cache_data(buffer, buffer_size);
+        }
+
+        size_t write_cache_data(const void *buffer, size_t buffer_size) override
+        {
+            return attention.write_cache_data(buffer, buffer_size);
         }
 
     public:
@@ -699,6 +714,16 @@ namespace chatllm
             return attention.set_cache_buffer(buffer);
         }
 
+        size_t read_cache_data(void *buffer, size_t buffer_size) const override
+        {
+            return attention.read_cache_data(buffer, buffer_size);
+        }
+
+        size_t write_cache_data(const void *buffer, size_t buffer_size) override
+        {
+            return attention.write_cache_data(buffer, buffer_size);
+        }
+
     public:
         InputNormBlock input_layernorm;
         AttentionBlock attention;
@@ -805,6 +830,16 @@ namespace chatllm
             return attention.set_cache_buffer(buffer);
         }
 
+        size_t read_cache_data(void *buffer, size_t buffer_size) const override
+        {
+            return attention.read_cache_data(buffer, buffer_size);
+        }
+
+        size_t write_cache_data(const void *buffer, size_t buffer_size) override
+        {
+            return attention.write_cache_data(buffer, buffer_size);
+        }
+
     public:
         PreAttnNormBlock pre_attention_layernorm;
         AttentionBlock attention;
@@ -886,6 +921,9 @@ namespace chatllm
                 buffer->assign_to(v_cache, offset);
             }
         }
+
+        size_t read_cache_data(void *buffer, size_t buffer_size) const override;
+        size_t write_cache_data(const void *buffer, size_t buffer_size) override;
 
     protected:
         // k: [heads, qlen, head_size]
@@ -2042,6 +2080,16 @@ namespace chatllm
         void  set_cache_buffer(BackendBuffer *buffer) override
         {
             return attention.set_cache_buffer(buffer);
+        }
+
+        size_t read_cache_data(void *buffer, size_t buffer_size) const override
+        {
+            return attention.read_cache_data(buffer, buffer_size);
+        }
+
+        size_t write_cache_data(const void *buffer, size_t buffer_size) override
+        {
+            return attention.write_cache_data(buffer, buffer_size);
         }
 
     public:

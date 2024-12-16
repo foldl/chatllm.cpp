@@ -1285,8 +1285,20 @@ namespace chatllm
             struct state state = {.cache_size = cache_size };
             if (fwrite(&state, sizeof(state), 1, f) != 1)
                 return -1;
-            //if (fwrite(cache_buffer, 1, cache_size, f) != cache_size)
-                return -3;
+
+            std::vector<uint8_t> buffer;
+
+            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+            {
+                auto layer = layers[layer_id];
+                buffer.resize(layer->get_cache_size());
+                size_t size = layer->read_cache_data(buffer.data(), buffer.size());
+                if (size != buffer.size())
+                    return -4;
+                if (fwrite(buffer.data(), 1, size, f) != size)
+                    return -3;
+            }
+
             return 0;
         }
 
@@ -1297,8 +1309,20 @@ namespace chatllm
                 return -10;
             if (state.cache_size != cache_size)
                 return -1;
-            //if (fread(cache_buffer, 1, cache_size, f) != cache_size)
-            //    return -2;
+
+            std::vector<uint8_t> buffer;
+
+            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+            {
+                auto layer = layers[layer_id];
+                buffer.resize(layer->get_cache_size());
+                if (fread(buffer.data(), 1, buffer.size(), f) != buffer.size())
+                    return -4;
+                size_t size = layer->write_cache_data(buffer.data(), buffer.size());
+                if (size != buffer.size())
+                    return -3;
+            }
+
             return 0;
         }
 

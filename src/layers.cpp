@@ -661,6 +661,48 @@ namespace chatllm
         return attn_output;
     }
 
+    size_t GLMSelfAttention::read_cache_data(void *buffer, size_t buffer_size) const
+    {
+        size_t r = 0;
+        uint8_t *p = (uint8_t *)buffer;
+        if (k_cache)
+        {
+            size_t s = ggml::nbytes(k_cache) <= buffer_size ? ggml::nbytes(k_cache) : buffer_size;
+            Backend::read_tensor_data(k_cache, p, 0, s);
+            r += s;
+            buffer_size -= s;
+            p += s;
+        }
+        if (v_cache && (buffer_size > 0))
+        {
+            size_t s = ggml::nbytes(v_cache) <= buffer_size ? ggml::nbytes(v_cache) : buffer_size;
+            Backend::read_tensor_data(v_cache, p, 0, s);
+            r += s;
+        }
+        return r;
+    }
+
+    size_t GLMSelfAttention::write_cache_data(const void *buffer, size_t buffer_size)
+    {
+        size_t r = 0;
+        const uint8_t *p = (const uint8_t *)buffer;
+        if (k_cache)
+        {
+            size_t s = ggml::nbytes(k_cache) <= buffer_size ? ggml::nbytes(k_cache) : buffer_size;
+            Backend::write_tensor_data(k_cache, p, 0, s);
+            r += s;
+            buffer_size -= s;
+            p += s;
+        }
+        if (v_cache && (buffer_size > 0))
+        {
+            size_t s = ggml::nbytes(v_cache) <= buffer_size ? ggml::nbytes(v_cache) : buffer_size;
+            Backend::write_tensor_data(v_cache, p, 0, s);
+            r += s;
+        }
+        return r;
+    }
+
     ggml::tensor *GLMBlock::forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past)
     {
         float alpha = sqrtf(2.f * (float)num_hidden_layers);
@@ -842,6 +884,48 @@ namespace chatllm
     void CoreAttention::before_forward(ComputeContext *ctx, const int n_past, const int qlen)
     {
         fill_pos_vector(ctx, v_pos, pos, n_past, qlen);
+    }
+
+    size_t CoreAttention::read_cache_data(void *buffer, size_t buffer_size) const
+    {
+        size_t r = 0;
+        uint8_t *p = (uint8_t *)buffer;
+        if (k_cache)
+        {
+            size_t s = ggml::nbytes(k_cache) <= buffer_size ? ggml::nbytes(k_cache) : buffer_size;
+            Backend::read_tensor_data(k_cache, p, 0, s);
+            r += s;
+            buffer_size -= s;
+            p += s;
+        }
+        if (v_cache && (buffer_size > 0))
+        {
+            size_t s = ggml::nbytes(v_cache) <= buffer_size ? ggml::nbytes(v_cache) : buffer_size;
+            Backend::read_tensor_data(v_cache, p, 0, s);
+            r += s;
+        }
+        return r;
+    }
+
+    size_t CoreAttention::write_cache_data(const void *buffer, size_t buffer_size)
+    {
+        size_t r = 0;
+        const uint8_t *p = (const uint8_t *)buffer;
+        if (k_cache)
+        {
+            size_t s = ggml::nbytes(k_cache) <= buffer_size ? ggml::nbytes(k_cache) : buffer_size;
+            Backend::write_tensor_data(k_cache, p, 0, s);
+            r += s;
+            buffer_size -= s;
+            p += s;
+        }
+        if (v_cache && (buffer_size > 0))
+        {
+            size_t s = ggml::nbytes(v_cache) <= buffer_size ? ggml::nbytes(v_cache) : buffer_size;
+            Backend::write_tensor_data(v_cache, p, 0, s);
+            r += s;
+        }
+        return r;
     }
 
     void KVCacheAttention::before_forward(ComputeContext *ctx, const int n_past, const int qlen)
