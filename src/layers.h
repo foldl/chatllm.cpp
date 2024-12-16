@@ -1431,7 +1431,8 @@ namespace chatllm
             }
 
             // patch n_past for memory estimation
-            const int write_offset = cache_offset + n_past < cache_length ? cache_offset + n_past : cache_length - 1;
+            const int write_offset = cache_offset + n_past < cache_length ? cache_offset + n_past : cache_length - qlen;
+            if (cache_offset + n_past >= cache_length) cache_offset = 0;
 
             // compute the transposed [N, n_embd] V matrix
             ggml::tensor * Vcur = ggml::transpose(ctx, v); // ggml::reshape_2d(ctx, tmpv, kv_hidden_size, qlen));
