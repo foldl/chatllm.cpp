@@ -531,7 +531,7 @@ namespace v3_2
         ConditionalGeneration() = default;
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_LLAMA3_1)
             : v3_1::ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length,
-                                          12, config.tie_word_embeddings != 0, 1)
+                                          13, config.tie_word_embeddings != 0, 0)
         {}
     };
 }
