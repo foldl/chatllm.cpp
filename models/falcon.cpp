@@ -58,9 +58,8 @@ namespace v3
         {
             tp = new tokenizer::BPEProcessor2();
             size_t size = tp->Load(buffer, n_vocab);
-            //tp->EnableReturnSpecialToken(true);
+
             int nl = tp->PieceToId("Ċ");
-            printf("nl = %d\n", nl);
             tp->OverrideTokenDecoding(nl, "\n");
 
             return size;
