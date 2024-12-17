@@ -1082,5 +1082,21 @@
                 }
             }
         }
+    },
+    "megrez" : {
+        "brief": "Megrez-3B-Instruct is a large language model trained by Infinigence AI. Megrez-3B aims to provide a fast inference, compact, and powerful edge-side intelligent solution through software-hardware co-design.",
+        "default": "3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3101520384,
+                        "url": "chatllm_quantized_megrez/megrez-3b.bin"
+                    }
+                }
+            }
+        }
     }
 }

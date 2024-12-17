@@ -198,6 +198,7 @@ namespace chatllm
         MODEL_TYPE_WIZARDMATH       = 0x154,
         MODEL_TYPE_TIGERBOT         = 0x155,
         MODEL_TYPE_LLAMA2PLUS       = 0x156,
+        MODEL_TYPE_MEGREZ           = 0x157,
 
         MODEL_TYPE_BAICHUANLLAMA = 0x200,
         MODEL_TYPE_BAICHUAN      = 0x201,
@@ -345,6 +346,8 @@ namespace chatllm
         case MODEL_TYPE_LLAMA2:
         case MODEL_TYPE_LLAMA2PLUS:
             return "LlaMA2";
+        case MODEL_TYPE_MEGREZ:
+            return "Megrez";
         case MODEL_TYPE_CODELLAMA:
             return "CodeLlaMa";
         case MODEL_TYPE_BAICHUAN:
@@ -516,6 +519,8 @@ namespace chatllm
             return "360智脑";
         case MODEL_TYPE_XVERSE:
             return "元象";
+        case MODEL_TYPE_MEGREZ:
+            return "无穹天权";
         default:
             return "";
         }
@@ -1655,6 +1660,11 @@ namespace chatllm
         #include "../models/granite.cpp"
     }
 
+    namespace megrez
+    {
+        #include "../models/megrez.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1864,6 +1874,7 @@ namespace chatllm
         CASE(LLAMA_MULTI,           llama::multi, 1)            \
         CASE(LLAMA3_1,              llama::v3_1, 1)             \
         CASE(LLAMA3_2,              llama::v3_2, 1)             \
+        CASE(MEGREZ,                megrez::chat, 1)            \
                                                                 \
         CASE(DEEPSEEK,              deepseek::v1, 1)            \
         CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \

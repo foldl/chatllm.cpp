@@ -30,6 +30,7 @@
         - v1: [Instruct-1.7B](https://huggingface.co/HuggingFaceTB/SmolLM-1.7B-Instruct)
         - v2: [Instruct-1.7B](https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct)
     * [x] Groq: [Llama-3-Groq-8B-Tool-Use](https://huggingface.co/Groq/Llama-3-Groq-8B-Tool-Use) (`-a Llama-3-Groq-8B-Tool-Use`)
+    * [x] Megrez: [Instruct-3B](https://huggingface.co/Infinigence/Megrez-3B-Instruct) (`-a Megrex`)
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
 
