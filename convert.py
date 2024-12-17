@@ -62,6 +62,7 @@ class ModelType(Enum):
     TigerBot    = 0x155
     LlaMA2Plus  = 0x156
     Megrez      = 0x157
+    Falcon3     = 0x158
 
     BaiChuanLlama = 0x200
     BaiChuan = 0x201
@@ -4347,6 +4348,11 @@ def main():
         assert config.rope_scaling is None, 'config.rope_scaling must be null'
         assert not config.tie_word_embeddings, 'config.tie_word_embeddings must be false'
         Llama3Converter.MODEL_TYPE = ModelType.Megrez
+        Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'falcon3':
+        assert config.rope_scaling is None, 'config.rope_scaling must be null'
+        assert not config.tie_word_embeddings, 'config.tie_word_embeddings must be false'
+        Llama3Converter.MODEL_TYPE = ModelType.Falcon3
         Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'smollm':
         SmolLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
