@@ -5,3 +5,4 @@ tqdm
 transformers>=4.34.0
 sentencepiece
 msgpack
+attrs

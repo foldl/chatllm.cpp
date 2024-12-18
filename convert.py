@@ -1686,7 +1686,7 @@ class MixtralConverter(BaseConverter):
             elif name.endswith('q_proj.weight'):
                 new_dict[name] = permute(tensor, config.num_attention_heads)
             elif 'block_sparse_moe.experts' in name:
-                id = int(re.findall("block_sparse_moe\.experts\.([0-9]+)\.", name)[0])
+                id = int(re.findall("block_sparse_moe\\.experts\\.([0-9]+)\\.", name)[0])
                 if id in experts_id_map:
                     new_name = name.replace(f"block_sparse_moe.experts.{id}.", f"block_sparse_moe.experts.{experts_id_map[id]}.")
                     new_dict[new_name] = tensor
