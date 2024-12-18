@@ -1098,5 +1098,30 @@
                 }
             }
         }
+    },
+    "falcon3" : {
+        "brief": "Falcon3 family of Open Foundation Models is a set of pretrained and instruct LLMs ranging from 1B to 10B parameters.",
+        "default": "1b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "1b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1777274800,
+                        "url": "chatllm_quantized_falcon3/falcon3-1b.bin"
+                    }
+                }
+            },
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3433097392,
+                        "url": "chatllm_quantized_falcon3/falcon3-3b.bin"
+                    }
+                }
+            }
+        }
     }
 }
