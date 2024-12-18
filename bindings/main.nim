@@ -79,7 +79,8 @@ proc receive_chunk(ht: var highlighter, chunk: string) =
     if chunk == "":
       if ht.line_acc.startsWith("```"):
         let l = ht.line_acc[3..<len(ht.line_acc)]
-        ht.lang = getSourceLanguage(l)
+        ht.lang = if l != "": getSourceLanguage(l) else: langCmd
+        if ht.lang == langNone: ht.lang = langC
       stdout.writeLine("")
       ht.line_acc = ""
     else:
