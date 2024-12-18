@@ -480,6 +480,12 @@ namespace v3_1
                 freq_factors.push_back((1 - smooth) / factor + smooth);
             }
         }
+
+        for (int i = 0; i < (int)freq_factors.size(); i++)
+        {
+            // factor is used as a divider in ggml
+            freq_factors[i] = 1 / freq_factors[i];
+        }
     }
 
     class ConditionalGeneration : public v2::GenericConditionalGeneration<Llama31Block>
