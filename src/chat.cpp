@@ -1504,6 +1504,16 @@ namespace chatllm
                 rewritten_query = query;
         }
 
+        if (!modelobj.loaded && (gen_config.emb_rank_query_sep.size() > 0))
+        {
+            auto pos = query.find(gen_config.emb_rank_query_sep);
+            if (pos != std::string::npos)
+            {
+                rewritten_query = query.substr(0, pos);
+                query.erase(0, pos + gen_config.emb_rank_query_sep.size());
+            }
+        }
+
         embedding.text_embedding(rewritten_query, gen_config, query_emb);
 
         vs.get()->Query(query_emb, selected, retrieve_top_n);
@@ -1559,6 +1569,9 @@ namespace chatllm
         }
 
         auto composed = composer.compose_augmented_query(query, augments);
+
+        if (!modelobj.loaded)
+            streamer->put_chunk(true, composed);
 
         history[index].content = composed;
     }

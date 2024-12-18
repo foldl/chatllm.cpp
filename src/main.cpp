@@ -43,6 +43,7 @@ struct Args
     std::string n_gpu_layers;
     std::string cur_vs_name = "default";
     std::string dump_dot;
+    std::string emb_rank_query_sep;
     std::map<std::string, std::vector<std::string>> vector_stores;
     int max_length = -1;
     int max_context_length = 512;
@@ -150,6 +151,8 @@ void usage(const std::string &prog)
               << "                          items with a lower score are discarded.\n"
               << "  --rerank_top_n N        number of selected items using reranker model (default: 1)\n"
               << "   +rerank_rewrite        reranker use the rewritten query (default: OFF, i.e. use the original user input)\n"
+              << "  --emb_rank_query_sep    separator for embedding & rerank query (default: \"\", i.e. disabled)\n"
+              << "                          only used without main model\n"
               << "  --hide_reference        do not show references (default: false)\n"
               << "  --rag_template ...      prompt template for RAG (macros: {context}, {question}) (optional).\n"
               << "                          Support some C escape sequences (\\n). Example:\n"
@@ -231,7 +234,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         while (c < argc)
         {
             const char *arg = argv[c].c_str();
-            if ((strcmp(arg, "--help") == 0) || (strcmp(arg, "-h") == 0))
+            if ((strcmp(arg, "--help") == 0) || (strcmp(arg, "-h") == 0) || (strcmp(arg, "-?") == 0))
             {
                 args.show_help = true;
             }
@@ -345,6 +348,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--rag_post_extending",          rag_post_extending,   std::stoi)
             handle_para0("--rag_template",                rag_template,         std::string)
             handle_para0("--rag_context_sep",             rag_context_sep,      std::string)
+            handle_para0("--emb_rank_query_sep",          emb_rank_query_sep,   std::string)
             handle_para0("--init_vs",                     vector_store_in,      std::string)
             handle_para0("--merge_vs",                    merge_vs,             std::string)
             handle_para0("--layer_spec",                  layer_spec,           std::string)
@@ -641,10 +645,28 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
 
 #define DEF_GenerationConfig(gen_config, args) chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.reversed_role, \
                                          args.top_k, args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z); \
-                                         gen_config.set_ai_prefix(args.ai_prefix); gen_config.dump_dot = args.dump_dot;
+                                         gen_config.set_ai_prefix(args.ai_prefix); gen_config.dump_dot = args.dump_dot; \
+                                         gen_config.emb_rank_query_sep = args.emb_rank_query_sep;
+
+static void _ggml_log_callback(enum ggml_log_level level, const char * text, void * user_data)
+{
+    chatllm::BaseStreamer *streamer = (chatllm::BaseStreamer *)user_data;
+    std::ostringstream oss;
+    static const char tags[] = {' ', 'D', 'I', 'W', 'E', '.'};
+
+    if ((0 <= level) && (level < sizeof(tags)))
+        oss << tags[level];
+    else
+        oss << '?';
+
+    oss << text;
+    streamer->putln(oss.str(),  chatllm::BaseStreamer::LOGGING);
+}
 
 void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 {
+    ggml_log_set(_ggml_log_callback, &streamer);
+
     if (args.system.size() > 0)
         pipeline.set_system_prompt(args.system);
 
@@ -1091,6 +1113,8 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline, chatl
     int r = 0;
     chat->pipeline = &pipeline;
     chat->streamer = &streamer;
+
+    ggml_log_set(_ggml_log_callback, &streamer);
 
     if (args.system.size() > 0)
         pipeline.set_system_prompt(args.system);

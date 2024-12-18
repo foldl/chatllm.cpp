@@ -292,6 +292,7 @@ namespace chatllm
             EMBEDDING       = 8,
             RANKING         = 9,
             TOKEN_IDS       =10,
+            LOGGING         =11,
         };
         BaseStreamer(BaseTokenizer *tokenizer);
         virtual ~BaseStreamer() = default;
@@ -503,6 +504,7 @@ namespace chatllm
         std::string sampling;
         std::string ai_prefix;
         std::string dump_dot;
+        std::string emb_rank_query_sep;
 
         GenerationConfig()
         {
