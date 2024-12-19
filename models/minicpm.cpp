@@ -160,6 +160,7 @@ namespace v2
         void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
         void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
         void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+        void append_user_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -249,11 +250,13 @@ namespace v2
     void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode("assistant\n", ids, true, false);
+    }
 
-        std::ostringstream oss_prompt;
-
-        oss_prompt << "assistant\n";
-        tok->encode(oss_prompt.str(), ids, true, false);
+    void ChatHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode("user\n", ids, true, false);
     }
 }
 

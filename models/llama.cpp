@@ -224,6 +224,7 @@ namespace v3
         void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
         void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
         void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+        void append_user_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -322,9 +323,13 @@ namespace v3
     void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        std::ostringstream oss;
-
         tok->encode_header("assistant", ids);
+    }
+
+    void ChatHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode_header("user", ids);
     }
 
     class ConditionalGeneration : public v2::GenericConditionalGeneration<LlamaBlock>

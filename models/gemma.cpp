@@ -14,6 +14,7 @@ public:
     void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
     void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
     void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+    void append_user_opening(int round_idx, std::vector<int> &ids) const override;
 };
 
 static ChatHistoryEncoder _chat_encoder;
@@ -153,10 +154,13 @@ void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std
 void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
 {
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-    std::ostringstream oss_prompt;
+    tok->encode("model\n", ids, true, false);
+}
 
-    oss_prompt << "model" << "\n";
-    tok->encode(oss_prompt.str(), ids, true, false);
+void ChatHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &ids) const
+{
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+    tok->encode("user\n", ids, true, false);
 }
 }
 

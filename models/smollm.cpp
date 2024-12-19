@@ -7,6 +7,7 @@ public:
     void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
     void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
     void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+    void append_user_opening(int round_idx, std::vector<int> &ids) const override;
 };
 
 static ChatHistoryEncoder _chat_encoder;
@@ -69,6 +70,13 @@ void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids)
     Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     ids.push_back(tok->bos_token_id);
     tok->encode("assistant\n", ids);
+}
+
+void ChatHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &ids) const
+{
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+    ids.push_back(tok->bos_token_id);
+    tok->encode("user\n", ids);
 }
 
 class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<LlamaBlock>
