@@ -119,8 +119,9 @@ class ModelType(Enum):
     Gemma       = 0x1300
     Gemma2      = 0x1301
 
-    CohereCommand = 0x1400
-    CohereAya23   = 0x1401
+    CohereCommand       = 0x1400
+    CohereAya23         = 0x1401
+    CohereCommandR7B    = 0x1402
 
     Grok1         = 0x1500
 
@@ -2286,6 +2287,49 @@ class CohereCommandConverter(BaseConverter):
 
         config_values = [
             config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        f.write(struct.pack("<f", config.rope_theta))
+        f.write(struct.pack("<f", config.logit_scale))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        return weight_names
+
+class Cohere2CommandConverter(BaseConverter):
+    MODEL_TYPE = ModelType.CohereCommandR7B
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.use_embedding_sharing, 'use_embedding_sharing must be True'
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.sliding_window,
+            config.sliding_window_pattern,
         ]
         f.write(struct.pack("i" * len(config_values), *config_values))
 
@@ -4504,6 +4548,8 @@ def main():
         Gemma2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'CohereForCausalLM':
         CohereCommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Cohere2ForCausalLM':
+        Cohere2CommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'aya-23':
         CohereCommandConverter.MODEL_TYPE = ModelType.CohereAya23
         CohereCommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

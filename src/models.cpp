@@ -257,8 +257,9 @@ namespace chatllm
         MODEL_TYPE_GEMMA    = 0x1300,
         MODEL_TYPE_GEMMA2   = 0x1301,
 
-        MODEL_TYPE_COHERE_COMMAND_R = 0x1400,
-        MODEL_TYPE_COHERE_AYA_23     = 0x1401,
+        MODEL_TYPE_COHERE_COMMAND_R     = 0x1400,
+        MODEL_TYPE_COHERE_AYA_23        = 0x1401,
+        MODEL_TYPE_COHERE_COMMAND_R7B   = 0x1402,
 
         MODEL_TYPE_GROK_1           = 0x1500,
 
@@ -439,6 +440,8 @@ namespace chatllm
             return "Gemma-2";
         case MODEL_TYPE_COHERE_COMMAND_R:
             return "Command-R";
+        case MODEL_TYPE_COHERE_COMMAND_R7B:
+            return "Command-R7B";
         case MODEL_TYPE_COHERE_AYA_23:
             return "Aya-23";
         case MODEL_TYPE_GROK_1:
@@ -1948,6 +1951,7 @@ namespace chatllm
                                                                 \
         CASE(COHERE_COMMAND_R,      cohere::command_r, 1)       \
         CASE(COHERE_AYA_23,         cohere::aya_23, 1)          \
+        CASE(COHERE_COMMAND_R7B,    cohere::v2, 1)              \
                                                                 \
         CASE(GROK_1,                grok::v1, 1)                \
                                                                 \
