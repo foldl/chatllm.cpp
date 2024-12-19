@@ -132,6 +132,7 @@ class ModelType(Enum):
     GroqToolUse   = 0x1702
     LlaMA31       = 0x1703
     LlaMA32       = 0x1704
+    Exaone        = 0x1705
 
     StarCoder2    = 0x1800
 
@@ -1173,6 +1174,48 @@ class Llama32Converter(BaseConverter):
         if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
             weight_names.remove('lm_head.weight')
         return weight_names
+
+class ExaoneConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Exaone
+
+    @staticmethod
+    def upgrade_name(name: str) -> str:
+        if name == 'transformer.ln_f.weight':
+            name = 'model.norm.weight'
+        elif name == 'transformer.wte.weight':
+            name = 'model.embed_tokens.weight'
+        else:
+            name = name.replace('transformer.h', 'model.layers')
+            name = name.replace('attn.attention.k_proj.weight', 'self_attn.k_proj.weight')
+            name = name.replace('attn.attention.out_proj.weight', 'self_attn.o_proj.weight')
+            name = name.replace('attn.attention.q_proj.weight', 'self_attn.q_proj.weight')
+            name = name.replace('attn.attention.v_proj.weight', 'self_attn.v_proj.weight')
+            name = name.replace('ln_1.weight', 'input_layernorm.weight')
+            name = name.replace('ln_2.weight', 'post_attention_layernorm.weight')
+            name = name.replace('mlp.c_fc_0.weight', 'mlp.gate_proj.weight')
+            name = name.replace('mlp.c_fc_1.weight', 'mlp.up_proj.weight')
+            name = name.replace('mlp.c_proj.weight', 'mlp.down_proj.weight')
+        return name
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            new_name = ExaoneConverter.upgrade_name(name)
+            new_dict[new_name] = Llama32Converter.pp(config, new_name, tensor)
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        config.num_hidden_layers = config.num_layers
+        config.hidden_act = config.activation_function
+
+        Llama32Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return Llama32Converter.get_weight_names(config)
 
 class SmolLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.SmolLM
@@ -4569,6 +4612,8 @@ def main():
         GraniteConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'GraniteMoeForCausalLM':
         GraniteMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'ExaoneForCausalLM':
+        ExaoneConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

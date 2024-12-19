@@ -270,6 +270,7 @@ namespace chatllm
         MODEL_TYPE_LLAMA3_GROQ_TOOL = 0x1702,
         MODEL_TYPE_LLAMA3_1         = 0x1703,
         MODEL_TYPE_LLAMA3_2         = 0x1704,
+        MODEL_TYPE_EXAONE           = 0x1705,
 
         MODEL_TYPE_STARCODER2       = 0x1800,
 
@@ -454,6 +455,8 @@ namespace chatllm
             return "LlaMA3.1";
         case MODEL_TYPE_LLAMA3_2:
             return "LlaMA3.2";
+        case MODEL_TYPE_EXAONE:
+            return "EXAONE";
         case MODEL_TYPE_BCE_Embedding:
             return "BCE-Embedding";
         case MODEL_TYPE_BCE_ReRanker:
@@ -1676,6 +1679,11 @@ namespace chatllm
         #include "../models/falcon.cpp"
     }
 
+    namespace exaone
+    {
+        #include "../models/exaone.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -1887,6 +1895,7 @@ namespace chatllm
         CASE(LLAMA3_2,              llama::v3_2, 1)             \
         CASE(MEGREZ,                megrez::chat, 1)            \
         CASE(FALCON3,               falcon::v3, 1)              \
+        CASE(EXAONE,                exaone, 1)                  \
                                                                 \
         CASE(DEEPSEEK,              deepseek::v1, 1)            \
         CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \
