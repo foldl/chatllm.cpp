@@ -586,31 +586,119 @@ namespace chatllm
         Linear dense_4h_to_h;
     };
 
+    template <class AttentionBlock> class LMAttentionBlock : public Block
+    {
+        public:
+        LMAttentionBlock() = default;
+        LMAttentionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
+                  int max_length)
+            : attention(ctx, hidden_size, num_attention_heads, max_length) {}
+
+        LMAttentionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int max_length)
+            : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length) {}
+
+        LMAttentionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int head_dim, int max_length)
+            : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length) {}
+
+        LMAttentionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
+                  int mlp_intermediate_size1, int mlp_intermediate_size2,
+                  int num_kv_heads,
+                  int head_dim, int max_length)
+            : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length) {}
+
+        LMAttentionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
+                  int mlp_intermediate_size1, int mlp_intermediate_size2,
+                  int num_kv_heads, int max_length,
+                  int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
+                  bool use_bias)
+            : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length,
+                        q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
+                        use_bias) {}
+
+        LMAttentionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
+                  int num_kv_heads, int max_length,
+                  int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
+                  bool use_bias)
+            : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length,
+                        q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
+                        use_bias) {}
+
+        LMAttentionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int max_length, bool qkv_bias, bool o_bias)
+            : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias) {}
+
+        void shift_cache(int shift, int total) override
+        {
+            attention.shift_cache(shift, total);
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = Block::get_param_num(effective_only);
+            r += attention.get_param_num(effective_only);
+            return r;
+        }
+
+        void set_id(int id) override
+        {
+            Block::set_id(id);
+
+            attention.set_id(id);
+        }
+
+        size_t get_cache_size(void) const override
+        {
+            return attention.get_cache_size();
+        }
+
+        void  set_cache_buffer(BackendBuffer *buffer) override
+        {
+            return attention.set_cache_buffer(buffer);
+        }
+
+        size_t read_cache_data(void *buffer, size_t buffer_size) const override
+        {
+            return attention.read_cache_data(buffer, buffer_size);
+        }
+
+        size_t write_cache_data(const void *buffer, size_t buffer_size) override
+        {
+            return attention.write_cache_data(buffer, buffer_size);
+        }
+
+    public:
+        AttentionBlock attention;
+    };
+
     template <class InputNormBlock,
               class AttentionBlock,
               class PostNormBlock,
-              class MLPBlock> class LMBlock1 : public Block
+              class MLPBlock> class LMBlock1 : public LMAttentionBlock<AttentionBlock>
     {
+    private:
+        typedef LMAttentionBlock<AttentionBlock> Base;
     public:
         LMBlock1() = default;
         LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
                   int max_length)
-            : input_layernorm(ctx, hidden_size),
-              attention(ctx, hidden_size, num_attention_heads, max_length),
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size, max_length),
+              input_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}
 
         LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
                   int max_length)
-            : input_layernorm(ctx, hidden_size),
-              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length),
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length),
+              input_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}
 
         LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
                   int head_dim, int max_length)
-            : input_layernorm(ctx, hidden_size),
-              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length),
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length),
+              input_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}
 
@@ -618,8 +706,10 @@ namespace chatllm
                   int mlp_intermediate_size1, int mlp_intermediate_size2,
                   int num_kv_heads,
                   int head_dim, int max_length)
-            : input_layernorm(ctx, hidden_size),
-              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length),
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size,
+                  mlp_intermediate_size1, mlp_intermediate_size2,
+                  num_kv_heads, head_dim, max_length),
+              input_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, mlp_intermediate_size1, mlp_intermediate_size2) {}
 
@@ -629,10 +719,11 @@ namespace chatllm
                   int num_kv_heads, int max_length,
                   int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
                   bool use_bias)
-            : input_layernorm(ctx, hidden_size),
-              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length,
-                        q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
-                        use_bias),
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size,
+                  mlp_intermediate_size1, mlp_intermediate_size2,
+                  num_kv_heads, max_length,
+                  q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim, use_bias),
+              input_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, mlp_intermediate_size1, mlp_intermediate_size2) {}
 
@@ -640,10 +731,10 @@ namespace chatllm
                   int num_kv_heads, int max_length,
                   int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
                   bool use_bias)
-            : input_layernorm(ctx, hidden_size),
-              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length,
-                        q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
-                        use_bias),
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size,
+                  num_kv_heads, max_length,
+                  q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim, use_bias),
+              input_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}
 
@@ -654,7 +745,7 @@ namespace chatllm
             ggml::build_forward_expand(ctx, residual);
 
             hidden_states = input_layernorm.forward(ctx, hidden_states);
-            hidden_states = attention.forward(ctx, hidden_states, n_past);
+            hidden_states = Base::attention.forward(ctx, hidden_states, n_past);
 
             if (scale_depth > 0.0f)
             {
@@ -679,16 +770,10 @@ namespace chatllm
             return hidden_states;
         }
 
-        void shift_cache(int shift, int total) override
-        {
-            attention.shift_cache(shift, total);
-        }
-
         int64_t get_param_num(bool effective_only) const override
         {
-            int64_t r = 0;
+            int64_t r = Base::get_param_num(effective_only);
             r += input_layernorm.get_param_num(effective_only);
-            r += attention.get_param_num(effective_only);
             r += post_attention_layernorm.get_param_num(effective_only);
             r += mlp.get_param_num(effective_only);
             return r;
@@ -696,37 +781,14 @@ namespace chatllm
 
         void set_id(int id) override
         {
-            Block::set_id(id);
-
+            Base::set_id(id);
             input_layernorm.set_id(id);
-            attention.set_id(id);
             post_attention_layernorm.set_id(id);
             mlp.set_id(id);
         }
 
-        size_t get_cache_size(void) const override
-        {
-            return attention.get_cache_size();
-        }
-
-        void  set_cache_buffer(BackendBuffer *buffer) override
-        {
-            return attention.set_cache_buffer(buffer);
-        }
-
-        size_t read_cache_data(void *buffer, size_t buffer_size) const override
-        {
-            return attention.read_cache_data(buffer, buffer_size);
-        }
-
-        size_t write_cache_data(const void *buffer, size_t buffer_size) override
-        {
-            return attention.write_cache_data(buffer, buffer_size);
-        }
-
     public:
         InputNormBlock input_layernorm;
-        AttentionBlock attention;
         PostNormBlock post_attention_layernorm;
         MLPBlock mlp;
         float scale_depth = -1.0;
@@ -737,14 +799,16 @@ namespace chatllm
               class PostAttnNormBlock,
               class PreMLPNormBlock,
               class MLPBlock,
-              class PostMLPNormBlock> class LMBlock4 : public Block
+              class PostMLPNormBlock> class LMBlock4 : public LMAttentionBlock<AttentionBlock>
     {
+    private:
+        typedef LMAttentionBlock<AttentionBlock> Base;
     public:
         LMBlock4() = default;
         LMBlock4(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
                   int max_length)
-            : pre_attention_layernorm(ctx, hidden_size),
-              attention(ctx, hidden_size, num_attention_heads, max_length),
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size, max_length),
+              pre_attention_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               pre_mlp_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size),
@@ -752,8 +816,8 @@ namespace chatllm
 
         LMBlock4(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
                   int max_length)
-            : pre_attention_layernorm(ctx, hidden_size),
-              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length),
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length),
+              pre_attention_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               pre_mlp_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size),
@@ -761,8 +825,8 @@ namespace chatllm
 
         LMBlock4(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
                   int head_dim, int max_length)
-            : pre_attention_layernorm(ctx, hidden_size),
-              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length),
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length),
+              pre_attention_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               pre_mlp_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size),
@@ -775,7 +839,7 @@ namespace chatllm
             ggml::build_forward_expand(ctx, residual);
 
             hidden_states = pre_attention_layernorm.forward(ctx, hidden_states);
-            hidden_states = attention.forward(ctx, hidden_states, n_past);
+            hidden_states = Base::attention.forward(ctx, hidden_states, n_past);
             hidden_states = post_attention_layernorm.forward(ctx, hidden_states);
 
             hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
@@ -791,16 +855,10 @@ namespace chatllm
             return hidden_states;
         }
 
-        void shift_cache(int shift, int total) override
-        {
-            attention.shift_cache(shift, total);
-        }
-
         int64_t get_param_num(bool effective_only) const override
         {
-            int64_t r = 0;
+            int64_t r = Base::get_param_num(effective_only);
             r += pre_attention_layernorm.get_param_num(effective_only);
-            r += attention.get_param_num(effective_only);
             r += post_attention_layernorm.get_param_num(effective_only);
             r += pre_mlp_layernorm.get_param_num(effective_only);
             r += mlp.get_param_num(effective_only);
@@ -810,39 +868,17 @@ namespace chatllm
 
         void set_id(int id) override
         {
-            Block::set_id(id);
+            Base::set_id(id);
 
             pre_attention_layernorm.set_id(id);
-            attention.set_id(id);
             post_attention_layernorm.set_id(id);
             pre_mlp_layernorm.set_id(id);
             mlp.set_id(id);
             post_mlp_layernorm.set_id(id);
         }
 
-        size_t get_cache_size(void) const override
-        {
-            return attention.get_cache_size();
-        }
-
-        void  set_cache_buffer(BackendBuffer *buffer) override
-        {
-            return attention.set_cache_buffer(buffer);
-        }
-
-        size_t read_cache_data(void *buffer, size_t buffer_size) const override
-        {
-            return attention.read_cache_data(buffer, buffer_size);
-        }
-
-        size_t write_cache_data(const void *buffer, size_t buffer_size) override
-        {
-            return attention.write_cache_data(buffer, buffer_size);
-        }
-
     public:
         PreAttnNormBlock pre_attention_layernorm;
-        AttentionBlock attention;
         PostAttnNormBlock post_attention_layernorm;
         PreMLPNormBlock pre_mlp_layernorm;
         MLPBlock mlp;
@@ -2026,15 +2062,18 @@ namespace chatllm
 
     template <class InputNormBlock,
               class AttentionBlock,
-              class MLPBlock> class LMBlock2 : public Block
+              class MLPBlock> class LMBlock2 : public LMAttentionBlock<AttentionBlock>
     {
+    private:
+        typedef LMAttentionBlock<AttentionBlock> Base;
     public:
         LMBlock2() = default;
 
         LMBlock2(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
                   int max_length, bool qkv_bias = true, bool o_bias = true)
-            : input_layernorm(ctx, hidden_size),
-              attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads,
+                   max_length, qkv_bias, o_bias),
+              input_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}
 
         using Block::forward;
@@ -2049,7 +2088,7 @@ namespace chatllm
             ggml::tensor *dup_hidden = ggml::dup(ctx, hidden_states);
             ggml::build_forward_expand(ctx, dup_hidden);
 
-            ggml::tensor *attn_outputs = attention.forward(ctx, dup_hidden, n_past);
+            ggml::tensor *attn_outputs = Base::attention.forward(ctx, dup_hidden, n_past);
             ggml::tensor *feed_forward_hidden_states = mlp.forward(ctx, dup_hidden);
 
             // CAUTION: MEMORY REUSED BETWEEN LAYERS
@@ -2059,43 +2098,23 @@ namespace chatllm
             return r;
         }
 
-        void shift_cache(int shift, int total) override
-        {
-            attention.shift_cache(shift, total);
-        }
-
         int64_t get_param_num(bool effective_only) const override
         {
-            int64_t r = 0;
+            int64_t r = Base::get_param_num(effective_only);
             r += input_layernorm.get_param_num(effective_only);
-            r += attention.get_param_num(effective_only);
             r += mlp.get_param_num(effective_only);
             return r;
         }
 
-        size_t get_cache_size(void) const override
+        void set_id(int id) override
         {
-            return attention.get_cache_size();
-        }
-
-        void  set_cache_buffer(BackendBuffer *buffer) override
-        {
-            return attention.set_cache_buffer(buffer);
-        }
-
-        size_t read_cache_data(void *buffer, size_t buffer_size) const override
-        {
-            return attention.read_cache_data(buffer, buffer_size);
-        }
-
-        size_t write_cache_data(const void *buffer, size_t buffer_size) override
-        {
-            return attention.write_cache_data(buffer, buffer_size);
+            Base::set_id(id);
+            input_layernorm.set_id(id);
+            mlp.set_id(id);
         }
 
     public:
         InputNormBlock input_layernorm;
-        AttentionBlock attention;
         MLPBlock mlp;
     };
 
