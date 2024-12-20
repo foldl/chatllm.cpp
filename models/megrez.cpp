@@ -62,7 +62,11 @@ namespace chat
         function_start_token_id       = tp->PieceToId("<|function_start|>");
         function_end_token_id         = tp->PieceToId("<|function_end|>");
 
-        turn_end_token_id             = eos_token_id;
+        if (eos_token_id < 0)
+            eos_token_id              = tp->PieceToId("<|eos|>");
+
+        turn_end_token_id             = tp->PieceToId("<|turn_end|>");
+        terminate_ids.insert(turn_end_token_id);
 
         return size;
     }
