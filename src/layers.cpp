@@ -73,6 +73,12 @@ namespace chatllm
         ggml_set_name(tensor, name);
     }
 
+    void ggml::fill(ggml::tensor *a, uint8_t value, size_t offset, size_t size)
+    {
+        if (size == 0) size = ggml::nbytes(a);
+        ggml_backend_tensor_memset(a, value, offset, size);
+    }
+
     ggml::tensor *ggml::init_tensor(ggml::tensor *tensor,
         ggml::type    type,
         int           n_dims,
@@ -151,6 +157,40 @@ namespace chatllm
             tensor = ggml_relu_inplace(ctx->get_ctx(), input);
             ctx->cb_op_tensor(tensor);
             tensor = ggml_sqr_inplace(ctx->get_ctx(), tensor);
+            ctx->cb_op_tensor(tensor);
+            break;
+        default:
+            CHATLLM_CHECK(false) << "not implemented act function: " << act;
+            return NULL;
+        }
+        return tensor;
+    }
+
+    ggml::tensor *ggml::act(ComputeContext *ctx, ActFunc act, ggml::tensor *input)
+    {
+        ggml::tensor *tensor = nullptr;
+        switch (act)
+        {
+        case ActFunc::GELU:
+            tensor = ggml_gelu(ctx->get_ctx(), input);
+            ctx->cb_op_tensor(tensor);
+            break;
+        case ActFunc::SILU:
+            tensor = ggml_silu(ctx->get_ctx(), input);
+            ctx->cb_op_tensor(tensor);
+            break;
+        case ActFunc::Tanh:
+            tensor = ggml_tanh(ctx->get_ctx(), input);
+            ctx->cb_op_tensor(tensor);
+            break;
+        case ActFunc::RELU:
+            tensor = ggml_relu(ctx->get_ctx(), input);
+            ctx->cb_op_tensor(tensor);
+            break;
+        case ActFunc::RELU2:
+            tensor = ggml_relu(ctx->get_ctx(), input);
+            ctx->cb_op_tensor(tensor);
+            tensor = ggml_sqr(ctx->get_ctx(), tensor);
             ctx->cb_op_tensor(tensor);
             break;
         default:

@@ -6,7 +6,7 @@ from ast import Dict, Tuple
 from collections import OrderedDict
 import json
 import struct
-import sys
+import os
 import io
 import pickle
 import re
@@ -32,14 +32,12 @@ GGML_QK4_1 = 32
 
 GGML_MEM_ALIGN = 16
 
-
 class GGMLType(Enum):
     F32 = 0
     F16 = 1
     Q4_0 = 2
     Q4_1 = 3
     Q8_0 = 8
-
 
 class ModelType(Enum):
     CHATGLM = 1
@@ -147,13 +145,14 @@ class ModelType(Enum):
     GraniteMoE      = 0x1d00
     Granite         = 0x1d01
 
+    TeleChat2       = 0x1e00
+
     LlaMAMulti    = 0x20000001
 
     BCE_Embedding = 0x10000100
     BCE_ReRanker  = 0x10000101
     BGE_M3        = 0x10000102
     BGE_ReRankerM3 = 0x10000103
-
 
 class TokenType(Enum):
     UNDEFINED    = 0
@@ -163,7 +162,6 @@ class TokenType(Enum):
     USER_DEFINED = 4
     UNUSED       = 5
     BYTE         = 6
-
 class TokenizerType(Enum):
     BPE1         = 0
     BPE2         = 1
@@ -470,6 +468,7 @@ class SimpleVocab:
             if (len(piece) == 6) and (piece[0] == '<') and (piece[5] == '>'):
                 byte_value = int(piece[3:-1], 16)
                 text = struct.pack("B", byte_value)
+                score = -1000.0
             else:
                 text = piece.replace("\u2581", " ").encode("utf-8")
             yield text, score
@@ -1216,6 +1215,96 @@ class ExaoneConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return Llama32Converter.get_weight_names(config)
+
+class TeleChat2Converter(BaseConverter):
+    MODEL_TYPE = ModelType.TeleChat2
+
+    @staticmethod
+    def upgrade_name(name: str) -> str:
+        if name == 'transformer.ln_f.weight':
+            name = 'model.norm.weight'
+        elif name == 'transformer.word_embeddings.weight':
+            name = 'model.embed_tokens.weight'
+        else:
+            name = name.replace('transformer.h', 'model.layers')
+            name = name.replace('.self_attention.', '.self_attn.')
+            name = name.replace('.dense.', '.o_proj.')
+            name = name.replace('.query.', '.q_proj.')
+        return name
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            new_name = TeleChat2Converter.upgrade_name(name)
+
+            if new_name.endswith('key_value.weight'):
+                num_heads = config.n_head
+                head_dim = config.hidden_size // num_heads
+                num_key_value_heads = config.num_key_value_heads if config.num_key_value_heads else num_heads
+                kv_projection_size = head_dim * num_key_value_heads
+
+                v = tensor.view(num_heads, 2, head_dim, tensor.shape[1])
+
+                wk = v[:, 0, ...].reshape(config.hidden_size, tensor.shape[1])
+                wv = v[:, 1, ...].reshape(config.hidden_size, tensor.shape[1])
+
+                k_name = new_name.replace('key_value.weight', 'k_proj.weight')
+                v_name = new_name.replace('key_value.weight', 'v_proj.weight')
+                new_dict[k_name] = Llama32Converter.pp(config, k_name, wk)
+                new_dict[v_name] = Llama32Converter.pp(config, v_name, wv)
+            else:
+                new_dict[new_name] = Llama32Converter.pp(config, new_name, tensor)
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act is None, 'hidden_act must be None'
+        assert not config.tie_word_embeddings, 'tie_word_embeddings must be False'
+        assert config.embed_layernorm is None, 'embed_layernorm must be None'
+        assert not config.apply_residual_connection_post_layernorm, 'apply_residual_connection_post_layernorm must be False'
+        assert config.training_seqlen == config.base_seqlen, 'training_seqlen must equal to base_seqlen'
+
+        config.hidden_act = 'silu'
+
+        config.num_attention_heads = config.n_head
+        config.num_hidden_layers = config.n_layer
+        config.intermediate_size = config.ffn_hidden_size
+        config.max_position_embeddings = config.seq_length
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.base_seqlen,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.down_proj.bias",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.bias",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
 
 class SmolLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.SmolLM
@@ -3713,7 +3802,7 @@ class AlphaGeometryLMConverter(BaseConverter):
             elif name == 'model.final_layernorm.scale':
                 new = 'model.norm.weight'
             else:
-                new:str = name.replace('model.transformer', 'model.layers.')
+                new: str = name.replace('model.transformer', 'model.layers.')
                 mapping = {
                     'relative_positions.rel_embedding': 'rel_embedding.weight',
                     'tbase._kvq.attention_scale': 'self_attn.attention_scale.weight',
@@ -3749,6 +3838,7 @@ class AlphaGeometryLMConverter(BaseConverter):
             config.pad_token_id if config.pad_token_id is not None else -1,
             config.sep_token_id if config.sep_token_id is not None else -1,
             config.window_length,
+            config.max_distance,
             config.num_buckets,
         ]
         f.write(struct.pack("i" * len(config_values), *config_values))
@@ -4229,6 +4319,7 @@ def convert_alphageometry_lm(args, vocab, ggml_type):
         'num_hidden_layers': 12,
         'max_position_embeddings': 1024,
         'window_length': 1024,
+        'max_distance': 128,
         'num_buckets': 32,
     }
 
@@ -4308,7 +4399,8 @@ def load_some_model(path: Path) -> List[Path]:
     '''Load a model of any supported format.'''
     # Be extra-friendly and accept either a file or a directory:
     if path.is_dir():
-        globs = ["model-*-of-*.safetensors", "consolidated.*.pth", "pytorch_model-*-of-*.bin",
+        globs = ["model-*-of-*.safetensors", "consolidated.*.pth",
+                 "pytorch_model-*-of-*.bin", "pytorch_model_*-of-*.bin",
                  "pytorch_model.bin", "model.safetensors", "*.pt", "consolidated.safetensors", "consolidated.pth"]
         for glob in globs:
             files = list(path.glob(glob))
@@ -4614,6 +4706,8 @@ def main():
         GraniteMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'ExaoneForCausalLM':
         ExaoneConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'TeleChat2ForCausalLM':
+        TeleChat2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

@@ -168,6 +168,9 @@
 * EXAONE (`ExaoneForCausalLM`)
     * [x] v3.5: [Instruct-2.4B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct), [Instruct-7.8B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct), [Instruct-32B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-32B-Instruct)
 
+* TeleChat (`TeleChat2ForCausalLM`)
+    * [x] v2: [3B](https://huggingface.co/Tele-AI/TeleChat2-3B), [7B](https://huggingface.co/Tele-AI/TeleChat2-7B), [115B](https://huggingface.co/Tele-AI/TeleChat2-115B)
+
 ## Base Models
 
 Please use `--format completion` for these models.

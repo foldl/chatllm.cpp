@@ -285,6 +285,8 @@ namespace chatllm
         MODEL_TYPE_GRANITE_MoE      = 0x1d00,
         MODEL_TYPE_GRANITE          = 0x1d01,
 
+        MODEL_TYPE_TELECHAT2        = 0x1e00,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -485,6 +487,8 @@ namespace chatllm
             return "Granite-MoE";
         case MODEL_TYPE_GRANITE:
             return "Granite";
+        case MODEL_TYPE_TELECHAT2:
+            return "TeleChat2";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -530,6 +534,8 @@ namespace chatllm
             return "元象";
         case MODEL_TYPE_MEGREZ:
             return "无穹天权";
+        case MODEL_TYPE_TELECHAT2:
+            return "星辰";
         default:
             return "";
         }
@@ -1246,6 +1252,8 @@ namespace chatllm
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) override
         {
+            before_forward(ctx, input_ids, n_past);
+
             ctx->move_to_layer(LayerAllocatorManager::Prolog);
             ggml::tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
             for (auto &layer : layers)
@@ -1346,6 +1354,8 @@ namespace chatllm
             size_t cache_size;
         };
     protected:
+        virtual void before_forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) {}
+
         virtual int64_t get_param_num_of_layers(bool effective_only) const
         {
             int64_t r = 0;
@@ -1446,6 +1456,9 @@ namespace chatllm
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) override
         {
+            Base::before_forward(ctx, input_ids, n_past);
+
+            ctx->move_to_layer(LayerAllocatorManager::Prolog);
             ggml::tensor *hidden_states = Base::word_embeddings.forward(ctx, input_ids, n_past);
             for (auto &layer : BaseBase::layers)
             {
@@ -1682,6 +1695,11 @@ namespace chatllm
     namespace exaone
     {
         #include "../models/exaone.cpp"
+    }
+
+    namespace telechat
+    {
+        #include "../models/telechat.cpp"
     }
 
     template <class Config>
@@ -1981,6 +1999,8 @@ namespace chatllm
                                                                 \
         CASE(GRANITE_MoE,           granite::moe, 1)            \
         CASE(GRANITE,               granite::dense, 1)          \
+                                                                \
+        CASE(TELECHAT2,             telechat::v2, 1)            \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

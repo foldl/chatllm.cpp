@@ -143,7 +143,7 @@ namespace chatllm
         virtual size_t load(tokenizer::DataReader *buffer, int n_vocab) = 0;
 
         virtual void encode(const std::string &text, std::vector<int> &ids) const;
-        virtual std::vector<int> encode(const std::string &text) const;
+        std::vector<int> encode(const std::string &text) const;
 
         virtual void encode_external_text_completion(const std::string &text, std::vector<int> &ids) const;
 

@@ -45,6 +45,8 @@ namespace chatllm
         void set_input(ggml::tensor *a);
         void set_output(ggml::tensor *a);
 
+        void fill(ggml::tensor *a, uint8_t value, size_t offset = 0, size_t size = 0);
+
         ggml::type    type_of(const ggml::tensor *a);
 
         ggml::tensor *cpy(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
@@ -99,6 +101,7 @@ namespace chatllm
         ggml::tensor *diag_mask_inf_inplace(ComputeContext *ctx, ggml::tensor *a, int n_past);
 
         ggml::tensor *inplace_act(ComputeContext *ctx, ActFunc act, ggml::tensor *input);
+        ggml::tensor *act(ComputeContext *ctx, ActFunc act, ggml::tensor *input);
 
         ggml::tensor *scale(ComputeContext *ctx, ggml::tensor *a, float  s);
         ggml::tensor *scale_inplace(ComputeContext *ctx, ggml::tensor *a, float  s);
@@ -1649,9 +1652,14 @@ namespace chatllm
     public:
         BaseMLP() = default;
         BaseMLP(InitContext *ctx, int hidden_size, int intermediate_size, ActFunc act)
-            : gate_proj(ctx, hidden_size, intermediate_size, false),
-              down_proj(ctx, intermediate_size, hidden_size, false),
-                up_proj(ctx, hidden_size, intermediate_size, false),
+            : BaseMLP(ctx, hidden_size, intermediate_size, act, false, false, false)
+        {}
+
+        BaseMLP(InitContext *ctx, int hidden_size, int intermediate_size, ActFunc act,
+               bool gate_use_bias, bool down_use_bias, bool up_use_bias)
+            : gate_proj(ctx, hidden_size, intermediate_size, gate_use_bias),
+              down_proj(ctx, intermediate_size, hidden_size, down_use_bias),
+                up_proj(ctx, hidden_size, intermediate_size, up_use_bias),
               act(act)
         {}
 
