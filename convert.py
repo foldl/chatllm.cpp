@@ -3825,6 +3825,8 @@ class AlphaGeometryLMConverter(BaseConverter):
 
     @staticmethod
     def dump_config(f, config, ggml_type):
+        assert ggml_type == GGMLType.F32, 'this model must converted with `-t f32`'
+
         config_values = [
             ggml_type.value,
             config.vocab_size,

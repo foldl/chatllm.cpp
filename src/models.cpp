@@ -3,6 +3,8 @@
 #include <cmath>
 #include <codecvt>
 #include <cstring>
+#include <cstdarg>
+#include <cstdio>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -15,6 +17,7 @@
 #include <type_traits>
 #include <utility>
 #include <numbers>
+#include <unordered_map>
 
 #include "layers.h"
 
@@ -58,11 +61,10 @@ namespace chatllm
     };
 
     static ForwardContext *dbg_ctx = nullptr;
-    static std::set<ggml::tensor *> inspected_set;
-    static std::string dbg_msg;
+    static std::unordered_map<ggml::tensor *, std::string> inspected_set;
     static ggml::tensor *dbg_w = nullptr;
 
-    void print_tensor(ggml::tensor *tensor, int offset)
+    void print_tensor(ggml::tensor *tensor, int offset, const bool full)
     {
         printf("\n%s (%p): [%zd, %zd, %zd] [%zd, %zd, %zd]\n", tensor->name, tensor->data, tensor->ne[0], tensor->ne[1], tensor->ne[2],
                                                                              tensor->nb[0], tensor->nb[1], tensor->nb[2]);
@@ -75,8 +77,10 @@ namespace chatllm
         case GGML_TYPE_F32:
             {
                 float * p = (float *)data.data();
-                for (size_t i = 0; i < ggml::nbytes(tensor) / sizeof(float); i++)
+                const size_t n = ggml::nbytes(tensor) / sizeof(float);
+                for (size_t i = 0; i < n; i++)
                 {
+                    if (!full && ((50 < i) && (i < n - 50))) continue;
                     float t = p[i];
                     //t = ggml_fp16_to_fp32(ggml_fp32_to_fp16(t));
                     printf("[%3d] = %+3.18f\n", (int)i, t);
@@ -140,7 +144,8 @@ namespace chatllm
 
     static bool observe_tensor_evaluation_callback(ggml::tensor *tensor, void *user_data)
     {
-        if (inspected_set.find(tensor) == inspected_set.end()) return true;
+        auto it = inspected_set.find(tensor);
+        if (it == inspected_set.end()) return true;
 
         if (dbg_w)
         {
@@ -150,8 +155,9 @@ namespace chatllm
             dbg_w = nullptr;
         }
 
-        printf("\n--------------- %s ----------------------\n", dbg_msg.c_str());
-        print_tensor(tensor);
+        printf("\n--------------- %s ----------------------\n", it->second.c_str());
+        bool full = false;
+        print_tensor(tensor, 0, full);
 
         return true;
     }
@@ -161,18 +167,30 @@ namespace chatllm
         dbg_w = tensor;
     }
 
-    void inspect_tensor(ggml::tensor *tensor, const char *msg, ggml::tensor *temp1, ggml::tensor *temp2, ggml::tensor *temp3, ggml::tensor *temp4, ggml::tensor *temp5)
-    {
+    void inspect_tensor(ggml::tensor *tensor, const char *format, ...)
+    { return;
         if (nullptr == dbg_ctx) return;
+        if (tensor == nullptr) return;
 
-        if (tensor) inspected_set.insert(tensor);
-        if (temp1) inspected_set.insert(temp1);
-        if (temp2) inspected_set.insert(temp2);
-        if (temp3) inspected_set.insert(temp3);
-        if (temp4) inspected_set.insert(temp4);
-        if (temp5) inspected_set.insert(temp5);
+        std::string tag;
 
-        dbg_msg = std::string(msg);
+        va_list args;
+        va_start(args, format);
+        int size = vsnprintf(nullptr, 0, format, args) + 1; // +1 for the null terminator
+        va_end(args);
+
+        if (size > 0)
+        {
+            std::unique_ptr<char[]> buffer(new char[size]);
+
+            va_start(args, format);
+            vsnprintf(buffer.get(), size, format, args);
+            va_end(args);
+
+            tag = buffer.get();
+        }
+
+        inspected_set[tensor] = tag;
 
         dbg_ctx->get_backend_context()->set_eval_observe_callback(need_observe_tensor_evaluation_callback, observe_tensor_evaluation_callback, nullptr);
     }

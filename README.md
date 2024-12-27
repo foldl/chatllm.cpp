@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2024-12-27: AlphaGeometry-LM
 * 2024-12-25: TeleChat2
 * 2024-12-19: C4AI Command R7B, EXAONE 3.5
 * 2024-12-17: Megrez, Falcon3

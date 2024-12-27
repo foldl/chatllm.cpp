@@ -1123,5 +1123,53 @@
                 }
             }
         }
+    },
+    "exaone3.5": {
+        "brief": "EXAONE 3.5, a collection of instruction-tuned bilingual (English and Korean) generative models ranging from 2.4B to 32B parameters, developed and released by LG AI Research.",
+        "default": "2.4b",
+        "license": "EXAONE AI Model License Agreement 1.1 - NC",
+        "variants": {
+            "2.4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2559193504,
+                        "url": "chatllm_quantized_20241227/exaone-2.4b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "telechat2": {
+        "brief": "TeleChat2 is a large language model trained by the Artificial Intelligence Research Institute of China Telecom.",
+        "default": "3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3265298768,
+                        "url": "chatllm_quantized_20241227/telechat2-3b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "alphageometry-lm": {
+        "brief": "TeleChat2 is a large language model trained by the Artificial Intelligence Research Institute of China Telecom.",
+        "default": "0.2b",
+        "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+        "variants": {
+            "0.2b": {
+                "default": "f32",
+                "quantized": {
+                    "f32": {
+                        "size": 608298976,
+                        "url": "chatllm_quantized_20241227/alphageometry-lm-f32.bin"
+                    }
+                }
+            }
+        }
     }
 }

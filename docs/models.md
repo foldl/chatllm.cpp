@@ -198,6 +198,9 @@ Please use `--format completion` for these models.
 * Stable-LM (`StableLMEpochModel`)
     * [x] [Code-3B](https://huggingface.co/stabilityai/stable-code-3b)
 
+* AlphaGeometry-LM (`-a AlphaGeometry-LM`)
+    * [x] [geometry.757](https://bit.ly/alphageometry)
+
 ## RAG Models
 
 * Text Embedding (`XLMRobertaModel`)

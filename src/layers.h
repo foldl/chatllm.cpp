@@ -14,9 +14,8 @@
 namespace chatllm
 {
     void dump_weight_tensor(ggml::tensor *tensor);
-    void print_tensor(ggml::tensor *tensor, int offset = 0);
-    void inspect_tensor(ggml::tensor *tensor, const char *msg,
-        ggml::tensor *temp1 = nullptr, ggml::tensor *temp2 = nullptr, ggml::tensor *temp3 = nullptr, ggml::tensor *temp4 = nullptr, ggml::tensor *temp5 = nullptr);
+    void print_tensor(ggml::tensor *tensor, int offset = 0, bool full = false);
+    void inspect_tensor(ggml::tensor *tensor, const char *format, ...);
 
     struct alibi_ctx
     {
