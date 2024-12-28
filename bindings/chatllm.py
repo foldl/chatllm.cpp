@@ -24,6 +24,10 @@ class PrintType(IntEnum):
     PRINTLN_EMBEDDING       = 8,    # print a whole line: embedding (example: "0.1, 0.3, ...")
     PRINTLN_RANKING         = 9,    # print a whole line: ranking (example: "0.8")
     PRINTLN_TOKEN_IDS       =10,    # print a whole line: token ids (example: "1, 3, 5, 8, ...")
+    PRINTLN_LOGGING         =11,    # print a whole line: internal logging with the first char indicating level
+                                    # (space): None; D: Debug; I: Info; W: Warn; E: Error; .: continue
+
+    PRINT_EVT_ASYNC_COMPLETED  = 100,   # last async operation completed (utf8_str is null)
 
 class LibChatLLM:
 
@@ -73,6 +77,8 @@ class LibChatLLM:
         self._chatllm_save_session      = self._lib.chatllm_save_session
         self._chatllm_load_session      = self._lib.chatllm_load_session
 
+        self._chatllm_async_user_input  = self._lib.chatllm_async_user_input
+
         self._chatllm_create.restype = c_void_p
         self._chatllm_create.argtypes = []
 
@@ -90,6 +96,8 @@ class LibChatLLM:
 
         self._chatllm_user_input.restype = c_int
         self._chatllm_user_input.argtypes = [c_void_p, c_char_p]
+        self._chatllm_async_user_input.restype = c_int
+        self._chatllm_async_user_input.argtypes = [c_void_p, c_char_p]
 
         self._chatllm_tool_input.restype = c_int
         self._chatllm_tool_input.argtypes = [c_void_p, c_char_p]
@@ -132,6 +140,11 @@ class LibChatLLM:
     @staticmethod
     def callback_print(user_data: int, print_type: c_int, s: bytes) -> None:
         obj = LibChatLLM._id2obj[user_data]
+
+        if print_type == PrintType.PRINT_EVT_ASYNC_COMPLETED.value:
+            obj.callback_async_done()
+            return
+
         txt = s.decode()
         if print_type == PrintType.PRINT_CHAT_CHUNK.value:
             obj.callback_print(txt)
@@ -189,6 +202,9 @@ class LibChatLLM:
 
     def chat(self, obj: c_void_p, user_input: str) -> int:
         return self._chatllm_user_input(obj, c_char_p(user_input.encode()))
+
+    def async_chat(self, obj: c_void_p, user_input: str) -> int:
+        return self._chatllm_async_user_input(obj, c_char_p(user_input.encode()))
 
     def ai_continue(self, obj: c_void_p, suffix: str) -> int:
         return self._chatllm_ai_continue(obj, c_char_p(suffix.encode()))
@@ -281,6 +297,15 @@ class ChatLLM:
         self.is_generating = False
         if r != 0:
             raise Exception(f'ChatLLM: failed to `chat()` with error code {r}')
+
+    def async_chat(self, user_input: str, input_id = None) -> None:
+        self.is_generating = True
+        self.input_id = input_id
+        self.references = []
+        self.rewritten_query = ''
+        r = self._lib.async_chat(self._chat, user_input)
+        if r != 0:
+            raise Exception(f'ChatLLM: failed to `async_chat()` with error code {r}')
 
     def ai_continue(self, suffix: str) -> int:
         self.is_generating = True
@@ -381,6 +406,9 @@ class ChatLLM:
             self.out_queue.put(LLMChatDone(self.input_id))
         self.input_id = self.tool_input_id
         self.tool_input_id = None
+
+    def callback_async_done(self) -> None:
+        self.is_generating = False
 
 class LLMChatInput:
     def __init__(self, input: str, id: Any) -> None:

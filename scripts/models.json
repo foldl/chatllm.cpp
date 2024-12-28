@@ -628,6 +628,15 @@
                         "url": "chatllm_quantized_models/gemma-1.1-2b.bin"
                     }
                 }
+            },
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 5340384992,
+                        "url": "chatllm_quantized_20241228_2/gemma-1.1-7b.bin"
+                    }
+                }
             }
         }
     },
@@ -774,6 +783,10 @@
                     "q4_1": {
                         "size": 4832334112,
                         "url": "chatllm_quantized_models/qwen-qany-7b-q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 8210125088,
+                        "url": "chatllm_quantized_20241228/qwen-qany-7b.bin"
                     }
                 }
             }
@@ -790,6 +803,15 @@
                     "q8": {
                         "size": 1956630800,
                         "url": "chatllm_quantized_models/qwen1.5-1.8b.bin"
+                    }
+                }
+            },
+            "14b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 15060054288,
+                        "url": "chatllm_quantized_20241228_2/qwen1.5-14b.bin"
                     }
                 }
             },
@@ -955,9 +977,27 @@
     },
     "yi-1": {
         "brief": "Yi (v1) is a high-performing, bilingual language model.",
-        "default": "34b",
+        "default": "6b",
         "license": "Apache License Version 2.0",
         "variants": {
+            "6b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 6441564880,
+                        "url": "chatllm_quantized_241124_3/yi-6b.bin"
+                    }
+                }
+            },
+            "9b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 9383354064,
+                        "url": "chatllm_quantized_20241228/yi-9b.bin"
+                    }
+                }
+            },
             "34b": {
                 "default": "q4_1",
                 "quantized": {
@@ -1167,6 +1207,102 @@
                     "f32": {
                         "size": 608298976,
                         "url": "chatllm_quantized_20241227/alphageometry-lm-f32.bin"
+                    }
+                }
+            }
+        }
+    },
+    "stable-code": {
+        "brief": "Stable Code 3B is a coding model with instruct and code completion variants on par with models such as Code Llama 7B that are 2.5x larger.",
+        "default": "3b",
+        "license": "STABILITY AI NON-COMMERCIAL RESEARCH COMMUNITY LICENSE AGREEMENT",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2972374416,
+                        "url": "chatllm_quantized_241124/stablecode-3b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "startcoder2": {
+        "brief": "StarCoder2 is the next generation of transparently trained open code LLMs that comes in three sizes: 3B, 7B and 15B parameters.",
+        "default": "3b",
+        "license": "BigCode Open RAIL-M v1 License Agreement",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3224019520,
+                        "url": "chatllm_quantized_241124/startcoder2-3b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "wizardcoder": {
+        "brief": "State-of-the-art code generation model.",
+        "default": "python-7b",
+        "license": "",
+        "variants": {
+            "python-7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7160808608,
+                        "url": "chatllm_quantized_241124/wizardcoder-python-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "wizardlm": {
+        "brief": "General use model based on Llama 2.",
+        "default": "13b",
+        "license": "",
+        "variants": {
+            "13b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 13831029920,
+                        "url": "chatllm_quantized_241124/wizardlm-13b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "wizard-math": {
+        "brief": "Model focused on math and logic problems.",
+        "default": "7b",
+        "license": "MICROSOFT RESEARCH LICENSE",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7695568736,
+                        "url": "chatllm_quantized_241124/wizardmath-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "command-r": {
+        "brief": "Command R is a Large Language Model optimized for conversational interaction and long context tasks.",
+        "default": "35b",
+        "license": "Creative Commons Attribution-NonCommercial 4.0 International Public",
+        "variants": {
+            "35b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 19685936400,
+                        "url": "chatllm_quantized_241124_2/c4ai_command_r_q4_0.bin"
                     }
                 }
             }

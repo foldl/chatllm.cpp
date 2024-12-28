@@ -554,6 +554,8 @@ namespace chatllm
             return "无穹天权";
         case MODEL_TYPE_TELECHAT2:
             return "星辰";
+        case MODEL_TYPE_ORION:
+            return "猎户星空";
         default:
             return "";
         }
