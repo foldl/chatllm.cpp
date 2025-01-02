@@ -22,7 +22,7 @@ proc parse_model_id(model_id: string): JsonNode =
   let model = all_models[parts[0]]
   let variants = model["variants"]
   let variant = variants[if len(parts) >= 2: parts[1] else: model["default"].getStr()]
-  let r = variant["quantized"][variant["default"].getStr()]
+  let r = variant["quantized"][variant["default"].getStr()].copy()
   let url = r["url"].getStr().split("/")
   r["url"] = json.newJString(get_model_url_on_modelscope(url))
   r["fn"] = json.newJString(url[1])

@@ -44,6 +44,31 @@
             }
         }
     },
+    "llama3.2": {
+        "brief": "Meta's Llama 3.2 goes small with 1B and 3B models.",
+        "default": "1b",
+        "license": "LLAMA 3.2 COMMUNITY LICENSE AGREEMENT",
+        "variants": {
+            "1b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1319059600,
+                        "url": "chatllm_quantized_20250101_1/llama3.2_1b.bin"
+                    }
+                }
+            },
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3419876240,
+                        "url": "chatllm_quantized_20250101_1/llama3.2_3b.bin"
+                    }
+                }
+            }
+        }
+    },
     "llama3-groq-tool-use": {
         "brief": "Llama 3 Groq Tool Use model, specifically designed for advanced tool use and function calling tasks.",
         "default": "8b",
@@ -85,12 +110,28 @@
         "default": "1.7b",
         "license": "Apache License Version 2.0",
         "variants": {
-            "12b": {
+            "1.7b": {
                 "default": "q8",
                 "quantized": {
                     "q8": {
                         "size": 1819874192,
                         "url": "chatllm_quantized_240722/smolllm-1.7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "smollm2": {
+        "brief": "SmolLM2 is a family of compact language models available in three size: 135M, 360M, and 1.7B parameters.",
+        "default": "1.7b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "1.7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1819874192,
+                        "url": "chatllm_quantized_20250101_1/smollm2-1.7b.bin"
                     }
                 }
             }
@@ -132,6 +173,46 @@
                     "q8": {
                         "size": 7702259552,
                         "url": "chatllm_quantized_mistral/mistral-7b-v0.3.bin"
+                    }
+                }
+            }
+        }
+    },
+    "mistral0.1": {
+        "brief": "The Mistral-7B-Instruct-v0.1 Large Language Model (LLM) is a instruct fine-tuned version of the Mistral-7B-v0.1 generative text model using a variety of publicly available conversation datasets.",
+        "default": "7b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "7b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q8": {
+                        "size": 7695568736,
+                        "url": "chatllm_quantized_241124_3/mistral-instruct-7b.bin"
+                    },
+                    "q4_1": {
+                        "size": 4527427424,
+                        "url": "chatllm_quantized_20241228_2/mistral-instruct-7b_q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "mixtral": {
+        "brief": "The Mixtral-8x7B Large Language Model (LLM) is a pretrained generative Sparse Mixture of Experts.",
+        "default": "8x7b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "8x7b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 26271739744,
+                        "url": "chatllm_quantized_241124_3/mixtral-8x7b-q4.bin"
+                    },
+                    "q8": {
+                        "size": 49623002976,
+                        "url": "chatllm_quantized_20241227_2/mixtral-8x7b-q8.bin"
                     }
                 }
             }
@@ -398,6 +479,15 @@
                     }
                 }
             },
+            "mini-128k-jun-24": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4060936080,
+                        "url": "chatllm_quantized_20250101_1/phi3-mini-128k-jun-24.bin"
+                    }
+                }
+            },
             "medium-4k": {
                 "default": "q4_1",
                 "quantized": {
@@ -476,6 +566,15 @@
                     "q4_1": {
                         "size": 5520662224,
                         "url": "chatllm_quantized_yi1.5/yi1.5-9b-16k_q4_1.bin"
+                    }
+                }
+            },
+            "34k": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 21496949200,
+                        "url": "chatllm_quantized_20250101/yi1.5-34b.bin"
                     }
                 }
             }
@@ -733,6 +832,10 @@
                     "q4_1": {
                         "size": 1705488848,
                         "url": "chatllm_quantized_models/minicpm-dpo-q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 2897542592,
+                        "url": "chatllm_quantized_20250101_1/minicpm-dpo-q8.bin"
                     }
                 }
             },
@@ -751,6 +854,15 @@
                     "q4_1": {
                         "size": 8673301984,
                         "url": "chatllm_quantized_minicpm_moe/minicpm-moe-q4_1.bin"
+                    }
+                }
+            },
+            "1b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1446808448,
+                        "url": "chatllm_quantized_20250101_1/minicpm-1b.bin"
                     }
                 }
             }
@@ -882,6 +994,28 @@
                         "url": "chatllm_quantized_qwen2.5/qwen2.5-7b.bin"
                     }
                 }
+            },
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3283801664,
+                        "url": "chatllm_quantized_20250101_1/qwen2.5-3b.bin"
+                    },
+                    "q4_1": {
+                        "size": 1933809216,
+                        "url": "chatllm_quantized_20250101_1/qwen2.5-3b_q4_1.bin"
+                    }
+                }
+            },
+            "32b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 18296273168,
+                        "url": "chatllm_quantized_20250101_1/qwen2.5-32b-q4_0.bin"
+                    }
+                }
             }
         }
     },
@@ -909,6 +1043,36 @@
                     "q4_0": {
                         "size": 4289205872,
                         "url": "chatllm_quantized_241110/qwen2.5-coder-7b_q4_0.bin"
+                    }
+                }
+            },
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3283801664,
+                        "url": "chatllm_quantized_20250101_1/qwen2.5-coder-3b.bin"
+                    },
+                    "q4_1": {
+                        "size": 1933809216,
+                        "url": "chatllm_quantized_20250101_1/qwen2.5-coder-3b_q4_1.bin"
+                    }
+                }
+            },
+            "32b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 18437831280,
+                        "url": "chatllm_quantized_20250101_1/qwen2.5-coder-32b_q4_0.bin"
+                    },
+                    "q4_1": {
+                        "size": 20485503600,
+                        "url": "chatllm_quantized_20250101_1/qwen2.5-coder-32b_q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 34819209840,
+                        "url": "chatllm_quantized_20250101_1/qwen2.5-coder-32b_q8.bin"
                     }
                 }
             }
@@ -1102,6 +1266,10 @@
                     "q4_1": {
                         "size": 359572992,
                         "url": "chatllm_quantized_models/bge-m3-q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 607365376,
+                        "url": "chatllm_quantized_20250101_1/bge-m3-q8.bin"
                     }
                 }
             }
@@ -1118,6 +1286,10 @@
                     "q4_1": {
                         "size": 360233284,
                         "url": "chatllm_quantized_models/bge-reranker-m3-q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 608484868,
+                        "url": "chatllm_quantized_20250101_1/bge-reranker-m3-q8.bin"
                     }
                 }
             }
@@ -1159,6 +1331,15 @@
                     "q8": {
                         "size": 3433097392,
                         "url": "chatllm_quantized_falcon3/falcon3-3b.bin"
+                    }
+                }
+            },
+            "10b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 5801103664,
+                        "url": "chatllm_quantized_20250101_1/falcon3-10b-q4_0.bin"
                     }
                 }
             }
@@ -1303,6 +1484,303 @@
                     "q4_0": {
                         "size": 19685936400,
                         "url": "chatllm_quantized_241124_2/c4ai_command_r_q4_0.bin"
+                    }
+                }
+            },
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8538242480,
+                        "url": "chatllm_quantized_20250101_1/cohere2-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "codefuse-deepseek": {
+        "brief": "CodeFuse-DeepSeek-33B is a 33B Code-LLM finetuned by QLoRA on multiple code-related tasks on the base model DeepSeek-Coder-33B. It ranks first on the HuggingFace Big Code Models Leaderboard (2024.01.30).",
+        "default": "33b",
+        "license": "(unknown)",
+        "variants": {
+            "33b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 35430394912,
+                        "url": "chatllm_quantized_241124_2/codefuse-deepseek-33b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "codellama": {
+        "brief": "A large language model that can use text prompts to generate and discuss code.",
+        "default": "7b",
+        "license": "LLAMA 2 COMMUNITY LICENSE AGREEMENT",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7160939440,
+                        "url": "chatllm_quantized_241124_2/codellama-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "codeqwen": {
+        "brief": "CodeQwen1.5 is a large language model pretrained on a large amount of code data.",
+        "default": "7b",
+        "license": "Tongyi Qianwen LICENSE AGREEMENT",
+        "variants": {
+            "7b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 4535287488,
+                        "url": "chatllm_quantized_241124_2/codeqwen1.5-7b-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "codestral": {
+        "brief": "CodeQwen1.5 is a large language model pretrained on a large amount of code data.",
+        "default": "22b",
+        "license": "Mistral AI Non-Production License",
+        "variants": {
+            "7b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 13907361472,
+                        "url": "chatllm_quantized_241124_2/codestra_hf_q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "baichuan": {
+        "brief": "Baichuan-7B is an open-source large-scale pre-trained model developed by Baichuan Intelligent Technology.",
+        "default": "7b",
+        "license": "Baichuan-7B License",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q4_1": {
+                        "size": 7977698656,
+                        "url": "chatllm_quantized_241124_3/baichuan-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "baichuan2": {
+        "brief": "Baichuan 2 is the new generation of large-scale open-source language models launched by Baichuan Intelligence inc.",
+        "default": "13b",
+        "license": "Apache 2.0 and Community License for Baichuan2 Model",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 14768252768,
+                        "url": "chatllm_quantized_241124_3/baichuan2-13b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "dolphin2.6": {
+        "brief": "This model is based on Phi-2 and is governed by MIT licence.",
+        "default": "phi2",
+        "license": "MICROSOFT RESEARCH LICENSE & MIT",
+        "variants": {
+            "phi2": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2957468560,
+                        "url": "chatllm_quantized_241124_3/dolphinphi2.bin"
+                    }
+                }
+            }
+        }
+    },
+    "openchat": {
+        "brief": "The Overall Best Performing Open Source 7B Model.",
+        "default": "7b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7695586176,
+                        "url": "chatllm_quantized_241124_3/openchat-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "neuralbeagle": {
+        "brief": "NeuralBeagle14-7B is a DPO fine-tune of Beagle14-7B.",
+        "default": "7b",
+        "license": "Creative Commons Attribution Non Commercial 4.0",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7695568736,
+                        "url": "chatllm_quantized_20241227_2/NeuralBeagle14-7B.bin"
+                    }
+                }
+            }
+        }
+    },
+    "persimmon": {
+        "brief": "Persimmon-8B, the best fully permissively-licensed model in the 8B class by Adept.",
+        "default": "8b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 9994614304,
+                        "url": "chatllm_quantized_20241228/persimmon-8b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "codegemma": {
+        "brief": "CodeGemma is a collection of powerful, lightweight models that can perform a variety of coding tasks like fill-in-the-middle code completion, code generation, natural language understanding, mathematical reasoning, and instruction following.",
+        "default": "2b",
+        "license": "Gemma Terms of Use",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2666768512,
+                        "url": "chatllm_quantized_20241228_2/codegemma-2b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "orion": {
+        "brief": "Orion-14B series models are open-source multilingual large language models trained from scratch by OrionStarAI.",
+        "default": "14b",
+        "license": "Orion-14B Series: Models Community License Agreement",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 15408495376,
+                        "url": "chatllm_quantized_20241228/orion-14b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "aya": {
+        "brief": "Aya 23, released by Cohere, is a new family of state-of-the-art, multilingual models that support 23 languages.",
+        "default": "8b",
+        "license": "Creative Commons Attribution-NonCommercial 4.0 International Public License",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8538242320,
+                        "url": "chatllm_quantized_20250101/aya-23-8b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "neo": {
+        "brief": "Neo is a completely open source large language model, including code, all model weights, datasets used for training, and training details by m-a-p.",
+        "default": "7b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8282246288,
+                        "url": "chatllm_quantized_20250101/map-neo-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "olmoe": {
+        "brief": "OLMoE is a Mixture-of-Experts LLM with 1B active and 7B total parameters, 100% open-source.",
+        "default": "7b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7353459872,
+                        "url": "chatllm_quantized_20250101/olmoe-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "marco-o1": {
+        "brief": "An open large reasoning model for real-world solutions by the Alibaba International Digital Commerce Group (AIDC-AI).",
+        "default": "7b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8096847472,
+                        "url": "chatllm_quantized_20250101_1/marco-o1-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "qwq": {
+        "brief": "QwQ is an experimental research model focused on advancing AI reasoning capabilities.",
+        "default": "32b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "32b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 18437831280,
+                        "url": "chatllm_quantized_20250101_1/qwb-32b-q4_0.bin"
+                    }
+                }
+            }
+        }
+    },
+    "llama-mtp": {
+        "brief": "Models accompanying the research paper 'Better & Faster Large Language Models via Multi-token Prediction.'",
+        "default": "7b",
+        "license": "Unknown",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7160799952,
+                        "url": "chatllm_quantized_20250101_1/llama-multi.bin"
                     }
                 }
             }

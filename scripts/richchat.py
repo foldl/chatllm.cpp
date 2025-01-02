@@ -3,10 +3,13 @@ import sys, signal, time
 from binding import PATH_BINDS
 
 from chatllm import ChatLLM, LibChatLLM
-from rich.panel import Panel
-from rich.markdown import Markdown
-from rich.live import Live
-from rich import print
+try:
+    from rich.panel import Panel
+    from rich.markdown import Markdown
+    from rich.live import Live
+    from rich import print
+except:
+    raise Exception('package `rich` is missing. install it: `pip install rich`')
 
 class RichChatLLM(ChatLLM):
     chunk_acc = ''

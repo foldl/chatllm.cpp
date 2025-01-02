@@ -1,6 +1,6 @@
 import requests
 import os, json
-
+import copy
 import binding
 
 def get_model_url_on_modelscope(proj: str, fn: str, user: str = 'judd2024') -> str:
@@ -59,7 +59,7 @@ def parse_model_id(model_id: str):
     model = all_models[parts[0]]
     variants = model['variants']
     var = variants[parts[1] if len(parts) >= 2 else model['default']]
-    r = var['quantized'][var['default']]
+    r =  copy.deepcopy(var['quantized'][var['default']])
     url = r['url'].split('/')
     r['url'] = get_model_url_on_modelscope(*url)
     r['fn'] = url[1]
@@ -99,6 +99,24 @@ def preprocess_args(args: list[str], storage_dir) -> list[str]:
             args[i + 1] = get_model(args[i + 1][1:].lower(), storage_dir)
 
     return args
+
+def enum_missing():
+    import glob
+    all = set()
+    for m in all_models.keys():
+        info = all_models[m]
+        variants = info['variants']
+        for s in variants.keys():
+            for q in variants[s]['quantized'].keys():
+                quantized = variants[s]['quantized'][q]
+                all.add(quantized['url'].split('/')[1])
+    f = glob.glob(os.path.join('../quantized', '*.bin'))
+    l = []
+    for x in f:
+        k = os.path.basename(x)
+        if not k in all:
+            l.append(k)
+    print(sorted(l))
 
 if __name__ == '__main__':
     show()

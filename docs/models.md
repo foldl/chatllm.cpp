@@ -190,7 +190,7 @@ Please use `--format completion` for these models.
 * Grok-1
     * [x] [Base](https://huggingface.co/xai-org/grok-1)
 
-        About [Grok-1](./docs/grok.md).
+        About [Grok-1](grok.md).
 
 * StarCoder (`Starcoder2ForCausalLM`)
     * [x] [Base-3B](https://huggingface.co/bigcode/starcoder2-7b), [Base-7B](https://huggingface.co/bigcode/starcoder2-7b), [Base-15B](https://huggingface.co/bigcode/starcoder2-15b)
