@@ -167,6 +167,7 @@ namespace chatllm
 
         virtual bool is_terminate_token_id(int id) const;
         virtual bool is_special_id(int id) const { return false; }
+        int get_vocab_size(void) const { return vocab_size; }
 
         void set_chat_format(ChatFormat format) { this->format = format; }
         ChatFormat get_chat_format(void) const { return format; }
@@ -195,6 +196,8 @@ namespace chatllm
         BaseHistoryEncoder *qa_encoder;
         bool auto_add_bos;
         std::set<int> terminate_ids;
+    private:
+        const int vocab_size;
     };
 
     class BaseHistoryEncoder
@@ -293,6 +296,7 @@ namespace chatllm
             RANKING         = 9,
             TOKEN_IDS       =10,
             LOGGING         =11,
+            BEAM_SEARCH     =12,
         };
         BaseStreamer(BaseTokenizer *tokenizer);
         virtual ~BaseStreamer() = default;
@@ -553,6 +557,31 @@ namespace chatllm
         std::chrono::time_point<Clock> m_beg { Clock::now() };
     };
 
+    class ModelSessionMemory
+    {
+    public:
+        ModelSessionMemory();
+
+        void *prepare_buffer(int id, size_t size);
+        void *get_buffer(int id, size_t *size = nullptr);
+
+        void set_n_past(int n_past);
+        void set_n_past_offset(int n_past_offset);
+
+        int get_n_past(void) const;
+        int get_n_past_offset(void) const;
+
+        void copy_from(const ModelSessionMemory &sess);
+
+        void dump(const char *fn);
+
+    private:
+        void prepare(int id);
+        std::vector<std::vector<uint8_t>> buffers;
+        int n_past;
+        int n_past_offset;
+    };
+
     class AbstractModel
     {
     public:
@@ -567,6 +596,8 @@ namespace chatllm
                                             ModelPerfInfo *performance,
                                             int gen_max_tokens,
                                             BaseStreamer *streamer = nullptr) = 0;
+
+        virtual void generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) {};
 
         virtual void abort_generation(void) = 0;
 
@@ -600,6 +631,9 @@ namespace chatllm
         virtual int save_session(FILE *f) const = 0;
         virtual int load_session(FILE *f) = 0;
 
+        virtual int save_session(ModelSessionMemory &session) const = 0;
+        virtual int load_session(ModelSessionMemory &session) = 0;
+
         virtual int64_t get_param_num(bool effective_only) const = 0;
 
         virtual ChunkInterceptor *get_interceptor(void) { return nullptr; }
@@ -629,6 +663,11 @@ namespace chatllm
                                             BaseStreamer *streamer = nullptr) override
         {
             return model->generate(input_ids, gen_config, continuous, completed, performance, gen_max_tokens, streamer);
+        }
+
+        void generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override
+        {
+            model->generate_next_token(input_ids, gen_config, lm_logits);
         }
 
         void abort_generation(void) override { model->abort_generation(); }
@@ -665,6 +704,9 @@ namespace chatllm
 
         int save_session(FILE *f) const override { return model->save_session(f); }
         int load_session(FILE *f) override { return model->load_session(f); }
+
+        int save_session(ModelSessionMemory &session) const override { return model->save_session(session); }
+        int load_session(ModelSessionMemory &session) override { return model->load_session(session); }
 
         int64_t get_param_num(bool effective_only) const override { return model->get_param_num(effective_only); }
 
@@ -741,7 +783,11 @@ namespace chatllm
 
         int get_n_past(void) override { return n_past; }
 
-        void set_n_past(int n_past) override { this->n_past = n_past; }
+        void set_n_past(int n_past) override
+        {
+            this->n_past = n_past;
+            n_past_offset = 0;
+        }
 
         void shift_memory(int keep) override
         {
@@ -757,8 +803,11 @@ namespace chatllm
         }
 
         int save_session(FILE *f) const override;
-
         int load_session(FILE *f) override;
+
+        int save_session(ModelSessionMemory &session) const override;
+        int load_session(ModelSessionMemory &session) override;
+
     private:
         struct state
         {
@@ -838,7 +887,7 @@ namespace chatllm
         Pipeline(const std::string &path);
         Pipeline(const std::string &path, const ModelObject::extra_args &args);
 
-        std::string chat(Messages &history, const GenerationConfig &gen_config,
+        virtual std::string chat(Messages &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);
         virtual void abort_generation(void);
         virtual void eval_sys_prompt(const GenerationConfig &gen_config);
@@ -887,17 +936,48 @@ namespace chatllm
 
         void add_ai_prefix(std::vector<int> &input_ids, const GenerationConfig &gen_config, BaseStreamer *streamer);
 
-        std::string chat_with_ext_completion(Messages &history, const std::string &external, const GenerationConfig &gen_config,
+        virtual std::string chat_with_ext_completion(Messages &history, const std::string &external, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);
-        std::string chat_with_restart(const Messages &history, const GenerationConfig &gen_config,
+        virtual std::string chat_with_restart(const Messages &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);
-        std::string chat_with_shift(const Messages &history, const GenerationConfig &gen_config,
+        virtual std::string chat_with_shift(const Messages &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer);
-        std::string chat_without_extending(const Messages &history, const GenerationConfig &gen_config,
+        virtual std::string chat_without_extending(const Messages &history, const GenerationConfig &gen_config,
                                BaseStreamer *streamer);
 
         virtual void before_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer);
         virtual void post_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer);
+    };
+
+    class BeamSearchPipeline: public Pipeline
+    {
+    public:
+        BeamSearchPipeline(const std::string &path, const ModelObject::extra_args &args, int num_beams);
+
+        std::string chat(Messages &history, const GenerationConfig &gen_config,
+                         BaseStreamer *streamer = nullptr) override;
+    private:
+        void do_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer);
+        void do_chat0(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer);
+
+        class Beam
+        {
+        public:
+            Beam(int vocab_size, int max_length, BaseTokenizer *tokenizer);
+            void clear(const std::vector<int> &init_ids);
+            void add(int token_id, float score);
+            int get_last_token(void) const;
+            void refresh_scores(void);
+            void set_max_length(int max_length);
+            ModelSessionMemory session;
+            std::vector<float> scores;
+            std::vector<int> trace;
+            float score;
+            bool completed;
+            int max_length;
+            BaseTokenizer *tokenizer;
+        };
+        std::vector<Beam> beams;
     };
 
     class AugmentedQueryComposer

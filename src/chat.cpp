@@ -48,7 +48,7 @@ namespace chatllm
     std::string trim(std::string str, const char *spaces)
     {
         str.erase(str.find_last_not_of(spaces) + 1);
-        str.erase(0,str.find_first_not_of(spaces));
+        str.erase(0, str.find_first_not_of(spaces));
         return str;
     }
 
@@ -235,7 +235,8 @@ namespace chatllm
         chat_encoder(chat_encoder),
         completion_encoder(completion_encoder),
         qa_encoder(qa_encoder),
-        auto_add_bos(true)
+        auto_add_bos(true),
+        vocab_size(config.vocab_size)
     {
         if (chat_encoder)
             chat_encoder->set_tokenizer(this);
@@ -855,7 +856,7 @@ namespace chatllm
                 weight_name = read_string(name_size);
             }
 
-            int64_t ne[4] = {1,1,1,1};
+            int64_t ne[4] = {1, 1, 1, 1};
 
             // read and check tensor shape
             int ndim = read_basic<int>();
@@ -984,6 +985,20 @@ namespace chatllm
         return 0;
     }
 
+    int BaseModel::save_session(ModelSessionMemory &session) const
+    {
+        session.set_n_past(n_past);
+        session.set_n_past_offset(n_past_offset);
+        return 0;
+    }
+
+    int BaseModel::load_session(ModelSessionMemory &session)
+    {
+        n_past = session.get_n_past();
+        n_past_offset = session.get_n_past_offset();
+        return 0;
+    }
+
     ModelObject::ModelObject(const std::string &path)
         : ModelObject(path, ModelObject::extra_args())
     {
@@ -1016,6 +1031,93 @@ namespace chatllm
     {
         if (!loaded) return nullptr;
         return ModelFactory::load_model_again(*loader, args);
+    }
+
+    ModelSessionMemory::ModelSessionMemory() : n_past(0), n_past_offset(0)
+    {
+    }
+
+    void ModelSessionMemory::prepare(int id)
+    {
+        while (id >= (int)buffers.size())
+        {
+            buffers.push_back(std::vector<uint8_t>());
+        }
+    }
+
+    void *ModelSessionMemory::prepare_buffer(int id, size_t size)
+    {
+        if (id >= 0)
+        {
+            prepare(id);
+            buffers[id].resize(size);
+            return get_buffer(id);
+        }
+        return nullptr;
+    }
+
+    void *ModelSessionMemory::get_buffer(int id, size_t *size)
+    {
+        if (id >= 0)
+        {
+            prepare(id);
+            if (size)
+                *size = buffers[id].size();
+            return buffers[id].data();
+        }
+        return nullptr;
+    }
+
+    void ModelSessionMemory::set_n_past(int n_past)
+    {
+        this->n_past = n_past;
+    }
+
+    void ModelSessionMemory::set_n_past_offset(int n_past_offset)
+    {
+        this->n_past_offset = n_past_offset;
+    }
+
+    int ModelSessionMemory::get_n_past(void) const
+    {
+        return n_past;
+    }
+
+    int ModelSessionMemory::get_n_past_offset(void) const
+    {
+        return n_past_offset;
+    }
+
+    void ModelSessionMemory::copy_from(const ModelSessionMemory &sess)
+    {
+        if (this == &sess) return;
+
+        n_past = sess.n_past;
+        n_past_offset = sess.n_past_offset;
+
+        for (int i = 0; i < (int)buffers.size(); i++)
+            memcpy(buffers[i].data(), sess.buffers[i].data(), buffers[i].size());
+    }
+
+    void ModelSessionMemory::dump(const char *fn)
+    {
+        FILE *f = fopen(fn, "wb");
+        struct state
+        {
+            int n_past;
+            int n_past_offset;
+        } state =
+        {
+            .n_past = this->n_past,
+            .n_past_offset = this->n_past_offset,
+        };
+        fwrite(&state, sizeof(state), 1, f);
+
+        for (int i = 0; i < (int)buffers.size(); i++)
+        {
+            fwrite(buffers[i].data(), 1, buffers[i].size(), f);
+        }
+        fclose(f);
     }
 
     // ===== pipeline =====
@@ -1200,7 +1302,7 @@ namespace chatllm
         std::vector<int> input_ids;
 
         input_ids = tokenizer->encode_history(history, gen_config.max_length, false, false);
-        rewind((int)input_ids.size());\
+        rewind((int)input_ids.size());
         input_ids.clear();
 
         tokenizer->encode_external_text_completion(external, input_ids);
@@ -1855,6 +1957,271 @@ final:
     CVectorStore *VectorStores::get()
     {
         return def_store;
+    }
+
+    BeamSearchPipeline::Beam::Beam(int vocab_size, int max_length, BaseTokenizer *tokenizer)
+        : score(0.0f), completed(false), max_length(max_length), tokenizer(tokenizer)
+    {
+        scores.resize(vocab_size, 0.0f);
+    }
+
+    void BeamSearchPipeline::Beam::clear(const std::vector<int> &init_ids)
+    {
+        completed = false;
+        trace.clear();
+        trace.insert(trace.end(), init_ids.begin(), init_ids.end());
+        score = 0.0f;
+    }
+
+    void BeamSearchPipeline::Beam::add(int token_id, float score)
+    {
+        CHATLLM_CHECK(!completed) << "Beam::add() called on a completed beam";
+        trace.push_back(token_id);
+        this->score = score;
+        completed = tokenizer->is_terminate_token_id(token_id) || ((max_length > 0) && ((int)trace.size() >= max_length));
+    }
+
+    int BeamSearchPipeline::Beam::get_last_token(void) const
+    {
+        return trace[trace.size() - 1];
+    }
+
+    void BeamSearchPipeline::Beam::set_max_length(int max_length)
+    {
+        this->max_length = max_length;
+    }
+
+    static void log_soft_max(std::vector<float> &vector)
+    {
+        float max_score = *std::max_element(vector.begin(), vector.end());
+        float sum = 0.f;
+        for (float &s : vector)
+        {
+            float s1 = std::exp(s - max_score);
+            sum += s1;
+        }
+        float inv_sum = std::log(1.f / sum);
+        for (float& s : vector)
+            s = s - max_score + inv_sum;
+    }
+
+    void BeamSearchPipeline::Beam::refresh_scores(void)
+    {
+        log_soft_max(scores);
+        for (auto& s : scores)
+            s += score;
+    }
+
+    BeamSearchPipeline::BeamSearchPipeline(const std::string &path, const ModelObject::extra_args &args, int num_beams)
+        : Pipeline(path, args)
+    {
+        for (int i = 0; i < num_beams; i++)
+            beams.emplace_back(tokenizer->get_vocab_size(), 0, tokenizer);
+    }
+
+    static void topk_sampling(const std::vector<float> &logits, int top_k, std::vector<int> &selected_ids)
+    {
+        struct TokenIdScore
+        {
+            int id;
+            float score;
+
+            bool operator<(const TokenIdScore &other) const { return score < other.score; }
+            bool operator>(const TokenIdScore &other) const { return score > other.score; }
+        };
+
+        const int vocab_size = (int)logits.size();
+        std::vector<TokenIdScore> token_scores;
+
+        token_scores.reserve(vocab_size);
+        token_scores.resize(vocab_size);
+
+        for (int i = 0; i < vocab_size; i++)
+        {
+            token_scores[i] = {.id = i, .score = logits[i]};
+        }
+
+        // top_k sampling
+        std::nth_element(token_scores.begin(), token_scores.begin() + top_k, token_scores.end(),
+                         std::greater<TokenIdScore>());
+        token_scores.resize(top_k);
+
+        selected_ids.clear();
+        for (int i = 0; i < top_k; i++)
+        {
+            selected_ids.push_back(token_scores[i].id);
+        }
+    }
+
+    void BeamSearchPipeline::do_chat0(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
+    {
+        std::vector<int> input_ids = tokenizer->encode_history(history, gen_config.max_context_length, false, true, gen_config.reversed_role);
+
+        for (auto &beam : beams)
+        {
+            beam.clear({});
+            beam.set_max_length(gen_config.max_length);
+        }
+        model->set_n_past(0);
+
+        std::vector<float> lm_logits;
+        model->generate_next_token(input_ids, gen_config, lm_logits);
+        model->set_n_past((int)input_ids.size());
+
+        log_soft_max(lm_logits);
+
+        std::vector<int> selected_ids;
+        topk_sampling(lm_logits, (int)beams.size(), selected_ids);
+
+        for (int i = 0; i < (int)beams.size(); i++)
+        {
+            beams[i].add(selected_ids[i], lm_logits[selected_ids[i]]);
+            model->save_session(beams[i].session);
+        }
+    }
+
+    void BeamSearchPipeline::do_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
+    {
+        bool completed = false;
+        std::vector<int> input_ids;
+
+        do_chat0(history, gen_config, streamer);
+
+        while (!completed)
+        {
+            completed = true;
+
+            for (auto &beam : beams)
+            {
+                if (beam.completed)
+                    continue;
+
+                completed = false;
+                std::vector<int> input_ids = {beam.get_last_token()};
+
+                model->load_session(beam.session);
+                model->generate_next_token(input_ids, gen_config, beam.scores);
+                model->set_n_past(model->get_n_past() + (int)input_ids.size());
+                model->save_session(beam.session);
+
+                beam.refresh_scores();
+            }
+
+            if (completed)
+                break;
+
+            std::vector<int> selected_ids;
+            std::vector<int> remaining_beams;
+            std::vector<float> all_logits;
+            for (int i = 0; i < (int)beams.size(); i++)
+            {
+                if (beams[i].completed)
+                    continue;
+                remaining_beams.push_back(i);
+
+                all_logits.insert(all_logits.end(), beams[i].scores.begin(), beams[i].scores.end());
+            }
+
+            topk_sampling(all_logits, (int)beams.size(), selected_ids);
+
+            std::vector<std::vector<int>> selected_traces;
+            for (int i = 0; i < (int)selected_ids.size(); i++)
+            {
+                int beam_id = selected_ids[i] / tokenizer->get_vocab_size();
+                beam_id = remaining_beams[beam_id];
+
+                selected_traces.push_back({});
+
+                selected_traces[i].insert(selected_traces[i].end(), beams[beam_id].trace.begin(), beams[beam_id].trace.end());
+            }
+
+            std::set<int> updated_beams;
+            std::vector<int> candidates;
+            for (int i = 0; i < (int)remaining_beams.size(); i++)
+            {
+                int beam_id = selected_ids[i] / tokenizer->get_vocab_size();
+                beam_id = remaining_beams[beam_id];
+                if (updated_beams.find(beam_id) != updated_beams.end())
+                {
+                    candidates.push_back(i);
+                    continue;
+                }
+
+                updated_beams.emplace(beam_id);
+
+                int tok_id = selected_ids[i] % tokenizer->get_vocab_size();
+                beams[beam_id].add(tok_id, beams[beam_id].scores[tok_id]);
+            }
+
+            int candidate_id = 0;
+            for (int i = 0; i < (int)beams.size(); i++)
+            {
+                if ((beams[i].completed) || (updated_beams.find(i) != updated_beams.end()))
+                    continue;
+                updated_beams.emplace(i);
+
+                const int selection = candidates[candidate_id++];
+
+                int beam_id = selected_ids[selection] / tokenizer->get_vocab_size();
+                beam_id = remaining_beams[beam_id];
+                int tok_id = selected_ids[selection] % tokenizer->get_vocab_size();
+
+                beams[i].clear(selected_traces[selection]);
+                beams[i].add(tok_id, beams[beam_id].scores[tok_id]);
+                beams[i].session.copy_from(beams[beam_id].session);
+            }
+
+            int selection = (int)remaining_beams.size();
+            for (int i = 0; i < (int)beams.size(); i++)
+            {
+                if (updated_beams.find(i) != updated_beams.end()) continue;
+
+                int beam_id = selected_ids[selection] / tokenizer->get_vocab_size();
+                beam_id = remaining_beams[beam_id];
+                int tok_id = selected_ids[selection] % tokenizer->get_vocab_size();
+
+                if (beams[i].score > beams[beam_id].scores[tok_id]) continue;
+
+                beams[i].clear(selected_traces[selection]);
+                beams[i].add(tok_id, beams[beam_id].scores[tok_id]);
+                beams[i].session.copy_from(beams[beam_id].session);
+
+                selection++;
+            }
+        }
+    }
+
+    std::string BeamSearchPipeline::chat(Messages &history, const GenerationConfig &gen_config,
+                                         BaseStreamer *streamer)
+    {
+        std::string r;
+
+        before_chat(history, gen_config, streamer);
+
+        if (modelobj.loaded)
+        {
+            do_chat(history, gen_config, streamer);
+
+            if (streamer)
+            {
+                std::vector<size_t> order;
+                ordering<BeamSearchPipeline::Beam, float>(beams, order, [=](const auto &a) {return a.score; }, true);
+                for (auto &id: order)
+                {
+                    auto beam = beams[id];
+                    std::ostringstream oss;
+                    oss << beam.score << "," << tokenizer->decode(beam.trace);
+                    streamer->putln(oss.str(), BaseStreamer::TextType::BEAM_SEARCH);
+                }
+            }
+        }
+
+        post_chat(history, gen_config, streamer);
+
+        if (streamer)
+            streamer->end();
+
+        return r;
     }
 
 } // namespace chatllm

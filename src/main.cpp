@@ -71,6 +71,7 @@ struct Args
     bool rerank_rewrite = false;
     bool reversed_role = false;
     int save_session_rounds = -1;
+    int beam_size = -1;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -132,6 +133,8 @@ void usage(const std::string &prog)
               << "  --tfs_z Z               Z param for TFS (default: 0.95)\n"
               << "  --presence_penalty N    presence repetition penalty (default: 1.0, no penalty)\n"
               << "  --seed N                seed for random generator (default: random)\n"
+              << "  --beam_size N           beam size for generation (default: -1, disabled)\n"
+              << "                          functionality of beam search limited.\n"
               << "RAG options:\n"
               << "  --set_vs_name           set vector store name.\n"
               << "                          all following vector store files are merged into this vector store. (optional. default: `default`)\n"
@@ -354,6 +357,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--layer_spec",                  layer_spec,           std::string)
             handle_para0("--load_session",                load_session,         std::string)
             handle_para0("--dump_dot",                    dump_dot,             std::string)
+            handle_para0("--beam_size",                   beam_size,            std::stoi)
             else
                 break;
 
@@ -980,12 +984,23 @@ int main(int argc, const char **argv)
         chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers);
         if (args.embedding_model_path.size() < 1)
         {
-            chatllm::Pipeline pipeline(args.model_path, pipe_args);
-            TextStreamer streamer(pipeline.tokenizer);
-            chat(args, pipeline, streamer);
+            if (args.beam_size < 1)
+            {
+                chatllm::Pipeline pipeline(args.model_path, pipe_args);
+                TextStreamer streamer(pipeline.tokenizer);
+                chat(args, pipeline, streamer);
+            }
+            else
+            {
+                chatllm::BeamSearchPipeline pipeline(args.model_path, pipe_args, args.beam_size);
+                TextStreamer streamer(pipeline.tokenizer);
+                chat(args, pipeline, streamer);
+            }
         }
         else
         {
+            CHATLLM_CHECK(args.beam_size < 1) << "beam search is not supported for RAG";
+
             chatllm::RAGPipeline pipeline(args.model_path, pipe_args,
                 args.vc, args.vector_stores,
                 args.embedding_model_path, args.reranker_model_path);
@@ -1175,12 +1190,23 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
             if (args.model_path.size() < 1)
                 return -1;
 
-            auto pipeline = new chatllm::Pipeline(args.model_path, pipe_args);
-            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, f_end, user_data);
-            return start_chat(chat, args, *pipeline, *streamer);
+            if (args.beam_size < 1)
+            {
+                auto pipeline = new chatllm::Pipeline(args.model_path, pipe_args);
+                auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, f_end, user_data);
+                return start_chat(chat, args, *pipeline, *streamer);
+            }
+            else
+            {
+                auto pipeline = new chatllm::BeamSearchPipeline(args.model_path, pipe_args, args.beam_size);
+                auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, f_end, user_data);
+                return start_chat(chat, args, *pipeline, *streamer);
+            }
         }
         else
         {
+            CHATLLM_CHECK(args.beam_size < 1) << "beam search is not supported for RAG";
+
             auto pipeline = new chatllm::RAGPipeline(args.model_path, pipe_args,
                 args.vc, args.vector_stores,
                 args.embedding_model_path, args.reranker_model_path);

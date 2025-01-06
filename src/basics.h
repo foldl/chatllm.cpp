@@ -33,6 +33,16 @@ namespace chatllm
             return descending ? lst[a] > lst[b] : lst[a] < lst[b];
         });
     }
+
+    template <class T, class V> void ordering(const std::vector<T> &lst, std::vector<size_t> &order, std::function<V(const T &)> by, bool descending = false)
+    {
+        order.resize(lst.size());
+        for (size_t i = 0; i < lst.size(); i++) order[i] = i;
+        std::sort(order.begin(), order.end(), [&lst, descending, by](auto a, auto b)
+        {
+            return descending ? by(lst[a]) > by(lst[b]) : by(lst[a]) < by(lst[b]);
+        });
+    }
 }
 
 namespace base64

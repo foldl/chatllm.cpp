@@ -812,6 +812,9 @@ namespace chatllm
     public:
         virtual int save_session(FILE *f) = 0;
         virtual int load_session(FILE *f) = 0;
+
+        virtual int save_session(ModelSessionMemory &session) const = 0;
+        virtual int load_session(ModelSessionMemory &session) = 0;
     };
 
     static bool parse_gpu_cfg(BackendContext::gpu_cfg &cfg, const std::string &s)
@@ -1041,7 +1044,7 @@ namespace chatllm
             return output[0];
         }
 
-        void generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits)
+        void generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override
         {
             if (batch_input)
             {
@@ -1068,6 +1071,21 @@ namespace chatllm
             int r = BaseModel::load_session(f);
             if (r != 0) return r;
             return transformer->load_session(f);
+        }
+
+        int save_session(ModelSessionMemory &session) const override
+        {
+            int r = BaseModel::save_session(session);
+            if (r != 0)
+                return r;
+            return transformer->save_session(session);
+        }
+
+        int load_session(ModelSessionMemory &session) override
+        {
+            int r = BaseModel::load_session(session);
+            if (r != 0) return r;
+            return transformer->load_session(session);
         }
 
         void prepare(const RuntimeConfig &rt_config)
@@ -1321,7 +1339,6 @@ namespace chatllm
             return layers[index];
         }
 
-        // TODO:
         int save_session(FILE *f) override
         {
             struct state state = {.cache_size = cache_size };
@@ -1362,6 +1379,35 @@ namespace chatllm
                     return -4;
                 size_t size = layer->write_cache_data(buffer.data(), buffer.size());
                 if (size != buffer.size())
+                    return -3;
+            }
+
+            return 0;
+        }
+
+        int save_session(ModelSessionMemory &session) const override
+        {
+            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+            {
+                auto layer = layers[layer_id];
+                const size_t size = layer->get_cache_size();
+                void *buf = session.prepare_buffer(layer_id, size);
+                if (layer->read_cache_data(buf, size) != size)
+                    return -1;
+            }
+
+            return 0;
+        }
+
+        int load_session(ModelSessionMemory &session) override
+        {
+            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+            {
+                auto layer = layers[layer_id];
+                size_t size = 0;
+                void *buf = session.get_buffer(layer_id, &size);
+                if (size != layer->get_cache_size()) return -1;
+                if (layer->write_cache_data(buf, size) != size)
                     return -3;
             }
 
