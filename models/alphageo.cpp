@@ -46,12 +46,10 @@ static void ggml_compute_forward_meliad_kq_norm_f32(ggml::tensor * dst , const g
     const int64_t ne02 = src0->ne[2];
     const int64_t ne03 = src0->ne[3];
 
-    const size_t nb00 = src0->nb[0];
     const size_t nb01 = src0->nb[1];
     const size_t nb02 = src0->nb[2];
     const size_t nb03 = src0->nb[3];
 
-    const size_t nb0 = dst->nb[0];
     const size_t nb1 = dst->nb[1];
     const size_t nb2 = dst->nb[2];
     const size_t nb3 = dst->nb[3];
@@ -151,21 +149,6 @@ struct safe_softmax_param
 static void ggml_compute_forward_safe_soft_max_f32(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, const safe_softmax_param *param)
 {
     const struct ggml_tensor * src0 = a;
-
-    const int64_t ne00 = src0->ne[0];
-    const int64_t ne01 = src0->ne[1];
-    const int64_t ne02 = src0->ne[2];
-    const int64_t ne03 = src0->ne[3];
-
-    const size_t nb00 = src0->nb[0];
-    const size_t nb01 = src0->nb[1];
-    const size_t nb02 = src0->nb[2];
-    const size_t nb03 = src0->nb[3];
-
-    const size_t nb0 = dst->nb[0];
-    const size_t nb1 = dst->nb[1];
-    const size_t nb2 = dst->nb[2];
-    const size_t nb3 = dst->nb[3];
 
     const int nc = (int)a->ne[0];
     const int nr = (int)ggml::nrows(a);
@@ -329,8 +312,6 @@ protected:
     ggml::tensor *calc_attn_scores(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
                                             ggml::tensor *key_layer, ggml::tensor *query_layer, ggml::tensor *value_layer) override
     {
-        const int head_size = hidden_size / num_attention_heads;
-
         key_layer   = ggml::map_custom1(ctx, key_layer, ggml_compute_forward_meliad_kq_norm, GGML_N_TASKS_MAX, nullptr);
         query_layer = ggml::map_custom1(ctx, query_layer, ggml_compute_forward_meliad_kq_norm, GGML_N_TASKS_MAX, nullptr);
 
@@ -362,8 +343,6 @@ protected:
 
     ggml::tensor *apply_pos_embedding_kq(ComputeContext *ctx, ggml::tensor *kq, int hidden_size, int qlen, ggml::tensor *past) const override
     {
-        ggml::tensor *kq0 = kq;
-
         ggml::tensor *bias = build_pos_bias(ctx, pos_bucket, rel_embedding);
         kq = ggml::add(ctx, kq, bias);
 
@@ -405,8 +384,8 @@ public:
                 int max_length, int max_distance, int num_buckets)
         : input_layernorm(ctx, hidden_size),
           attention(ctx, hidden_size, num_attention_heads, max_length, max_distance, num_buckets),
-          mlp(ctx, hidden_size, intermediate_size),
-          post_attention_layernorm(ctx, hidden_size)
+          post_attention_layernorm(ctx, hidden_size),
+          mlp(ctx, hidden_size, intermediate_size)
     {
         mlp.set_prec(ggml::prec::GGML_PREC_F32);
     }
@@ -468,6 +447,16 @@ public:
         return attention.set_cache_buffer(buffer);
     }
 
+    size_t read_cache_data(void *buffer, size_t buffer_size) const override
+    {
+        return attention.read_cache_data(buffer, buffer_size);
+    }
+
+    size_t write_cache_data(const void *buffer, size_t buffer_size) override
+    {
+        return attention.write_cache_data(buffer, buffer_size);
+    }
+
 public:
     RMSNorm input_layernorm;
     AlphaGeoSelfAttention attention;
@@ -522,7 +511,6 @@ protected:
             n_kv * ggml::element_size(pos_bucket), 0);
 
         int32_t       *data = (      int32_t *)pos_bucket->data;
-        const int32_t *ids  = (const int32_t *)input_ids->data;
 
         for (int j = 0; j < n_tokens; ++j)
         {
