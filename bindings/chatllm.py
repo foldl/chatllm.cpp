@@ -26,6 +26,8 @@ class PrintType(IntEnum):
     PRINTLN_TOKEN_IDS       =10,    # print a whole line: token ids (example: "1, 3, 5, 8, ...")
     PRINTLN_LOGGING         =11,    # print a whole line: internal logging with the first char indicating level
                                     # (space): None; D: Debug; I: Info; W: Warn; E: Error; .: continue
+    PRINTLN_BEAM_SEARCH     =12,    # print a whole line: a result of beam search with a prefix of probability
+                                    # (example: "0.8,....")
 
     PRINT_EVT_ASYNC_COMPLETED  = 100,   # last async operation completed (utf8_str is null)
 
@@ -168,6 +170,8 @@ class LibChatLLM:
             obj.callback_text_tokenize(txt)
         elif print_type == PrintType.PRINTLN_ERROR.value:
             raise Exception(txt)
+        elif print_type == PrintType.PRINTLN_BEAM_SEARCH.value:
+            obj.callback_print_beam_search(txt)
         else:
             raise Exception(f"unhandled print_type({print_type}): {txt}")
 
@@ -268,6 +272,7 @@ class ChatLLM:
         self.input_id = None
         self.tool_input_id = None
         self.references = []
+        self.beam_search_results = []
         self.rewritten_query = ''
         self._result_embedding = None
         self._result_ranking = None
@@ -292,6 +297,7 @@ class ChatLLM:
         self.is_generating = True
         self.input_id = input_id
         self.references = []
+        self.beam_search_results = []
         self.rewritten_query = ''
         r = self._lib.chat(self._chat, user_input)
         self.is_generating = False
@@ -302,6 +308,7 @@ class ChatLLM:
         self.is_generating = True
         self.input_id = input_id
         self.references = []
+        self.beam_search_results = []
         self.rewritten_query = ''
         r = self._lib.async_chat(self._chat, user_input)
         if r != 0:
@@ -365,6 +372,10 @@ class ChatLLM:
 
     def callback_print_reference(self, s: str) -> None:
         self.references.append(s)
+
+    def callback_print_beam_search(self, s: str) -> None:
+        l = s.split(',', maxsplit=1)
+        self.beam_search_results.append({'str': l[1], 'score': float(l[0])})
 
     def callback_print_rewritten_query(self, s: str) -> None:
         self.rewritten_query = s
