@@ -69,6 +69,22 @@
             }
         }
     },
+    "llama3.3": {
+        "brief": "New state of the art 70B model. Llama 3.3 70B offers similar performance compared to the Llama 3.1 405B model.",
+        "default": "70b",
+        "license": "LLAMA 3.3 COMMUNITY LICENSE AGREEMENT",
+        "variants": {
+            "70b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 39696838848,
+                        "url": "chatllm_quantized_llama3.3/llama3.3-70b_q4_0.bin"
+                    }
+                }
+            }
+        }
+    },
     "llama3-groq-tool-use": {
         "brief": "Llama 3 Groq Tool Use model, specifically designed for advanced tool use and function calling tasks.",
         "default": "8b",
