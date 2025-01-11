@@ -817,3 +817,113 @@ namespace v3_moe
 
     typedef _ConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, MODEL_TYPE_PHI3_MOE> ConditionalGeneration;
 }
+
+namespace v4
+{
+    typedef llama::v3::Config Config;
+
+    class ChatHistoryEncoder : public BaseHistoryEncoder
+    {
+    public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+        void append_user_opening(int round_idx, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public BaseTokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config)
+            : BaseTokenizer(config, &_chat_encoder)
+        {
+        }
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            tp = new tokenizer::BPEProcessor2();
+            size_t size = tp->Load(buffer, n_vocab);
+
+            im_start_token_id     = tp->PieceToId("<|im_start|>");
+            im_sep_token_id       = tp->PieceToId("<|im_start|>");
+            im_end_token_id       = tp->PieceToId("<|im_end|>");
+
+            pad_token_id = eos_token_id;
+
+            terminate_ids.insert(im_end_token_id);
+
+            return size;
+        }
+
+        void encode_role(const std::string &msg, std::vector<int> &ids)
+        {
+            ids.push_back(im_start_token_id);
+            encode(msg, ids, false);
+            ids.push_back(im_sep_token_id);
+        }
+
+        void encode(const std::string &msg, std::vector<int> &ids, bool add_end_tok = true)
+        {
+            BaseTokenizer::encode(msg, ids);
+            if (add_end_tok)
+            {
+                ids.push_back(im_end_token_id);
+            }
+        }
+
+    public:
+        int im_start_token_id;
+        int im_sep_token_id;
+        int im_end_token_id;
+    };
+
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        if (tok->get_system_prompt().size() > 0)
+        {
+            tok->encode_role("system", ids);
+            tok->encode(tok->get_system_prompt(), ids);
+        }
+    }
+
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        append_ai_opening(round_idx, ids);
+        tok->encode(ai, ids);
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        append_user_opening(round_idx, ids);
+        tok->encode(user, ids);
+    }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode_role("assistant", ids);
+    }
+
+    void ChatHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode_role("user", ids);
+    }
+
+
+    class ConditionalGeneration : public llama::v3::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration() = default;
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : llama::v3::ConditionalGeneration(config, runtime_config, MODEL_TYPE_PHI4)
+        {
+        }
+    };
+}

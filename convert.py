@@ -84,6 +84,7 @@ class ModelType(Enum):
     Phi3_ScalingSU2     = 0x522
     Phi3_ScalingSU3     = 0x523
     Phi3MoE_ScalingSU   = 0x530
+    Phi4                = 0x531
 
     Mistral = 0x600
     Mixtral = 0x601
@@ -2883,6 +2884,35 @@ class Phi3Converter(BaseConverter):
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
 
+class Phi4Converter(Phi3Converter):
+    MODEL_TYPE = ModelType.Phi4
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        return Phi3Converter.state_dict_pp(config, state_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+
+        assert config.rope_scaling is None, "rope_scaling must be null"
+        assert config.sliding_window is None, "sliding_window must be null"
+        assert config.original_max_position_embeddings == config.max_position_embeddings, "original_max_position_embeddings must be equal to max_position_embeddings"
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        float_values = [
+            config.rope_theta,
+        ]
+        f.write(struct.pack("<" + "f" * len(float_values), *float_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return Phi3Converter.get_weight_names(config)
 class Phi3SUConverter(BaseConverter):
     MODEL_TYPE = ModelType.Phi3_ScalingSU2
 
@@ -4568,7 +4598,10 @@ def main():
         Phi2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Phi3ForCausalLM':
         if config.rope_scaling is None:
-            Phi3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            if config.sliding_window is None:
+                Phi4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            else:
+                Phi3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             if config.rope_scaling['type'] == 'su':
                 Phi3SUConverter.MODEL_TYPE = ModelType.Phi3_ScalingSU

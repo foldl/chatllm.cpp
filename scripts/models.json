@@ -537,6 +537,22 @@
             }
         }
     },
+    "phi4": {
+        "brief": "Phi 4 is a 14B parameter, state-of-the-art open model from Microsoft.",
+        "default": "14b",
+        "license": "MIT",
+        "variants": {
+            "14b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 8249858256,
+                        "url": "chatllm_quantized_phi4/phi-4_q4_0.bin"
+                    }
+                }
+            }
+        }
+    },
     "yi-1.5": {
         "brief": "Yi 1.5 is a high-performing, bilingual language model.",
         "default": "6b",
