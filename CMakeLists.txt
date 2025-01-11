@@ -39,10 +39,6 @@ if (GGML_CLBLAST)
     add_compile_definitions(GGML_USE_CLBLAST)
 endif ()
 
-if (GGML_PERF)
-    add_compile_definitions(GGML_PERF)
-endif ()
-
 add_library(libchatllm SHARED EXCLUDE_FROM_ALL src/main.cpp src/backend.cpp src/chat.cpp src/vectorstore.cpp src/layers.cpp src/tokenizer.cpp src/models.cpp src/unicode.cpp src/unicode-data.cpp)
 target_link_libraries(libchatllm PRIVATE ggml)
 target_compile_definitions(libchatllm PUBLIC CHATLLM_SHARED_LIB)
