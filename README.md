@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-01-13: OLMo-2
 * 2025-01-11: Phi-4
 * 2025-01-06: (Naive) Beam search
 * 2024-12-27: AlphaGeometry-LM

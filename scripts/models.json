@@ -1770,6 +1770,22 @@
             }
         }
     },
+    "olmo2": {
+        "brief": "OLMo 2 is a new family of 7B and 13B models trained on up to 5T tokens. These models are on par with or better than equivalently sized fully open models, and competitive with open-weight models such as Llama 3.1 on English academic benchmarks.",
+        "default": "7b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7758791536,
+                        "url": "chatllm_quantized_olmo-2/olmo-2-7b.bin"
+                    }
+                }
+            }
+        }
+    },
     "marco-o1": {
         "brief": "An open large reasoning model for real-world solutions by the Alibaba International Digital Commerce Group (AIDC-AI).",
         "default": "7b",

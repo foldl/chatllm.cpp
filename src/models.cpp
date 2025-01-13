@@ -298,6 +298,7 @@ namespace chatllm
         MODEL_TYPE_INDEX            = 0x1a00,
 
         MODEL_TYPE_OLMoE            = 0x1b00,
+        MODEL_TYPE_OLMo2            = 0x1b01,
 
         MODEL_TYPE_ALPHAGEO_LM      = 0x1c00,
 
@@ -496,6 +497,8 @@ namespace chatllm
             return "Index";
         case MODEL_TYPE_OLMoE:
             return "OLMoE";
+        case MODEL_TYPE_OLMo2:
+            return "OLM-2";
         case MODEL_TYPE_LLAMA_MULTI:
             return "LlaMA-Multi";
         case MODEL_TYPE_SMOLLM:
@@ -2065,6 +2068,7 @@ namespace chatllm
         CASE(LLAMA3_GROQ_TOOL,      groq, 1)                    \
                                                                 \
         CASE(OLMoE,                 allenai::moe, 1)            \
+        CASE(OLMo2,                 allenai::dense, 1)          \
                                                                 \
         CASE(ALPHAGEO_LM,           alphageo, 1)                \
                                                                 \

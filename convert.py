@@ -140,6 +140,7 @@ class ModelType(Enum):
     Index         = 0x1a00
 
     OLMoE         = 0x1b00
+    OLMo2         = 0x1b01
 
     AlphaGeometryLM = 0x1c00
 
@@ -2074,6 +2075,52 @@ class OLMoEConverter(BaseConverter):
 
                 f"model.layers.{i}.input_layernorm.weight",
                 f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_norm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_norm.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
+class OLMo2Converter(BaseConverter):
+    MODEL_TYPE = ModelType.OLMo2
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.rope_scaling is None, "rope_scaling must be null"
+        assert not config.tie_word_embeddings, "tie_word_embeddings must be False"
+        assert not config.attention_bias, "attention_bias must be False"
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_theta,
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.post_feedforward_layernorm.weight",
                 f"model.layers.{i}.self_attn.k_norm.weight",
                 f"model.layers.{i}.self_attn.k_proj.weight",
                 f"model.layers.{i}.self_attn.o_proj.weight",
@@ -4735,6 +4782,8 @@ def main():
         IndexConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OlmoeForCausalLM':
         OLMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Olmo2ForCausalLM':
+        OLMo2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'GraniteForCausalLM':
         GraniteConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'GraniteMoeForCausalLM':

@@ -158,8 +158,9 @@
 
     Note: Tokenizer's behavior is not 100% identical.
 
-* AllenAI (`OlmoeForCausalLM`)
+* AllenAI (`OlmoeForCausalLM`, `Olmo2ForCausalLM`)
     * [x] OLMoE: [Instruct-7B](https://huggingface.co/allenai/OLMoE-1B-7B-0924-Instruct)
+    * [x] OLM-2: [Instruct-7B](https://huggingface.co/allenai/OLMo-2-1124-7B-Instruct), [Instruct-13B](https://huggingface.co/allenai/OLMo-2-1124-13B-Instruct)
 
 * Granite (`GraniteForCausalLM`, `GraniteMoeForCausalLM`)
     * [x] v3.0: [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.0-1b-a400m-instruct), [Instruct-3B-A800M](https://huggingface.co/ibm-granite/granite-3.0-3b-a800m-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.0-2b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.0-8b-instruct)
