@@ -383,6 +383,22 @@
             }
         }
     },
+    "internlm3": {
+        "brief": "InternLM3 has open-sourced an 8-billion parameter instruction model, InternLM3-8B-Instruct, designed for general-purpose usage and advanced reasoning.",
+        "default": "8b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 9357670272,
+                        "url": "chatllm_quantized_internlm3/internlm3-8b.bin"
+                    }
+                }
+            }
+        }
+    },
     "llm-compiler": {
         "brief": "LLM Compiler is a state-of-the-art LLM that builds upon Code Llama with improved performance for code optimization and compiler reasoning.",
         "default": "7b",

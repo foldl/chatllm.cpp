@@ -432,7 +432,7 @@ namespace v3
             const int seq_len = config.max_length < max_position_embeddings ? max_position_embeddings : config.max_length;
             const int dim = config.hidden_size / config.num_attention_heads;
 
-            base = powf(base * ((factor * seq_len / max_position_embeddings) - (factor - 1)), (float)dim / (dim - 2));
+            base = base * powf((factor * seq_len / max_position_embeddings) - (factor - 1), (float)dim / (dim - 2));
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
