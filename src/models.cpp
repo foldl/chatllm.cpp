@@ -205,9 +205,10 @@ namespace chatllm
         MODEL_TYPE_GLM4 = 6,
         MODEL_TYPE_CODEGEEX4 = 7,
 
-        MODEL_TYPE_INTERNLM = 0x100,
-        MODEL_TYPE_INTERNLM2= 0x101, // extended model, supporting 7B & 20B
-        MODEL_TYPE_INTERNLM3= 0x102,
+        MODEL_TYPE_INTERNLM     = 0x100,
+        MODEL_TYPE_INTERNLM2    = 0x101, // extended model, supporting 7B & 20B
+        MODEL_TYPE_INTERNLM2_1  = 0x102,
+        MODEL_TYPE_INTERNLM3    = 0x103,
 
         MODEL_TYPE_LLAMA2   = 0x150,
         MODEL_TYPE_CODELLAMA= 0x151,
@@ -366,6 +367,7 @@ namespace chatllm
             return "CharacterGLM";
         case MODEL_TYPE_INTERNLM:
         case MODEL_TYPE_INTERNLM2:
+        case MODEL_TYPE_INTERNLM2_1:
         case MODEL_TYPE_INTERNLM3:
             return "InternLM";
         case MODEL_TYPE_LLAMA2:
@@ -525,6 +527,7 @@ namespace chatllm
         {
         case MODEL_TYPE_INTERNLM:
         case MODEL_TYPE_INTERNLM2:
+        case MODEL_TYPE_INTERNLM2_1:
         case MODEL_TYPE_INTERNLM3:
             return "书生·浦语";
         case MODEL_TYPE_BAICHUAN:
@@ -1975,6 +1978,7 @@ namespace chatllm
                                                                 \
         CASE(INTERNLM,              internlm::v1, 1)            \
         CASE(INTERNLM2,             internlm::v2, 1)            \
+        CASE(INTERNLM2_1,           internlm::v2_1, 1)          \
         CASE(INTERNLM3,             internlm::v3, 1)            \
                                                                 \
         CASE(LLAMA2,                llama::v2, 1)               \

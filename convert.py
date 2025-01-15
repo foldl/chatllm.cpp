@@ -48,9 +48,10 @@ class ModelType(Enum):
     CHATGLM4 = 6
     CODEGEEX4 = 7
 
-    InternLM   = 0x100
+    InternLM    = 0x100
     InternLM2   = 0x101
-    InternLM3   = 0x102
+    InternLM2_1 = 0x102
+    InternLM3   = 0x103
 
     LlaMA2      = 0x150
     CodeLlaMA   = 0x151
@@ -917,7 +918,7 @@ class InternLMConverter(BaseConverter):
         return weight_names
 
 class InternLM2Converter(BaseConverter):
-    MODEL_TYPE = ModelType.InternLM3
+    MODEL_TYPE = ModelType.InternLM2_1
 
     @classmethod
     def state_dict_pp(cls, config, state_dict):
@@ -1175,6 +1176,33 @@ class Llama32Converter(BaseConverter):
         if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
             weight_names.remove('lm_head.weight')
         return weight_names
+
+class InternLM3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.InternLM3
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return Llama32Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.rope_scaling['rope_type'] == 'dynamic', "rope_scaling['rope_type'] != 'dynamic'"
+        assert not config.qkv_bias, "qkv_bias must be False"
+        assert not config.bias, "bias must be False"
+        assert config.head_dim == config.hidden_size // config.num_attention_heads, 'head_dim must equal to (hidden_size / num_attention_heads)'
+
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            config.rope_theta,
+            config.rope_scaling['factor'],
+            config.max_position_embeddings
+        ]
+        f.write(struct.pack("<iffi", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return Llama32Converter.get_weight_names(config)
 
 class ExaoneConverter(BaseConverter):
     MODEL_TYPE = ModelType.Exaone
@@ -4580,6 +4608,8 @@ def main():
         InternLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InternLM2ForCausalLM':
         InternLM2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'InternLM3ForCausalLM':
+        InternLM3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'LlamaForCausalLM':
         if isinstance(config.rope_scaling, dict):
             if config.tie_word_embeddings:

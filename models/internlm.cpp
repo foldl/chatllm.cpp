@@ -209,7 +209,7 @@ namespace v1
     };
 }
 
-namespace v3
+namespace v2_1
 {
     struct Config : public v2::Config
     {
@@ -243,20 +243,31 @@ namespace v3
             tp = new tokenizer::BPEProcessor1();
             size_t size = tp->Load(buffer, n_vocab);
 
-            int id = n_vocab;
-            im_start_token_id       = --id;
-            im_end_token_id         = --id;
-            action_start_token_id   = --id;
-            action_end_token_id     = --id;
-            interpreter_token_id    = --id;
-            plugin_token_id         = --id;
-
             newline_token_id = tp->PieceToId("\n");
 
-            tp->AddAddedToken("<|action_start|>",       action_start_token_id);
-            tp->AddAddedToken("<|action_end|>",         action_end_token_id);
-            tp->AddAddedToken("<|interpreter|>",        interpreter_token_id);
-            tp->AddAddedToken("<|plugin|>",             plugin_token_id);
+            im_start_token_id       = tp->PieceToId("<|im_start|>");
+            im_end_token_id         = tp->PieceToId("<|im_end|>");
+            action_start_token_id   = tp->PieceToId("<|action_start|>");
+            action_end_token_id     = tp->PieceToId("<|action_end|>");
+            interpreter_token_id    = tp->PieceToId("<|interpreter|>");
+            plugin_token_id         = tp->PieceToId("<|plugin|>");
+
+            if (im_start_token_id < 0)
+            {
+                int id = n_vocab;
+
+                im_start_token_id       = --id;
+                im_end_token_id         = --id;
+                action_start_token_id   = --id;
+                action_end_token_id     = --id;
+                interpreter_token_id    = --id;
+                plugin_token_id         = --id;
+
+                tp->AddAddedToken("<|action_start|>",       action_start_token_id);
+                tp->AddAddedToken("<|action_end|>",         action_end_token_id);
+                tp->AddAddedToken("<|interpreter|>",        interpreter_token_id);
+                tp->AddAddedToken("<|plugin|>",             plugin_token_id);
+            }
 
             terminate_ids.insert(im_end_token_id);
 
@@ -348,8 +359,8 @@ namespace v3
     class ConditionalGeneration: public GenericConditionalGeneration<false>
     {
     public:
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-            : GenericConditionalGeneration(config, runtime_config, MODEL_TYPE_INTERNLM3, config.num_key_value_heads, config.rope_theta, config.rope_scaling)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_INTERNLM2_1)
+            : GenericConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.rope_theta, config.rope_scaling)
         {
         }
 
@@ -396,4 +407,39 @@ namespace v3
         oss_prompt << "assistant\n";
         tok->encode(oss_prompt.str(), ids, true, false);
     }
+}
+
+namespace v3
+{
+    struct Config : public v2_1::Config
+    {
+        int original_max_position_embeddings;
+    };
+
+    typedef v2_1::Tokenizer Tokenizer;
+
+    class ConditionalGeneration: public v2_1::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : v2_1::ConditionalGeneration(config, runtime_config, MODEL_TYPE_INTERNLM3)
+        {
+            auto transformer = get_typed_transformer<TransformerClass>();
+
+            float base = config.rope_theta;
+            const float factor = config.rope_scaling;
+            const int max_position_embeddings = config.original_max_position_embeddings;
+            const int seq_len = config.max_length < max_position_embeddings ? max_position_embeddings : config.max_length;
+            const int dim = config.hidden_size / config.num_attention_heads;
+
+            base = powf(base * ((factor * seq_len / max_position_embeddings) - (factor - 1)), (float)dim / (dim - 2));
+
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto &attention = transformer->layers[i].attention;
+                attention.freq_base = base;
+                attention.freq_scale = 1.0f;
+            }
+        }
+    };
 }
