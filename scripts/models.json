@@ -1849,5 +1849,21 @@
                 }
             }
         }
+    },
+    "reader-lm-v2": {
+        "brief": "ReaderLM-v2 is a 1.5B parameter language model that converts raw HTML into beautifully formatted markdown or JSON with superior accuracy and improved longer context handling.",
+        "default": "1.5b",
+        "license": "Creative Commons Attribution Non Commercial 4.0",
+        "variants": {
+            "1.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1644897856,
+                        "url": "chatllm_quantized_jina_readerlm2/readerlm-v2.bin"
+                    }
+                }
+            }
+        }
     }
 }

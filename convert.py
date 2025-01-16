@@ -101,6 +101,7 @@ class ModelType(Enum):
     QWen2MoE = 0x750
     MarcoO1  = 0x751
     QwQ      = 0x752
+    ReaderLM2= 0x753
 
     BlueLM  = 0x800
 
@@ -4745,13 +4746,16 @@ def main():
         if config.intermediate_size is None:
             config.intermediate_size = config.ffn_hidden_size
         QWenConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
-    elif (arch == 'Qwen2ForCausalLM') or (arch == 'marco-o1') or (arch == 'qwq'):
+    elif (arch == 'Qwen2ForCausalLM') or (arch == 'marco-o1') or (arch == 'qwq') or (arch == 'readerlm-v2'):
         if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
             QWen2Converter.MODEL_TYPE = ModelType.QWen2Tie
         if arch == 'marco-o1':
             QWen2Converter.MODEL_TYPE = ModelType.MarcoO1
         if arch == 'qwq':
             QWen2Converter.MODEL_TYPE = ModelType.QwQ
+        if arch == 'readerlm-v2':
+            QWen2Converter.MODEL_TYPE = ModelType.ReaderLM2
+            assert config.tie_word_embeddings
         QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2MoeForCausalLM':
         QWen2MoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

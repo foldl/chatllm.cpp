@@ -259,6 +259,7 @@ namespace chatllm
         MODEL_TYPE_QWEN2MoE = 0x750,
         MODEL_TYPE_MARCO_O1 = 0x751,
         MODEL_TYPE_QWQ      = 0x752,
+        MODEL_TYPE_READERLM2= 0x753,
 
         MODEL_TYPE_BLUELM   = 0x800,
 
@@ -515,6 +516,8 @@ namespace chatllm
             return "Granite";
         case MODEL_TYPE_TELECHAT2:
             return "TeleChat2";
+        case MODEL_TYPE_READERLM2:
+            return "ReaderLM-v2";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1778,6 +1781,11 @@ namespace chatllm
         #include "../models/telechat.cpp"
     }
 
+    namespace jina
+    {
+        #include "../models/jina.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2029,6 +2037,7 @@ namespace chatllm
         CASE(QWEN2TIE,              qwen::v2_tie, 1)            \
         CASE(MARCO_O1,              qwen::marco_o1, 1)          \
         CASE(QWQ,                   qwen::qwq, 1)               \
+        CASE(READERLM2,             jina::readerlm, 1)          \
                                                                 \
         CASE(TIGERBOT,              tigerbot, 1)                \
                                                                 \
