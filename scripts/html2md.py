@@ -96,16 +96,17 @@ def html2json(html: str):
 
 if __name__ == '__main__':
 
-    model = ':reader-lm-v2'
+    model_args = [':reader-lm-v2']
 
     args = sys.argv[1:]
     if len(args) < 1:
-        print(f"usage: python html2md.py path/to/html/file [{model}]")
+        print(f"usage: python html2md.py path/to/html/file [model/file/or/id [additional LLM args]]")
         exit(-1)
 
-    if len(args) > 1: model = args[1]
+    if len(args) > 1: model_args = args[1:]
+    model_args.insert(0, '-m')
 
-    llm = CallableLLM(LibChatLLM(PATH_BINDS), ['-m', model])
+    llm = CallableLLM(LibChatLLM(PATH_BINDS), model_args)
 
     with open(args[0], 'r', encoding='utf-8') as f:
         html = f.read()
