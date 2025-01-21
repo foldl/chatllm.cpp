@@ -102,6 +102,7 @@ class ModelType(Enum):
     MarcoO1  = 0x751
     QwQ      = 0x752
     ReaderLM2= 0x753
+    DeepSeek_R1_Distill_QWen = 0x754
 
     BlueLM  = 0x800
 
@@ -134,6 +135,7 @@ class ModelType(Enum):
     LlaMA31       = 0x1703
     LlaMA32       = 0x1704
     Exaone        = 0x1705
+    DeepSeek_R1_Distill_LlaMA = 0x1706
 
     StarCoder2    = 0x1800
 
@@ -3253,6 +3255,21 @@ class QWen2Converter(BaseConverter):
 
         return weight_names
 
+class QWen2TieConverter(BaseConverter):
+    MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        QWen2Converter.dump_config(f, config, ggml_type)
+        config_values = [
+            0 if (config.tie_word_embeddings is None) or (not config.tie_word_embeddings) else 1
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return QWen2Converter.get_weight_names(config)
+
 class QWen2MoEConverter(BaseConverter):
     MODEL_TYPE = ModelType.QWen2MoE
 
@@ -4628,6 +4645,10 @@ def main():
                 Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'deepseek-r1-distill-llama':
+        assert isinstance(config.rope_scaling, dict), 'rope_scaling must be a dict'
+        Llama32Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_LlaMA
+        Llama32Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Llama-3-Groq-8B-Tool-Use'.lower():
         Llama3Converter.MODEL_TYPE = ModelType.GroqToolUse
         Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
@@ -4757,6 +4778,9 @@ def main():
             QWen2Converter.MODEL_TYPE = ModelType.ReaderLM2
             assert config.tie_word_embeddings
         QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'deepseek-r1-distill-qwen':
+        QWen2TieConverter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen
+        QWen2TieConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2MoeForCausalLM':
         QWen2MoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'tigerbot':

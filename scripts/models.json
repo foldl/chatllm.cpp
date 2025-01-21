@@ -1865,5 +1865,39 @@
                 }
             }
         }
+    },
+    "deepseek-r1": {
+        "brief": "DeepSeek's first generation (distilled) reasoning models with comparable performance to OpenAI-o1.",
+        "default": "qwen-1.5b",
+        "license": "MIT",
+        "variants": {
+            "qwen-1.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1892857472,
+                        "url": "chatllm_quantized_deepseek_r1/ds-r1-qwen-1.5b.bin"
+                    }
+                }
+            },
+            "qwen-7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8096847488,
+                        "url": "chatllm_quantized_deepseek_r1/ds-r1-qwen-7b.bin"
+                    }
+                }
+            },
+            "llama-8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8538752128,
+                        "url": "chatllm_quantized_deepseek_r1/ds-r1-llama-8b.bin"
+                    }
+                }
+            }
+        }
     }
 }

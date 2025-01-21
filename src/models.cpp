@@ -261,6 +261,8 @@ namespace chatllm
         MODEL_TYPE_QWQ      = 0x752,
         MODEL_TYPE_READERLM2= 0x753,
 
+        MODEL_TYPE_DEEPSEEK_R1_DISTILL_QWEN = 0x754,
+
         MODEL_TYPE_BLUELM   = 0x800,
 
         MODEL_TYPE_STABLELM = 0x900,
@@ -292,6 +294,7 @@ namespace chatllm
         MODEL_TYPE_LLAMA3_1         = 0x1703,
         MODEL_TYPE_LLAMA3_2         = 0x1704,
         MODEL_TYPE_EXAONE           = 0x1705,
+        MODEL_TYPE_DEEPSEEK_R1_DISTILL_LLAMA = 0x1706,
 
         MODEL_TYPE_STARCODER2       = 0x1800,
 
@@ -518,6 +521,10 @@ namespace chatllm
             return "TeleChat2";
         case MODEL_TYPE_READERLM2:
             return "ReaderLM-v2";
+        case MODEL_TYPE_DEEPSEEK_R1_DISTILL_QWEN:
+            return "DeepSeek-R1-Distill-QWen";
+        case MODEL_TYPE_DEEPSEEK_R1_DISTILL_LLAMA:
+            return "DeepSeek-R1-Distill-LlaMA";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1999,6 +2006,7 @@ namespace chatllm
         CASE(MEGREZ,                megrez::chat, 1)            \
         CASE(FALCON3,               falcon::v3, 1)              \
         CASE(EXAONE,                exaone, 1)                  \
+        CASE(DEEPSEEK_R1_DISTILL_LLAMA, llama::ds_r1_distill, 1)\
                                                                 \
         CASE(DEEPSEEK,              deepseek::v1, 1)            \
         CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \
@@ -2038,6 +2046,7 @@ namespace chatllm
         CASE(MARCO_O1,              qwen::marco_o1, 1)          \
         CASE(QWQ,                   qwen::qwq, 1)               \
         CASE(READERLM2,             jina::readerlm, 1)          \
+        CASE(DEEPSEEK_R1_DISTILL_QWEN, qwen::ds_r1_distill, 1)  \
                                                                 \
         CASE(TIGERBOT,              tigerbot, 1)                \
                                                                 \

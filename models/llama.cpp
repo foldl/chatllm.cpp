@@ -777,3 +777,105 @@ namespace multi
         Config config;
     };
 }
+
+namespace ds_r1_distill
+{
+    typedef v3_2::Config Config;
+
+    class ChatHistoryEncoder : public BaseHistoryEncoder
+    {
+    public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public BaseTokenizer
+    {
+    public:
+        Tokenizer(const Config &config)
+            : Tokenizer(config, &_chat_encoder)
+        {}
+
+        Tokenizer(const Config &config, BaseHistoryEncoder *encoder)
+            : BaseTokenizer::BaseTokenizer(config, encoder)
+        {
+            sys_prompt = "";
+        }
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            tp = new tokenizer::BPEProcessor2(
+                {
+                    "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+                }
+            );
+
+            size_t size = tp->Load(buffer, n_vocab);
+            tp->EnableReturnSpecialToken(true);
+
+            user_token_id           = tp->PieceToId("<｜User｜>");
+            assistant_token_id      = tp->PieceToId("<｜Assistant｜>");
+
+            std::vector<int> ids;
+            tp->Encode("\n", &ids);
+
+            nl_token_id = -1;
+
+            if (ids.size()  == 1)
+                nl_token_id = ids[0];
+
+            bos_token_id            = tp->PieceToId("<｜begin▁of▁sentence｜>");
+            eos_token_id            = tp->PieceToId("<｜end▁of▁sentence｜>");
+
+            return size;
+        }
+
+    public:
+        int user_token_id;
+        int assistant_token_id;
+        int nl_token_id;
+    };
+
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(tok->bos_token_id);
+        if (tok->get_system_prompt().size() > 0)
+        {
+            tok->encode(tok->get_system_prompt(), ids);
+        }
+    }
+
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(tok->assistant_token_id);
+        tok->encode(ai, ids);
+        ids.push_back(tok->eos_token_id);
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(tok->user_token_id);
+        tok->encode(user, ids);
+    }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(tok->assistant_token_id);
+    }
+
+    class ConditionalGeneration : public v3_2::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_DEEPSEEK_R1_DISTILL_LLAMA)
+            : v3_2::ConditionalGeneration(config, runtime_config, type)
+        {}
+    };
+}

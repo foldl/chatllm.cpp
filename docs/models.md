@@ -33,6 +33,7 @@
     * [x] Megrez: [Instruct-3B](https://huggingface.co/Infinigence/Megrez-3B-Instruct) (`-a Megrex`)
     * [x] Falcon: (`-a Falcon3`)
         - v3: [Instruct-1B](https://huggingface.co/tiiuae/Falcon3-1B-Instruct), [Instruct-3B](https://huggingface.co/tiiuae/Falcon3-3B-Instruct), [Instruct-7B](https://huggingface.co/tiiuae/Falcon3-7B-Instruct), [Instruct-10B](https://huggingface.co/tiiuae/Falcon3-10B-Instruct)
+    * [x] DeepSeek-R1-Distill-LlaMA: [8B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B), [70B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-70B) (-a `DeepSeek-R1-Distill-LlaMA`)
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
 
@@ -116,6 +117,7 @@
     * [x] [Marco-o1](https://huggingface.co/AIDC-AI/Marco-o1) (-a `Marco-o1`)
     * [x] [QwQ-32B-Preview](https://huggingface.co/Qwen/QwQ-32B-Preview) (-a `QwQ`)
     * [x] [ReaderLM-v2](https://huggingface.co/jinaai/ReaderLM-v2) (-a `ReaderLM-v2`)
+    * [x] DeepSeek-R1-Distill-QWen: [1.5B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B), [7B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B), [14B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B), [32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B) (-a `DeepSeek-R1-Distill-QWen`)
 
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
