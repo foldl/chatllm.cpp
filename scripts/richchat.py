@@ -7,16 +7,29 @@ try:
     from rich.panel import Panel
     from rich.markdown import Markdown
     from rich.live import Live
+    from rich.status import Status
+    from rich.console import Console
     from rich import print
 except:
     raise Exception('package `rich` is missing. install it: `pip install rich`')
 
+TAG_THINK_START = '<think>'
+TAG_THINK_END = '</think>'
+
 class RichChatLLM(ChatLLM):
     chunk_acc = ''
+    thoughts_acc = ''
+    acc = ''
     meta = []
+    is_thinking = False
+    detecting = False
 
     def async_chat(self, user_input: str, input_id = None) -> None:
         self.chunk_acc = ''
+        self.is_thinking = True
+        self.thoughts_acc = ''
+        self.acc = ''
+        self.detecting = True
         super().async_chat(user_input, input_id)
 
     def callback_print_meta(self, s: str) -> None:
@@ -30,7 +43,30 @@ class RichChatLLM(ChatLLM):
     def render_ai(self) -> Panel:
         return Panel(Markdown(llm.chunk_acc), title='A.I.')
 
+    def render_thoughts(self) -> str:
+        thoughts = self.thoughts_acc.split('\n')
+        s = thoughts[-1] if len(thoughts) > 0 else ''
+        return s
+
     def callback_print(self, s: str) -> None:
+        if self.detecting:
+            self.acc = (self.acc + s).lstrip(" \n\r")
+            if len(self.acc) < len(TAG_THINK_START):
+                return
+            self.detecting = False
+            if s.startswith(TAG_THINK_START):
+                self.thoughts_acc = s[len(TAG_THINK_START):]
+            else:
+                self.is_thinking = False
+                self.chunk_acc = self.acc
+            return
+
+        if self.is_thinking:
+            self.thoughts_acc = self.thoughts_acc + s
+            if s.endswith(TAG_THINK_END):
+                self.is_thinking = False
+            return
+
         self.chunk_acc = self.chunk_acc + s
 
 llm: RichChatLLM = None
@@ -52,11 +88,20 @@ def demo_simple(params, lib_path: str, cls = RichChatLLM):
     llm.show_meta('Model')
 
     render_ai = lambda: llm.render_ai()
+    render_thoughts = lambda: llm.render_thoughts()
+
+    console = Console()
 
     while True:
         s = input('You  > ')
         llm.async_chat(s)
         time.sleep(0.1)
+
+        with Status("thinking...", spinner="bouncingBall", console=console) as status:
+            while llm.is_thinking:
+                status.update('[bright_black]' + render_thoughts())
+                time.sleep(0.2)
+
         with Live(render_ai(), refresh_per_second=4) as live:
             while llm.is_generating:
                 time.sleep(0.2)
