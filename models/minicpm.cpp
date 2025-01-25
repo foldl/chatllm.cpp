@@ -674,3 +674,312 @@ namespace v3
         Config config;
     };
 }
+
+namespace emb_light
+{
+    const int MAX_FACTOR_LEN = 32;
+    struct Config : public BaseConfig
+    {
+        int num_key_value_heads;
+        int original_max_position_embeddings;
+
+        float rope_theta;
+        float scale_depth;
+        float short_factor[MAX_FACTOR_LEN];
+        float long_factor[MAX_FACTOR_LEN];
+    };
+
+    class Tokenizer : public v1::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config)
+            : v1::Tokenizer(config, nullptr)
+        {}
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            size_t r = v1::Tokenizer::load(buffer, n_vocab);
+            tp->RegisterPreprocessor(new tokenizer::TextPrepNewlineToSpaces());
+            tp->RegisterPreprocessor(new tokenizer::TextPrepDeleteMultiSpaces());
+            tp->RegisterPreprocessor(new tokenizer::TextPrepAddLeadingSpace());
+            im_end_token_id = tp->PieceToId("<|im_end|>");
+            return r;
+        }
+
+        void encode(const std::string &text, std::vector<int> &ids) const override
+        {
+            encode(text, ids, true, true);
+        }
+
+    protected:
+        void encode(const std::string &text, std::vector<int> &ids, bool add_bos, bool add_eos) const
+        {
+            if (add_bos)
+                ids.push_back(bos_token_id);
+
+            BaseTokenizer::encode(text, ids);
+
+            if (add_eos)
+                ids.push_back(im_end_token_id);
+        }
+
+        int im_end_token_id;
+    };
+
+    class MiniCPMLongRoPESelfAttention : public RoPESelfAttention<BaseAttention>
+    {
+    private:
+        typedef RoPESelfAttention<BaseAttention> Base;
+    public:
+        MiniCPMLongRoPESelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : Base(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
+        {
+            causal = false;
+        }
+
+        void config(int original_max_position_embeddings,
+            float rope_theta, float short_scaling_factor, float long_scaling_factor, int factor_len, const float *short_factor, const float *long_factor)
+        {
+            this->original_max_position_embeddings = original_max_position_embeddings;
+            this->freq_base = rope_theta;
+            this->short_scaling_factor = short_scaling_factor;
+            this->long_scaling_factor  = long_scaling_factor;
+            build_inv_freq_from_factors(this->inv_freq_short, factor_len * 2, short_factor, freq_base);
+            build_inv_freq_from_factors(this->inv_freq_long,  factor_len * 2, long_factor,  freq_base);
+
+            if (max_length > original_max_position_embeddings)
+            {
+                long_rope.reset(new SimpleLongRoPEParam(rope_dim, long_scaling_factor, inv_freq_long.data()));
+            }
+            else
+            {
+                long_rope.reset(new SimpleLongRoPEParam(rope_dim, short_scaling_factor, inv_freq_short.data()));
+            }
+        }
+
+    protected:
+        // input & output: [qlen, heads, head_size]
+        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override
+        {
+            return ggml::map_custom2_inplace(ctx, k, past, v3::ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, long_rope.get());
+        }
+        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override
+        {
+            return ggml::map_custom2_inplace(ctx, q, past, v3::ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, long_rope.get());
+        }
+
+    public:
+        int original_max_position_embeddings;
+        float short_scaling_factor;
+        float long_scaling_factor;
+        std::vector<float> inv_freq_short;
+        std::vector<float> inv_freq_long;
+    protected:
+        std::unique_ptr<SimpleLongRoPEParam> long_rope;
+    };
+
+    class MiniCPMBlock : public LMBlock1<RMSNorm, MiniCPMLongRoPESelfAttention, RMSNorm, SiLUMLP>
+    {
+    public:
+        MiniCPMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+    };
+
+    template <class FinalBlock, int final_tensor_num> class _ConditionalGeneration : public BaseModelForConditionalGeneration
+    {
+    public:
+        typedef EmbeddingModel<Config, Embedding, MiniCPMBlock, FinalBlock, int, int, int, int, int> ModelClass;
+        typedef BaseModelForConditionalGeneration Base;
+    public:
+        _ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
+        {
+            const size_t tensor_ovhd = ggml_tensor_overhead();
+            const size_t num_tensors = 1 + final_tensor_num + config.num_hidden_layers * 12;
+            const size_t ctx_size = num_tensors * tensor_ovhd;
+            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+            w_ctx_.dtype = config.dtype;
+
+            Base::transformer = new ModelClass(&w_ctx_, config,
+                                        config.hidden_size, config.num_attention_heads,
+                                        config.intermediate_size, config.num_key_value_heads, config.max_length);
+
+            const double scale = (double)config.max_length / config.original_max_position_embeddings;
+            const float freq_scale =
+                config.max_length > config.original_max_position_embeddings ?
+                     (float)std::sqrt( 1.0 + std::log(scale) / std::log((double)config.original_max_position_embeddings)) : 1.0f;
+
+            int head_dim = config.hidden_size / config.num_attention_heads;
+
+            CHATLLM_CHECK(head_dim / 2 == MAX_FACTOR_LEN) << "dim = " << head_dim;
+
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto &layer = Base::get_typed_transformer<ModelClass>()->layers[i];
+                auto &attention = layer.attention;
+                layer.scale_depth          = config.scale_depth;
+
+                attention.config(config.original_max_position_embeddings, config.rope_theta,
+                                 freq_scale,
+                                 freq_scale,
+                                 head_dim / 2,
+                                 config.short_factor,
+                                 config.long_factor);
+                attention.set_prec(ggml::prec::GGML_PREC_F32);
+            }
+        }
+
+        void load(ModelLoader &loader) override
+        {
+            auto transformer = Base::get_typed_transformer<ModelClass>();
+
+            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
+                loader.read_tensor(layer_prefix + "input_layernorm.weight", transformer->layers[i].input_layernorm.weight);
+                loader.read_tensor(layer_prefix + "mlp.down_proj.weight",   transformer->layers[i].mlp.down_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.gate_proj.weight",   transformer->layers[i].mlp.gate_proj.weight);
+                loader.read_tensor(layer_prefix + "mlp.up_proj.weight",     transformer->layers[i].mlp.up_proj.weight);
+                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
+
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
+            }
+
+            load_final_block(loader);
+
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
+                << "corrupted model weights";
+        }
+
+    protected:
+        virtual void load_final_block(ModelLoader &loader) {}
+    public:
+        Config config;
+    };
+
+    class ConditionalGeneration : public _ConditionalGeneration<MiniCPMMeanPooling, 2>
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_MiniCPM_Embedding_Light)
+            : _ConditionalGeneration<MiniCPMMeanPooling, 2>(config, runtime_config, type)
+        {
+            {
+                auto transformer = get_typed_transformer<ModelClass>();
+                transformer->final_layernorm.set_max_length(&w_ctx_, config.max_length);
+            }
+        }
+    protected:
+        void load_final_block(ModelLoader &loader) override
+        {
+            auto transformer = get_typed_transformer<ModelClass>();
+
+            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+        }
+    };
+}
+
+namespace ranker_light
+{
+    typedef emb_light::Config Config;
+
+    class Tokenizer : public v1::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config)
+            : v1::Tokenizer(config, nullptr)
+        {}
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            size_t r = v1::Tokenizer::load(buffer, n_vocab);
+            tp->RegisterPreprocessor(new tokenizer::TextPrepNewlineToSpaces());
+            tp->RegisterPreprocessor(new tokenizer::TextPrepDeleteMultiSpaces());
+            return r;
+        }
+
+        void encode(const std::string &text, std::vector<int> &ids) const override
+        {
+            BaseTokenizer::encode(text, ids);
+        }
+
+        void encode_qa(const std::string &q, const std::string &a, std::vector<int> &ids) const override
+        {
+            const int max_length = this->max_length;
+
+            std::vector<int> ids_q;
+            std::vector<int> ids_a;
+            BaseTokenizer::encode(q, ids_q);
+            BaseTokenizer::encode(a, ids_a);
+
+            int total = (int)ids_q.size() + (int)ids_a.size();
+
+            // this is bad
+            if (total > max_length - 2)
+            {
+                int remain = max_length - 2 - (int)ids_q.size();
+                CHATLLM_CHECK(remain > 0) << "query is TOOOO long.";
+
+                ids_a.resize(remain);
+            }
+
+            ids.push_back(bos_token_id);
+            ids.insert(std::end(ids), std::begin(ids_q), std::end(ids_q));
+            ids.push_back(eos_token_id);
+            ids.insert(std::end(ids), std::begin(ids_a), std::end(ids_a));
+        }
+    };
+
+    class MiniCPMClassificationHead : public Block
+    {
+    public:
+        MiniCPMClassificationHead(InitContext *ctx, int hidden_size)
+            : layernorm(ctx, hidden_size), score(ctx, hidden_size, 1, false)
+        {}
+
+        using Block::forward;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override
+        {
+            int hidden_size = (int)hidden_states->ne[0];
+
+            ggml::tensor *first_token_tensor = ggml::view_2d(ctx, hidden_states, hidden_size, 1,
+                                                        hidden_size * ggml::element_size(hidden_states), 0);
+            first_token_tensor = layernorm.forward(ctx, first_token_tensor);
+            ggml::tensor *output = score.forward(ctx, first_token_tensor);
+            output = ggml::map_custom1(ctx, output, ggml_compute_forward_sigmoid, 1, nullptr);
+            return output;
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += layernorm.get_param_num(effective_only);
+            r += score.get_param_num(effective_only);
+            return r;
+        }
+    public:
+        RMSNorm layernorm;
+        Linear score;
+    };
+
+    class ConditionalGeneration : public emb_light::_ConditionalGeneration<MiniCPMClassificationHead, 2>
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_MiniCPM_ReRanker_Light)
+            : emb_light::_ConditionalGeneration<MiniCPMClassificationHead, 2>(config, runtime_config, type)
+        {
+        }
+    protected:
+        void load_final_block(ModelLoader &loader) override
+        {
+            auto transformer = get_typed_transformer<ModelClass>();
+
+            loader.read_tensor("model.norm.weight", transformer->final_layernorm.layernorm.weight);
+            loader.read_tensor("score.weight", transformer->final_layernorm.score.weight);
+        }
+    };
+}

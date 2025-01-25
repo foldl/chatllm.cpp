@@ -932,6 +932,38 @@
             }
         }
     },
+    "minicpm-embedding": {
+        "brief": "MiniCPM-Embedding-Light is a bilingual & cross-lingual text embedding model developed by ModelBest Inc., THUNLP and NEUIR.",
+        "default": "light",
+        "license": "https://github.com/OpenBMB/MiniCPM/blob/main/MiniCPM%20Model%20License.md",
+        "variants": {
+            "light": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 462196880,
+                        "url": "chatllm_quantized_minicpm_rag/minicpm-emb-light.bin"
+                    }
+                }
+            }
+        }
+    },
+    "minicpm-reranker": {
+        "brief": "MiniCPM-Reranker-Light is a bilingual & cross-lingual text re-ranking model developed by ModelBest Inc., THUNLP and NEUIR",
+        "default": "light",
+        "license": "https://github.com/OpenBMB/MiniCPM/blob/main/MiniCPM%20Model%20License.md",
+        "variants": {
+            "light": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1446810368,
+                        "url": "chatllm_quantized_minicpm_rag/minicpm-reranker-light.bin"
+                    }
+                }
+            }
+        }
+    },
     "qanything": {
         "brief": "QAnything is a local knowledge base question-answering system based on QwenLM.",
         "default": "7b",

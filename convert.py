@@ -153,12 +153,18 @@ class ModelType(Enum):
 
     TeleChat2       = 0x1e00
 
+    BCE_Embedding           = 0x10000100
+    BCE_ReRanker            = 0x10000101
+    BGE_M3                  = 0x10000102
+    BGE_ReRankerM3          = 0x10000103
+    MiniCPM_Embedding_Light = 0x10000104
+    MiniCPM_ReRanker_Light  = 0x10000105
+
     LlaMAMulti    = 0x20000001
 
-    BCE_Embedding = 0x10000100
-    BCE_ReRanker  = 0x10000101
-    BGE_M3        = 0x10000102
-    BGE_ReRankerM3 = 0x10000103
+    Qwen2VL         = 0x30000001
+
+    MiniCPM_O       = 0x30000101
 
 class TokenType(Enum):
     UNDEFINED    = 0
@@ -374,14 +380,14 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
 
             tensor = tensor.float()
 
-            if tensor.ndim == 2:
-                if tensor.shape[1] % GGML_QK8_0 == 0:
+            if tensor.ndim in {2, 3, 4}:
+                if tensor.shape[tensor.ndim - 1] % GGML_QK8_0 == 0:
                     tensor_ggml_type = ggml_type
                 else:
                     tensor_ggml_type = GGMLType.F16
             else:
                 # 1d weight: convert it to float32
-                assert tensor.ndim == 1
+                assert tensor.ndim == 1, f'shape of {name} = {tensor.shape}'
                 tensor_ggml_type = GGMLType.F32
 
             dump_tensor(f, name, tensor, tensor_ggml_type)
@@ -1596,6 +1602,73 @@ class MiniCPMConverter(BaseConverter):
             r.remove('lm_head.weight')
         return r
 
+class MiniCPMEmbConverter(BaseConverter):
+    MODEL_TYPE = ModelType.MiniCPM_Embedding_Light
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            new_name = name
+            if ('model.' + name) in MiniCPMEmbConverter.weight_names:
+                new_name = 'model.' + name
+
+            if new_name == 'model.embed_tokens.weight':
+                tensor = tensor * config.scale_emb
+
+            new_dict[new_name] = tensor
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        assert config.rope_scaling['type'] == 'longrope', "rope_scaling['type'] must be 'longrope'"
+        assert len(config.rope_scaling['long_factor']) == 32, f"length of rope_scaling['factor'] {len(config.rope_scaling['long_factor'])} must be 32"
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.rope_scaling['original_max_position_embeddings'],
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_theta,
+            config.scale_depth / math.sqrt(config.num_hidden_layers)
+        ]  + config.rope_scaling['short_factor'] + config.rope_scaling['long_factor']
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = MiniCPMConverter.get_weight_names(config)
+        weight_names += [
+            'head.weight'
+        ]
+        MiniCPMEmbConverter.weight_names = weight_names
+        return weight_names
+
+class MiniCPMReRankerConverter(BaseConverter):
+    MODEL_TYPE = ModelType.MiniCPM_ReRanker_Light
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        return MiniCPMEmbConverter.state_dict_pp(config, state_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MiniCPMEmbConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = MiniCPMConverter.get_weight_names(config)
+        weight_names += [
+            'score.weight'
+        ]
+        MiniCPMEmbConverter.weight_names = weight_names
+        return weight_names
+
 class MiniCPMMoEConverter(BaseConverter):
     MODEL_TYPE = ModelType.MiniCPM_MoE
 
@@ -1719,7 +1792,7 @@ class MiniCPM3Converter(BaseConverter):
     def dump_config(f, config, ggml_type):
         assert config.hidden_act == 'silu', "hidden_act must be silu"
         assert config.rope_scaling['type'] == 'longrope', "rope_scaling['type'] must be 'longrope'"
-        assert len(config.rope_scaling['long_factor']) == 16, "length of rope_scaling['factor'] must be 16"
+        assert len(config.rope_scaling['long_factor']) == 16, f"length of rope_scaling['factor'] {len(config.rope_scaling['long_factor'])} must be 16"
 
         config.v_head_dim = config.hidden_size // config.num_attention_heads
 
@@ -3255,6 +3328,357 @@ class QWen2Converter(BaseConverter):
 
         return weight_names
 
+class QWen2VLConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Qwen2VL
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name == 'visual.patch_embed.proj.weight':
+            shape = tensor.shape
+            return tensor.view(shape[0], shape[1] * shape[2] * shape[3] * shape[4])
+        else:
+            return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.vision_config['hidden_size'] == config.hidden_size, 'vision_config.hidden_size must == hidden_size'
+        assert config.rope_scaling['type'] == 'mrope', 'rope_scaling must be mrope'
+
+        QWen2Converter.dump_config(f, config, ggml_type)
+        config_values = [
+            config.vision_start_token_id,
+            config.vision_end_token_id,
+            config.vision_token_id,
+            config.image_token_id,
+            config.video_token_id,
+            1 if config.tie_word_embeddings else 0,
+            len(config.rope_scaling['mrope_section']),
+        ] + config.rope_scaling['mrope_section']
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [
+            config.vision_config['depth'],
+            config.vision_config['embed_dim'],
+            config.vision_config['mlp_ratio'] * config.vision_config['embed_dim'],
+            config.vision_config['num_heads'],
+            config.vision_config['in_chans'],
+            config.vision_config['patch_size'],
+            config.vision_config['spatial_merge_size'],
+            config.vision_config['spatial_patch_size'],
+            config.vision_config['temporal_patch_size'],
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = QWen2Converter.get_weight_names(config)
+
+        for i in range(config.vision_config['depth']):
+            weight_names += [
+                f"visual.blocks.{i}.attn.proj.bias",
+                f"visual.blocks.{i}.attn.proj.weight",
+                f"visual.blocks.{i}.attn.qkv.bias",
+                f"visual.blocks.{i}.attn.qkv.weight",
+                f"visual.blocks.{i}.mlp.fc1.bias",
+                f"visual.blocks.{i}.mlp.fc1.weight",
+                f"visual.blocks.{i}.mlp.fc2.bias",
+                f"visual.blocks.{i}.mlp.fc2.weight",
+                f"visual.blocks.{i}.norm1.bias",
+                f"visual.blocks.{i}.norm1.weight",
+                f"visual.blocks.{i}.norm2.bias",
+                f"visual.blocks.{i}.norm2.weight",
+            ]
+
+        weight_names += [
+            "visual.merger.ln_q.bias",
+            "visual.merger.ln_q.weight",
+            "visual.merger.mlp.0.bias",
+            "visual.merger.mlp.0.weight",
+            "visual.merger.mlp.2.bias",
+            "visual.merger.mlp.2.weight",
+            "visual.patch_embed.proj.weight",
+        ]
+
+        return weight_names
+
+class MiniCPMOConverter(BaseConverter):
+    MODEL_TYPE = ModelType.MiniCPM_O
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name == 'visual.patch_embed.proj.weight':
+            shape = tensor.shape
+            return tensor.view(shape[0], shape[1] * shape[2] * shape[3] * shape[4])
+        else:
+            return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert not config.tie_word_embeddings, 'tie_word_embeddings must be False'
+        assert not config.drop_vision_last_layer, 'drop_vision_last_layer must be False'
+        assert config.slice_config["model_type"] == "minicpmv", 'slice_config.model_type must be minicpmv'
+        assert config.slice_mode, 'slice_mode must be True'
+        assert config.use_image_id, 'use_image_id must be True'
+        assert config.audio_config['architectures'][0] == "MiniCPMWhisperEncoder", 'audio_config.architectures[0] must be MiniCPMWhisperEncoder'
+
+        QWen2Converter.dump_config(f, config, ggml_type)
+
+        # vision
+        config_values = [
+            config.image_size,
+            config.patch_size,
+            config.query_num,
+            config.slice_config['max_slice_nums'],
+            config.vision_batch_size,
+            config.vision_config['hidden_size'],
+            config.vision_config['image_size'],
+            config.vision_config['intermediate_size'],
+            config.vision_config['num_attention_heads'],
+            config.vision_config['num_hidden_layers'],
+            config.vision_config['patch_size'],
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        # audio
+        config_values = [
+            config.audio_chunk_length,
+            config.audio_config['d_model'],
+            config.audio_config['num_hidden_layers'],
+            config.audio_config['decoder_attention_heads'],
+            config.audio_config['decoder_ffn_dim'],
+            config.audio_config['decoder_layers'],
+            config.audio_config['encoder_attention_heads'],
+            config.audio_config['encoder_ffn_dim'],
+            config.audio_config['encoder_layers'],
+
+            config.audio_config['decoder_start_token_id'],
+            config.audio_config['bos_token_id'],
+            config.audio_config['eos_token_id'],
+            config.audio_config['pad_token_id'],
+
+            config.audio_config['max_length'],
+
+            config.audio_pool_step,
+        ]
+        f.write(struct.pack("<" + "f" * 1 + "i" * (len(config_values) - 1), *config_values))
+
+        tts_config = {
+            "llm_dim": 2560,
+            "hidden_size": 768,
+            "intermediate_size": 3072,
+            "num_attention_heads": 12,
+            "num_hidden_layers": 20,
+            "max_position_embeddings": 4096,
+            "num_audio_tokens": 626,
+            "num_text_tokens": 21178,
+            "num_mel_bins": 100,
+            "num_vq": 4,
+            "spk_emb_token_id": 21143,
+            "num_spk_embs": 1,
+            "audio_bos_token_id": 21132,
+            "text_eos_token_id": 21133,
+            "streaming_text_chunk_size": 10,
+            "streaming_text_reserved_len": 300,
+            "streaming_audio_chunk_size": 50,
+        }
+        tts_config.update(config.tts_config)
+
+        # tts
+        config_values = [
+            tts_config['llm_dim'],
+            tts_config['hidden_size'],
+            tts_config['intermediate_size'],
+            tts_config['num_attention_heads'],
+            tts_config['num_hidden_layers'],
+            tts_config['max_position_embeddings'],
+            tts_config['num_audio_tokens'],
+            tts_config['num_text_tokens'],
+            tts_config['num_mel_bins'],
+            tts_config['num_vq'],
+            tts_config['spk_emb_token_id'],
+            tts_config['num_spk_embs'],
+            tts_config['audio_bos_token_id'],
+            tts_config['text_eos_token_id'],
+            tts_config['streaming_text_chunk_size'],
+            tts_config['streaming_text_reserved_len'],
+            tts_config['streaming_audio_chunk_size'],
+        ]
+        f.write(struct.pack("<" + "f" * 1 + "i" * (len(config_values) - 1), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ['llm.' + n for n in QWen2Converter.get_weight_names(config)]
+
+        weight_names += [
+                "apm.conv1.bias",
+                "apm.conv1.weight",
+                "apm.conv2.bias",
+                "apm.conv2.weight",
+                "apm.embed_positions.weight",
+                "apm.layer_norm.bias",
+                "apm.layer_norm.weight",
+                "audio_projection_layer.linear1.bias",
+                "audio_projection_layer.linear1.weight",
+                "audio_projection_layer.linear2.bias",
+                "audio_projection_layer.linear2.weight"
+        ]
+        for i in range(config.audio_config['encoder_layers']):
+            weight_names += [
+                f"apm.layers.{i}.fc1.bias",
+                f"apm.layers.{i}.fc1.weight",
+                f"apm.layers.{i}.fc2.bias",
+                f"apm.layers.{i}.fc2.weight",
+                f"apm.layers.{i}.final_layer_norm.bias",
+                f"apm.layers.{i}.final_layer_norm.weight",
+                f"apm.layers.{i}.self_attn.k_proj.weight",
+                f"apm.layers.{i}.self_attn.out_proj.bias",
+                f"apm.layers.{i}.self_attn.out_proj.weight",
+                f"apm.layers.{i}.self_attn.q_proj.bias",
+                f"apm.layers.{i}.self_attn.q_proj.weight",
+                f"apm.layers.{i}.self_attn.v_proj.bias",
+                f"apm.layers.{i}.self_attn.v_proj.weight",
+                f"apm.layers.{i}.self_attn_layer_norm.bias",
+                f"apm.layers.{i}.self_attn_layer_norm.weight",
+            ]
+
+        weight_names += [
+                "resampler.attn.in_proj_bias",
+                "resampler.attn.in_proj_weight",
+                "resampler.attn.out_proj.bias",
+                "resampler.attn.out_proj.weight",
+                "resampler.kv_proj.weight",
+                "resampler.ln_kv.bias",
+                "resampler.ln_kv.weight",
+                "resampler.ln_post.bias",
+                "resampler.ln_post.weight",
+                "resampler.ln_q.bias",
+                "resampler.ln_q.weight",
+                "resampler.proj",
+                "resampler.query",
+                "tts.dvae.coef",
+                "tts.dvae.decoder.conv_in.0.bias",
+                "tts.dvae.decoder.conv_in.0.weight",
+                "tts.dvae.decoder.conv_in.2.bias",
+                "tts.dvae.decoder.conv_in.2.weight",
+                "tts.dvae.decoder.conv_out.weight",
+        ]
+
+        for i in range(12):
+            weight_names += [
+                f"tts.dvae.decoder.decoder_block.{i}.coef",
+                f"tts.dvae.decoder.decoder_block.{i}.dwconv.bias",
+                f"tts.dvae.decoder.decoder_block.{i}.dwconv.weight",
+                f"tts.dvae.decoder.decoder_block.{i}.norm.bias",
+                f"tts.dvae.decoder.decoder_block.{i}.norm.weight",
+                f"tts.dvae.decoder.decoder_block.{i}.pwconv1.bias",
+                f"tts.dvae.decoder.decoder_block.{i}.pwconv1.weight",
+                f"tts.dvae.decoder.decoder_block.{i}.pwconv2.bias",
+                f"tts.dvae.decoder.decoder_block.{i}.pwconv2.weight",
+            ]
+
+
+        weight_names += [
+            "tts.dvae.downsample_conv.0.bias",
+            "tts.dvae.downsample_conv.0.weight",
+            "tts.dvae.downsample_conv.2.bias",
+            "tts.dvae.downsample_conv.2.weight",
+            "tts.dvae.encoder.conv_in.0.bias",
+            "tts.dvae.encoder.conv_in.0.weight",
+            "tts.dvae.encoder.conv_in.2.bias",
+            "tts.dvae.encoder.conv_in.2.weight",
+            "tts.dvae.encoder.conv_out.weight",
+        ]
+
+        for i in range(12):
+            weight_names += [
+                f"tts.dvae.encoder.decoder_block.{i}.coef",
+                f"tts.dvae.encoder.decoder_block.{i}.dwconv.bias",
+                f"tts.dvae.encoder.decoder_block.{i}.dwconv.weight",
+                f"tts.dvae.encoder.decoder_block.{i}.norm.bias",
+                f"tts.dvae.encoder.decoder_block.{i}.norm.weight",
+                f"tts.dvae.encoder.decoder_block.{i}.pwconv1.bias",
+                f"tts.dvae.encoder.decoder_block.{i}.pwconv1.weight",
+                f"tts.dvae.encoder.decoder_block.{i}.pwconv2.bias",
+                f"tts.dvae.encoder.decoder_block.{i}.pwconv2.weight",
+            ]
+
+        weight_names += [
+            "tts.dvae.out_conv.weight",
+            "tts.dvae.vq_layer.quantizer.rvqs.0.project_in.bias",
+            "tts.dvae.vq_layer.quantizer.rvqs.0.project_in.weight",
+            "tts.dvae.vq_layer.quantizer.rvqs.0.project_out.bias",
+            "tts.dvae.vq_layer.quantizer.rvqs.0.project_out.weight",
+            "tts.dvae.vq_layer.quantizer.rvqs.1.project_in.bias",
+            "tts.dvae.vq_layer.quantizer.rvqs.1.project_in.weight",
+            "tts.dvae.vq_layer.quantizer.rvqs.1.project_out.bias",
+            "tts.dvae.vq_layer.quantizer.rvqs.1.project_out.weight",
+            "tts.emb_code.0.weight",
+            "tts.emb_code.1.weight",
+            "tts.emb_code.2.weight",
+            "tts.emb_code.3.weight",
+            "tts.emb_text.weight",
+            "tts.head_code.0.parametrizations.weight.original0",
+            "tts.head_code.0.parametrizations.weight.original1",
+            "tts.head_code.1.parametrizations.weight.original0",
+            "tts.head_code.1.parametrizations.weight.original1",
+            "tts.head_code.2.parametrizations.weight.original0",
+            "tts.head_code.2.parametrizations.weight.original1",
+            "tts.head_code.3.parametrizations.weight.original0",
+            "tts.head_code.3.parametrizations.weight.original1",
+            "tts.model.embed_tokens.weight",
+        ]
+
+        for i in range(config.tts_config['num_hidden_layers'] if 'num_hidden_layers' in config.tts_config else 20):
+            weight_names += [
+                f"tts.model.layers.{i}.input_layernorm.weight",
+                f"tts.model.layers.{i}.mlp.down_proj.weight",
+                f"tts.model.layers.{i}.mlp.gate_proj.weight",
+                f"tts.model.layers.{i}.mlp.up_proj.weight",
+                f"tts.model.layers.{i}.post_attention_layernorm.weight",
+                f"tts.model.layers.{i}.self_attn.k_proj.weight",
+                f"tts.model.layers.{i}.self_attn.o_proj.weight",
+                f"tts.model.layers.{i}.self_attn.q_proj.weight",
+                f"tts.model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "tts.model.norm.weight",
+            "tts.projector.linear1.bias",
+            "tts.projector.linear1.weight",
+            "tts.projector.linear2.bias",
+            "tts.projector.linear2.weight",
+            "vpm.embeddings.patch_embedding.bias",
+            "vpm.embeddings.patch_embedding.weight",
+            "vpm.embeddings.position_embedding.weight",
+        ]
+
+        for i in range(config.vision_config['num_hidden_layers']):
+            weight_names += [
+                f"vpm.encoder.layers.{i}.layer_norm1.bias",
+                f"vpm.encoder.layers.{i}.layer_norm1.weight",
+                f"vpm.encoder.layers.{i}.layer_norm2.bias",
+                f"vpm.encoder.layers.{i}.layer_norm2.weight",
+                f"vpm.encoder.layers.{i}.mlp.fc1.bias",
+                f"vpm.encoder.layers.{i}.mlp.fc1.weight",
+                f"vpm.encoder.layers.{i}.mlp.fc2.bias",
+                f"vpm.encoder.layers.{i}.mlp.fc2.weight",
+                f"vpm.encoder.layers.{i}.self_attn.k_proj.bias",
+                f"vpm.encoder.layers.{i}.self_attn.k_proj.weight",
+                f"vpm.encoder.layers.{i}.self_attn.out_proj.bias",
+                f"vpm.encoder.layers.{i}.self_attn.out_proj.weight",
+                f"vpm.encoder.layers.{i}.self_attn.q_proj.bias",
+                f"vpm.encoder.layers.{i}.self_attn.q_proj.weight",
+                f"vpm.encoder.layers.{i}.self_attn.v_proj.bias",
+                f"vpm.encoder.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "vpm.post_layernorm.bias",
+            "vpm.post_layernorm.weight"
+        ]
+
+        return weight_names
+
 class QWen2TieConverter(BaseConverter):
     MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen
 
@@ -4778,6 +5202,8 @@ def main():
             QWen2Converter.MODEL_TYPE = ModelType.ReaderLM2
             assert config.tie_word_embeddings
         QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Qwen2VLForConditionalGeneration':
+        QWen2VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen':
         QWen2TieConverter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen
         QWen2TieConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
@@ -4813,6 +5239,14 @@ def main():
             MiniCPMMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MiniCPM3ForCausalLM':
         MiniCPM3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'MiniCPMO':
+        MiniCPMOConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'MiniCPMModel':
+        assert config._name_or_path == "openbmb/UltraRAG-Embedding", "only support openbmb/UltraRAG-Embedding"
+        MiniCPMEmbConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'MiniCPMForSequenceClassification':
+        assert config._name_or_path == "OpenBMB/UltraRAG-Reranker", "only support OpenBMB/UltraRAG-Reranker"
+        MiniCPMReRankerConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'PersimmonForCausalLM':
         PersimmonConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'FuyuForCausalLM':

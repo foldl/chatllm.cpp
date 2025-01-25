@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-01-25: MiniCPM Embedding & ReRanker
 * 2025-01-21: DeepSeek-R1-Distill-Llama & Qwen
 * 2025-01-15: InternLM3
 * 2025-01-13: OLMo-2

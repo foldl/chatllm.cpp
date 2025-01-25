@@ -316,6 +316,9 @@ namespace chatllm
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
         MODEL_TYPE_BGE_ReRanker_M3  = 0x10000103,
+        MODEL_TYPE_MiniCPM_Embedding_Light  = 0x10000104,
+        MODEL_TYPE_MiniCPM_ReRanker_Light   = 0x10000105,
+
 
         MODEL_TYPE_LLAMA_MULTI      = 0x20000001,
     };
@@ -326,9 +329,11 @@ namespace chatllm
         {
         case MODEL_TYPE_BCE_Embedding:
         case MODEL_TYPE_BGE_M3:
+        case MODEL_TYPE_MiniCPM_Embedding_Light:
             return ModelPurpose::TextEmbedding;
         case MODEL_TYPE_BCE_ReRanker:
         case MODEL_TYPE_BGE_ReRanker_M3:
+        case MODEL_TYPE_MiniCPM_ReRanker_Light:
             return ModelPurpose::Ranker;
         default:
             return ModelPurpose::Chat;
@@ -525,6 +530,10 @@ namespace chatllm
             return "DeepSeek-R1-Distill-QWen";
         case MODEL_TYPE_DEEPSEEK_R1_DISTILL_LLAMA:
             return "DeepSeek-R1-Distill-LlaMA";
+        case MODEL_TYPE_MiniCPM_Embedding_Light:
+            return "MiniCPM-Embedding-Light";
+        case MODEL_TYPE_MiniCPM_ReRanker_Light:
+            return "MiniCPM-ReRanker-Light";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -2103,7 +2112,8 @@ namespace chatllm
         CASE(BCE_ReRanker,          bce::ranker, 1)             \
         CASE(BGE_M3,                bge::embedding, 1)          \
         CASE(BGE_ReRanker_M3,       bge::ranker, 1)             \
-
+        CASE(MiniCPM_Embedding_Light,   minicpm::emb_light, 1)  \
+        CASE(MiniCPM_ReRanker_Light,    minicpm::ranker_light, 1)
 
     AbstractModel *ModelFactory::load_model_again(ModelLoader &loader, const ModelObject::extra_args &args)
     {

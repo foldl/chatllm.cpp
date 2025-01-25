@@ -71,6 +71,7 @@ namespace chatllm
         ggml::tensor *div(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
 
         ggml::tensor *sum_rows(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *mean(ComputeContext *ctx, ggml::tensor *a);
 
         ggml::tensor *top_k(ComputeContext *ctx, ggml::tensor *a, int k);
 
@@ -229,6 +230,7 @@ namespace chatllm
 
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int n_past) override;
 
         int64_t get_param_num(bool effective_only) const override
         {
@@ -1209,6 +1211,7 @@ namespace chatllm
     };
 
     void fill_pos_vector(ComputeContext *ctx, std::vector<int> &v_pos, ggml::tensor *pos, int n_past, int qlen);
+    void fill_pos_vector(ComputeContext *ctx, std::vector<float> &v_pos, ggml::tensor *pos, int n_past, int qlen);
 
     // qlen must be 1.
     // This is just a proof of concept.
@@ -1941,6 +1944,24 @@ namespace chatllm
         {
             return 0;
         }
+    };
+
+    class MiniCPMMeanPooling : public RMSNorm
+    {
+    public:
+        MiniCPMMeanPooling() {}
+
+        MiniCPMMeanPooling(InitContext *ctx, int normalized_shape)
+            : RMSNorm(ctx, normalized_shape)
+        {}
+
+        using Block::forward;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
+
+        void set_max_length(InitContext *ctx, int max_length);
+
+    public:
+        ggml::tensor *pos;
     };
 
     class RobertaSelfAttention : public RoPESelfAttention<BaseCachelessAttention>

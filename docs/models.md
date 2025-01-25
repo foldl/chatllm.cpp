@@ -211,13 +211,14 @@ Please use `--format completion` for these models.
 * Text Embedding (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
     * [x] [BGE-M3](https://huggingface.co/BAAI/bge-m3) (`-a BGE-M3`)
+    * [x] [MiniCPM-Embedding-Light](https://huggingface.co/openbmb/MiniCPM-Embedding-Light)
 
         Note: Only dense embedding is implemented.
 
 * QA Ranking (`XLMRobertaForSequenceClassification`)
     * [x] [BCE-ReRanker](https://huggingface.co/maidalun1020/bce-reranker-base_v1)
     * [x] [BGE-ReRanker-M3](https://huggingface.co/BAAI/bge-reranker-v2-m3) (`-a BGE-Reranker-M3`)
-
+    * [x] [MiniCPM-Reranker-Light](https://huggingface.co/openbmb/MiniCPM-Reranker-Light)
 
 ## LoRA Models
 

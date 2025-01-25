@@ -388,6 +388,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::mean(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_mean(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::top_k(ComputeContext *ctx, ggml::tensor *a, int k)
     {
         ggml::tensor *tensor = ggml_top_k(ctx->get_ctx(), a, k);
@@ -517,6 +524,11 @@ namespace chatllm
         return output;
     }
 
+    ggml::tensor *Embedding::forward(ComputeContext *ctx, ggml::tensor *input, int n_past)
+    {
+        return forward(ctx, input);
+    }
+
     ggml::tensor *RobertaEmbedding::forward(ComputeContext *ctx, ggml::tensor *input, int n_past)
     {
         int qlen = (int)input->ne[0];
@@ -604,10 +616,42 @@ namespace chatllm
         return output;
     }
 
+    void MiniCPMMeanPooling::set_max_length(InitContext *ctx, int max_length)
+    {
+        std::vector<float> v_pos(max_length);
+        pos = ggml::new_tensor_1d(ctx, GGML_TYPE_F32, max_length);
+        ctx->get_allocator()->alloc(pos);
+        fill_pos_vector(ctx, v_pos, pos, 1, max_length);
+    }
+
+    ggml::tensor *MiniCPMMeanPooling::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
+    {
+        const int qlen = (int)hidden_states->ne[1];
+        ggml::tensor *one_based_pos = ggml::view_1d(ctx, pos, qlen, ggml::element_size(pos));
+
+        ggml::tensor *output = RMSNorm::forward(ctx, hidden_states);
+
+        output = ggml::transpose(ctx, output);
+        output = ggml::cont(ctx, output);
+        output = ggml::mul(ctx, output, one_based_pos);
+        output = ggml::mean(ctx, output);
+        output = ggml::transpose(ctx, output);
+        output = ggml::map_custom1(ctx, output, ggml_compute_forward_simple_norm, 1, nullptr);
+        return output;
+    }
+
     void fill_pos_vector(ComputeContext *ctx, std::vector<int> &v_pos, ggml::tensor *pos, int n_past, int qlen)
     {
         for (int i = 0; i < qlen; i++)
             v_pos[i] = n_past + i;
+        pos->ne[0] = qlen;
+        Backend::write_tensor_data(pos, v_pos.data(), 0, qlen * sizeof(v_pos[0]));
+    }
+
+    void fill_pos_vector(ComputeContext *ctx, std::vector<float> &v_pos, ggml::tensor *pos, int n_past, int qlen)
+    {
+        for (int i = 0; i < qlen; i++)
+            v_pos[i] = (float)(n_past + i);
         pos->ne[0] = qlen;
         Backend::write_tensor_data(pos, v_pos.data(), 0, qlen * sizeof(v_pos[0]));
     }
