@@ -1416,7 +1416,6 @@ int chatllm_async_text_embedding(struct chatllm_obj *obj, const char *utf8_str)
 
 int chatllm_text_tokenize(struct chatllm_obj *obj, const char *utf8_str)
 {
-    int r = 0;
     Chat *chat = reinterpret_cast<Chat *>(obj);
     FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
 
@@ -1437,7 +1436,7 @@ int chatllm_text_tokenize(struct chatllm_obj *obj, const char *utf8_str)
 
     streamer->putln(oss.str(), chatllm::BaseStreamer::TextType::TOKEN_IDS);
 
-    return r;
+    return (int)result.size();
 }
 
 int chatllm_rag_select_store(struct chatllm_obj *obj, const char *name)

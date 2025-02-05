@@ -21,9 +21,9 @@ class PrintType(IntEnum):
     PRINTLN_HISTORY_USER    = 5,    # print a whole line: user input history
     PRINTLN_HISTORY_AI      = 6,    # print a whole line: AI output history
     PRINTLN_TOOL_CALLING    = 7,    # print a whole line: tool calling (supported by only a few models)
-    PRINTLN_EMBEDDING       = 8,    # print a whole line: embedding (example: "0.1, 0.3, ...")
+    PRINTLN_EMBEDDING       = 8,    # print a whole line: embedding (example: "0.1,0.3,...")
     PRINTLN_RANKING         = 9,    # print a whole line: ranking (example: "0.8")
-    PRINTLN_TOKEN_IDS       =10,    # print a whole line: token ids (example: "1, 3, 5, 8, ...")
+    PRINTLN_TOKEN_IDS       =10,    # print a whole line: token ids (example: "1,3,5,8, ...")
     PRINTLN_LOGGING         =11,    # print a whole line: internal logging with the first char indicating level
                                     # (space): None; D: Debug; I: Info; W: Warn; E: Error; .: continue
     PRINTLN_BEAM_SEARCH     =12,    # print a whole line: a result of beam search with a prefix of probability
@@ -336,7 +336,7 @@ class ChatLLM:
 
     def text_tokenize(self, txt: str) -> list[int]:
         self._result_text_tokenize = ''
-        assert self._lib.text_tokenize(self._chat, txt) == 0, 'text_embedding failed'
+        assert self._lib.text_tokenize(self._chat, txt) >= 0, 'text_tokenize failed'
         return json.loads(f"[{self._result_text_tokenize}]")
 
     def text_embedding(self, txt: str) -> list[float]:
@@ -404,7 +404,7 @@ class ChatLLM:
     def callback_print_ranking(self, s: str) -> None:
         self._result_ranking = s
 
-    def callback_print_text_tokenize(self, s: str) -> None:
+    def callback_text_tokenize(self, s: str) -> None:
         self._result_text_tokenize = s
 
     def call_tool(self, s: str) -> None:

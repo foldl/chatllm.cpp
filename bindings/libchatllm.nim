@@ -8,9 +8,13 @@ type
     PRINTLN_HISTORY_USER = 5,       ##  print a whole line: user input history
     PRINTLN_HISTORY_AI = 6,         ##  print a whole line: AI output history
     PRINTLN_TOOL_CALLING = 7,       ##  print a whole line: tool calling (supported by only a few models)
-    PRINTLN_EMBEDDING = 8,          ##  print a whole line: embedding (example: "0.1, 0.3, ...")
+    PRINTLN_EMBEDDING = 8,          ##  print a whole line: embedding (example: "0.1,0.3,...")
     PRINTLN_RANKING = 9,            ##  print a whole line: ranking (example: "0.8")
-    PRINTLN_TOKEN_IDS = 10,         ##  print a whole line: token ids (example: "1, 3, 5, 8, ...")
+    PRINTLN_TOKEN_IDS = 10,         ##  print a whole line: token ids (example: "1,3,5,8,...")
+    PRINTLN_LOGGING =11,            ## print a whole line: internal logging with the first char indicating level
+                                    ## (space): None; D: Debug; I: Info; W: Warn; E: Error; .: continue
+    PRINTLN_BEAM_SEARCH =12,        ## print a whole line: a result of beam search with a prefix of probability
+                                    ## (example: "0.8,....")
     PRINT_EVT_ASYNC_COMPLETED = 100 ##  last async operation completed (utf8_str is null)
 
 type
@@ -134,18 +138,18 @@ proc chatllm_tool_completion*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.s
 ##
 ##  @brief tokenize
 ##
-##  embedding is emit through `PRINTLN_TOKEN_IDS`.
+##  token ids are emitted through `PRINTLN_TOKEN_IDS`.
 ##
 ##  @param[in] obj               model object
 ##  @param[in] utf8_str          text
-##  @return                      0 if succeeded
+##  @return                      number of ids if succeeded. otherwise -1.
 ##
 proc chatllm_text_tokenize*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.stdcall, dynlib: libName, importc.}
 
 ##
 ##  @brief text embedding
 ##
-##  embedding is emit through `PRINTLN_EMBEDDING`.
+##  embedding is emitted through `PRINTLN_EMBEDDING`.
 ##
 ##  @param[in] obj               model object
 ##  @param[in] utf8_str          text
