@@ -64,6 +64,12 @@ namespace chatllm
     static std::unordered_map<ggml::tensor *, std::string> inspected_set;
     static ggml::tensor *dbg_w = nullptr;
 
+    void print_tensor_shape(const char *info, ggml::tensor *tensor)
+    {
+        printf("%s: shape of %s (%p): [%zd, %zd, %zd] [%zd, %zd, %zd]\n", info, tensor->name, tensor->data, tensor->ne[0], tensor->ne[1], tensor->ne[2],
+                                                                             tensor->nb[0], tensor->nb[1], tensor->nb[2]);
+    }
+
     void print_tensor(ggml::tensor *tensor, int offset, const bool full)
     {
         printf("\n%s (%p): [%zd, %zd, %zd] [%zd, %zd, %zd]\n", tensor->name, tensor->data, tensor->ne[0], tensor->ne[1], tensor->ne[2],
@@ -312,6 +318,8 @@ namespace chatllm
 
         MODEL_TYPE_TELECHAT2        = 0x1e00,
 
+        MODEL_TYPE_HUNYUAN_DENSE    = 0x1f00,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -524,6 +532,8 @@ namespace chatllm
             return "Granite";
         case MODEL_TYPE_TELECHAT2:
             return "TeleChat2";
+        case MODEL_TYPE_HUNYUAN_DENSE:
+            return "HuanYuan";
         case MODEL_TYPE_READERLM2:
             return "ReaderLM-v2";
         case MODEL_TYPE_DEEPSEEK_R1_DISTILL_QWEN:
@@ -585,6 +595,8 @@ namespace chatllm
             return "星辰";
         case MODEL_TYPE_ORION:
             return "猎户星空";
+        case MODEL_TYPE_HUNYUAN_DENSE:
+            return "混元";
         default:
             return "";
         }
@@ -1802,6 +1814,11 @@ namespace chatllm
         #include "../models/jina.cpp"
     }
 
+    namespace hunyuan
+    {
+        #include "../models/hunyuan.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2107,6 +2124,8 @@ namespace chatllm
         CASE(GRANITE,               granite::dense, 1)          \
                                                                 \
         CASE(TELECHAT2,             telechat::v2, 1)            \
+                                                                \
+        CASE(HUNYUAN_DENSE,         hunyuan::dense, 1)          \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

@@ -153,6 +153,8 @@ class ModelType(Enum):
 
     TeleChat2       = 0x1e00
 
+    HunYuanDense    = 0x1f00
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -252,7 +254,7 @@ def dump_tensor(f, name: str, tensor: torch.Tensor, ggml_type: GGMLType):
     # align address
     aligned_pos = (f.tell() + (GGML_MEM_ALIGN - 1)) // GGML_MEM_ALIGN * GGML_MEM_ALIGN
     f.seek(aligned_pos)
-    tensor.numpy().tofile(f)
+    tensor.detach().numpy().tofile(f)
 
 def load_model_file(path: Path) -> Dict:
     print(f"loading {path} ...")
@@ -751,7 +753,6 @@ class TikTokenizerVocab:
         self.vocab_size: int = vocab_size
         self.merges = merges
         self.vocab_tokens = vocab_tokens
-        print(len(vocab_tokens))
         print("vocab_size ", self.vocab_size)
 
     def tokenizer_tokens(self) -> Iterable[Tuple[bytes, float]]:
@@ -4815,6 +4816,88 @@ class IndexConverter(BaseConverter):
     def get_weight_names(config):
         return Llama3Converter.get_weight_names(config)
 
+class HunYuanDenseConverter(BaseConverter):
+    MODEL_TYPE = ModelType.HunYuanDense
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.endswith('mlp.gate_and_up_proj.weight'):
+
+                new_dict[name.replace('gate_and_up_proj.weight', 'gate_proj.weight')] = part(tensor, 1, 2)
+                new_dict[name.replace('gate_and_up_proj.weight', 'up_proj.weight')]   = part(tensor, 0, 2)
+            if name.endswith('.qkv_proj.weight'):
+
+                kv_groups = config.num_attention_heads // config.num_key_value_heads
+                head_dim = config.hidden_size // config.num_attention_heads
+                gs = 2 + kv_groups
+                h = tensor.shape[0] // (gs * head_dim)
+
+                v = tensor.view(h, gs, head_dim, config.hidden_size)
+
+                wq = v[:, 0:kv_groups, ...].reshape(h * kv_groups * head_dim, config.hidden_size)
+                wk = v[:, -2,          ...].reshape(h * 1         * head_dim, config.hidden_size)
+                wv = v[:, -1,          ...].reshape(h * 1         * head_dim, config.hidden_size)
+
+                new_dict[name.replace('qkv_proj.weight', 'q_proj.weight')] = permute(wq, config.num_attention_heads)
+                new_dict[name.replace('qkv_proj.weight', 'k_proj.weight')] = permute(wk, config.num_key_value_heads)
+                new_dict[name.replace('qkv_proj.weight', 'v_proj.weight')] = wv
+            else:
+                new_dict[name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.tie_word_embeddings, "tie_word_embeddings must be True"
+        assert config.attention_bias == False, "attention_bias must be False"
+        assert config.mlp_bias == False, "mlp_bias must be False"
+        assert config.rope_scaling['type'] == 'dynamic', "rope_scaling['type'] must be 'dynamic'"
+        assert config.use_qk_norm, "use_qk_norm must be True"
+        assert config.rope_scaling['alpha'] > 0, "rope_scaling['alpha'] must be > 0"
+
+        assert not (((isinstance(config.num_experts, int) and config.num_experts > 1) or
+            (isinstance(config.num_experts, list) and max(config.num_experts) > 1))), "MoE not allowed"
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        head_dim = config.attention_head_dim
+        config.rope_theta = config.rope_theta * config.rope_scaling['alpha'] ** (head_dim / (head_dim - 2))
+
+        config_values = [
+            config.num_key_value_heads,
+            config.rope_theta,
+        ]
+        f.write(struct.pack("if", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.key_layernorm.weight",
+                f"model.layers.{i}.self_attn.query_layernorm.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -4927,6 +5010,9 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
                  return GenericBPETokenizerVocab(path7, path8)
 
         path9 = path / 'vocab' / "360.tiktoken"
+        if path9.exists():
+            return load_vocab_from_tiktok_mergeable_ranks(path9)
+        path9 = path / "hy.tiktoken"
         if path9.exists():
             return load_vocab_from_tiktok_mergeable_ranks(path9)
 
@@ -5284,6 +5370,11 @@ def main():
         ExaoneConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'TeleChat2ForCausalLM':
         TeleChat2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'HunYuanForCausalLM':
+        if ((isinstance(config.num_experts, int) and config.num_experts > 1) or
+            (isinstance(config.num_experts, list) and max(config.num_experts) > 1)):
+            raise Exception('HunYuanForCausalLM: only dense model is supported')
+        HunYuanDenseConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

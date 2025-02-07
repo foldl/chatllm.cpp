@@ -15,6 +15,7 @@ namespace chatllm
 {
     void dump_weight_tensor(ggml::tensor *tensor);
     void print_tensor(ggml::tensor *tensor, int offset = 0, bool full = false);
+    void print_tensor_shape(const char *info, ggml::tensor *tensor);
     void inspect_tensor(ggml::tensor *tensor, const char *format, ...);
 
     struct alibi_ctx
@@ -2385,8 +2386,9 @@ namespace chatllm
 
         QKNormedAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
             : RoPESelfAttention<BaseAttn>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
-              k_layernorm(ctx, hidden_size / num_kv_heads),
-              q_layernorm(ctx, hidden_size / num_attention_heads)
+              k_layernorm(ctx, hidden_size / num_attention_heads),
+              q_layernorm(ctx, hidden_size / num_attention_heads),
+              post_norm(false)
         {
             RoPESelfAttention<BaseAttn>::rope_mode = RoPEMode::Original;
         }
@@ -2404,19 +2406,28 @@ namespace chatllm
         // input & output: [qlen, heads, head_size]
         ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override
         {
-            k = const_cast<QKNormedAttention *>(this)->k_layernorm.forward(ctx, k);
-            return RoPESelfAttention<BaseAttn>::apply_pos_embedding_k(ctx, k, hidden_size, qlen, past);    // [qlen, heads, head_size]
+            if (!post_norm)
+                k = const_cast<QKNormedAttention *>(this)->k_layernorm.forward(ctx, k);
+            k = RoPESelfAttention<BaseAttn>::apply_pos_embedding_k(ctx, k, hidden_size, qlen, past);    // [qlen, heads, head_size]
+            if (post_norm)
+                k = const_cast<QKNormedAttention *>(this)->k_layernorm.forward(ctx, k);
+            return k;
         }
 
         ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override
         {
-            q = const_cast<QKNormedAttention *>(this)->q_layernorm.forward(ctx, q);
-            return RoPESelfAttention<BaseAttn>::apply_pos_embedding_q(ctx, q, hidden_size, qlen, past);    // [qlen, heads, head_size];
+            if (!post_norm)
+                q = const_cast<QKNormedAttention *>(this)->q_layernorm.forward(ctx, q);
+            q = RoPESelfAttention<BaseAttn>::apply_pos_embedding_q(ctx, q, hidden_size, qlen, past);    // [qlen, heads, head_size];
+            if (post_norm)
+                q = const_cast<QKNormedAttention *>(this)->q_layernorm.forward(ctx, q);
+            return q;
         }
 
     public:
         Norm k_layernorm;
         Norm q_layernorm;
+        bool post_norm;
     };
 
     class PersimmonSelfAttention : public QKNormedAttention<LayerNorm, BaseAttention>
