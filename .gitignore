@@ -13,6 +13,7 @@ dist/
 # cpp
 build/
 winbuild/
+build-*/
 
 # model
 *.bin
