@@ -2,11 +2,93 @@ import sys, signal, time, os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 import itertools
+from dataclasses import dataclass, field, asdict
 
 this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 PATH_BINDS = os.path.join(this_dir, '..', 'bindings')
 sys.path.append(PATH_BINDS)
 from chatllm import LibChatLLM, ChatLLM, ChatLLMStreamer
+
+@dataclass
+class APIUsage:
+    prompt_tokens: int = 1
+    completion_tokens: int = 1
+    total_tokens: int = 1
+
+@dataclass
+class ChunkChoiceDelta:
+    role: str = "assistant"
+    content: str = ""
+
+@dataclass
+class ChunkChoice:
+    delta: ChunkChoiceDelta
+    index: int = 0
+    logprobs: str | None = None
+    finish_reason: str | None = None
+
+@dataclass
+class CompletionChunkResponse:
+    id: str
+    created: int
+    model: str
+    choices: list[ChunkChoice] = field(default_factory=list)
+    object: str = "chat.completion.chunk"
+    system_fingerprint: str = "fp_xxx"
+
+@dataclass
+class CompletionResponse:
+    id: str
+    created: int
+    model: str
+    choices: list[ChunkChoice] = field(default_factory=list)
+    object: str = "chat.completion.chunk"
+    system_fingerprint: str = "fp_xxx"
+    usage = APIUsage()
+
+@dataclass
+class LegacyChoice:
+    index: int = 0
+    text: str = ""
+    logprobs = None
+    finish_reason = None
+
+@dataclass
+class LegacyCompletionChunkResponse:
+    id: str
+    created: int
+    model: str
+    choices: list[LegacyChoice] = field(default_factory=list)
+    object: str = "chat.completion.chunk"
+    system_fingerprint: str = "fp_xxx"
+
+@dataclass
+class LegacyCompletionResponse:
+    id: str
+    created: int
+    model: str
+    choices: list[LegacyChoice] = field(default_factory=list)
+    object: str = "text_completion"
+    system_fingerprint: str = "fp_xxx"
+    usage = APIUsage()
+
+@dataclass
+class Embedding:
+    index: int
+    embedding: list[float] = field(default_factory=list)
+    object: str = "embedding"
+
+@dataclass
+class TokenUsage:
+    prompt_tokens: int = 8
+    total_tokens: int = 8
+
+@dataclass
+class DataListResponse:
+    model: str
+    data = []
+    object: str = "list"
+    usage: TokenUsage = TokenUsage()
 
 class HttpResponder:
     def __init__(self, req: BaseHTTPRequestHandler, id: str, timestamp: int, model: str) -> None:
@@ -23,6 +105,7 @@ class HttpResponder:
 
     def send_str(self, s: str) -> bool:
         self.req.wfile.write(s.encode('utf-8'))
+        self.req.wfile.flush()
         return True
 
 class ChatCompletionNonStreamResponder(HttpResponder):
@@ -35,76 +118,25 @@ class ChatCompletionNonStreamResponder(HttpResponder):
         return True
 
     def done(self) -> None:
-        rsp = {
-                "id": self.id,
-                "object": "chat.completion",
-                "created": self.timestamp,
-                "model": self.model,
-                "system_fingerprint": "fp_xxx",
-                "choices": [{
-                    "index": 0,
-                    "delta": {
-                        "role": "assistant",
-                        "content": self.acc,
-                    },
-                    "logprobs": None,
-                    "finish_reason" : "stop"
-                }],
-                'usage': {
-                    "prompt_tokens": 1,
-                    "completion_tokens": 1,
-                    "total_tokens": 1
-                }
-            }
-        self.send_str(json.dumps(rsp) + '\n\n')
+        rsp = CompletionResponse(id=self.id, created=self.timestamp, model=self.model)
+        rsp.choices.append(ChunkChoice(delta=ChunkChoiceDelta(content=self.acc), finish_reason="stop"))
+        self.send_str(json.dumps(asdict(rsp)) + '\n\n')
 
 class ChatCompletionStreamResponder(HttpResponder):
     def __init__(self, req: BaseHTTPRequestHandler, id: str, timestamp: int, model: str) -> None:
         super().__init__(req, id, timestamp, model)
 
     def recv_chunk(self, content: str) -> bool:
-        rsp = {
-                "id": self.id,
-                "object": "chat.completion.chunk",
-                "created": self.timestamp,
-                "model": self.model,
-                "system_fingerprint": "fp_xxx",
-                "choices": [{
-                    "index": 0,
-                    "delta": {
-                        "role": "assistant",
-                        "content": content,
-                    },
-                    "logprobs": None,
-                    "finish_reason" : None
-                }]
-            }
-        self.send_str(json.dumps(rsp) + '\n\n')
+        rsp = CompletionChunkResponse(id=self.id, created=self.timestamp, model=self.model)
+        rsp.choices.append(ChunkChoice(delta=ChunkChoiceDelta(content=content)))
+        self.send_str('data: ' + json.dumps(asdict(rsp)) + '\n\n')
         return True
 
     def done(self) -> None:
-        rsp = {
-                "id": self.id,
-                "object": "chat.completion",
-                "created": self.timestamp,
-                "model": self.model,
-                "system_fingerprint": "fp_xxx",
-                "choices": [{
-                    "index": 0,
-                    "delta": {
-                        "role": "assistant",
-                        "content": '',
-                    },
-                    "logprobs": None,
-                    "finish_reason" : "stop"
-                }],
-                'usage': {
-                    "prompt_tokens": 1,
-                    "completion_tokens": 1,
-                    "total_tokens": 1
-                }
-            }
-        self.send_str(json.dumps(rsp) + '\n\n')
+        rsp = CompletionResponse(id=self.id, created=self.timestamp, model=self.model)
+        rsp.choices.append(ChunkChoice(delta=ChunkChoiceDelta(), finish_reason="stop"))
+        self.send_str('data: ' + json.dumps(asdict(rsp)) + '\n\n')
+        self.send_str('data: [DONE]\n')
 
 class LegacyCompletionNonStreamResponder(HttpResponder):
     def __init__(self, req: BaseHTTPRequestHandler, id: str, timestamp: int, model: str) -> None:
@@ -116,27 +148,10 @@ class LegacyCompletionNonStreamResponder(HttpResponder):
         return True
 
     def done(self) -> None:
-        rsp = {
-            "id": self.id,
-            "object": "text_completion",
-            "created": self.timestamp,
-            "model": self.model,
-            "system_fingerprint": "fp_xxx",
-            "choices": [
-                {
-                "text": self.acc,
-                "index": 0,
-                "logprobs": None,
-                "finish_reason": "length"
-                }
-            ],
-            "usage": {
-                "prompt_tokens": 1,
-                "completion_tokens": 1,
-                "total_tokens": 1
-            }
-        }
-        self.send_str(json.dumps(rsp) + '\n')
+        rsp = LegacyCompletionResponse(id=self.id, created=self.timestamp, model=self.model)
+        rsp.choices.append(LegacyChoice(text=self.acc, finish_reason="length"))
+        self.send_str(json.dumps(asdict(rsp)) + '\n')
+        self.send_str('data: [DONE]\n')
 
 class LegacyCompletionStreamResponder(HttpResponder):
     def __init__(self, req: BaseHTTPRequestHandler, id: str, timestamp: int, model: str) -> None:
@@ -144,23 +159,9 @@ class LegacyCompletionStreamResponder(HttpResponder):
         self.first_chunk = True
 
     def recv_chunk(self, content: str) -> bool:
-        rsp = {
-                "id": self.id,
-                "object": "chat.completion.chunk",
-                "created": self.timestamp,
-                "choices": [
-                {
-                    "text": content,
-                    "index": 0,
-                    "logprobs": None,
-                    #"finish_reason": None
-                }
-                ],
-                "model": self.model,
-                "system_fingerprint": "fp_xxx"
-            }
-
-        self.send_str('data: ' + json.dumps(rsp) + '\n\n')
+        rsp = LegacyCompletionChunkResponse(id=self.id, created=self.timestamp, model=self.model)
+        rsp.choices.append(LegacyChoice(text=content))
+        self.send_str('data: ' + json.dumps(asdict(rsp)) + '\n\n')
         return True
 
     def done(self) -> None:
@@ -211,16 +212,11 @@ class HttpHandler(BaseHTTPRequestHandler):
         if isinstance(input, str):
             input = [input]
 
-        r = []
+        rsp = DataListResponse(model=obj['model'])
         for i, s in enumerate(input):
-            r.append(mk_emb(i, emb_model_obj.text_embedding(s)))
+            rsp.data.append(Embedding(index=i, embedding=emb_model_obj.text_embedding(s)))
 
-        rsp = {
-            "object": "list", "data": r,
-            "model": obj['model'],
-            "usage": { "prompt_tokens": 8, "total_tokens": 8 }
-        }
-        self.wfile.write(json.dumps(rsp).encode('utf-8'))
+        self.wfile.write(json.dumps(asdict(rsp)).encode('utf-8'))
 
     def do_POST(self):
         print(self.path)
@@ -248,6 +244,10 @@ class HttpHandler(BaseHTTPRequestHandler):
             return
 
         self.send_response(200)
+        self.send_header('Cache-Control', 'no-cache')
+        self.send_header('vary', 'origin, access-control-request-method, access-control-request-headers')
+        self.send_header('access-control-allow-credentials', 'true')
+        self.send_header('x-content-type-options', 'nosniff')
 
         id = session_man.make_id()
         timestamp = int(time.time())
@@ -273,16 +273,14 @@ class HttpHandler(BaseHTTPRequestHandler):
             restart = counter < 2
 
             responder_cls = ChatCompletionStreamResponder if stream else ChatCompletionNonStreamResponder
-
-            self.send_header('Content-type', 'application/json')
         else:
             prompt = obj['prompt']
             responder_cls = LegacyCompletionStreamResponder if stream else LegacyCompletionNonStreamResponder
 
-            if stream:
-                self.send_header('Content-type', 'text/event-stream')
-            else:
-                self.send_header('Content-type', 'application/json')
+        if stream:
+            self.send_header('Content-type', 'text/event-stream; charset=utf-8')
+        else:
+            self.send_header('Content-type', 'application/json')
 
         self.end_headers()
 

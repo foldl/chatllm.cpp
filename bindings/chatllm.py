@@ -470,7 +470,7 @@ class ChatLLMStreamer:
                 if output.id == id:
                     break
             elif isinstance(output, LLMChatMeta):
-                yield output.text + '\n'
+                pass
             else:
                 print(output)
                 raise Exception(output)
