@@ -62,6 +62,7 @@
 
 * Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
     * [x] Mistral: [Instruct-7B-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), [Instruct-7B-v0.3](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3)
+    * [x] Small: [Instruct-24B](https://huggingface.co/mistralai/Mistral-Small-24B-Instruct-2501)
 
     * [x] OpenChat: [3.5](https://huggingface.co/openchat/openchat-3.5-1210/) (`-a OpenChat`) 🔥
 

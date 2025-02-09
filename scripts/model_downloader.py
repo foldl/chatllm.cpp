@@ -6,7 +6,7 @@ import binding
 def get_model_url_on_modelscope(proj: str, fn: str, user: str = 'judd2024') -> str:
     return f"https://modelscope.cn/api/v1/models/{user}/{proj}/repo?Revision=master&FilePath={fn}"
 
-with open(os.path.join(binding.PATH_SCRIPTS, 'models.json')) as f:
+with open(os.path.join(binding.PATH_SCRIPTS, 'models.json'), encoding='utf-8') as f:
     all_models = json.load(f)
 
 def print_progress_bar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 60, fill = '█', printEnd = "\r", auto_nl = True):

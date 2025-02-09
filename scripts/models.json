@@ -194,6 +194,22 @@
             }
         }
     },
+    "mistral-small": {
+        "brief": "Mistral Small 3 sets a new benchmark in the 'small' Large Language Models category below 70B.",
+        "default": "24b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "24b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 14740037840,
+                        "url": "chatllm_quantized_mistral_small/mistral-small-24b-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
     "mistral0.1": {
         "brief": "The Mistral-7B-Instruct-v0.1 Large Language Model (LLM) is a instruct fine-tuned version of the Mistral-7B-v0.1 generative text model using a variety of publicly available conversation datasets.",
         "default": "7b",
