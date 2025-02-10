@@ -20,19 +20,9 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * 2025-01-13: OLMo-2
 * 2025-01-11: Phi-4
 * 2025-01-06: (Naive) Beam search
-* 2024-12-27: AlphaGeometry-LM
-* 2024-12-25: TeleChat2
-* 2024-12-19: C4AI Command R7B, EXAONE 3.5
-* 2024-12-17: Megrez, Falcon3
 * 2024-12-09: [Reversed role](./docs/fun.md#reversed-role)
-* 2024-11-29: QwQ-32B
-* 2024-11-22: Marco-o1
 * 2024-11-21: [Continued generation](./docs/fun.md#continued-generation)
-* 2024-11-01: Granite, [generation steering](./docs/fun.md#generation-steering)
-* 2024-09-29: LlaMA 3.2
-* 2024-09-22: Qwen 2.5
-* 2024-09-13: OLMoE
-* 2024-09-11: MiniCPM3
+* 2024-11-01: [generation steering](./docs/fun.md#generation-steering)
 * 2024-07-14: [ggml updated](https://github.com/ggerganov/ggml/tree/3e7e5e26f90fecf4f7c2808df7d94454630b219c)
 * 2024-06-15: [Tool calling](./docs/tool_calling.md)
 * 2024-05-29: [ggml](https://github.com/ggerganov/ggml) is forked instead of submodule
