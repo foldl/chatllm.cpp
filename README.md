@@ -6,13 +6,14 @@
 
 ![](./docs/demo.gif)
 
-Inference of a bunch of models from less than 1B to more than 300B, for real-time chatting with [RAG](./docs/rag.md) on your computer (CPU),
+Inference of a bunch of models from less than 1B to more than 300B, for real-time chatting with [RAG](./docs/rag.md) on your computer (CPU & GPU),
 pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml).
 
 | [Supported Models](./docs/models.md) | [Download Quantized Models](./docs/quick_start.md#download-quantized-models) |
 
 **What's New:**
 
+* 2025-02-10: [GPU acceleration](./docs/gpu.md)
 * 2025-01-25: MiniCPM Embedding & ReRanker
 * 2025-01-21: DeepSeek-R1-Distill-Llama & Qwen
 * 2025-01-15: InternLM3

@@ -1133,7 +1133,9 @@ namespace chatllm
         {
             std::vector<BackendContext::gpu_cfg> gpu_cfgs;
             parse_gpu_layers(gpu_cfgs, rt_config.gpu_layers);
-            backend_context.init(gpu_cfgs, config_.num_hidden_layers, GRAPH_SIZE);
+            // one more layer for Epilog
+            backend_context.init(gpu_cfgs, config_.num_hidden_layers + 1, GRAPH_SIZE);
+            backend_context.layer_allocators.set_misc_layer_backend_mapping(-1, config_.num_hidden_layers);
         }
 
         LayerAllocatorManager *get_alloc_manager(void) override
@@ -1165,7 +1167,7 @@ namespace chatllm
             ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
 
             if (logit_scale > 0)
-                r = ggml::scale_inplace(&ctx, r, logit_scale);
+                r = ggml::scale(&ctx, r, logit_scale);
 
             ggml::build_forward_expand(&ctx, r);
 
@@ -1205,7 +1207,7 @@ namespace chatllm
             ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
 
             if (logit_scale > 0)
-                r = ggml::scale_inplace(&ctx, r, logit_scale);
+                r = ggml::scale(&ctx, r, logit_scale);
 
             ggml::build_forward_expand(&ctx, r);
 

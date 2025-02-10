@@ -305,6 +305,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::norm(ComputeContext *ctx, ggml::tensor *a, float eps)
+    {
+        ggml::tensor *tensor = ggml_norm(ctx->get_ctx(), a, eps);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps)
     {
         ggml::tensor *tensor = ggml_norm_inplace(ctx->get_ctx(), a, eps);
@@ -322,6 +329,26 @@ namespace chatllm
     ggml::tensor *ggml::rms_norm(ComputeContext *ctx, ggml::tensor *a, float eps)
     {
         ggml::tensor *tensor = ggml_rms_norm(ctx->get_ctx(), a, eps);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::rope(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int n_dims, int mode)
+    {
+        ggml::tensor *tensor = ggml_rope(ctx->get_ctx(), a, b, n_dims, mode);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::rope_ext(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c,
+                                            int   n_dims, int   mode, int   n_ctx_orig,
+                                            float freq_base, float freq_scale, float ext_factor,
+                                            float attn_factor, float beta_fast, float beta_slow)
+    {
+        ggml::tensor *tensor = ggml_rope_ext(ctx->get_ctx(), a, b, c,
+                                n_dims, mode, n_ctx_orig,
+                                freq_base, freq_scale, ext_factor,
+                                attn_factor, beta_fast, beta_slow);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -356,6 +383,20 @@ namespace chatllm
     ggml::tensor *ggml::soft_max_inplace(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_soft_max_inplace(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::sigmoid(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_sigmoid(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::diag_mask_inf(ComputeContext *ctx, ggml::tensor *a, int n_past)
+    {
+        ggml::tensor *tensor = ggml_diag_mask_inf(ctx->get_ctx(), a, n_past);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -568,7 +609,7 @@ namespace chatllm
     ggml::tensor *LayerNorm::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         // input: [seqlen, normalized_shape]
-        ggml::tensor *output = ggml::norm_inplace(ctx, input, eps);
+        ggml::tensor *output = ggml::norm(ctx, input, eps);
         output = ggml::mul_inplace(ctx, output, weight);
         if (bias)
             output = ggml::add_inplace(ctx, output, bias);
@@ -578,7 +619,7 @@ namespace chatllm
     ggml::tensor *RMSNorm::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         ggml::tensor *output = inplace ? ggml::rms_norm_inplace(ctx, input, eps) : ggml::rms_norm(ctx, input, eps);
-        output = ggml::mul_inplace(ctx, output, weight);
+        output = ggml::mul(ctx, output, weight);
         return output;
     }
 
@@ -604,7 +645,7 @@ namespace chatllm
         ggml::tensor *output = dense.forward(ctx, first_token_tensor);
         output = ggml::inplace_act(ctx, act, output);
         output = out_proj.forward(ctx, output);
-        output = ggml::map_custom1(ctx, output, ggml_compute_forward_sigmoid, 1, nullptr);
+        output = ggml::sigmoid(ctx, output);
         return output;
     }
 

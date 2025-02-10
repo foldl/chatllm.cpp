@@ -86,10 +86,16 @@ namespace chatllm
 
         ggml::tensor *permute(ComputeContext *ctx, ggml::tensor *a, int axis0, int axis1, int axis2, int axis3);
 
+        ggml::tensor *norm(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *rms_norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *rms_norm(ComputeContext *ctx, ggml::tensor *a, float eps);
 
+        ggml::tensor *rope(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int n_dims, int mode);
+        ggml::tensor *rope_ext(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c,
+                                            int   n_dims, int   mode, int   n_ctx_orig,
+                                            float freq_base, float freq_scale, float ext_factor,
+                                            float attn_factor, float beta_fast, float beta_slow);
         ggml::tensor *rope_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int n_dims, int mode);
         ggml::tensor *rope_ext_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c,
                                             int   n_dims, int   mode, int   n_ctx_orig,
@@ -99,6 +105,9 @@ namespace chatllm
         ggml::tensor *soft_max(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *soft_max_inplace(ComputeContext *ctx, ggml::tensor *a);
 
+        ggml::tensor *sigmoid(ComputeContext *ctx, ggml::tensor *a);
+
+        ggml::tensor *diag_mask_inf(ComputeContext *ctx, ggml::tensor *a, int n_past);
         ggml::tensor *diag_mask_inf_inplace(ComputeContext *ctx, ggml::tensor *a, int n_past);
 
         ggml::tensor *inplace_act(ComputeContext *ctx, ActFunc act, ggml::tensor *input);
@@ -1716,8 +1725,8 @@ namespace chatllm
         {
             ggml::tensor *scale = gate.forward(ctx, hidden_states);
             ggml::tensor *r     = MLP::forward(ctx, hidden_states);
-            scale = ggml::map_custom1_inplace(ctx, scale, ggml_compute_forward_sigmoid, 1, nullptr);
-            r = ggml::mul_inplace(ctx, r, scale);
+            scale = ggml::map_custom1(ctx, scale, ggml_compute_forward_sigmoid, 1, nullptr);
+            r = ggml::mul(ctx, r, scale);
             return r;
         }
 
@@ -2120,7 +2129,6 @@ namespace chatllm
             ggml::tensor *attn_outputs = Base::attention.forward(ctx, dup_hidden, n_past);
             ggml::tensor *feed_forward_hidden_states = mlp.forward(ctx, dup_hidden);
 
-            // CAUTION: MEMORY REUSED BETWEEN LAYERS
             ggml::tensor *r = ggml::add_inplace(ctx, feed_forward_hidden_states, residual);
             r = ggml::add_inplace(ctx, r, attn_outputs);
 
@@ -2188,7 +2196,7 @@ namespace chatllm
             : RoPESelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
     };
 
-    class BaichuanSelfAttention : public RoPESelfAttention<BaseAttention>
+    class BaichuanSelfAttention : public BaseAttention
     {
     public:
         BaichuanSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
@@ -2197,7 +2205,7 @@ namespace chatllm
         }
 
         BaichuanSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-            : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
         {
             alibi.bias_max = 8.0f;
             alibi.n_past = 0;

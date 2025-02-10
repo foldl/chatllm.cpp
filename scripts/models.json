@@ -41,6 +41,15 @@
                         "url": "chatllm_quantized_240726/llama3.1-8b.bin"
                     }
                 }
+            },
+            "70b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 44106363072,
+                        "url": "chatllm_quantized_llama3.1-70b/llama3.1-70b-q4_1.bin"
+                    }
+                }
             }
         }
     },
