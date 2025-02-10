@@ -118,5 +118,11 @@ def enum_missing():
             l.append(k)
     print(sorted(l))
 
+def check_default():
+    for m in all_models.keys():
+        info = all_models[m]
+        if info['default'] not in info['variants']:
+            print(f"{m} default missing")
+
 if __name__ == '__main__':
     show()

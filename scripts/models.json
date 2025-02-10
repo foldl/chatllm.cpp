@@ -1656,7 +1656,7 @@
         "default": "22b",
         "license": "Mistral AI Non-Production License",
         "variants": {
-            "7b": {
+            "22b": {
                 "default": "q4_1",
                 "quantized": {
                     "q4_1": {
@@ -1688,7 +1688,7 @@
         "default": "13b",
         "license": "Apache 2.0 and Community License for Baichuan2 Model",
         "variants": {
-            "7b": {
+            "13b": {
                 "default": "q8",
                 "quantized": {
                     "q8": {
@@ -1768,7 +1768,7 @@
         "default": "2b",
         "license": "Gemma Terms of Use",
         "variants": {
-            "8b": {
+            "2b": {
                 "default": "q8",
                 "quantized": {
                     "q8": {
@@ -1784,7 +1784,7 @@
         "default": "14b",
         "license": "Orion-14B Series: Models Community License Agreement",
         "variants": {
-            "8b": {
+            "14b": {
                 "default": "q8",
                 "quantized": {
                     "q8": {
