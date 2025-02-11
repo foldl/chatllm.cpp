@@ -267,7 +267,11 @@ namespace v2_light
             ggml::tensor * key_layer = ggml::new_tensor_3d(ctx, k_pe->type,
                 qk_nope_head_dim + rope_dim, num_kv_heads, qlen);
 
-            key_layer = ggml::map_custom1_inplace(ctx, key_layer, _compute_forward_zero, 1, nullptr);
+            // TODO: optimize (waiting for a proper operator)
+            if (ctx->is_using_gpu())
+                key_layer = ggml::scale_inplace(ctx, key_layer, 0.0f);
+            else
+                key_layer = ggml::map_custom1_inplace(ctx, key_layer, _compute_forward_zero, 1, nullptr);
 
             ggml::tensor * k_nope_dst = ggml::view_3d(ctx, key_layer,
                          qk_nope_head_dim, num_kv_heads, qlen,
@@ -288,7 +292,19 @@ namespace v2_light
                          rope_dim, num_attention_heads, qlen,
                          query_layer->nb[1], query_layer->nb[2],
                          qk_nope_head_dim * ggml::element_size(query_layer));
-            q_pe = apply_pos_embedding_q(ctx, q_pe, rope_dim * num_attention_heads, qlen, pos);
+
+            if (ctx->is_using_gpu())
+            {
+                // TODO: optimize (GPU rope requires continuous)
+                ggml::tensor * q_pe_cont = ggml::cont(ctx, q_pe);
+                q_pe_cont = apply_pos_embedding_q(ctx, q_pe_cont, rope_dim * num_attention_heads, qlen, pos);
+                q_pe = ggml::cpy(ctx, q_pe_cont, q_pe);
+            }
+            else
+            {
+                q_pe = apply_pos_embedding_q(ctx, q_pe, rope_dim * num_attention_heads, qlen, pos);
+            }
+
             ggml::build_forward_expand(ctx, q_pe);
 
             ggml::tensor *attn_scores = cross_attention_after_pe(ctx, hidden_size, n_past, qlen, query_layer, key_layer, v);
@@ -331,7 +347,19 @@ namespace v2_light
                          rope_dim, num_attention_heads, qlen,
                          query_layer->nb[1], query_layer->nb[2],
                          qk_nope_head_dim * ggml::element_size(query_layer));
-            q_pe = apply_pos_embedding_q(ctx, q_pe, rope_dim * num_attention_heads, qlen, pos);
+
+            if (ctx->is_using_gpu())
+            {
+                // TODO: optimize (GPU rope requires continuous)
+                ggml::tensor * q_pe_cont = ggml::cont(ctx, q_pe);
+                q_pe_cont = apply_pos_embedding_q(ctx, q_pe_cont, rope_dim * num_attention_heads, qlen, pos);
+                q_pe = ggml::cpy(ctx, q_pe_cont, q_pe);
+            }
+            else
+            {
+                q_pe = apply_pos_embedding_q(ctx, q_pe, rope_dim * num_attention_heads, qlen, pos);
+            }
+
             ggml::build_forward_expand(ctx, q_pe);
 
             ggml::tensor *attn_scores = cross_attention_after_pe_memory(ctx, hidden_size, n_past, qlen, query_layer, k_pe, kv_lora);
@@ -401,7 +429,11 @@ namespace v2_light
             ggml::tensor *key_layer = ggml::new_tensor_3d(ctx, k_nope->type,
                 qk_nope_head_dim + rope_dim, num_kv_heads, qlen); // [qlen, heads, head_size]
 
-            key_layer = ggml::map_custom1_inplace(ctx, key_layer, _compute_forward_zero, 1, nullptr);
+            // TODO: optimize (waiting for a proper operator)
+            if (ctx->is_using_gpu())
+                key_layer = ggml::scale_inplace(ctx, key_layer, 0.0f);
+            else
+                key_layer = ggml::map_custom1_inplace(ctx, key_layer, _compute_forward_zero, 1, nullptr);
 
             ggml::tensor * k_nope_dst = ggml::view_3d(ctx, key_layer,
                          qk_nope_head_dim, num_kv_heads, qlen,

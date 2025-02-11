@@ -76,6 +76,9 @@ namespace chatllm
 
         virtual BackendBuffer *alloc(size_t size, Usage usage = Usage::Others) = 0;
         virtual bool alloc(ggml::tensor *tensor) = 0;
+        virtual bool alloc(ggml::tensor *tensor, Usage usage) = 0;
+        virtual size_t get_alloc_size(ggml::tensor *tensor) = 0;
+        virtual size_t get_alloc_size(ggml::tensor *tensor, Usage usage) = 0;
 
         virtual size_t get_alignment(Usage usage) const = 0;
         virtual size_t get_max_size(Usage usage) const = 0;
@@ -106,6 +109,9 @@ namespace chatllm
 
         BackendBuffer *alloc(size_t size, Usage usage = Usage::Others) override;
         bool alloc(ggml::tensor *tensor) override;
+        bool alloc(ggml::tensor *tensor, Usage usage) override;
+        size_t get_alloc_size(ggml::tensor *tensor) override;
+        size_t get_alloc_size(ggml::tensor *tensor, Usage usage) override;
 
         bool supported_by_backend(Backend *backend, ggml::tensor *tensor) override;
 
@@ -233,6 +239,15 @@ namespace chatllm
         {
             int id;         // ignored for Metal
             int n_layers;
+            bool prolog;
+            bool epilog;
+
+            void merge(const gpu_cfg &cfg)
+            {
+                if (cfg.n_layers > 0) n_layers = cfg.n_layers;
+                if (cfg.prolog) prolog = true;
+                if (cfg.epilog) epilog = true;
+            }
         };
 
         BackendContext();
@@ -257,6 +272,8 @@ namespace chatllm
         void show_buffer_sizes(void);
 
         void synchronize(void);
+
+        bool is_using_gpu(void) const;
 
     public:
         std::vector<Backend> backends;
@@ -322,6 +339,8 @@ namespace chatllm
 
         virtual size_t get_used_mem(void);
         virtual size_t get_mem_size(void);
+
+        virtual bool is_using_gpu(void) const { return backend_context->is_using_gpu(); }
 
         BackendContext *get_backend_context(void) { return backend_context; }
 

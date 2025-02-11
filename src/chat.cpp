@@ -725,7 +725,7 @@ namespace chatllm
 
         this->original_type = ggml::type_of(tensor);
         tensor.type = target_type;
-        data = alloc->alloc(ggml::nbytes(&tensor), usage);
+        data = alloc->alloc(alloc->get_alloc_size(&tensor, usage), usage);
         data->assign_to(&tensor);
         this->alloc = alloc;
 

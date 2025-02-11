@@ -95,13 +95,28 @@ namespace chatllm
         return r;
     }
 
-    bool LayerBufAllocator::alloc(ggml::tensor *tensor)
+    bool LayerBufAllocator::alloc(ggml::tensor *tensor, Usage usage)
     {
-        BackendBuffer *buf = alloc(ggml::nbytes(tensor), detect_usage(tensor));
+        BackendBuffer *buf = alloc(get_alloc_size(tensor), usage);
         if (nullptr == buf) return false;
 
         buf->assign_to(tensor);
         return true;
+    }
+
+    bool LayerBufAllocator::alloc(ggml::tensor *tensor)
+    {
+        return alloc(tensor, detect_usage(tensor));
+    }
+
+    size_t  LayerBufAllocator::get_alloc_size(ggml::tensor *tensor, Usage usage)
+    {
+        return ggml_backend_buft_get_alloc_size(get_allocator(usage), tensor);
+    }
+
+    size_t  LayerBufAllocator::get_alloc_size(ggml::tensor *tensor)
+    {
+        return get_alloc_size(tensor, detect_usage(tensor));
     }
 
     bool LayerBufAllocator::supported_by_backend(Backend *backend, ggml::tensor *tensor)
@@ -431,10 +446,25 @@ namespace chatllm
     {
     }
 
+    bool BackendContext::is_using_gpu(void) const
+    {
+        return backends.size() > 1;
+    }
+
     void BackendContext::init(const std::vector<gpu_cfg> &gpu_cfgs, const int n_layers, const size_t graph_max_nodes_num)
     {
+        int prolog_id = -1;
+        int epilog_id = -1;
         int n_gpu_layers = 0;
-        for (auto &cfg : gpu_cfgs) n_gpu_layers += cfg.n_layers;
+        for (auto &cfg : gpu_cfgs)
+        {
+            n_gpu_layers += cfg.n_layers;
+            if ((prolog_id < 0) && cfg.prolog)
+                prolog_id = cfg.id;
+            if ((epilog_id < 0) && cfg.epilog)
+                epilog_id = cfg.id;
+        }
+
         const bool use_gpu = n_gpu_layers > 0;
 
         buf_compute_meta.resize(ggml_tensor_overhead() * graph_max_nodes_num + ggml_graph_overhead_custom(graph_max_nodes_num, false));
@@ -494,6 +524,21 @@ namespace chatllm
                 layer_allocators.allocators.emplace_back(backend.get_allocator(BufferType::Dedicated), &backend);
             }
         }
+
+        if (prolog_id >= 0)
+        {
+            auto &backend = backends[prolog_id];
+            prolog_id = (int)layer_allocators.allocators.size();
+            layer_allocators.allocators.emplace_back(backend.get_allocator(BufferType::Dedicated), &backend);
+        }
+        if (epilog_id >= 0)
+        {
+            auto &backend = backends[epilog_id];
+            epilog_id = (int)layer_allocators.allocators.size();
+            layer_allocators.allocators.emplace_back(backend.get_allocator(BufferType::Dedicated), &backend);
+        }
+
+        layer_allocators.set_misc_layer_backend_mapping(prolog_id, epilog_id);
 
         // a "faked" layer for CPU
         layer_allocators.allocators.emplace_back(host_allocator.alloc_matrix, &backends[backends.size() - 1]);

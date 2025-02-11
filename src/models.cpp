@@ -862,20 +862,30 @@ namespace chatllm
     {
         cfg.id = 0;
         cfg.n_layers = -1;
+        cfg.epilog = false;
+        cfg.prolog = false;
 
         std::string t(s);
 
         size_t pos = t.find_first_of(':');
         std::string part = t.substr(0, pos);
-        if (part.size() > 0)
-            cfg.n_layers = atoi(part.c_str());
         if (pos != std::string::npos)
         {
-            t = t.substr(pos + 1);
-            cfg.id = atoi(t.c_str());
+            cfg.id = atoi(part.c_str());
+            part = t.substr(pos + 1);
         }
 
-        return (cfg.n_layers >= 0) && (cfg.id >= 0);
+        if (part.size() > 0)
+        {
+            if (part.compare("prolog") == 0)
+                cfg.prolog = true;
+            else if (part.compare("epilog") == 0)
+                cfg.epilog = true;
+            else
+                cfg.n_layers = atoi(part.c_str());
+        }
+
+        return (cfg.n_layers >= 1) || cfg.prolog || cfg.epilog;
     }
 
     static int index_of_gpu_cfg(const std::vector<BackendContext::gpu_cfg> &gpu_cfgs, int id)
@@ -898,7 +908,7 @@ namespace chatllm
             {
                 int index = index_of_gpu_cfg(gpu_cfgs, cfg.id);
                 if (index >= 0)
-                    gpu_cfgs[index].n_layers = cfg.n_layers;
+                    gpu_cfgs[index].merge(cfg);
                 else
                     gpu_cfgs.push_back(cfg);
             }
@@ -1133,9 +1143,7 @@ namespace chatllm
         {
             std::vector<BackendContext::gpu_cfg> gpu_cfgs;
             parse_gpu_layers(gpu_cfgs, rt_config.gpu_layers);
-            // one more layer for Epilog
-            backend_context.init(gpu_cfgs, config_.num_hidden_layers + 1, GRAPH_SIZE);
-            backend_context.layer_allocators.set_misc_layer_backend_mapping(-1, config_.num_hidden_layers);
+            backend_context.init(gpu_cfgs, config_.num_hidden_layers, GRAPH_SIZE);
         }
 
         LayerAllocatorManager *get_alloc_manager(void) override

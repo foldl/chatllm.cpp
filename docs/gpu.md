@@ -33,8 +33,17 @@ For more information, please checkout [Build llama.cpp locally](https://github.c
 ## Usage
 
 Use `-ngl` (`--n_gpu_layers`) to specify number of layers to be deployed to GPU. We name the staffs before the first layer as "Prolog", and
-staffs after the last layer as "Epilog". At present, "Prolog" is always put to CPU, while others are configurable with `-ngl`.
-Suppose a model has `10` hidden layers, then `-ngl 10` will put all layers to GPU, and `-ngl 11` will also put the "Epilog" to GPU.
+staffs after the last layer as "Epilog". "Prolog" and "Epilog" are treated as special layers, and they can also be configured from `-ngl`
+by including `prolog` and `epilog` respectively.
+Suppose there is a model with `10` hidden layers:
+
+* `-ngl 5`: put the first 5 layers to GPU;
+* `-ngl 100`: put all layers to GPU;
+* `-ngl 5,prolog`: put the first 5 layers, and "Prolog" layer to GPU;
+* `-ngl 100,prolog,epilog`: put all layers, "Prolog" layer and "Epilog" layer to GPU.
+
+The full format of `-ngl` is `-ngl id:layer_spec[,id:layer_spec]`. `id` is GPU device ID. If `id` is omitted, `0` is assumed.
+`layer_spec` can be a positive integer, `prolog` and `epilog`.
 
 ## Known issues
 
@@ -42,9 +51,9 @@ Suppose a model has `10` hidden layers, then `-ngl 10` will put all layers to GP
 
     If hidden layers of a model use custom operators, then GPU acceleration is unavailable.
 
-1. Use of `tie_word_embeddings`;
+1. Models with `tie_word_embeddings = true`;
 
-    "Epilog" may work on GPU (iGPU). If not, do not place "Epilog" on GPU.
+    Ensure `Prolog` and `Epilog` layers are on the same device.
 
 1. `ggml` scheduler can't handle some operators properly.
 
