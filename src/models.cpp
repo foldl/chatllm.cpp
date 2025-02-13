@@ -877,7 +877,13 @@ namespace chatllm
 
         if (part.size() > 0)
         {
-            if (part.compare("prolog") == 0)
+            if (part.compare("all") == 0)
+            {
+                cfg.prolog = true;
+                cfg.epilog = true;
+                cfg.n_layers = 99999;
+            }
+            else if (part.compare("prolog") == 0)
                 cfg.prolog = true;
             else if (part.compare("epilog") == 0)
                 cfg.epilog = true;

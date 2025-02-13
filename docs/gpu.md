@@ -41,9 +41,10 @@ Suppose there is a model with `10` hidden layers:
 * `-ngl 100`: put all layers to GPU;
 * `-ngl 5,prolog`: put the first 5 layers, and "Prolog" layer to GPU;
 * `-ngl 100,prolog,epilog`: put all layers, "Prolog" layer and "Epilog" layer to GPU.
+* `-ngl all`: equivalent to `-ngl 99999,prolog,epilog`.
 
 The full format of `-ngl` is `-ngl id:layer_spec[,id:layer_spec]`. `id` is GPU device ID. If `id` is omitted, `0` is assumed.
-`layer_spec` can be a positive integer, `prolog` and `epilog`.
+`layer_spec` can be a positive integer, `prolog`, `epilog`, or `all`.
 
 ## Known issues
 
