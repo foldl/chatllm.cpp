@@ -143,10 +143,6 @@ class LibChatLLM:
     def callback_print(user_data: int, print_type: c_int, s: bytes) -> None:
         obj = LibChatLLM._id2obj[user_data]
 
-        if print_type == PrintType.PRINT_EVT_ASYNC_COMPLETED.value:
-            obj.callback_async_done()
-            return
-
         txt = s.decode()
         if print_type == PrintType.PRINT_CHAT_CHUNK.value:
             obj.callback_print(txt)
@@ -170,8 +166,12 @@ class LibChatLLM:
             obj.callback_text_tokenize(txt)
         elif print_type == PrintType.PRINTLN_ERROR.value:
             raise Exception(txt)
+        elif print_type == PrintType.PRINTLN_LOGGING.value:
+            obj.callback_print_log(txt)
         elif print_type == PrintType.PRINTLN_BEAM_SEARCH.value:
             obj.callback_print_beam_search(txt)
+        elif print_type == PrintType.PRINT_EVT_ASYNC_COMPLETED.value:
+            obj.callback_async_done()
         else:
             raise Exception(f"unhandled print_type({print_type}): {txt}")
 
@@ -372,6 +372,9 @@ class ChatLLM:
 
     def callback_print_reference(self, s: str) -> None:
         self.references.append(s)
+
+    def callback_print_log(self, s: str) -> None:
+        pass
 
     def callback_print_beam_search(self, s: str) -> None:
         l = s.split(',', maxsplit=1)

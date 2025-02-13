@@ -40,10 +40,11 @@ enum PrintType
     PRINTLN_TOKEN_IDS       =10,    // print a whole line: token ids (example: "1,3,5,8,...")
     PRINTLN_LOGGING         =11,    // print a whole line: internal logging with the first char indicating level
                                     // (space): None; D: Debug; I: Info; W: Warn; E: Error; .: continue
+                                    // Note: log is passed to the `f_print` callback of the 1st alive chatllm_obj
     PRINTLN_BEAM_SEARCH     =12,    // print a whole line: a result of beam search with a prefix of probability
                                     // (example: "0.8,....")
 
-    PRINT_EVT_ASYNC_COMPLETED  = 100,   // last async operation completed (utf8_str is null)
+    PRINT_EVT_ASYNC_COMPLETED  = 100,   // last async operation completed (utf8_str is "" to keep callback code simple)
 };
 
 typedef void (*f_chatllm_print)(void *user_data, int print_type, const char *utf8_str);

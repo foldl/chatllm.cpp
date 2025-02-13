@@ -72,6 +72,7 @@ struct Args
     bool reversed_role = false;
     int save_session_rounds = -1;
     int beam_size = -1;
+    int log_level = 4;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -181,6 +182,7 @@ void usage(const std::string &prog)
               << "  --hide_banner           hide banner\n"
               << "  --show                  show model info and quit\n"
               << "  --dump_dot FILE         dump sched splits to a DOT file, and exit with -1\n"
+              << "  --log_level             log level. (default: 4 - ERROR)\n"
               << "Additional key-value args:\n"
               << "  --kv                    start of additional args. all following options are interpreted as k-v pairs\n"
               << "  key value               a key-value pair of args\n"
@@ -358,6 +360,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--load_session",                load_session,         std::string)
             handle_para0("--dump_dot",                    dump_dot,             std::string)
             handle_para0("--beam_size",                   beam_size,            std::stoi)
+            handle_para0("--log_level",                   log_level,            std::stoi)
             else
                 break;
 
@@ -652,24 +655,35 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
                                          gen_config.set_ai_prefix(args.ai_prefix); gen_config.dump_dot = args.dump_dot; \
                                          gen_config.emb_rank_query_sep = args.emb_rank_query_sep;
 
-static void _ggml_log_callback(enum ggml_log_level level, const char * text, void * user_data)
+chatllm::BaseStreamer *get_streamer_for_log(void);
+
+void log_internal(int level, const char * text)
 {
-    chatllm::BaseStreamer *streamer = (chatllm::BaseStreamer *)user_data;
+    chatllm::BaseStreamer *streamer = get_streamer_for_log();
+    if (nullptr == streamer) return;
+
     std::ostringstream oss;
     static const char tags[] = {' ', 'D', 'I', 'W', 'E', '.'};
+    if (level < streamer->log_level) return;
 
     if ((0 <= level) && (level < sizeof(tags)))
         oss << tags[level];
     else
         oss << '?';
-
-    oss << text;
+    std::string s(text);
+    s.erase(s.find_last_not_of('\n') + 1);
+    oss << s;
     streamer->putln(oss.str(),  chatllm::BaseStreamer::LOGGING);
+}
+
+static void _ggml_log_callback(enum ggml_log_level level, const char * text, void * user_data)
+{
+    log_internal(level, text);
 }
 
 void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 {
-    ggml_log_set(_ggml_log_callback, &streamer);
+    streamer.set_tokenizer(pipeline.tokenizer);
 
     if (args.system.size() > 0)
         pipeline.set_system_prompt(args.system);
@@ -888,6 +902,12 @@ std::string wstr_to_utf8(const wchar_t* wstr)
 
 #ifndef CHATLLM_SHARED_LIB
 
+static chatllm::BaseStreamer *log_streamer = nullptr;
+chatllm::BaseStreamer *get_streamer_for_log(void)
+{
+    return log_streamer;
+}
+
 static int init_vector_store(Args &args)
 {
     chatllm::Pipeline pipeline(args.embedding_model_path);
@@ -979,21 +999,25 @@ int main(int argc, const char **argv)
     if (args.merge_vs.size() > 0)
         return merge_vector_store(args);
 
+    ggml_log_set(_ggml_log_callback, nullptr);
+
     try
     {
         chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers);
+        TextStreamer streamer(nullptr);
+        streamer.log_level = args.log_level;
+        log_streamer = &streamer;
+
         if (args.embedding_model_path.size() < 1)
         {
             if (args.beam_size < 1)
             {
                 chatllm::Pipeline pipeline(args.model_path, pipe_args);
-                TextStreamer streamer(pipeline.tokenizer);
                 chat(args, pipeline, streamer);
             }
             else
             {
                 chatllm::BeamSearchPipeline pipeline(args.model_path, pipe_args, args.beam_size);
-                TextStreamer streamer(pipeline.tokenizer);
                 chat(args, pipeline, streamer);
             }
         }
@@ -1014,7 +1038,6 @@ int main(int argc, const char **argv)
             pipeline.composer.set_context_sep(args.rag_context_sep);
             pipeline.composer.set_prompt_template(args.rag_template);
             pipeline.composer.set_rewrite_template(args.retrieve_rewrite_template);
-            TextStreamer streamer(pipeline.tokenizer);
             chat(args, pipeline, streamer);
         }
     }
@@ -1095,7 +1118,7 @@ public:
 
     void put_event(int type)
     {
-        f_print(user_data, type, nullptr);
+        f_print(user_data, type, "");
     }
 
     void end() override
@@ -1112,9 +1135,21 @@ public:
     int ref_count;
 };
 
+static std::vector<Chat *> chat_objects;
+
+chatllm::BaseStreamer *get_streamer_for_log(void)
+{
+    return chat_objects.size() > 0 ? chat_objects[0]->streamer : nullptr;
+}
+
 struct chatllm_obj *chatllm_create(void)
 {
-    return (chatllm_obj *)new Chat();
+    auto chat = new Chat();
+    chat_objects.push_back(chat);
+    if (chat_objects.size() == 1) {
+        ggml_log_set(_ggml_log_callback, nullptr);
+    }
+    return (chatllm_obj *)chat;
 }
 
 void chatllm_append_param(struct chatllm_obj *obj, const char *utf8_str)
@@ -1123,13 +1158,10 @@ void chatllm_append_param(struct chatllm_obj *obj, const char *utf8_str)
     chat->append_param(utf8_str);
 }
 
-static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline, chatllm::BaseStreamer &streamer)
+static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline)
 {
     int r = 0;
     chat->pipeline = &pipeline;
-    chat->streamer = &streamer;
-
-    ggml_log_set(_ggml_log_callback, &streamer);
 
     if (args.system.size() > 0)
         pipeline.set_system_prompt(args.system);
@@ -1150,7 +1182,7 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline, chatl
 
     chat->gen_config = gen_config;
 
-    show_banner(pipeline, args.interactive && args.show_banner, &streamer);
+    show_banner(pipeline, args.interactive && args.show_banner, chat->streamer);
 
     if (args.load_session.size() > 0)
     {
@@ -1180,6 +1212,8 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
         args.num_threads = get_num_physical_cores();
 
     args.interactive = true;
+    chat->streamer = new FFIStreamer(nullptr, f_print, f_end, user_data);
+    chat->streamer->log_level = args.log_level;
 
     try
     {
@@ -1193,14 +1227,14 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
             if (args.beam_size < 1)
             {
                 auto pipeline = new chatllm::Pipeline(args.model_path, pipe_args);
-                auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, f_end, user_data);
-                return start_chat(chat, args, *pipeline, *streamer);
+                chat->streamer->tokenizer = pipeline->tokenizer;
+                return start_chat(chat, args, *pipeline);
             }
             else
             {
                 auto pipeline = new chatllm::BeamSearchPipeline(args.model_path, pipe_args, args.beam_size);
-                auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, f_end, user_data);
-                return start_chat(chat, args, *pipeline, *streamer);
+                chat->streamer->tokenizer = pipeline->tokenizer;
+                return start_chat(chat, args, *pipeline);
             }
         }
         else
@@ -1221,8 +1255,8 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
             pipeline->composer.set_prompt_template(args.rag_template);
             pipeline->composer.set_rewrite_template(args.retrieve_rewrite_template);
             chat->is_rag = true;
-            auto streamer = new FFIStreamer(pipeline->tokenizer, f_print, f_end, user_data);
-            return start_chat(chat, args, *pipeline, *streamer);
+            chat->streamer->tokenizer = pipeline->tokenizer;
+            return start_chat(chat, args, *pipeline);
         }
 
     }

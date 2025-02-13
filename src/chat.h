@@ -308,6 +308,11 @@ namespace chatllm
         virtual void set_interceptor(ChunkInterceptor *interceptor);
         virtual void remove_interceptor(void);
 
+        virtual void set_tokenizer(BaseTokenizer *tokenizer)
+        {
+            this->tokenizer = tokenizer;
+        }
+
         // used for RAG
         void put_reference(const std::string &line)
         {
@@ -332,6 +337,7 @@ namespace chatllm
     public:
         bool is_prompt;
         BaseTokenizer *tokenizer;
+        int log_level;
     protected:
         bool is_first;
         size_t print_len;

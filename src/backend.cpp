@@ -1,5 +1,6 @@
 #include <cstring>
 #include <set>
+#include <stdarg.h>
 #ifdef GGML_USE_CUDA
 #  include "ggml-cuda.h"
 #elif defined(GGML_USE_VULKAN)
@@ -29,6 +30,36 @@ extern void ggml_vk_print_devices_info(void);
 
 namespace chatllm
 {
+    static std::string str_format(const char* format, va_list args)
+    {
+        // First, determine the required length of the formatted string
+        va_list args_copy;
+        va_copy(args_copy, args);
+        int length = std::vsnprintf(nullptr, 0, format, args_copy);
+        va_end(args_copy);
+
+        if (length < 0) {
+            return "";
+        }
+
+        std::vector<char> buffer(length + 1);
+
+        std::vsnprintf(buffer.data(), buffer.size(), format, args);
+
+        return std::string(buffer.data());
+    }
+
+    void ggml::log(enum ggml_log_level level, const char * format, ...)
+    {
+        void log_internal(int level, const char * text);
+
+        va_list args;
+        va_start(args, format);
+        auto s = str_format(format, args);
+        log_internal(level, s.c_str());
+        va_end(args);
+    }
+
     void *BackendBuffer::get_base(void)
     {
         return ggml_backend_buffer_get_base(buf);
@@ -61,7 +92,7 @@ namespace chatllm
 
     void BackendBufAllocator::show_info(void)
     {
-        printf("%30s allocated buffer size = (%8.2f, %8.2f) MiB\n", ggml_backend_name(backend->backend), total[0] / 1024.0 / 1024.0, total[1] / 1024.0 / 1024.0);
+        ggml::log(GGML_LOG_LEVEL_INFO, "%30s allocated buffer size = (%8.2f, %8.2f) MiB\n", ggml_backend_name(backend->backend), total[0] / 1024.0 / 1024.0, total[1] / 1024.0 / 1024.0);
     }
 
     Backend *BackendBufAllocator::get_backend(void)
@@ -80,7 +111,7 @@ namespace chatllm
     void LayerBufAllocator::show_info(void)
     {
         BackendBufAllocator::show_info();
-        printf("\tMatrix = %s, Others = %s\n", ggml_backend_buft_name(get_allocator(Usage::Matrix)), ggml_backend_buft_name(get_allocator(Usage::Others)));
+        ggml::log(GGML_LOG_LEVEL_INFO, "\tMatrix = %s, Others = %s\n", ggml_backend_buft_name(get_allocator(Usage::Matrix)), ggml_backend_buft_name(get_allocator(Usage::Others)));
     }
 
     BackendBuffer *LayerBufAllocator::alloc(size_t size, Usage usage)
@@ -476,7 +507,7 @@ namespace chatllm
             {
                 size_t total = 0;
                 size_t free = ComputeManager::get_device_free_memory(0, &total);
-                printf("%d: total = %zd, free = %zd\n", i, total, free);
+                ggml::log(GGML_LOG_LEVEL_INFO, "Device %d memory: total = %zd, free = %zd\n", i, total, free);
             }
         }
 
@@ -637,7 +668,7 @@ namespace chatllm
     {
         for (size_t i = 0; i < layer_allocators.allocators.size(); i++)
         {
-            printf("layer #%d", (int)i);
+            ggml::log(GGML_LOG_LEVEL_INFO, "layer #%d", (int)i);
             layer_allocators.allocators[i].show_info();
         }
 
@@ -645,7 +676,7 @@ namespace chatllm
         {
             ggml_backend_buffer_type_t buft = gg_bufts[i];
             size_t size = ggml_backend_sched_get_buffer_size(sched, gg_backends[i]);
-            printf("%s: %30s compute buffer size = %8.2f MiB\n", __func__, ggml_backend_buft_name(buft), size / 1024.0 / 1024.0);
+            ggml::log(GGML_LOG_LEVEL_INFO, "%s: %30s compute buffer size = %8.2f MiB\n", __func__, ggml_backend_buft_name(buft), size / 1024.0 / 1024.0);
         }
     }
 

@@ -133,7 +133,7 @@ namespace chatllm
     }
 
     BaseStreamer::BaseStreamer(BaseTokenizer *tokenizer)
-        : is_prompt(true), tokenizer(tokenizer), is_first(true), print_len(0),
+        : is_prompt(true), tokenizer(tokenizer), log_level(0), is_first(true), print_len(0),
           interceptor(nullptr)
     {
     }

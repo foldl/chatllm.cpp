@@ -32,6 +32,8 @@ namespace chatllm
 
         typedef bool (* need_observe_tensor_evaluation_callback)(ggml::tensor *tensor, void *user_data);
         typedef bool (* observe_tensor_evaluation_callback)(ggml::tensor *tensor, void *user_data);
+
+        void log(enum ggml_log_level level, const char * format, ...);
     }
 
     // Is `ggml_backend_buffer_type_t` a good name?
