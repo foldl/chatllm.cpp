@@ -59,3 +59,13 @@ The full format of `-ngl` is `-ngl id:layer_spec[,id:layer_spec]`. `id` is GPU d
 1. `ggml` scheduler can't handle some operators properly.
 
     If a model has `10` hidden layers and `-ngl 10` not work, then try `-ngl 10,epilog`. If `-ngl 10,epilog` not work, then try `-ngl 9`.
+
+## Tips
+
+1. Having trouble with Python binding on Windows with CUDA?
+
+    Copy these DLL to the `bindings` folder:
+
+    * `cublas64_12.dll`
+    * `cudart64_12.dll`
+    * `cublasLt64_12.dll`

@@ -86,9 +86,9 @@ class TokenUsage:
 @dataclass
 class DataListResponse:
     model: str
-    data = []
+    data: list[str] = field(default_factory=list)
     object: str = "list"
-    usage: TokenUsage = TokenUsage()
+    usage: TokenUsage = field(default_factory=TokenUsage)
 
 class HttpResponder:
     def __init__(self, req: BaseHTTPRequestHandler, id: str, timestamp: int, model: str) -> None:
@@ -313,32 +313,34 @@ if __name__ == '__main__':
 
     args = sys.argv[1:]
     if len(args) < 1:
-        print(f"usage: python openai_api.py path/to/chat/model path/to/fim/model path/to/emb/model [more args for chat model {ARG_SEP} more args for fim model  {ARG_SEP} more args for embedding model]")
-        print('Use * to skip loading a model')
+        print(f"usage: python openai_api.py [{ARG_SEP}TYPE path/to/model [additional args]]")
+        print('where TYPE ::= chat | fim | emb')
         exit(-1)
 
-    if len(args) < 3:
-        args = args + ['*' for i in range(3 - len(args))]
+    chat_args = ['-m']
+    fim_args = ['-m']
+    emb_args = ['-m']
+    current = []
+    for a in args:
+        if a.startswith(ARG_SEP):
+            t = a[len(ARG_SEP):]
+            if t == 'chat': current = chat_args
+            elif t == 'fim': current = fim_args
+            elif t == 'emb': current = emb_args
+            else:
+                current = []
+        else:
+            current.append(a)
 
-    chat_model = args[0]
-    fim_model  = args[1]
-    emb_model  = args[2]
+    if len(chat_args) > 1:
+        chat_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), chat_args, False))
 
-    all_model_args = split_list(args[3:], ARG_SEP)
-    chat_args = all_model_args[0] if len(all_model_args) >= 1 else []
-    fim_args  = all_model_args[1] if len(all_model_args) >= 2 else []
-    emb_args  = all_model_args[2] if len(all_model_args) >= 3 else []
-
-    basic_args = ['-m']
-    if chat_model != '*':
-        chat_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), basic_args + [chat_model] + chat_args, False))
-
-    if fim_model != '*':
-        fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), basic_args + [fim_model, '--format', 'completion'] + fim_args, False))
+    if len(fim_args) > 1:
+        fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), fim_args + ['--format', 'completion'], False))
         fim_streamer.auto_restart = True
 
-    if emb_model != '*':
-        emb_model_obj = ChatLLM(LibChatLLM(PATH_BINDS), basic_args + [emb_model] + emb_args)
+    if len(emb_args) > 1:
+        emb_model_obj = ChatLLM(LibChatLLM(PATH_BINDS), emb_args)
 
     http_server = HTTPServer(('0.0.0.0', 3000), HttpHandler)
     http_server.serve_forever()

@@ -59,7 +59,8 @@ def parse_model_id(model_id: str):
     model = all_models[parts[0]]
     variants = model['variants']
     var = variants[parts[1] if len(parts) >= 2 else model['default']]
-    r =  copy.deepcopy(var['quantized'][var['default']])
+    q = parts[2] if len(parts) >= 3 else var['default']
+    r =  copy.deepcopy(var['quantized'][q])
     url = r['url'].split('/')
     r['url'] = get_model_url_on_modelscope(*url)
     r['fn'] = url[1]
