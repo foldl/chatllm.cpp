@@ -6,7 +6,7 @@ from ast import Dict, Tuple
 from collections import OrderedDict
 import json
 import struct
-import os
+import time
 import io
 import pickle
 import re
@@ -16,13 +16,9 @@ from pathlib import Path
 from typing import IO, Any, Iterable, List, Optional, Tuple
 import numpy as np
 import math
-from attr import dataclass
 
 import torch
 from torch import nn
-from tabulate import tabulate
-from tqdm import tqdm
-import msgpack
 
 from sentencepiece import SentencePieceProcessor  # type: ignore
 
@@ -346,6 +342,59 @@ def load_all_model_files(model_files) -> Dict:
             r[k] = g_lora.merge_tensor(k, v) if g_lora is not None else v
         yield r
 
+def tabulate(data, headers = []) -> str:
+    all = []
+    all.append(headers)
+    col_num = len(headers)
+    for d in data:
+        row = [str(x) for x in d]
+        all.append(row)
+        col_num = max(col_num, len(row))
+
+    print(all)
+    def get_col_width(n: int) -> int:
+        nonlocal all
+        r = 0
+        for i in range(len(all)):
+            row = all[i]
+            print(f"row[{i}] = {row}")
+            if n < len(row): r = max(r, len(row[n]))
+        return r
+
+    widths = [get_col_width(i) for i in range(col_num)]
+    sep = '+-' + '-+-'.join(['-' * w for w in widths]) + '-+\n'
+
+    def make_row(i: int) -> int:
+        nonlocal all, col_num, widths
+        row = all[i]
+        str_row = [str(row[n]) if n < len(row) else ' ' for n in range(col_num)]
+
+        return '| ' + ' | '.join([f"{{:<{widths[n]}}}".format(str_row[n]) for n in range(col_num)]) + ' |\n'
+
+    return sep + make_row(0) + sep + ''.join([make_row(i) for i in range(1, len(all))]) + sep
+
+def tqdm(items, desc='') -> Iterable[any]:
+
+    def print_progress_bar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 60, fill = '█', printEnd = "\r", auto_nl = True):
+        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+        filledLength = int(length * iteration // total)
+        bar = fill * filledLength + '-' * (length - filledLength)
+        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+        if (iteration == total) and auto_nl:
+            print()
+
+    def format_time(t) -> str:
+        return "{:.2f}s".format(t)
+
+    total = len(items)
+    t = time.perf_counter()
+    for i, x in enumerate(items):
+        yield x
+        used = time.perf_counter() - t
+        per_item = used / (i + 1)
+        remain = (total - i - 1) * per_item
+        print_progress_bar(i + 1, total, prefix=desc, suffix=f"({i}/{total}) {format_time(per_item)}/iter rem: {format_time(remain)}")
+
 def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_pp, loader_fun = None):
     tensor_info = []
     converted_names = []
@@ -395,7 +444,7 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
             dump_tensor(f, name, tensor, tensor_ggml_type)
             tensor_info.append((name, tensor.shape, tensor_ggml_type.name))
 
-    print(tabulate(tensor_info, headers=["name", "shape", "dtype"], tablefmt="psql"))
+    print(tabulate(tensor_info, headers=["name", "shape", "dtype"]))
 
     if len(tensor_info) != len(weight_names):
         raise Exception(f'not all tensors are converted: {remaining}')
@@ -4132,20 +4181,6 @@ class Gemma2Converter(BaseConverter):
 
         return weight_names
 
-@dataclass
-class QuantizedWeight8bit:
-    def __init__(self):
-        import jax
-        import jax.numpy as jnp
-        import jnp.array
-
-        self.weight: jnp.array
-        self.scales: jnp.array
-
-    @property
-    def shape(self):
-        return self.weight.shape
-
 class Grok1Converter(BaseConverter):
     MODEL_TYPE = ModelType.Grok1
     tensor_map = []
@@ -4429,25 +4464,6 @@ class AlphaGeometryLMConverter(BaseConverter):
         else:
             return np.dtype(name)
 
-    def _ndarray_from_bytes(data: bytes) -> np.ndarray:
-        """Load ndarray from simple msgpack encoding."""
-        shape, dtype_name, buffer = msgpack.unpackb(data, raw=True)
-        return np.frombuffer(
-            buffer, dtype=AlphaGeometryLMConverter._dtype_from_name(dtype_name), count=-1, offset=0
-        ).reshape(shape, order='C')
-
-    def _msgpack_ext_unpack(code, data):
-        """Messagepack decoders for custom types."""
-        if code == AlphaGeometryLMConverter._MsgpackExtType.ndarray:
-            return AlphaGeometryLMConverter._ndarray_from_bytes(data)
-        elif code == AlphaGeometryLMConverter._MsgpackExtType.native_complex:
-            complex_tuple = msgpack.unpackb(data)
-            return complex(complex_tuple[0], complex_tuple[1])
-        elif code == AlphaGeometryLMConverter._MsgpackExtType.npscalar:
-            ar = AlphaGeometryLMConverter._ndarray_from_bytes(data)
-            return ar[()]  # unpack ndarray to scalar
-        return msgpack.ExtType(code, data)
-
     _dict_to_tuple = lambda dct: tuple(dct[str(i)] for i in range(len(dct)))
 
     def _unchunk(data: dict[str, any]):
@@ -4457,19 +4473,6 @@ class AlphaGeometryLMConverter(BaseConverter):
         shape = _dict_to_tuple(data['shape'])
         flatarr = np.concatenate(_dict_to_tuple(data['chunks']))
         return flatarr.reshape(shape)
-
-    def _unchunk_array_leaves_in_place(d):
-        """Convert chunked array leaves back into array leaves, in place."""
-        if isinstance(d, dict):
-            if '__msgpack_chunked_array__' in d:
-                return AlphaGeometryLMConverter._unchunk(d)
-            else:
-                for k, v in d.items():
-                    if isinstance(v, dict) and '__msgpack_chunked_array__' in v:
-                        d[k] = AlphaGeometryLMConverter._unchunk(v)
-                    elif isinstance(v, dict):
-                        AlphaGeometryLMConverter._unchunk_array_leaves_in_place(v)
-        return d
 
     def convert_weight(v, tensor_name: str) -> torch.tensor:
         dtype = torch.float32
@@ -4497,9 +4500,46 @@ class AlphaGeometryLMConverter(BaseConverter):
 
     @staticmethod
     def load_tensor_file(tensor_name) -> Any:
+        try:
+            import msgpack
+        except:
+            raise Exception(f"Package `msgpack` is required. \n`pip install msgpack`")
+
+        def _ndarray_from_bytes(data: bytes) -> np.ndarray:
+            """Load ndarray from simple msgpack encoding."""
+            shape, dtype_name, buffer = msgpack.unpackb(data, raw=True)
+            return np.frombuffer(
+                buffer, dtype=AlphaGeometryLMConverter._dtype_from_name(dtype_name), count=-1, offset=0
+            ).reshape(shape, order='C')
+
+        def _msgpack_ext_unpack(code, data):
+            """Messagepack decoders for custom types."""
+            if code == AlphaGeometryLMConverter._MsgpackExtType.ndarray:
+                return _ndarray_from_bytes(data)
+            elif code == AlphaGeometryLMConverter._MsgpackExtType.native_complex:
+                complex_tuple = msgpack.unpackb(data)
+                return complex(complex_tuple[0], complex_tuple[1])
+            elif code == AlphaGeometryLMConverter._MsgpackExtType.npscalar:
+                ar = _ndarray_from_bytes(data)
+                return ar[()]  # unpack ndarray to scalar
+            return msgpack.ExtType(code, data)
+
+        def _unchunk_array_leaves_in_place(d):
+            """Convert chunked array leaves back into array leaves, in place."""
+            if isinstance(d, dict):
+                if '__msgpack_chunked_array__' in d:
+                    return AlphaGeometryLMConverter._unchunk(d)
+                else:
+                    for k, v in d.items():
+                        if isinstance(v, dict) and '__msgpack_chunked_array__' in v:
+                            d[k] = AlphaGeometryLMConverter._unchunk(v)
+                        elif isinstance(v, dict):
+                            _unchunk_array_leaves_in_place(v)
+            return d
+
         with open(tensor_name, 'rb') as f:
-            state_dict = msgpack.unpack(f, ext_hook=AlphaGeometryLMConverter._msgpack_ext_unpack, raw=False)
-        r = AlphaGeometryLMConverter._unchunk_array_leaves_in_place(state_dict)
+            state_dict = msgpack.unpack(f, ext_hook=_msgpack_ext_unpack, raw=False)
+        r = _unchunk_array_leaves_in_place(state_dict)
         return AlphaGeometryLMConverter.extract_tensor_dict(r['optimizer']['target']['decoder'])
 
     @staticmethod
@@ -4809,7 +4849,10 @@ class IndexConverter(BaseConverter):
     @staticmethod
     def dump_config(f, config, ggml_type):
         config.rope_theta = 10000.0
-
+        if config.rope_ratio is not None:
+            assert isinstance(config.rope_ratio, int) or isinstance(config.rope_ratio, float), "`rope_ratio` must be a number"
+            assert config.rope_scaling is None, "rope_scaling must be null"
+            config.rope_theta *= config.rope_ratio
         Llama3Converter.dump_config(f, config, ggml_type)
 
     @staticmethod
