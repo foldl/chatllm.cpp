@@ -1946,6 +1946,15 @@
                     }
                 }
             },
+            "qwen-32b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 18437831296,
+                        "url": "chatllm_quantized_ds_r1_qwen-32b/ds-r1-distill-qwen-32b.bin"
+                    }
+                }
+            },
             "llama-8b": {
                 "default": "q8",
                 "quantized": {
