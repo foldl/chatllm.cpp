@@ -188,8 +188,8 @@ def get_streamer(model: str) -> ChatLLMStreamer | None:
         return chat_streamer
 
 def handler(signal_received, frame):
-    http_server.shutdown()
-    sys.exit(0)
+    print("Ctrl+C pressed, shutting down server...")
+    os._exit(0)
 
 class HttpHandler(BaseHTTPRequestHandler):
 
@@ -268,7 +268,10 @@ class HttpHandler(BaseHTTPRequestHandler):
                     flag = False
 
                 if flag:
-                    prompt = x['content'] + '\n' + prompt
+                    if isinstance(x['content'], list):
+                        prompt = '\n'.join([o['text'] for o in x['content'] if o['type'] == 'text']) + '\n' + prompt
+                    else:
+                        prompt = str(x['content']) + '\n' + prompt
 
             restart = counter < 2
 
@@ -297,14 +300,9 @@ class HttpHandler(BaseHTTPRequestHandler):
             except:
                 streamer.abort()
         else:
-            responder.recv_chunk('FIM model not loaded!')
+            responder.recv_chunk('CHAT model not loaded!')
 
         responder.done()
-
-def split_list(lst, val):
-    return [list(group) for k,
-            group in
-            itertools.groupby(lst, lambda x: x==val) if not k]
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, handler)

@@ -24,7 +24,7 @@
     * [x] TigerBot: [Chat-7B](https://huggingface.co/TigerResearch/tigerbot-7b-chat), [Chat-13B](https://huggingface.co/TigerResearch/tigerbot-13b-chat-v5) (`-a TigerBot`)
     * [x] CodeFuse-DeepSeek: [33B](https://huggingface.co/codefuse-ai/CodeFuse-DeepSeek-33B) (`-a CodeFuseDeepSeek`)
     * [x] MAP-Neo: [Instruct-7B](https://huggingface.co/m-a-p/neo_7b_instruct_v0.1) (`-a MAP-Neo`)
-    * [x] Index: [Chat-1.9B](https://huggingface.co/IndexTeam/Index-1.9B-Chat), [Character-1.9B](https://huggingface.co/IndexTeam/Index-1.9B-Character)
+    * [x] Index: [Chat-1.9B](https://huggingface.co/IndexTeam/Index-1.9B-Chat), [Character-1.9B](https://huggingface.co/IndexTeam/Index-1.9B-Character), [Chat-1.9B-32K](https://huggingface.co/IndexTeam/Index-1.9B-32K)
     * [x] NuminaMath: [7B-TIR](https://huggingface.co/AI-MO/NuminaMath-7B-TIR)
     * [x] SmolLM: (`-a SmolLM`)
         - v1: [Instruct-1.7B](https://huggingface.co/HuggingFaceTB/SmolLM-1.7B-Instruct)

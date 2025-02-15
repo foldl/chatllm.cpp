@@ -9,6 +9,7 @@ try:
     from rich.live import Live
     from rich.status import Status
     from rich.console import Console
+    from rich.text import Text
     from rich import print
 except:
     raise Exception('package `rich` is missing. install it: `pip install rich`')
@@ -22,6 +23,7 @@ class RichChatLLM(ChatLLM):
     acc = ''
     meta = []
     is_thinking = False
+    think_time = 0
     detecting = False
 
     def async_chat(self, user_input: str, input_id = None) -> None:
@@ -30,6 +32,7 @@ class RichChatLLM(ChatLLM):
         self.thoughts_acc = ''
         self.acc = ''
         self.detecting = True
+        self.think_time = 0
         super().async_chat(user_input, input_id)
 
     def callback_print_meta(self, s: str) -> None:
@@ -54,8 +57,9 @@ class RichChatLLM(ChatLLM):
             if len(self.acc) < len(TAG_THINK_START):
                 return
             self.detecting = False
-            if s.startswith(TAG_THINK_START):
-                self.thoughts_acc = s[len(TAG_THINK_START):]
+            if self.acc.startswith(TAG_THINK_START):
+                self.thoughts_acc = self.acc[len(TAG_THINK_START):]
+                self.think_time = time.perf_counter()
             else:
                 self.is_thinking = False
                 self.chunk_acc = self.acc
@@ -63,8 +67,11 @@ class RichChatLLM(ChatLLM):
 
         if self.is_thinking:
             self.thoughts_acc = self.thoughts_acc + s
-            if s.endswith(TAG_THINK_END):
+            pos = self.thoughts_acc.find(TAG_THINK_END)
+            if pos > 0:
                 self.is_thinking = False
+                self.think_time = time.perf_counter() - self.think_time
+                self.chunk_acc = self.thoughts_acc[pos + len(TAG_THINK_END)]
             return
 
         self.chunk_acc = self.chunk_acc + s
@@ -94,6 +101,8 @@ def demo_simple(params, lib_path: str, cls = RichChatLLM):
 
     while True:
         s = input('You  > ')
+        if s == '': continue
+
         llm.async_chat(s)
         time.sleep(0.1)
 
@@ -101,6 +110,10 @@ def demo_simple(params, lib_path: str, cls = RichChatLLM):
             while llm.is_thinking:
                 status.update('[bright_black]' + render_thoughts())
                 time.sleep(0.2)
+        if llm.think_time > 0:
+            text = Text()
+            text.append(f"<<Thought for {llm.think_time:.2f}s>>", style="bright_black")
+            console.print(text)
 
         with Live(render_ai(), refresh_per_second=4) as live:
             while llm.is_generating:

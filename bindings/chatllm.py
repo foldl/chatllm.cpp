@@ -45,7 +45,11 @@ class LibChatLLM:
 
         lib = os.path.join(lib, 'libchatllm.')
         if sys.platform == 'win32':
+            import re
             lib = lib + 'dll'
+            for path in os.getenv('PATH').split(';'):
+                if re.match(r'.+\\CUDA\\v[0-9]+\.[0-9]+\\bin', path) is not None:
+                    os.add_dll_directory(path)
         elif sys.platform == 'darwin':
             lib = lib + 'dylib'
         else:
