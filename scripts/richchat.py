@@ -71,10 +71,16 @@ class RichChatLLM(ChatLLM):
             if pos > 0:
                 self.is_thinking = False
                 self.think_time = time.perf_counter() - self.think_time
-                self.chunk_acc = self.thoughts_acc[pos + len(TAG_THINK_END)]
+                self.chunk_acc = self.thoughts_acc[pos + len(TAG_THINK_END):]
             return
 
         self.chunk_acc = self.chunk_acc + s
+
+    def callback_async_done(self) -> None:
+        super().callback_async_done()
+        if self.is_thinking:
+            self.is_thinking = False
+            self.think_time = time.perf_counter() - self.think_time
 
 llm: RichChatLLM = None
 
@@ -107,7 +113,7 @@ def demo_simple(params, lib_path: str, cls = RichChatLLM):
         time.sleep(0.1)
 
         with Status("thinking...", spinner="bouncingBall", console=console) as status:
-            while llm.is_thinking:
+            while llm.is_thinking and llm.is_generating:
                 status.update('[bright_black]' + render_thoughts())
                 time.sleep(0.2)
         if llm.think_time > 0:
