@@ -462,6 +462,15 @@
                         "url": "chatllm_quantized_index/index-ch.bin"
                     }
                 }
+            },
+            "1.9b-32k": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2309982912,
+                        "url": "chatllm_quantized_index/index-1.9b-32k.bin"
+                    }
+                }
             }
         }
     },
@@ -1977,6 +1986,22 @@
                     "q8": {
                         "size": 8538752192,
                         "url": "chatllm_quantized_deephermes-3-llama/deephermes-3-8b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "deepscaler": {
+        "brief": "DeepScaleR-1.5B-Preview is a language model fine-tuned from DeepSeek-R1-Distilled-Qwen-1.5B using distributed reinforcement learning (RL) to scale up to long context lengths.",
+        "default": "1.5b",
+        "license": "MIT",
+        "variants": {
+            "1.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1892857472,
+                        "url": "chatllm_quantized_deepseek_r1/deepscale-r1-1.5b.bin"
                     }
                 }
             }
