@@ -37,6 +37,8 @@ namespace chatllm
         User = 2,
         Assistant = 3,
         Tool = 4,
+
+        LAST,
     };
 
     class Message
@@ -351,6 +353,7 @@ namespace chatllm
     {
     public:
         ChunkInterceptor() : streamer(nullptr) {}
+        virtual ~ChunkInterceptor() {}
         virtual void intercept(BaseStreamer *streamer) { this->streamer = streamer; }
         virtual void put_chunk(bool first, const std::string &chunk) { if (streamer) streamer->put_chunk(first, chunk); }
         virtual void end() { }
@@ -893,6 +896,8 @@ namespace chatllm
         Pipeline(const std::string &path);
         Pipeline(const std::string &path, const ModelObject::extra_args &args);
 
+        virtual ~Pipeline() {};
+
         virtual std::string chat(Messages &history, const GenerationConfig &gen_config,
                          BaseStreamer *streamer = nullptr);
         virtual void abort_generation(void);
@@ -1026,6 +1031,8 @@ namespace chatllm
                     DistanceStrategy vec_cmp, const std::map<std::string, std::vector<std::string>> &vector_stores,
                     const std::string &embedding_model, const std::string &reranker_model = "");
 
+        ~RAGPipeline() override {}
+
         std::string get_additional_description(void) const override;
 
         bool select_vector_store(const std::string &name);
@@ -1045,13 +1052,13 @@ namespace chatllm
 
         VectorStores vs;
         ModelObject embedding;
-        ModelObject *reranker;
+        std::unique_ptr<ModelObject> reranker;
         std::vector<std::string> metainfo;
 
     private:
         void rerank(const std::string &query, std::vector<int64_t> &candidates, const GenerationConfig &gen_config, int top_n = 3);
         std::string rewrite_query(const std::string &prompt, const GenerationConfig &gen_config);
-        AbstractModel *rewrite_model;
+        std::unique_ptr<AbstractModel> rewrite_model;
     };
 
 } // namespace chatllm

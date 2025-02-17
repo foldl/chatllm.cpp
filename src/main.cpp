@@ -1081,8 +1081,8 @@ public:
 public:
     std::vector<std::string> params;
     chatllm::Messages history;
-    chatllm::BaseStreamer *streamer;
-    chatllm::Pipeline *pipeline;
+    std::unique_ptr<chatllm::BaseStreamer> streamer;
+    std::unique_ptr<chatllm::Pipeline> pipeline;
     chatllm::GenerationConfig gen_config;
     int sess_n_past;
     int sess_hist_len;
@@ -1135,33 +1135,56 @@ public:
     int ref_count;
 };
 
-static std::vector<Chat *> chat_objects;
+static std::vector<std::unique_ptr<Chat>> chat_objects;
+
+#define DEF_CHAT_STREAMER()                         \
+    Chat *chat = reinterpret_cast<Chat *>(obj);     \
+    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer.get())
 
 chatllm::BaseStreamer *get_streamer_for_log(void)
 {
-    return chat_objects.size() > 0 ? chat_objects[0]->streamer : nullptr;
+    return chat_objects.size() > 0 ? chat_objects[0]->streamer.get() : nullptr;
 }
 
 struct chatllm_obj *chatllm_create(void)
 {
     auto chat = new Chat();
-    chat_objects.push_back(chat);
+    chat_objects.emplace_back(chat);
     if (chat_objects.size() == 1) {
+        // it's ok to call this multiple times
         ggml_log_set(_ggml_log_callback, nullptr);
     }
     return (chatllm_obj *)chat;
 }
 
+int chatllm_destroy(struct chatllm_obj *obj)
+{
+    DEF_CHAT_STREAMER();
+
+    if (!streamer->is_prompt || chat->is_async_busy) return -1;
+
+    auto it = find_if(chat_objects.begin(), chat_objects.end(), [=](auto &c) { return c.get() == chat; });
+
+    if (it != chat_objects.end())
+    {
+        chat_objects.erase(it);
+        return 0;
+    }
+
+    return -1;
+}
+
 void chatllm_append_param(struct chatllm_obj *obj, const char *utf8_str)
 {
-    Chat *chat = reinterpret_cast<Chat *>(obj);
+    DEF_CHAT_STREAMER();
+
     chat->append_param(utf8_str);
 }
 
 static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline)
 {
     int r = 0;
-    chat->pipeline = &pipeline;
+    chat->pipeline = std::unique_ptr<chatllm::Pipeline>(&pipeline);
 
     if (args.system.size() > 0)
         pipeline.set_system_prompt(args.system);
@@ -1182,7 +1205,7 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline)
 
     chat->gen_config = gen_config;
 
-    show_banner(pipeline, args.interactive && args.show_banner, chat->streamer);
+    show_banner(pipeline, args.interactive && args.show_banner, chat->streamer.get());
 
     if (args.load_session.size() > 0)
     {
@@ -1212,7 +1235,7 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
         args.num_threads = get_num_physical_cores();
 
     args.interactive = true;
-    chat->streamer = new FFIStreamer(nullptr, f_print, f_end, user_data);
+    chat->streamer = std::unique_ptr<chatllm::BaseStreamer>(new FFIStreamer(nullptr, f_print, f_end, user_data));
     chat->streamer->log_level = args.log_level;
 
     try
@@ -1276,13 +1299,12 @@ int chatllm_get_async_result_int(struct chatllm_obj *obj)
 }
 
 #define ASYNC_FUN_BODY(expr)    do {        \
-    Chat *chat = reinterpret_cast<Chat *>(obj);             \
+    DEF_CHAT_STREAMER();                    \
     if (chat->is_async_busy) return -1;                     \
     chat->is_async_busy = true;                             \
                                                             \
     std::thread t([=]() {                                   \
         chat->async_result_int = expr;                      \
-        FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);    \
         chat->is_async_busy = false;                        \
         streamer->put_event(PRINT_EVT_ASYNC_COMPLETED);     \
     });                                                     \
@@ -1304,7 +1326,7 @@ int chatllm_set_ai_prefix(struct chatllm_obj *obj, const char *utf8_str)
 
 static void chatllm_continue_chat(Chat *chat)
 {
-    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer.get());
     std::string external_ai = chat->tool_completion;
 
     if (external_ai.size() < 1) return;
@@ -1324,8 +1346,8 @@ static void chatllm_continue_chat(Chat *chat)
 int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
 {
     int r = 0;
-    Chat *chat = reinterpret_cast<Chat *>(obj);
-    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    DEF_CHAT_STREAMER();
+
     if (!streamer->is_prompt) return -1;
 
     if (chat->pipeline->is_loaded() && (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Chat))
@@ -1364,8 +1386,8 @@ int chatllm_async_user_input(struct chatllm_obj *obj, const char *utf8_str)
 int chatllm_ai_continue(struct chatllm_obj *obj, const char *utf8_str)
 {
     int r = 0;
-    Chat *chat = reinterpret_cast<Chat *>(obj);
-    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    DEF_CHAT_STREAMER();
+
     if (!streamer->is_prompt) return -1;
 
     if (chat->pipeline->is_loaded() && (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Chat))
@@ -1388,9 +1410,9 @@ int chatllm_async_ai_continue(struct chatllm_obj *obj, const char *utf8_str)
 
 int chatllm_tool_input(struct chatllm_obj *obj, const char *utf8_str)
 {
-    Chat *chat = reinterpret_cast<Chat *>(obj);
+    DEF_CHAT_STREAMER();
+
     chat->tool_input = std::string(utf8_str);
-    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
     if (!streamer->is_prompt)
         chatllm_continue_chat(chat);
     return 0;
@@ -1403,8 +1425,8 @@ int chatllm_async_tool_input(struct chatllm_obj *obj, const char *utf8_str)
 
 int chatllm_tool_completion(struct chatllm_obj *obj, const char *utf8_str)
 {
-    Chat *chat = reinterpret_cast<Chat *>(obj);
-    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    DEF_CHAT_STREAMER();
+
     if (streamer->is_prompt)
         return chatllm_user_input(obj, utf8_str);
 
@@ -1420,8 +1442,7 @@ int chatllm_async_tool_completion(struct chatllm_obj *obj, const char *utf8_str)
 int chatllm_text_embedding(struct chatllm_obj *obj, const char *utf8_str)
 {
     int r = 0;
-    Chat *chat = reinterpret_cast<Chat *>(obj);
-    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    DEF_CHAT_STREAMER();
 
     if (!chat->pipeline->is_loaded() || (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::TextEmbedding))
         return -1;
@@ -1450,8 +1471,7 @@ int chatllm_async_text_embedding(struct chatllm_obj *obj, const char *utf8_str)
 
 int chatllm_text_tokenize(struct chatllm_obj *obj, const char *utf8_str)
 {
-    Chat *chat = reinterpret_cast<Chat *>(obj);
-    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    DEF_CHAT_STREAMER();
 
     if (!chat->pipeline->is_loaded())
         return -1;
@@ -1480,15 +1500,14 @@ int chatllm_rag_select_store(struct chatllm_obj *obj, const char *name)
     if (!chat->is_rag)
         return -1;
 
-    auto pipeline = dynamic_cast<chatllm::RAGPipeline *>(chat->pipeline);
+    auto pipeline = dynamic_cast<chatllm::RAGPipeline *>(chat->pipeline.get());
     return pipeline->select_vector_store(name) ? 0 : -1;
 }
 
 int chatllm_qa_rank(struct chatllm_obj *obj, const char *utf8_str_q, const char *utf8_str_a)
 {
     int r = 0;
-    Chat *chat = reinterpret_cast<Chat *>(obj);
-    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    DEF_CHAT_STREAMER();
 
     if (!chat->pipeline->is_loaded() || (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Ranker))
         return -1;
@@ -1511,8 +1530,8 @@ int chatllm_async_qa_rank(struct chatllm_obj *obj, const char *utf8_str_q, const
 
 void chatllm_restart(struct chatllm_obj *obj, const char *utf8_sys_prompt)
 {
-    Chat *chat = reinterpret_cast<Chat *>(obj);
-    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    DEF_CHAT_STREAMER();
+
     if (!streamer->is_prompt) return;
 
     if ((chat->sess_hist_len > 0) && (nullptr == utf8_sys_prompt))
@@ -1528,6 +1547,16 @@ void chatllm_restart(struct chatllm_obj *obj, const char *utf8_sys_prompt)
         if (utf8_sys_prompt)
             chat->pipeline->set_system_prompt(utf8_sys_prompt);
     }
+}
+
+void chatllm_history_append(struct chatllm_obj *obj, int role_type, const char *utf8_str)
+{
+    DEF_CHAT_STREAMER();
+
+    if (!streamer->is_prompt) return;
+    if ((role_type < chatllm::MsgRole::User) || (role_type >= chatllm::MsgRole::LAST)) return;
+
+    chat->history.push_back(utf8_str, static_cast<chatllm::MsgRole>(role_type));
 }
 
 void chatllm_abort_generation(struct chatllm_obj *obj)
@@ -1551,8 +1580,8 @@ void chatllm_show_statistics(struct chatllm_obj *obj)
 
 int chatllm_save_session(struct chatllm_obj *obj, const char *utf8_str)
 {
-    Chat *chat = reinterpret_cast<Chat *>(obj);
-    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    DEF_CHAT_STREAMER();
+
     if (!streamer->is_prompt) return -1;
 
     streamer->putln("saving session ...", chatllm::BaseStreamer::TextType::META);
@@ -1566,8 +1595,8 @@ int chatllm_save_session(struct chatllm_obj *obj, const char *utf8_str)
 
 int  chatllm_load_session(struct chatllm_obj *obj, const char *utf8_str)
 {
-    Chat *chat = reinterpret_cast<Chat *>(obj);
-    FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer);
+    DEF_CHAT_STREAMER();
+
     if (!streamer->is_prompt) return -1;
 
     int r = chat->pipeline->load_session(chat->history, utf8_str, streamer, &chat->sess_n_past);

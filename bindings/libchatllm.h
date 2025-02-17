@@ -77,6 +77,18 @@ struct chatllm_obj;
 DLL_DECL struct chatllm_obj * API_CALL chatllm_create(void);
 
 /**
+ * @brief destroy a ChatLLM object
+ *
+ * WARNING: this is WIP!
+ *
+ * object can't be destroy while still working (generating tokens).
+ *
+ * @param[in] obj           model object
+ * @return                  0 if succeeded
+ */
+DLL_DECL int API_CALL chatllm_destroy(struct chatllm_obj *obj);
+
+/**
  * @brief append a command line option
  *
  * @param[in] obj               model object
@@ -117,6 +129,25 @@ DLL_DECL void API_CALL chatllm_set_gen_max_tokens(struct chatllm_obj *obj, int g
  *                              if NULL, then system prompt is kept unchanged.
  */
 DLL_DECL void API_CALL chatllm_restart(struct chatllm_obj *obj, const char *utf8_sys_prompt);
+
+enum RoleType
+{
+    ROLE_USER = 2,
+    ROLE_ASSISTANT = 3,
+    ROLE_TOOL = 4,
+};
+
+/**
+ * @brief push back a message to the end of chat history.
+ *
+ * This can be used to restore session after `chatllm_restart`.
+ * This would not trigger generation. Use `chatllm_user_input`, etc  to start generation.
+ *
+ * @param[in] obj               model object
+ * @param[in] role_type         message type (see `RoleType`)
+ * @param[in] utf8_str          content
+ */
+DLL_DECL void API_CALL chatllm_history_append(struct chatllm_obj *obj, int role_type, const char *utf8_str);
 
 /**
  * @brief user input

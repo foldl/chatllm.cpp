@@ -1524,11 +1524,9 @@ namespace chatllm
           rerank_rewrite(false),
           vs(vec_cmp, vector_stores),
           embedding(embedding_model),
-          reranker(nullptr),
+          reranker(reranker_model.size() > 0 ? new ModelObject(reranker_model) : nullptr),
           rewrite_model(nullptr)
     {
-        if (reranker_model.size() > 0)
-            reranker = new ModelObject(reranker_model);
     }
 
     void RAGPipeline::rerank(const std::string &query, std::vector<int64_t> &candidates, const GenerationConfig &gen_config, int top_n)
@@ -1565,9 +1563,9 @@ namespace chatllm
 
     std::string RAGPipeline::rewrite_query(const std::string &prompt, const GenerationConfig &gen_config)
     {
-        if (nullptr == rewrite_model)
+        if (rewrite_model.get() == nullptr)
         {
-            rewrite_model = modelobj.fork_model(ModelObject::extra_args());
+            rewrite_model = std::unique_ptr<AbstractModel>(modelobj.fork_model(ModelObject::extra_args()));
             rewrite_model->set_tokenizer(tokenizer);
         }
 
