@@ -17,20 +17,18 @@
 #include <cstring>
 #include <cstdlib>
 #include <cassert>
+#include <algorithm>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #ifdef _WIN32
     #include <windows.h>
     #include <direct.h> // For _mkdir on Windows
-    #include <algorithm> // For std::replace on w64devkit
 #else
     #include <unistd.h>
     #include <sys/wait.h>
     #include <fcntl.h>
 #endif
-
-#include <vulkan/vulkan_core.h>
 
 #define ASYNCIO_CONCURRENCY 64
 
@@ -57,6 +55,14 @@ const std::vector<std::string> type_names = {
     "q4_k",
     "q5_k",
     "q6_k",
+    "iq1_s",
+    "iq1_m",
+    "iq2_xxs",
+    "iq2_xs",
+    "iq2_s",
+    "iq3_xxs",
+    "iq3_s",
+    "iq4_xs",
     "iq4_nl"
 };
 
@@ -78,7 +84,8 @@ void execute_command(const std::string& command, std::string& stdout_str, std::s
     }
 
     PROCESS_INFORMATION pi;
-    STARTUPINFOA si = { sizeof(STARTUPINFOA) };
+    STARTUPINFOA si = {};
+    si.cb = sizeof(STARTUPINFOA);
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdOutput = stdout_write;
     si.hStdError = stderr_write;
@@ -177,6 +184,13 @@ std::string to_uppercase(const std::string& input) {
     return result;
 }
 
+bool string_starts_with(const std::string& str, const std::string& prefix) {
+    if (prefix.size() > str.size()) {
+        return false;
+    }
+    return std::equal(prefix.begin(), prefix.end(), str.begin());
+}
+
 bool string_ends_with(const std::string& str, const std::string& suffix) {
     if (suffix.size() > str.size()) {
         return false;
@@ -206,10 +220,13 @@ void string_to_spv_func(const std::string& _name, const std::string& in_fname, c
 
     std::string target_env = (name.find("_cm2") != std::string::npos) ? "--target-env=vulkan1.3" : "--target-env=vulkan1.2";
 
+    // disable spirv-opt for coopmat shaders for https://github.com/ggerganov/llama.cpp/issues/10734
+    std::string opt_level = coopmat ? "" : "-O";
+
     #ifdef _WIN32
-        std::vector<std::string> cmd = {GLSLC, "-fshader-stage=compute", target_env, "-O", "\"" + in_path + "\"", "-o", "\"" + out_fname + "\""};
+        std::vector<std::string> cmd = {GLSLC, "-fshader-stage=compute", target_env, opt_level, "\"" + in_path + "\"", "-o", "\"" + out_fname + "\""};
     #else
-        std::vector<std::string> cmd = {GLSLC, "-fshader-stage=compute", target_env, "-O", in_path, "-o",  out_fname};
+        std::vector<std::string> cmd = {GLSLC, "-fshader-stage=compute", target_env, opt_level, in_path, "-o",  out_fname};
     #endif
 
     #ifdef GGML_VULKAN_SHADER_DEBUG_INFO
@@ -314,8 +331,11 @@ void matmul_shaders(bool fp16, bool matmul_id, bool coopmat, bool coopmat2, bool
         // For aligned matmul loads
         std::string load_vec_a = (coopmat2 || tname == "f32" || tname == "f16") ? load_vec : "2";
 
-        string_to_spv(shader_name + "_" + tname + "_f32", source_name, merge_maps(base_dict, {{data_a_key, "1"}, {"LOAD_VEC_A", load_vec_a_unaligned}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"B_IS_FLOAT", "1"}}), fp16, coopmat, coopmat2, f16acc);
-        string_to_spv(shader_name + "_" + tname + "_f32_aligned", source_name, merge_maps(base_dict, {{data_a_key, "1"}, {"LOAD_VEC_A", load_vec_a}, {"LOAD_VEC_B", load_vec}, {"B_TYPE", aligned_b_type_f32}, {"D_TYPE", "float"}, {"B_IS_FLOAT", "1"}, {"ALIGNED", "1"}}), fp16, coopmat, coopmat2, f16acc);
+        // don't generate f32 variants for coopmat2
+        if (!coopmat2) {
+            string_to_spv(shader_name + "_" + tname + "_f32", source_name, merge_maps(base_dict, {{data_a_key, "1"}, {"LOAD_VEC_A", load_vec_a_unaligned}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"B_IS_FLOAT", "1"}}), fp16, coopmat, coopmat2, f16acc);
+            string_to_spv(shader_name + "_" + tname + "_f32_aligned", source_name, merge_maps(base_dict, {{data_a_key, "1"}, {"LOAD_VEC_A", load_vec_a}, {"LOAD_VEC_B", load_vec}, {"B_TYPE", aligned_b_type_f32}, {"D_TYPE", "float"}, {"B_IS_FLOAT", "1"}, {"ALIGNED", "1"}}), fp16, coopmat, coopmat2, f16acc);
+        }
 
         if (tname != "f16" && tname != "f32") {
             string_to_spv(shader_name + "_" + tname + "_f16", source_name,          merge_maps(base_dict, {{data_a_key, "1"}, {"LOAD_VEC_A", load_vec_a_unaligned},                           {"B_TYPE", "float16_t"},        {"D_TYPE", "float"}, {"B_IS_FLOAT", "1"}}), fp16, coopmat, coopmat2, f16acc);
@@ -338,9 +358,11 @@ void process_shaders() {
         matmul_shaders(true, matmul_id, false, false, false);
         matmul_shaders(true, matmul_id, false, false, true);
 
+#if defined(GGML_VULKAN_COOPMAT_GLSLC_SUPPORT)
         // Coopmat, fp32acc and fp16acc
         matmul_shaders(true, matmul_id, true, false, false);
         matmul_shaders(true, matmul_id, true, false, true);
+#endif
 
 #if defined(GGML_VULKAN_COOPMAT2_GLSLC_SUPPORT)
         // Coopmat2, fp32acc and fp16acc
@@ -374,7 +396,7 @@ void process_shaders() {
     for (const auto& tname : type_names) {
         // mul mat vec
         std::string data_a_key = "DATA_A_" + to_uppercase(tname);
-        std::string shader = (string_ends_with(tname, "_k")) ? "mul_mat_vec_" + tname + ".comp" : "mul_mat_vec.comp";
+        std::string shader = (string_ends_with(tname, "_k") || string_starts_with(tname, "iq1_")) ? "mul_mat_vec_" + tname + ".comp" : "mul_mat_vec.comp";
 
         string_to_spv("mul_mat_vec_" + tname + "_f32_f32", shader, merge_maps(base_dict, {{data_a_key, "1"}, {"B_TYPE", "float"}, {"B_TYPE_VEC2", "vec2"}, {"B_TYPE_VEC4", "vec4"}, {"D_TYPE", "float"}}));
         string_to_spv("mul_mat_vec_" + tname + "_f16_f32", shader, merge_maps(base_dict, {{data_a_key, "1"}, {"B_TYPE", "float16_t"}, {"B_TYPE_VEC2", "f16vec2"}, {"B_TYPE_VEC4", "f16vec4"}, {"D_TYPE", "float"}}));
@@ -412,6 +434,11 @@ void process_shaders() {
     string_to_spv("contig_cpy_f32_f32", "contig_copy.comp", {{"A_TYPE", "float"}, {"D_TYPE", "float"}});
     string_to_spv("contig_cpy_f32_f16", "contig_copy.comp", {{"A_TYPE", "float"}, {"D_TYPE", "float16_t"}});
     string_to_spv("contig_cpy_f16_f16", "contig_copy.comp", {{"A_TYPE", "float16_t"}, {"D_TYPE", "float16_t"}, {"OPTIMIZATION_ERROR_WORKAROUND", "1"}});
+
+    for (std::string t : {"q4_0", "q4_1", "q5_0", "q5_1", "q8_0", "iq4_nl"}) {
+        string_to_spv("cpy_f32_" + t, "copy_to_quant.comp", {{"DATA_A_" + to_uppercase(t), "1"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}});
+        string_to_spv("cpy_" + t + "_f32", "copy_from_quant.comp", {{"DATA_A_" + to_uppercase(t), "1"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}});
+    }
 
     string_to_spv("add_f32", "add.comp", {{"A_TYPE", "float"}, {"B_TYPE", "float"}, {"D_TYPE", "float"}, {"FLOAT_TYPE", "float"}});
     string_to_spv("add_f16_f32_f16", "add.comp", {{"A_TYPE", "float16_t"}, {"B_TYPE", "float"}, {"D_TYPE", "float16_t"}, {"FLOAT_TYPE", "float"}});
@@ -458,9 +485,19 @@ void process_shaders() {
 
     string_to_spv("rope_norm_f32", "rope_norm.comp", {{"A_TYPE", "float"}, {"D_TYPE", "float"}});
     string_to_spv("rope_norm_f16", "rope_norm.comp", {{"A_TYPE", "float16_t"}, {"D_TYPE", "float16_t"}});
+    string_to_spv("rope_norm_f16_rte", "rope_norm.comp", {{"A_TYPE", "float16_t"}, {"D_TYPE", "float16_t"}, {"RTE16", "1"}});
 
     string_to_spv("rope_neox_f32", "rope_neox.comp", {{"A_TYPE", "float"}, {"D_TYPE", "float"}});
     string_to_spv("rope_neox_f16", "rope_neox.comp", {{"A_TYPE", "float16_t"}, {"D_TYPE", "float16_t"}});
+    string_to_spv("rope_neox_f16_rte", "rope_neox.comp", {{"A_TYPE", "float16_t"}, {"D_TYPE", "float16_t"}, {"RTE16", "1"}});
+
+    string_to_spv("rope_multi_f32", "rope_multi.comp", {{"A_TYPE", "float"}, {"D_TYPE", "float"}});
+    string_to_spv("rope_multi_f16", "rope_multi.comp", {{"A_TYPE", "float16_t"}, {"D_TYPE", "float16_t"}});
+    string_to_spv("rope_multi_f16_rte", "rope_multi.comp", {{"A_TYPE", "float16_t"}, {"D_TYPE", "float16_t"}, {"RTE16", "1"}});
+
+    string_to_spv("rope_vision_f32", "rope_vision.comp", {{"A_TYPE", "float"}, {"D_TYPE", "float"}});
+    string_to_spv("rope_vision_f16", "rope_vision.comp", {{"A_TYPE", "float16_t"}, {"D_TYPE", "float16_t"}});
+    string_to_spv("rope_vision_f16_rte", "rope_vision.comp", {{"A_TYPE", "float16_t"}, {"D_TYPE", "float16_t"}, {"RTE16", "1"}});
 
     string_to_spv("argsort_f32", "argsort.comp", {{"A_TYPE", "float"}});
 
@@ -468,10 +505,13 @@ void process_shaders() {
 
     string_to_spv("im2col_f32", "im2col.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}}));
     string_to_spv("im2col_f32_f16", "im2col.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float16_t"}}));
+    string_to_spv("im2col_f32_f16_rte", "im2col.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float16_t"}, {"RTE16", "1"}}));
 
     string_to_spv("timestep_embedding_f32", "timestep_embedding.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}}));
 
     string_to_spv("pool2d_f32", "pool2d.comp", merge_maps(base_dict, {{"A_TYPE", "float"}, {"D_TYPE", "float"}}));
+
+    string_to_spv("rwkv_wkv6_f32", "wkv6.comp", merge_maps(base_dict, {{"A_TYPE", "float"}}));
 
     for (auto &c : compiles) {
         c.wait();
@@ -485,6 +525,7 @@ void write_output_files() {
     fprintf(hdr, "#include <cstdint>\n\n");
     fprintf(src, "#include \"%s\"\n\n", basename(target_hpp).c_str());
 
+    std::sort(shader_fnames.begin(), shader_fnames.end());
     for (const auto& pair : shader_fnames) {
         const std::string& name = pair.first;
         #ifdef _WIN32

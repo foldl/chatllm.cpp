@@ -88,7 +88,6 @@ namespace chatllm
 
         *result = ggml::tensor {
             /*.type         =*/ type,
-            /*.backend      =*/ GGML_BACKEND_TYPE_CPU,
             /*.buffer       =*/ NULL,
             /*.ne           =*/ { 1, 1, 1, 1 },
             /*.nb           =*/ { 0, 0, 0, 0 },

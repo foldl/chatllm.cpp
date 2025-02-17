@@ -13,7 +13,8 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
-* 2025-02-10: [GPU acceleration](./docs/gpu.md)
+* 2024-07-14: [ggml updated](https://github.com/ggml-org/llama.cpp/tree/0f2bbe656473177538956d22b6842bcaa0449fab) again
+* 2025-02-10: [GPU acceleration](./docs/gpu.md) 🔥
 * 2025-01-25: MiniCPM Embedding & ReRanker
 * 2025-01-21: DeepSeek-R1-Distill-Llama & Qwen
 * 2025-01-15: InternLM3
