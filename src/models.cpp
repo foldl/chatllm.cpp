@@ -66,14 +66,16 @@ namespace chatllm
 
     void print_tensor_shape(const char *info, ggml::tensor *tensor)
     {
-        printf("%s: shape of %s (%p): [%zd, %zd, %zd] [%zd, %zd, %zd]\n", info, tensor->name, tensor->data, tensor->ne[0], tensor->ne[1], tensor->ne[2],
-                                                                             tensor->nb[0], tensor->nb[1], tensor->nb[2]);
+        printf("%s: shape of %s (%p): [%zd, %zd, %zd, %zd] [%zd, %zd, %zd, %zd]\n",
+            info, tensor->name, tensor->data,
+            tensor->ne[0], tensor->ne[1], tensor->ne[2], tensor->ne[3],
+            tensor->nb[0], tensor->nb[1], tensor->nb[2], tensor->nb[3]);
     }
 
     void print_tensor(ggml::tensor *tensor, int offset, const bool full)
     {
-        printf("\n%s (%p): [%zd, %zd, %zd] [%zd, %zd, %zd]\n", tensor->name, tensor->data, tensor->ne[0], tensor->ne[1], tensor->ne[2],
-                                                                             tensor->nb[0], tensor->nb[1], tensor->nb[2]);
+        print_tensor_shape("\n", tensor);
+
         std::vector<uint8_t > data;
         data.resize(ggml::nbytes(tensor));
         Backend::read_tensor_data(tensor, data.data());
@@ -174,7 +176,7 @@ namespace chatllm
     }
 
     void inspect_tensor(ggml::tensor *tensor, const char *format, ...)
-    { return;
+    { //return;
         if (nullptr == dbg_ctx) return;
         if (tensor == nullptr) return;
 

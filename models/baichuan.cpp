@@ -25,6 +25,7 @@ namespace _7b
             user_token_id(config.user_token_id),
             assistant_token_id(config.assistant_token_id)
         {
+            sys_prompt = "";
         }
 
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
@@ -105,7 +106,7 @@ namespace larger
 
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : llama::v2::GenericConditionalGeneration<BaichuanBlock>(config, runtime_config, type, num_key_value_heads, max_length)
+            : llama::v2::GenericConditionalGeneration<BaichuanBlock>(config, runtime_config, type, num_key_value_heads, max_length, 13)
         {}
     };
 }

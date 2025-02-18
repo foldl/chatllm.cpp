@@ -416,6 +416,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml_tensor  *ggml::soft_max_ext(ComputeContext *ctx,  ggml::tensor *a,  ggml::tensor *mask, float scale, float max_bias)
+    {
+        ggml::tensor *tensor = ggml_soft_max_ext(ctx->get_ctx(), a, mask, scale, max_bias);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::sigmoid(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_sigmoid(ctx->get_ctx(), a);
@@ -943,16 +950,10 @@ namespace chatllm
         return output;
     }
 
-    ggml::tensor *CoreAttention::calc_attn_scores(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
-        ggml::tensor *key_layer, ggml::tensor *query_layer, ggml::tensor *value_layer)
+    ggml::tensor *CoreAttention::attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
+        ggml::tensor *attn_scores)
     {
         const int head_size = hidden_size / num_attention_heads;
-
-        // note auto-broadcasting in ggml_mul_mat for `repeat > 1`
-        ggml::tensor *attn_scores = ggml::mul_mat(ctx, key_layer, query_layer); // [heads, qlen, klen]
-
-        // default to F32 here
-        ggml::mul_mat_set_prec(attn_scores, GGML_PREC_F32);
 
         if (attn_scaling)
         {
@@ -973,6 +974,23 @@ namespace chatllm
 
         // attn_probs = soft_max(attn_masked)
         ggml::tensor * attn_probs = ggml::soft_max_inplace(ctx, attn_masked);
+
+        return attn_probs;
+    }
+
+    ggml::tensor *CoreAttention::calc_attn_scores(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
+        ggml::tensor *key_layer, ggml::tensor *query_layer, ggml::tensor *value_layer)
+    {
+        const int head_size = hidden_size / num_attention_heads;
+
+        // note auto-broadcasting in ggml_mul_mat for `repeat > 1`
+        ggml::tensor *attn_scores = ggml::mul_mat(ctx, key_layer, query_layer); // [heads, qlen, klen]
+
+        // default to F32 here
+        ggml::mul_mat_set_prec(attn_scores, GGML_PREC_F32);
+
+        // attn_probs = soft_max(attn_masked)
+        ggml::tensor * attn_probs = attn_scores_to_probs(ctx, hidden_size, n_past, qlen, attn_scores);
 
         ggml::tensor *context_layer = ggml::mul_mat(ctx, value_layer, attn_probs); // [heads, qlen, head_size]
         last_attn_scores = ggml::reshape_2d(ctx,
@@ -1240,19 +1258,42 @@ namespace chatllm
         return r;
     }
 
-    ggml::tensor *BaichuanSelfAttention::apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const
+    ALiBiSelfAttention::ALiBiSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+        : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false),
+        mask(ggml::new_tensor_2d(ctx, GGML_TYPE_F32, max_length, max_length))
     {
-        return k;
+        bias_max = 8.0f;
+        scale = 1.0f / sqrtf(float(hidden_size / num_attention_heads));
+
+        std::vector<float> v_mask;
+        v_mask.resize(max_length * max_length);
+        float *data = v_mask.data();
+
+        for (int i = 0; i < max_length; i++)
+        {
+            for (int j = 0; j < max_length; j++)
+            {
+                int pos = i * max_length + j;
+                if (j > i)
+                    data[pos] = -INFINITY;
+                else
+                    data[pos] = -(float)std::abs(j - i);
+            }
+        }
+
+        ctx->get_allocator()->alloc(mask);
+        Backend::write_tensor_data(mask, data);
     }
 
-    ggml::tensor *BaichuanSelfAttention::apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const
+    ggml::tensor *ALiBiSelfAttention::attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
+        ggml::tensor *attn_scores)
     {
-        return q;
-    }
+        ggml::tensor *sub_mask = ggml::view_2d(ctx, mask, n_past + qlen, qlen, max_length * ggml::element_size(mask), n_past * max_length * ggml::element_size(mask));
+        sub_mask = ggml::cont(ctx, sub_mask);
 
-    ggml::tensor *BaichuanSelfAttention::apply_pos_embedding_kq(ComputeContext *ctx, ggml::tensor *kq, int hidden_size, int qlen, ggml::tensor *past) const
-    {
-        return ggml::map_custom1(ctx, kq, ggml_compute_forward_custom_alibi, GGML_N_TASKS_MAX, const_cast<void *>((const void *)&alibi));
+        ggml::tensor *attn_probs = ggml::soft_max_ext(ctx, attn_scores, sub_mask, scale, bias_max);
+
+        return attn_probs;
     }
 
     QWenSelfAttention::QWenSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)

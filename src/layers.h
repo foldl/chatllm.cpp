@@ -105,6 +105,7 @@ namespace chatllm
 
         ggml::tensor *soft_max(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *soft_max_inplace(ComputeContext *ctx, ggml::tensor *a);
+        ggml_tensor  *soft_max_ext(ComputeContext *ctx,  ggml::tensor *a,  ggml::tensor *mask, float scale, float max_bias);
 
         ggml::tensor *sigmoid(ComputeContext *ctx, ggml::tensor *a);
 
@@ -981,7 +982,9 @@ namespace chatllm
         // q: [heads, qlen, head_size]
         // v: [heads, head_size, klen]
         virtual ggml::tensor *calc_attn_scores(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
-                                              ggml::tensor *key_layer, ggml::tensor *query_layer, ggml::tensor *value_layer);
+                                            ggml::tensor *key_layer, ggml::tensor *query_layer, ggml::tensor *value_layer);
+        virtual ggml::tensor *attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
+                                            ggml::tensor *attn_scores);
 
         // input & output: [qlen, heads, head_size]
         // CAUTION: **inplace** operation is assumed.
@@ -2199,33 +2202,27 @@ namespace chatllm
             : RoPESelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
     };
 
-    class BaichuanSelfAttention : public BaseAttention
+    class ALiBiSelfAttention : public BaseAttention
     {
     public:
-        BaichuanSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
-            : BaichuanSelfAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length)
+        ALiBiSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+            : ALiBiSelfAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length)
         {
         }
 
-        BaichuanSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
-        {
-            alibi.bias_max = 8.0f;
-            alibi.n_past = 0;
-            alibi.n_head = num_attention_heads;
-        }
+        ALiBiSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length);
 
     protected:
-        // input & output: [qlen, heads, head_size]
-        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override;
-        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override;
+        ggml::tensor *attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
+            ggml::tensor *attn_scores) override;
 
-        ggml::tensor *apply_pos_embedding_kq(ComputeContext *ctx, ggml::tensor *kq, int hidden_size, int qlen, ggml::tensor *past) const override;
-
-        alibi_ctx alibi;
+    public:
+        float  bias_max;
+        float  scale;
+        ggml::tensor *mask;
     };
 
-    class BaichuanBlock : public LMBlock1<RMSNorm, BaichuanSelfAttention, RMSNorm, SiLUMLP>
+    class BaichuanBlock : public LMBlock1<RMSNorm, ALiBiSelfAttention, RMSNorm, SiLUMLP>
     {
     public:
         BaichuanBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
