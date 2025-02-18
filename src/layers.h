@@ -983,6 +983,7 @@ namespace chatllm
                                               ggml::tensor *key_layer, ggml::tensor *query_layer, ggml::tensor *value_layer);
 
         // input & output: [qlen, heads, head_size]
+        // CAUTION: **inplace** operation is assumed.
         virtual ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const { return k; }
         virtual ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const { return q; }
         virtual ggml::tensor *apply_pos_embedding_kq(ComputeContext *ctx, ggml::tensor *kq, int hidden_size, int qlen, ggml::tensor *past) const { return kq; }
@@ -1555,7 +1556,7 @@ namespace chatllm
     enum RoPEMode
     {
         Interleaved = 0,        // IQIQ......IQ
-        Original = 2,           // II...IQQ...Q
+        Original = 2,           // II...IQQ...Q (i.e. Su's Paper)
         GLM = 4,
     };
 

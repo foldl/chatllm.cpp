@@ -704,11 +704,23 @@ namespace chatllm
 
     void ComputeContext::cb_op_tensor(ggml::tensor *tensor)
     {
-        if (get_backend() && ggml_backend_supports_op(get_backend()->backend, tensor))
+        if (get_backend() == nullptr) return;
+        if (ggml_backend_supports_op(get_backend()->backend, tensor))
         {
             //struct ggml_backend_buffer *buffer = tensor->buffer;
             //if (buffer && ggml_backend_supports_buft(get_backend()->backend, ggml_backend_buffer_get_type(buffer)))
-            ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
+
+            if (!ggml::is_view_op(tensor))
+            {
+                ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
+            }
+        }
+        else
+        {
+            if (ggml::maybe_inplace_op(tensor))
+            {
+                ggml::log(GGML_LOG_LEVEL_ERROR, "tensor %s might not work, op = %s", ggml::get_name(tensor), ggml::op_name(tensor));
+            }
         }
     }
 

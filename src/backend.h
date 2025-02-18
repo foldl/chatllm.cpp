@@ -26,7 +26,13 @@ namespace chatllm
         type type_of(const ggml::tensor *tensor);
         type type_of(const ggml::tensor &tensor);
 
+        // why param type is `ggml::tensor`, but not `op`? `tensor` is an operation (a map) mathematically.
+        bool is_view_op(ggml::tensor *a);
+        const char *op_name(ggml::tensor *a);
+        bool maybe_inplace_op(ggml::tensor *a);
+
         void set_name(tensor *tensor, const char *name);
+        const char *get_name(tensor *tensor);
 
         void graph_dump_dot(ggml_backend_sched_t sched, const struct ggml_cgraph * gb, const struct ggml_cgraph * gf, const char * filename);
 

@@ -56,9 +56,9 @@ The full format of `-ngl` is `-ngl id:layer_spec[,id:layer_spec]`. `id` is GPU d
 
     Ensure `Prolog` and `Epilog` layers are on the same device.
 
-1. `ggml` scheduler can't handle some operators properly.
+1. Other issues;
 
-    If a model has `10` hidden layers and `-ngl 10` not work, then try `-ngl 10,epilog`. If `-ngl 10,epilog` not work, then try `-ngl 9`.
+    If a model has `10` hidden layers and `-ngl 10` not work, then try `-ngl all`, `-ngl 10,epilog`, or `-ngl 9`.
 
 ## Tips
 

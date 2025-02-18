@@ -37,6 +37,22 @@ namespace chatllm
         return a.type;
     }
 
+    bool ggml::is_view_op(ggml::tensor *a)
+    {
+        enum ggml_op op = a->op;
+        return op == GGML_OP_VIEW || op == GGML_OP_RESHAPE || op == GGML_OP_PERMUTE || op == GGML_OP_TRANSPOSE;
+    }
+
+    const char *ggml::op_name(ggml::tensor *a)
+    {
+        return ggml_op_name(a->op);
+    }
+
+    bool ggml::maybe_inplace_op(ggml::tensor *a)
+    {
+        return a->view_src != nullptr;
+    }
+
     ggml::tensor *ggml::new_tensor_1d(ComputeContext *ctx, ggml::type type, int64_t ne0)
     {
         ggml::tensor *tensor = ggml_new_tensor_1d(ctx->get_ctx(), type, ne0);
@@ -71,6 +87,11 @@ namespace chatllm
     void ggml::set_name(ggml::tensor *tensor, const char *name)
     {
         ggml_set_name(tensor, name);
+    }
+
+    const char *ggml::get_name(tensor *tensor)
+    {
+        return ggml_get_name(tensor);
     }
 
     void ggml::fill(ggml::tensor *a, uint8_t value, size_t offset, size_t size)
