@@ -384,142 +384,6 @@ namespace v3
 
     #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-    static void ggml_compute_forward_su_rope_f16(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
-    {
-        LongRoPEParam *data = reinterpret_cast<LongRoPEParam *>(userdata);
-
-        const ggml::tensor *src0 = a;
-        const ggml::tensor *src1 = b;
-
-        GGML_TENSOR_UNARY_OP_LOCALS
-
-        int n_dims = data->rope_dim;
-
-        const int nr = (int)ggml::nrows(dst);
-
-        GGML_ASSERT(n_dims == ne0);
-        GGML_ASSERT(n_dims % 2 == 0);
-
-        CHATLLM_CHECK(nb0 == sizeof(float)) << "nb0 = " << nb0;
-        CHATLLM_CHECK(nb00 == sizeof(float)) << "nb0 = " << nb0;
-
-        // rows per thread
-        const int dr = (nr + nth - 1)/nth;
-
-        // row range for this thread
-        const int ir0 = dr*ith;
-        const int ir1 = MIN(ir0 + dr, nr);
-
-        // row index used to determine which thread to use
-        int ir = 0;
-
-        const int32_t * pos = (const int32_t *) src1->data;
-
-        for (int64_t i3 = 0; i3 < ne3; i3++) {
-            for (int64_t i2 = 0; i2 < ne2; i2++) {
-                const float p = (float)pos[i2];
-                const float *inv_freq = data->get_inv_freq(pos[i2]);
-                for (int64_t i1 = 0; i1 < ne1; i1++) {
-                    if (ir++ < ir0) continue;
-                    if (ir   > ir1) break;
-
-                    for (int64_t i0 = 0; i0 < n_dims / 2; i0 += 1) {
-
-                        float theta = p * inv_freq[i0];
-
-                        float cos_theta = cosf(theta) * data->scaling_factor;
-                        float sin_theta = sinf(theta) * data->scaling_factor;
-
-                        const ggml_fp16_t * const src = (ggml_fp16_t *)((char *) src0->data + i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
-                              ggml_fp16_t * dst_data  = (ggml_fp16_t *)((char *)  dst->data + i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0);
-
-                        const float x0 = ggml_fp16_to_fp32(src[0]);
-                        const float x1 = ggml_fp16_to_fp32(src[n_dims / 2]);
-
-                        dst_data[0]             = ggml_fp32_to_fp16(x0*cos_theta - x1*sin_theta);
-                        dst_data[n_dims / 2]    = ggml_fp32_to_fp16(x0*sin_theta + x1*cos_theta);
-                    }
-                }
-            }
-        }
-    }
-
-    static void ggml_compute_forward_su_rope_f32(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
-    {
-        LongRoPEParam *data = reinterpret_cast<LongRoPEParam *>(userdata);
-
-        const ggml::tensor *src0 = a;
-        const ggml::tensor *src1 = b;
-
-        GGML_TENSOR_UNARY_OP_LOCALS
-
-        int n_dims = data->rope_dim;
-
-        const int nr = (int)ggml::nrows(dst);
-
-        GGML_ASSERT(n_dims == ne0);
-        GGML_ASSERT(n_dims % 2 == 0);
-
-        CHATLLM_CHECK(nb0 == sizeof(float)) << "nb0 = " << nb0;
-        CHATLLM_CHECK(nb00 == sizeof(float)) << "nb0 = " << nb0;
-
-        // rows per thread
-        const int dr = (nr + nth - 1)/nth;
-
-        // row range for this thread
-        const int ir0 = dr*ith;
-        const int ir1 = MIN(ir0 + dr, nr);
-
-        // row index used to determine which thread to use
-        int ir = 0;
-
-        const int32_t * pos = (const int32_t *) src1->data;
-
-        for (int64_t i3 = 0; i3 < ne3; i3++) {
-            for (int64_t i2 = 0; i2 < ne2; i2++) {
-                const float p = (float)pos[i2];
-                const float *inv_freq = data->get_inv_freq(pos[i2]);
-                for (int64_t i1 = 0; i1 < ne1; i1++) {
-                    if (ir++ < ir0) continue;
-                    if (ir   > ir1) break;
-
-                    for (int64_t i0 = 0; i0 < n_dims / 2; i0 += 1) {
-
-                        float theta = p * inv_freq[i0];
-
-                        float cos_theta = cosf(theta) * data->scaling_factor;
-                        float sin_theta = sinf(theta) * data->scaling_factor;
-
-                        const float * const src = (float *)((char *) src0->data + i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
-                              float * dst_data  = (float *)((char *)  dst->data + i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0);
-
-                        const float x0 = src[0];
-                        const float x1 = src[n_dims / 2];
-
-                        dst_data[0]             = x0*cos_theta - x1*sin_theta;
-                        dst_data[n_dims / 2]    = x0*sin_theta + x1*cos_theta;
-                    }
-                }
-            }
-        }
-    }
-
-    static void ggml_compute_forward_su_rope(ggml::tensor * dst , const ggml::tensor * a, const ggml::tensor * b, int ith, int nth, void * userdata)
-    {
-        switch (a->type)
-        {
-        case GGML_TYPE_F16:
-            ggml_compute_forward_su_rope_f16(dst, a, b, ith, nth, userdata);
-            break;
-        case GGML_TYPE_F32:
-            ggml_compute_forward_su_rope_f32(dst, a, b, ith, nth, userdata);
-            break;
-        default:
-            GGML_ASSERT(false);
-            break;
-        }
-    }
-
     class MiniCPM3SelfAttention : public RoPESelfAttention<deepseek::v2_light::BaseMLAttention<true>>
     {
     private:
@@ -529,47 +393,32 @@ namespace v3
                       int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim, bool use_bias)
             : Base(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim, use_bias)
         {
+            freq_factors = ggml::new_tensor_1d(ctx, GGML_TYPE_F32, rope_dim / 2);
+            ctx->get_allocator()->alloc(freq_factors);
+            rope_mode = RoPEMode::Original;
+            this->rope_dim = rope_dim;
         }
 
         void config(int original_max_position_embeddings,
             float rope_theta, float short_scaling_factor, float long_scaling_factor, int factor_len, const float *short_factor, const float *long_factor)
         {
-            this->original_max_position_embeddings = original_max_position_embeddings;
+            const float *factors = nullptr;
             this->freq_base = rope_theta;
-            this->short_scaling_factor = short_scaling_factor;
-            this->long_scaling_factor  = long_scaling_factor;
-            build_inv_freq_from_factors(this->inv_freq_short, factor_len * 2, short_factor, freq_base);
-            build_inv_freq_from_factors(this->inv_freq_long,  factor_len * 2, long_factor,  freq_base);
-
             if (max_length > original_max_position_embeddings)
             {
-                long_rope.reset(new SimpleLongRoPEParam(rope_dim, long_scaling_factor, inv_freq_long.data()));
+                attn_factor = long_scaling_factor;
+                factors = long_factor;
             }
             else
             {
-                long_rope.reset(new SimpleLongRoPEParam(rope_dim, short_scaling_factor, inv_freq_short.data()));
+                attn_factor = short_scaling_factor;
+                factors = short_factor;
             }
-        }
 
-    protected:
-        // input & output: [qlen, heads, head_size]
-        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override
-        {
-            return ggml::map_custom2_inplace(ctx, k, past, ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, long_rope.get());
-        }
-        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override
-        {
-            return ggml::map_custom2_inplace(ctx, q, past, ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, long_rope.get());
-        }
+            CHATLLM_CHECK(freq_factors->ne[0] == factor_len) << "factor_len mismatch!";
 
-    public:
-        int original_max_position_embeddings;
-        float short_scaling_factor;
-        float long_scaling_factor;
-        std::vector<float> inv_freq_short;
-        std::vector<float> inv_freq_long;
-    protected:
-        std::unique_ptr<SimpleLongRoPEParam> long_rope;
+            Backend::write_tensor_data(freq_factors, factors);
+        }
     };
 
 
@@ -601,7 +450,7 @@ namespace v3
               config(config)
         {
             const size_t tensor_ovhd = ggml_tensor_overhead();
-            const size_t num_tensors = 2 + config.num_hidden_layers * 17;
+            const size_t num_tensors = 2 + config.num_hidden_layers * 18;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
@@ -735,47 +584,32 @@ namespace emb_light
             : Base(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
         {
             causal = false;
+
+            freq_factors = ggml::new_tensor_1d(ctx, GGML_TYPE_F32, hidden_size / num_attention_heads / 2);
+            ctx->get_allocator()->alloc(freq_factors);
+            rope_mode = RoPEMode::Original;
         }
 
         void config(int original_max_position_embeddings,
             float rope_theta, float short_scaling_factor, float long_scaling_factor, int factor_len, const float *short_factor, const float *long_factor)
         {
-            this->original_max_position_embeddings = original_max_position_embeddings;
+            const float *factors = nullptr;
             this->freq_base = rope_theta;
-            this->short_scaling_factor = short_scaling_factor;
-            this->long_scaling_factor  = long_scaling_factor;
-            build_inv_freq_from_factors(this->inv_freq_short, factor_len * 2, short_factor, freq_base);
-            build_inv_freq_from_factors(this->inv_freq_long,  factor_len * 2, long_factor,  freq_base);
-
             if (max_length > original_max_position_embeddings)
             {
-                long_rope.reset(new SimpleLongRoPEParam(rope_dim, long_scaling_factor, inv_freq_long.data()));
+                attn_factor = long_scaling_factor;
+                factors = long_factor;
             }
             else
             {
-                long_rope.reset(new SimpleLongRoPEParam(rope_dim, short_scaling_factor, inv_freq_short.data()));
+                attn_factor = short_scaling_factor;
+                factors = short_factor;
             }
-        }
 
-    protected:
-        // input & output: [qlen, heads, head_size]
-        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override
-        {
-            return ggml::map_custom2_inplace(ctx, k, past, v3::ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, long_rope.get());
-        }
-        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override
-        {
-            return ggml::map_custom2_inplace(ctx, q, past, v3::ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, long_rope.get());
-        }
+            CHATLLM_CHECK(freq_factors->ne[0] == factor_len) << "factor_len mismatch!";
 
-    public:
-        int original_max_position_embeddings;
-        float short_scaling_factor;
-        float long_scaling_factor;
-        std::vector<float> inv_freq_short;
-        std::vector<float> inv_freq_long;
-    protected:
-        std::unique_ptr<SimpleLongRoPEParam> long_rope;
+            Backend::write_tensor_data(freq_factors, factors);
+        }
     };
 
     class MiniCPMBlock : public LMBlock1<RMSNorm, MiniCPMLongRoPESelfAttention, RMSNorm, SiLUMLP>
@@ -796,7 +630,7 @@ namespace emb_light
             : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
         {
             const size_t tensor_ovhd = ggml_tensor_overhead();
-            const size_t num_tensors = 1 + final_tensor_num + config.num_hidden_layers * 12;
+            const size_t num_tensors = 1 + final_tensor_num + config.num_hidden_layers * 13;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
@@ -950,7 +784,7 @@ namespace ranker_light
                                                         hidden_size * ggml::element_size(hidden_states), 0);
             first_token_tensor = layernorm.forward(ctx, first_token_tensor);
             ggml::tensor *output = score.forward(ctx, first_token_tensor);
-            output = ggml::map_custom1(ctx, output, ggml_compute_forward_sigmoid, 1, nullptr);
+            output = ggml::sigmoid(ctx, output);
             return output;
         }
 

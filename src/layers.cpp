@@ -353,6 +353,15 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::simple_norm(ComputeContext *ctx, ggml::tensor *a, float eps)
+    {
+        int hidden_size = (int)a->ne[0];
+        float scale = 1.0f / sqrtf((float)hidden_size);
+        ggml::tensor *tensor = ggml::rms_norm(ctx, a, eps);
+        tensor = ggml::scale(ctx, tensor, scale);
+        return tensor;
+    }
+
     ggml::tensor *ggml::rope(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int n_dims, int mode)
     {
         ggml::tensor *tensor = ggml_rope(ctx->get_ctx(), a, b, n_dims, mode);
@@ -673,7 +682,7 @@ namespace chatllm
     {
         int hidden_size = (int)hidden_states->ne[0];
         ggml::tensor *first_token_tensor = ggml::view_1d(ctx, hidden_states, hidden_size, 0);
-        ggml::tensor *output = ggml::map_custom1(ctx, first_token_tensor, ggml_compute_forward_simple_norm, 1, this);
+        ggml::tensor *output = ggml::simple_norm(ctx, first_token_tensor, eps);
         return output;
     }
 
@@ -697,7 +706,7 @@ namespace chatllm
         output = ggml::mul(ctx, output, one_based_pos);
         output = ggml::mean(ctx, output);
         output = ggml::transpose(ctx, output);
-        output = ggml::map_custom1(ctx, output, ggml_compute_forward_simple_norm, 1, nullptr);
+        output = ggml::simple_norm(ctx, output, eps);
         return output;
     }
 
@@ -1373,44 +1382,24 @@ namespace chatllm
         return nullptr;
     }
 
-    void build_inv_freq_from_factors(std::vector<float> &inv_freq, int dim, const float *factors, float base)
-    {
-        inv_freq.clear();
-        inv_freq.reserve(dim);
-        for (int i = 0; i < dim; i += 2)
-        {
-            double v = 1.0 / (factors[i / 2] * pow(base, (double)i / dim));
-            inv_freq.push_back((float)v);
-        }
-    }
-
     void Phi3SUSelfAttention::config(int original_max_position_embeddings, float rope_theta, float short_scaling_factor, float long_scaling_factor, int factor_len, const float *short_factor, const float *long_factor)
     {
-        this->original_max_position_embeddings = original_max_position_embeddings;
+        const float *factors = nullptr;
         this->freq_base = rope_theta;
-        this->short_scaling_factor = short_scaling_factor;
-        this->long_scaling_factor  = long_scaling_factor;
-        build_inv_freq_from_factors(this->inv_freq_short, factor_len * 2, short_factor, freq_base);
-        build_inv_freq_from_factors(this->inv_freq_long,  factor_len * 2, long_factor,  freq_base);
-
         if (max_length > original_max_position_embeddings)
         {
-            long_rope.reset(new SimpleLongRoPEParam(rope_dim, long_scaling_factor, inv_freq_long.data()));
+            attn_factor = long_scaling_factor;
+            factors = long_factor;
         }
         else
         {
-            long_rope.reset(new SimpleLongRoPEParam(rope_dim, short_scaling_factor, inv_freq_short.data()));
+            attn_factor = short_scaling_factor;
+            factors = short_factor;
         }
-    }
 
-    ggml::tensor *Phi3SUSelfAttention::apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const
-    {
-        return ggml::map_custom2(ctx, k, past, ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, long_rope.get());
-    }
+        CHATLLM_CHECK(freq_factors->ne[0] == factor_len) << "factor_len mismatch!";
 
-    ggml::tensor *Phi3SUSelfAttention::apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const
-    {
-        return ggml::map_custom2(ctx, q, past, ggml_compute_forward_su_rope, GGML_N_TASKS_MAX, long_rope.get());
+        Backend::write_tensor_data(freq_factors, factors);
     }
 
     ggml::tensor *BaseSparseMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states)

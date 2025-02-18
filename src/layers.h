@@ -90,6 +90,7 @@ namespace chatllm
         ggml::tensor *norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *rms_norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *rms_norm(ComputeContext *ctx, ggml::tensor *a, float eps);
+        ggml::tensor *simple_norm(ComputeContext *ctx, ggml::tensor *a, float eps);
 
         ggml::tensor *rope(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int n_dims, int mode);
         ggml::tensor *rope_ext(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c,
@@ -1711,8 +1712,6 @@ namespace chatllm
         {}
     };
 
-    void ggml_compute_forward_sigmoid(ggml::tensor * dst , const ggml::tensor * src, int ith, int nth, void * userdata);
-
     template<class MLP, bool use_bias = false> class GatedMLP : public MLP
     {
     public:
@@ -1726,7 +1725,7 @@ namespace chatllm
         {
             ggml::tensor *scale = gate.forward(ctx, hidden_states);
             ggml::tensor *r     = MLP::forward(ctx, hidden_states);
-            scale = ggml::map_custom1(ctx, scale, ggml_compute_forward_sigmoid, 1, nullptr);
+            scale = ggml::sigmoid(ctx, scale);
             r = ggml::mul(ctx, r, scale);
             return r;
         }
@@ -1945,7 +1944,8 @@ namespace chatllm
     public:
         BCEFinalNorm() {}
 
-        BCEFinalNorm(InitContext *ctx, int hidden_size)
+        BCEFinalNorm(InitContext *ctx, int hidden_size):
+            eps(1e-5f)
         {}
 
         using Block::forward;
@@ -1955,6 +1955,8 @@ namespace chatllm
         {
             return 0;
         }
+    public:
+        float eps;
     };
 
     class MiniCPMMeanPooling : public RMSNorm
@@ -2534,24 +2536,6 @@ namespace chatllm
         const float scaling_factor;
     };
 
-    class SimpleLongRoPEParam : public LongRoPEParam
-    {
-    public:
-        SimpleLongRoPEParam(int rope_dim, float scaling_factor, const float *inv_freq)
-            : LongRoPEParam(rope_dim, scaling_factor), inv_freq(inv_freq)
-        {}
-
-        const float *get_inv_freq(int max_pos) override
-        {
-            return inv_freq;
-        }
-
-    protected:
-        const float *inv_freq;
-    };
-
-    void build_inv_freq_from_factors(std::vector<float> &inv_freq, int dim, const float *factors, float base);
-
     class Phi3SUSelfAttention : public RoPESelfAttention<BaseAttention>
     {
     public:
@@ -2563,27 +2547,12 @@ namespace chatllm
         Phi3SUSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
             : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias)
         {
+            freq_factors = ggml::new_tensor_1d(ctx, GGML_TYPE_F32, rope_dim / 2);
+            ctx->get_allocator()->alloc(freq_factors);
         }
 
         void config(int original_max_position_embeddings,
             float rope_theta, float short_scaling_factor, float long_scaling_factor, int factor_len, const float *short_factor, const float *long_factor);
-
-        const float *get_inv_freq(int pos);
-
-    protected:
-        // input & output: [qlen, heads, head_size]
-        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override;
-        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override;
-
-    public:
-        int original_max_position_embeddings;
-        float short_scaling_factor;
-        float long_scaling_factor;
-        std::vector<float> inv_freq_short;
-        std::vector<float> inv_freq_long;
-
-    protected:
-        std::unique_ptr<SimpleLongRoPEParam> long_rope;
     };
 
     class Phi3SUBlock : public LMBlock1<RMSNorm, Phi3SUSelfAttention, RMSNorm, SiLUMLP>

@@ -572,7 +572,7 @@ namespace v3_su
 
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
                             int num_key_value_heads, int max_length)
-            : llama::v2::GenericConditionalGeneration<Phi3SUBlock>(config, runtime_config, type, num_key_value_heads, max_length, 12)
+            : llama::v2::GenericConditionalGeneration<Phi3SUBlock>(config, runtime_config, type, num_key_value_heads, max_length, 13)
         {
             CHATLLM_CHECK(config.sliding_window >= config.max_length)
                 << "sliding_window (" << config.sliding_window << ") must >= " << config.max_length;
