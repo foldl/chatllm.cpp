@@ -11,6 +11,7 @@ Demos of tool calling for these models are provided:
 * [NuminaMath](../scripts/tool_numinamath.py)
 * [LlaMA3-Groq-Tool-Use](../scripts/tool_groq.py)
 * [LlaMA 3.1](../scripts/tool_llama3.1.py)
+* [Watt-Tool](../scripts/tool_watt.py)
 
 ## Precondition
 

@@ -13,7 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
-* 2025-02-19: MoE CPU offloading
+* 2025-02-19: MoE CPU offloading, tool calling with Watt-tool
 * 2025-02-17: [ggml updated](https://github.com/ggml-org/llama.cpp/tree/0f2bbe656473177538956d22b6842bcaa0449fab) again
 * 2025-02-10: [GPU acceleration](./docs/gpu.md) 🔥
 * 2025-01-25: MiniCPM Embedding & ReRanker

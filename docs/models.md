@@ -35,6 +35,7 @@
         - v3: [Instruct-1B](https://huggingface.co/tiiuae/Falcon3-1B-Instruct), [Instruct-3B](https://huggingface.co/tiiuae/Falcon3-3B-Instruct), [Instruct-7B](https://huggingface.co/tiiuae/Falcon3-7B-Instruct), [Instruct-10B](https://huggingface.co/tiiuae/Falcon3-10B-Instruct)
     * [x] DeepSeek-R1-Distill-LlaMA: [8B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B), [70B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-70B) (`-a DeepSeek-R1-Distill-LlaMA`)
     * [x] DeepHermes-3: [Llama-3-8B-Preview](https://huggingface.co/NousResearch/DeepHermes-3-Llama-3-8B-Preview) (Remember to user `-s ...`)
+    * [x] Watt-tool: [8B](https://huggingface.co/watt-ai/watt-tool-8B), [70B](https://huggingface.co/watt-ai/watt-tool-70B)
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
 
@@ -94,7 +95,7 @@
 
     * [x] Codestral: [22B-v0.1](https://huggingface.co/mistralai/Codestral-22B-v0.1)
     * [x] Mistral-Nemo: [Nemo-Instruct-2407](https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407)
-
+    * [x] Small: [Instruct-24B](https://huggingface.co/mistralai/Mistral-Small-24B-Instruct-2501)
 
 * Phi (`PhiForCausalLM`, `Phi3ForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4)

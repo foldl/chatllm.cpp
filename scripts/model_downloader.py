@@ -8,6 +8,8 @@ def get_model_url_on_modelscope(proj: str, fn: str, user: str = 'judd2024') -> s
 with open(os.path.join(binding.PATH_SCRIPTS, 'models.json'), encoding='utf-8') as f:
     all_models = json.load(f)
 
+DEF_STORAGE_DIR = '../quantized'
+
 def print_progress_bar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 60, fill = '█', printEnd = "\r", auto_nl = True):
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filledLength = int(length * iteration // total)
@@ -126,13 +128,13 @@ def enum_missing():
             for q in variants[s]['quantized'].keys():
                 quantized = variants[s]['quantized'][q]
                 all.add(quantized['url'].split('/')[1])
-    f = glob.glob(os.path.join('../quantized', '*.bin'))
+    f = glob.glob(os.path.join(DEF_STORAGE_DIR, '*.bin'))
     l = []
     for x in f:
         k = os.path.basename(x)
         if not k in all:
             l.append(k)
-    print(sorted(l))
+    print(f'not uploaded models: {sorted(l)}')
 
 def check_default():
     for m in all_models.keys():
@@ -141,4 +143,15 @@ def check_default():
             print(f"{m} default missing")
 
 if __name__ == '__main__':
+    import sys
+    args = sys.argv[1:]
+    if len(args) > 0:
+        if args[0] == 'check':
+            enum_missing()
+            check_default()
+            exit(0)
+
+        if args[0].startswith(':'):
+            print(preprocess_args(args, DEF_STORAGE_DIR))
+            exit(0)
     show()

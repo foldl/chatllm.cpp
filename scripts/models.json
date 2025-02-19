@@ -2006,5 +2006,21 @@
                 }
             }
         }
+    },
+    "watt-tool": {
+        "brief": "watt-tool-8B is a fine-tuned language model based on LLaMa-3.1-8B-Instruct, optimized for tool usage and multi-turn dialogue.",
+        "default": "8b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8538752192,
+                        "url": "chatllm_quantized_watt-tool/watt-tool-8b.bin"
+                    }
+                }
+            }
+        }
     }
 }
