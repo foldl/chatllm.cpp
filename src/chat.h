@@ -280,6 +280,51 @@ namespace chatllm
         ggml::type dtype;
     };
 
+    class LayerMover
+    {
+    public:
+        LayerMover(InitContext *ctx, int layer_id): ctx(ctx)
+        {
+            ctx->move_to_layer(layer_id);
+        }
+
+        operator InitContext *() const
+        {
+            return ctx;
+        }
+    private:
+        InitContext *ctx;
+    };
+
+    class CPUMover
+    {
+    public:
+        CPUMover(ComputeContext *ctx, bool activated): ctx(ctx), activated(activated)
+        {
+            if (activated)
+                ctx->backend_cpu_override(true);
+        }
+
+        ~CPUMover()
+        {
+            if (activated)
+                ctx->backend_cpu_override(false);
+        }
+
+        operator InitContext *() const
+        {
+            return dynamic_cast<InitContext *>(ctx);
+        }
+
+        operator ComputeContext *() const
+        {
+            return ctx;
+        }
+    private:
+        ComputeContext *ctx;
+        const bool activated;
+    };
+
     class ChunkInterceptor;
 
     class BaseStreamer
@@ -844,10 +889,11 @@ namespace chatllm
             int   max_length;
             std::string layer_spec;
             std::string gpu_layers;
-            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers)
-                : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers)
+            bool moe_on_cpu;
+            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers, bool moe_on_cpu)
+                : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu)
             {}
-            extra_args() : extra_args(-1, "", "") {}
+            extra_args() : extra_args(-1, "", "", false) {}
         };
 
         ModelObject(const std::string &path);

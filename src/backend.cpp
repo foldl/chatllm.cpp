@@ -119,7 +119,7 @@ namespace chatllm
         total[usage] += size;
         ggml_backend_buffer_t buf = ggml_backend_buft_alloc_buffer(get_allocator(usage), size);
 
-        CHATLLM_CHECK(buf) << __FUNCTION__ << "() failed to allocate buffer";
+        CHATLLM_CHECK(buf) << __FUNCTION__ << "() failed to allocate buffer of size " << size;
 
         auto r = new BackendBuffer(buf);
         buffers.emplace_back(r);
@@ -261,6 +261,11 @@ namespace chatllm
         alloc_of_tensor.insert_or_assign(tensor, allocator);
     }
 
+    void LayerAllocatorManager::override_to_cpu_only(bool flag)
+    {
+        cpu_override = flag;
+    }
+
     int LayerAllocatorManager::get_mapped_layer_id(int layer_id)
     {
         int id = layer_id;
@@ -276,7 +281,7 @@ namespace chatllm
         default:
             break;
         }
-        if ((id < 0) || (id >= (int)allocators.size()))
+        if (cpu_override || (id < 0) || (id >= (int)allocators.size()))
             id = (int)allocators.size() - 1;
 
         return id;
@@ -732,6 +737,11 @@ namespace chatllm
     void ComputeContext::move_to_layer(int layer_id)
     {
         backend_context->layer_allocators.move_to_layer(layer_id);
+    }
+
+    void ComputeContext::backend_cpu_override(bool flag)
+    {
+        backend_context->layer_allocators.override_to_cpu_only(flag);
     }
 
     BackendBufAllocator *ComputeContext::get_allocator(void)

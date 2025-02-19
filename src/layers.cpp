@@ -1450,6 +1450,8 @@ namespace chatllm
 
         ggml::tensor * logits = gate.forward(ctx, hidden_states); // [qlen, num_experts]
 
+        CPUMover mover(ctx, ctx->user_options.moe_on_cpu);
+
         ggml::tensor * probs = ggml::soft_max(ctx, logits); // [qlen, num_experts]
 
         // select experts

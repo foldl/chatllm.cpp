@@ -26,7 +26,10 @@ namespace chatllm
     struct RuntimeConfig
     {
         std::string gpu_layers;
-        RuntimeConfig(const std::string &gpu_layers): gpu_layers(gpu_layers) {}
+        bool moe_on_cpu;
+        RuntimeConfig(const std::string &gpu_layers, bool moe_on_cpu):
+            gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu)
+        {}
     };
 
     class ForwardContext : public ComputeContext
@@ -42,22 +45,6 @@ namespace chatllm
     public:
         GGMLContext gctx;
         ggml_cgraph *gf;
-    };
-
-    class LayerMover
-    {
-    public:
-        LayerMover(InitContext *ctx, int layer_id): ctx(ctx)
-        {
-            ctx->move_to_layer(layer_id);
-        }
-
-        operator InitContext *() const
-        {
-            return ctx;
-        }
-    private:
-        InitContext *ctx;
     };
 
     static ForwardContext *dbg_ctx = nullptr;
@@ -1151,6 +1138,7 @@ namespace chatllm
         {
             std::vector<BackendContext::gpu_cfg> gpu_cfgs;
             parse_gpu_layers(gpu_cfgs, rt_config.gpu_layers);
+            w_ctx_.user_options.moe_on_cpu = rt_config.moe_on_cpu;
             backend_context.init(gpu_cfgs, config_.num_hidden_layers, GRAPH_SIZE);
         }
 
@@ -1209,6 +1197,7 @@ namespace chatllm
             }
 
             ForwardContext ctx(&backend_context);
+            ctx.user_options = w_ctx_.user_options;
 
             ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
             ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
@@ -1933,7 +1922,7 @@ namespace chatllm
             config.num_hidden_layers = (int)layers.size();
         }
 
-        RuntimeConfig rt_config(args.gpu_layers);
+        RuntimeConfig rt_config(args.gpu_layers, args.moe_on_cpu);
 
         // load model
         ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);

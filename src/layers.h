@@ -1781,14 +1781,18 @@ namespace chatllm
         BaseSparseMLP() = default;
         BaseSparseMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
                   ActFunc act, bool gate_use_bias)
-            : num_local_experts(num_local_experts), num_experts_per_tok(num_experts_per_tok),
+            :
+              num_local_experts(num_local_experts), num_experts_per_tok(num_experts_per_tok),
               gate(ctx, hidden_size, num_local_experts, gate_use_bias),
+              mover(new CPUMover(ctx, ctx->user_options.moe_on_cpu)),
               experts_gate(ctx, hidden_size, intermediate_size, num_local_experts),
               experts_down(ctx, intermediate_size, hidden_size, num_local_experts),
               experts_up  (ctx, hidden_size, intermediate_size, num_local_experts),
               act(act),
               norm_topk_prob(true)
         {
+            delete mover;
+            mover = nullptr;
         }
 
         using Block::forward;
@@ -1819,6 +1823,7 @@ namespace chatllm
         const int num_local_experts;
         const int num_experts_per_tok;
         Linear gate;
+        CPUMover *mover;        // when `+moe_on_cpu` is set, all things are done on CPU except for `gate`
         MultiLinear experts_gate;
         MultiLinear experts_down;
         MultiLinear experts_up;

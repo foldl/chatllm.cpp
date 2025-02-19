@@ -166,6 +166,8 @@ namespace chatllm
 
         void register_tensor_allocator(ggml::tensor *tensor,  LayerBufAllocator *allocator);
 
+        void override_to_cpu_only(bool flag);
+
     protected:
         int get_mapped_layer_id(int layer_id);
     public:
@@ -175,6 +177,7 @@ namespace chatllm
         int epilog_layer_backend_map_to_layer_id = -1;
         int cur_layer = MiscLayer::Prolog;
         std::map<ggml::tensor *, LayerBufAllocator *> alloc_of_tensor;
+        bool cpu_override = false;
     };
 
     class ComputeManager
@@ -319,6 +322,12 @@ namespace chatllm
     class ComputeContext
     {
     public:
+        // additional user options
+        struct UserOptions
+        {
+            bool moe_on_cpu = false;
+        };
+
         ComputeContext(BackendContext *backend_context);
 
         virtual struct ggml_context *get_ctx() = 0;
@@ -328,6 +337,7 @@ namespace chatllm
         virtual void cb_op_tensor(ggml::tensor *tensor);
 
         virtual void move_to_layer(int layer_id);
+        virtual void backend_cpu_override(bool flag);
 
         BackendBufAllocator *get_allocator(void);
         BackendBufAllocator *get_allocator(ggml::tensor *tensor);
@@ -351,6 +361,9 @@ namespace chatllm
         virtual bool is_using_gpu(void) const { return backend_context->is_using_gpu(); }
 
         BackendContext *get_backend_context(void) { return backend_context; }
+
+    public:
+        UserOptions user_options;
 
     protected:
         virtual ggml_backend_sched_t get_sched(void);

@@ -13,7 +13,8 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
-* 2024-07-14: [ggml updated](https://github.com/ggml-org/llama.cpp/tree/0f2bbe656473177538956d22b6842bcaa0449fab) again
+* 2025-02-19: MoE CPU offloading
+* 2025-02-17: [ggml updated](https://github.com/ggml-org/llama.cpp/tree/0f2bbe656473177538956d22b6842bcaa0449fab) again
 * 2025-02-10: [GPU acceleration](./docs/gpu.md) 🔥
 * 2025-01-25: MiniCPM Embedding & ReRanker
 * 2025-01-21: DeepSeek-R1-Distill-Llama & Qwen
@@ -32,7 +33,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 ## Features
 
-* [x] Accelerated memory-efficient CPU inference with int4/int8 quantization, optimized KV cache and parallel computing;
+* [x] Accelerated memory-efficient CPU/GPU inference with int4/int8 quantization, optimized KV cache and parallel computing;
 * [x] Use OOP to address the similarities between different _Transformer_ based models;
 * [x] Streaming generation with typewriter effect;
 * [x] Continuous chatting (content length is virtually unlimited)

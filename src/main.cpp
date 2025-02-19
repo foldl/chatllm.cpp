@@ -73,6 +73,7 @@ struct Args
     int save_session_rounds = -1;
     int beam_size = -1;
     int log_level = 4;
+    bool moe_on_cpu = false;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -125,6 +126,7 @@ void usage(const std::string &prog)
               << "Performance options:\n"
               << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
               << "  -ngl, --n_gpu_layers N  number of model layers to offload to each GPU (default: GPU not used)\n"
+              << "  +moe_on_cpu             alway use CPU for sparse operations (MoE) (default: off)\n"
               << "Sampling options:\n"
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
               << "                          where, tfs = Tail Free Sampling\n"
@@ -232,6 +234,12 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                 args.field.push_back(f(argv[c].c_str()));                   \
         }
 
+    #define handle_flag(field)    \
+        else if ((strcmp(arg, "+" #field) == 0))                            \
+        {                                                                   \
+            args.field = true;                                              \
+        }
+
     size_t c = 1;
 
     try
@@ -271,14 +279,9 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             {
                 args.reversed_role = true;
             }
-            else if (strcmp(arg, "+rag_dump") == 0)
-            {
-                args.rag_dump = true;
-            }
-            else if (strcmp(arg, "+rerank_rewrite") == 0)
-            {
-                args.rerank_rewrite = true;
-            }
+            handle_flag(rag_dump)
+            handle_flag(rerank_rewrite)
+            handle_flag(moe_on_cpu)
             else if (strcmp(arg, "--format") == 0)
             {
                 c++;
@@ -655,6 +658,9 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
                                          gen_config.set_ai_prefix(args.ai_prefix); gen_config.dump_dot = args.dump_dot; \
                                          gen_config.emb_rank_query_sep = args.emb_rank_query_sep;
 
+#define DEF_ExtraArgs(pipe_args, args)  \
+    chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers, args.moe_on_cpu)
+
 chatllm::BaseStreamer *get_streamer_for_log(void);
 
 void log_internal(int level, const char * text)
@@ -1003,7 +1009,7 @@ int main(int argc, const char **argv)
 
     try
     {
-        chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers);
+        DEF_ExtraArgs(pipe_args, args);
         TextStreamer streamer(nullptr);
         streamer.log_level = args.log_level;
         log_streamer = &streamer;
@@ -1240,7 +1246,7 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
 
     try
     {
-        chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers);
+        DEF_ExtraArgs(pipe_args, args);
 
         if ((args.embedding_model_path.size() < 1) || (args.vector_stores.empty()))
         {
