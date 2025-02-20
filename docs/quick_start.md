@@ -3,7 +3,7 @@
 For Windows users, the easies way is to download a release, extract it, and start chatting:
 
 ```
-main -i -m :qwen2:0.5b
+main_nim -i -m :qwen2:0.5b
 Downloading qwen2:0.5b
  |████████████████████████████████████████████████████████████| 100.0%
     ________          __  __    __    __  ___ (通义千问)
@@ -21,7 +21,7 @@ You  >
 
 For Linux/MacOS (and Windows) users, build [binding](binding.md) and start chatting.
 
-Note: `main` built from [`main.nim`](../bindings/main.nim) supports model id and model downloading, while the _default_ `main`
+Note: `main_nim` built from [`main.nim`](../bindings/main.nim) supports model id and model downloading, while the _default_ `main`
 built from [`main.cpp`](../src/main.cpp) does not.
 
 ### Download Quantized Models

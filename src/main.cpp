@@ -68,6 +68,7 @@ struct Args
     bool rag_dump = false;
     bool show_banner = true;
     bool show_help = false;
+    bool show_devices = false;
     bool rerank_rewrite = false;
     bool reversed_role = false;
     int save_session_rounds = -1;
@@ -97,15 +98,15 @@ void usage(const std::string &prog)
     std::cout << "Usage: " << prog << " [options]\n"
               << "\n"
               << "Basic options:\n"
-              << "  -h, --help              show this help message and exit\n"
+              << "  -h, --help              show this help message and exit                                                         [*]\n"
               << "  -m, --model PATH        model path\n"
               << "  -p, --prompt PROMPT     prompt to start generation with (default: 你好)\n"
               << "      --prompt_file FN    prompt from file\n"
               << "  -s, --system SYSTEM     system prompt (instruction) (default: model specific)\n"
               << "      --sys_file FN       system prompt (instruction) from file\n"
               << "      --ai_prefix         AI prefix for generation (default: empty)\n"
-              << "  -i, --interactive       run in interactive mode\n"
-              << "      --reversed_role     AI becomes `user`, user becomes `AI`\n"
+              << "  -i, --interactive       run in interactive mode                                                                 [*]\n"
+              << "      --reversed_role     AI becomes `user`, user becomes `AI`                                                    [#]\n"
               << "  -l, --max_length N      max total length including prompt and output (default: model specific)\n"
               << "                          generally, this is used to reduce KV cache size.\n"
               << "                          for models that does not show its max context window in `config.json`,\n"
@@ -120,12 +121,12 @@ void usage(const std::string &prog)
               << "                          max context length (default: 512)\n"
               << "  --extending EXT         context extending method (EXT = restart | shift | none)\n"
               << "                          (default: none if `--load_session` is specified, otherwise restart)\n"
-              << "  --multi                 enabled multiple lines of input\n"
+              << "  --multi                 enabled multiple lines of input                                                         [*]\n"
               << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n"
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
               << "Performance options:\n"
               << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
-              << "  -ngl, --n_gpu_layers N  number of model layers to offload to each GPU (default: GPU not used)\n"
+              << "  -ngl, --n_gpu_layers N  number of model layers to offload to a backend device (GPU) (default: GPU not used)\n"
               << "  +moe_on_cpu             alway use CPU for sparse operations (MoE) (default: off)\n"
               << "Sampling options:\n"
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
@@ -159,7 +160,7 @@ void usage(const std::string &prog)
               << "   +rerank_rewrite        reranker use the rewritten query (default: OFF, i.e. use the original user input)\n"
               << "  --emb_rank_query_sep    separator for embedding & rerank query (default: \"\", i.e. disabled)\n"
               << "                          only used without main model\n"
-              << "  --hide_reference        do not show references (default: false)\n"
+              << "  --hide_reference        do not show references (default: false)                                                     [*]\n"
               << "  --rag_template ...      prompt template for RAG (macros: {context}, {question}) (optional).\n"
               << "                          Support some C escape sequences (\\n). Example:\n"
               << "                          Answer the question according to below information:\n"
@@ -173,21 +174,25 @@ void usage(const std::string &prog)
               << "                          this may be useful when context length of embedding/reranker models is limited.\n"
               << "   +rag_dump              (debug) dump retrieved/re-ranking results\n"
               << "Session:\n"
-              << "  --save_session N FILE   save session to FILE after N round(s) of chatting (N >= 0) and quit\n"
+              << "  --save_session N FILE   save session to FILE after N round(s) of chatting (N >= 0) and quit                         [*]\n"
               << "                          when N = 0, system prompt is evaluated.\n"
-              << "  --load_session FILE     load session from FILE\n"
+              << "  --load_session FILE     load session from FILE                                                                      [*]\n"
               << "Misc:\n"
-              << "  --init_vs FILE          init vector store file from input\n"
-              << "  --merge_vs FILE         merge multiple vector store files into a single one\n"
-              << "  --tokenize              (debug) tokenize `prompt` and exit\n"
-              << "  --test FILE             test against inputs from a file and exit\n"
-              << "  --hide_banner           hide banner\n"
-              << "  --show                  show model info and quit\n"
+              << "  --init_vs FILE          init vector store file from input                                                           [*]\n"
+              << "  --merge_vs FILE         merge multiple vector store files into a single one                                         [*]\n"
+              << "  --tokenize              (debug) tokenize `prompt` and exit                                                          [*]\n"
+              << "  --test FILE             test against inputs from a file and exit                                                    [*]\n"
+              << "  --hide_banner           hide banner                                                                                 [*]\n"
+              << "  --show                  show model info and quit                                                                    [*]\n"
+              << "  --show_devices          show info about backends and devices, then quit                                             [*]\n"
               << "  --dump_dot FILE         dump sched splits to a DOT file, and exit with -1\n"
               << "  --log_level             log level. (default: 4 - ERROR)\n"
               << "Additional key-value args:\n"
               << "  --kv                    start of additional args. all following options are interpreted as k-v pairs\n"
               << "  key value               a key-value pair of args\n"
+              << "\n------------------------\n"
+              << "*: implemented by front end (i.e. `main.cpp` or apps using bindings)\n"
+              << "#: implemented by front end & backend\n"
               << std::endl;
 }
 
@@ -235,7 +240,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         }
 
     #define handle_flag(field)    \
-        else if ((strcmp(arg, "+" #field) == 0))                            \
+        else if (((strcmp(arg, "+" #field) == 0)) || ((strcmp(arg, "--" #field) == 0))) \
         {                                                                   \
             args.field = true;                                              \
         }
@@ -259,26 +264,15 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             {
                 args.multi_line = true;
             }
-            else if (strcmp(arg, "--tokenize") == 0)
-            {
-                args.tokenize = true;
-            }
-            else if (strcmp(arg, "--hide_reference") == 0)
-            {
-                args.hide_reference = true;
-            }
             else if (strcmp(arg, "--hide_banner") == 0)
             {
                 args.show_banner = false;
             }
-            else if (strcmp(arg, "--show") == 0)
-            {
-                args.show = true;
-            }
-            else if (strcmp(arg, "--reversed_role") == 0)
-            {
-                args.reversed_role = true;
-            }
+            handle_flag(tokenize)
+            handle_flag(hide_reference)
+            handle_flag(show)
+            handle_flag(show_devices)
+            handle_flag(reversed_role)
             handle_flag(rag_dump)
             handle_flag(rerank_rewrite)
             handle_flag(moe_on_cpu)
@@ -659,7 +653,7 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
                                          gen_config.emb_rank_query_sep = args.emb_rank_query_sep;
 
 #define DEF_ExtraArgs(pipe_args, args)  \
-    chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers, args.moe_on_cpu)
+    chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers, args.moe_on_cpu, args.num_threads)
 
 chatllm::BaseStreamer *get_streamer_for_log(void);
 
@@ -948,6 +942,20 @@ static int merge_vector_store(Args &args)
     return 0;
 }
 
+static void show_devices(void)
+{
+    std::vector<chatllm::ComputeManager::DeviceInfo> devs;
+    chatllm::ComputeManager::get_devices_info(devs);
+    for (size_t i = 0; i < devs.size(); i++)
+    {
+        auto &dev = devs[i];
+        printf("%2zd: %s - %s\n", i, dev.backend_name.c_str(), dev.name.c_str());
+        printf("    type: %s\n", chatllm::ComputeManager::dev_type_to_str(dev.type).c_str());
+        printf("    memory total: %zd B\n", dev.total_memory);
+        printf("    memory free : %zd B\n", dev.free_memory);
+    }
+}
+
 #if defined(_WIN32)
 int wmain(int argc, const wchar_t **wargv)
 {
@@ -974,6 +982,15 @@ int main(int argc, const char **argv)
     if (args.show_help)
     {
         usage(utf_args[0]);
+        return 0;
+    }
+
+    TextStreamer streamer(nullptr);
+    ggml_log_set(_ggml_log_callback, nullptr);
+
+    if (args.show_devices)
+    {
+        show_devices();
         return 0;
     }
 
@@ -1005,12 +1022,9 @@ int main(int argc, const char **argv)
     if (args.merge_vs.size() > 0)
         return merge_vector_store(args);
 
-    ggml_log_set(_ggml_log_callback, nullptr);
-
     try
     {
         DEF_ExtraArgs(pipe_args, args);
-        TextStreamer streamer(nullptr);
         streamer.log_level = args.log_level;
         log_streamer = &streamer;
 

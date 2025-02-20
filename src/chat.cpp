@@ -38,10 +38,6 @@
 #include <stdio.h>
 #endif
 
-#ifdef GGML_USE_CLBLAST
-#include "ggml-opencl.h"
-#endif
-
 namespace chatllm
 {
 

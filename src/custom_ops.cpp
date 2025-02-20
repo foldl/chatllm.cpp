@@ -9,10 +9,6 @@
 #include <functional>
 #include "layers.h"
 
-#ifdef GGML_USE_CLBLAST
-#include "ggml-opencl.h"
-#endif
-
 #undef MIN
 #undef MAX
 

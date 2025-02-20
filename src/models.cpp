@@ -27,8 +27,9 @@ namespace chatllm
     {
         std::string gpu_layers;
         bool moe_on_cpu;
-        RuntimeConfig(const std::string &gpu_layers, bool moe_on_cpu):
-            gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu)
+        int n_threads;
+        RuntimeConfig(const std::string &gpu_layers, bool moe_on_cpu, int n_threads):
+            gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads)
         {}
     };
 
@@ -1139,7 +1140,7 @@ namespace chatllm
             std::vector<BackendContext::gpu_cfg> gpu_cfgs;
             parse_gpu_layers(gpu_cfgs, rt_config.gpu_layers);
             w_ctx_.user_options.moe_on_cpu = rt_config.moe_on_cpu;
-            backend_context.init(gpu_cfgs, config_.num_hidden_layers, GRAPH_SIZE);
+            backend_context.init(gpu_cfgs, config_.num_hidden_layers, GRAPH_SIZE, rt_config.n_threads);
         }
 
         LayerAllocatorManager *get_alloc_manager(void) override
@@ -1230,7 +1231,7 @@ namespace chatllm
                 exit(-1);
             }
 
-            ctx.compute(gen_config.num_threads);
+            ctx.compute();
 
             Backend::read_tensor_data(r, output.data());
 
@@ -1922,7 +1923,7 @@ namespace chatllm
             config.num_hidden_layers = (int)layers.size();
         }
 
-        RuntimeConfig rt_config(args.gpu_layers, args.moe_on_cpu);
+        RuntimeConfig rt_config(args.gpu_layers, args.moe_on_cpu, args.n_threads);
 
         // load model
         ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);

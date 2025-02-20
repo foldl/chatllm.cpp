@@ -3,6 +3,7 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <string>
 
 #include "ggml-backend.h"
 
@@ -183,20 +184,40 @@ namespace chatllm
     class ComputeManager
     {
     public:
-        static ggml_backend_allocator get_default_allocator_cpu(bool host_buffer, bool use_gpu);
+        enum DeviceType {
+            // CPU device using system memory
+            CPU,
+            // GPU device using dedicated memory
+            GPU,
+            // accelerator devices intended to be used together with the CPU backend (e.g. BLAS or AMX)
+            ACCEL
+        };
+        struct DeviceInfo
+        {
+            DeviceType type;
+            std::string backend_name;
+            std::string name;
+            size_t total_memory;
+            size_t free_memory;
+        };
+
+        static void init(void);
+
+        static std::string dev_type_to_str(DeviceType type);
+
+        static ggml_backend_allocator get_default_allocator_cpu(bool host_buffer, int gpu_id);
 
         static ggml_backend_allocator get_default_allocator(ggml_backend_t backend);
         static int get_device_count(void);
 
-        static ggml_backend_t init_backend_device(int index);
+        static ggml_backend_t init_backend_device(int index, const char *param = nullptr);
 
-        static ggml_backend_allocator get_default_allocator_offload(int gpu);
+        static ggml_backend_allocator get_default_allocator_offload(int device);
 
         static size_t get_device_free_memory(int device, size_t *p_total = nullptr);
 
-        static int get_max_devices(void);
-
-        static bool is_gpu_offload_supported(void);
+        static bool get_device_info(int device, DeviceInfo &info);
+        static void get_devices_info(std::vector<DeviceInfo> &devs);
     };
 
     enum BufferType
@@ -263,7 +284,7 @@ namespace chatllm
 
         BackendContext();
 
-        void init(const std::vector<gpu_cfg> &gpu_cfgs, const int n_layers, const size_t graph_max_nodes_num);
+        void init(const std::vector<gpu_cfg> &gpu_cfgs, const int n_layers, const size_t graph_max_nodes_num, const int n_threads);
 
         ~BackendContext();
 
@@ -271,7 +292,7 @@ namespace chatllm
 
         bool alloc_graph(ggml_cgraph *gf);
 
-        void compute_graph(ggml_cgraph *gf, int n_threads);
+        void compute_graph(ggml_cgraph *gf);
 
         void reset();
 
@@ -288,12 +309,7 @@ namespace chatllm
 
     public:
         std::vector<Backend> backends;
-    #ifdef GGML_USE_METAL
-        ggml_backend_t backend_metal = nullptr;
-    #endif
-    #ifdef GGML_USE_BLAS
-        ggml_backend_t backend_blas = nullptr;
-    #endif
+
         ggml_backend_t backend_cpu = nullptr;
 
         // memory buffers used to evaluate the model
@@ -345,7 +361,7 @@ namespace chatllm
 
         virtual Backend *get_backend(void);
 
-        virtual void compute(int n_threads);
+        virtual void compute(void);
 
         virtual void synchronize(void);
 

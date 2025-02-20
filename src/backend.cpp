@@ -1,31 +1,9 @@
 #include <cstring>
 #include <set>
 #include <stdarg.h>
-#ifdef GGML_USE_CUDA
-#  include "ggml-cuda.h"
-#elif defined(GGML_USE_VULKAN)
-#  include "ggml-vulkan.h"
-extern void ggml_vk_print_devices_info(void);
-#elif defined(GGML_USE_SYCL)
-#  include "ggml-sycl.h"
-#elif defined(GGML_USE_KOMPUTE)
-#   include "ggml-kompute.h"
-#elif defined(GGML_USE_CANN)
-#   include "ggml-cann.h"
-#endif
-
-#ifdef GGML_USE_BLAS
-#  include "ggml-blas.h"
-#endif
-
-#ifdef GGML_USE_METAL
-#  include "ggml-metal.h"
-#endif
 
 #include "backend.h"
-
 #include "basics.h"
-
 #include "ggml-cpu.h"
 
 namespace chatllm
@@ -287,33 +265,46 @@ namespace chatllm
         return id;
     }
 
-    ggml_backend_allocator ComputeManager::get_default_allocator_cpu(bool host_buffer, bool use_gpu)
+    void ComputeManager::init(void)
+    {
+#if GGML_BACKEND_DL
+        static bool initialized = false;
+        if (initialized) return;
+        initialized = true;
+
+        ggml_backend_load_all();
+#endif
+    }
+
+    std::string ComputeManager::dev_type_to_str(DeviceType type)
+    {
+        switch (type)
+        {
+        case DeviceType::CPU:
+            return "CPU";
+        case DeviceType::GPU:
+            return "GPU";
+        case DeviceType::ACCEL:
+            return "ACCEL";
+        default:
+            return "UNKNOWN";
+        }
+    }
+
+    ggml_backend_allocator ComputeManager::get_default_allocator_cpu(bool host_buffer, int gpu_id)
     {
         ggml_backend_allocator allocator = nullptr;
 
-        if (use_gpu)
+        if (gpu_id >= 0)
         {
-    #if defined(GGML_USE_CUDA)
-            // host buffers should only be used when data is expected to be copied to/from the GPU
-            if (host_buffer) {
-                allocator = ggml_backend_cuda_host_buffer_type();
-            }
-    #elif defined(GGML_USE_SYCL)
-            if (host_buffer) {
-                allocator = ggml_backend_sycl_host_buffer_type();
-            }
-    #elif defined(GGML_USE_CPU_HBM)
-            allocator = ggml_backend_cpu_hbm_buffer_type();
-    #elif defined(GGML_USE_VULKAN)
-            if (host_buffer) {
-                allocator = ggml_backend_vk_host_buffer_type();
-            }
-    #endif
+            auto dev = ggml_backend_dev_get(gpu_id);
+            if (dev)
+                allocator = ggml_backend_dev_host_buffer_type(dev);
         }
 
-        if (allocator == nullptr) {
+        if (allocator == nullptr)
             allocator = ggml_backend_cpu_buffer_type();
-        }
+
         return allocator;
     }
 
@@ -324,48 +315,23 @@ namespace chatllm
 
     int ComputeManager::get_device_count(void)
     {
-        int count = 1;
-    #if defined(GGML_USE_CUDA)
-        count = ggml_backend_cuda_get_device_count();
-    #elif defined(GGML_USE_SYCL)
-        count = ggml_backend_sycl_get_device_count();
-    #elif defined(GGML_USE_VULKAN)
-        count = ggml_backend_vk_get_device_count();
-    #elif defined(GGML_USE_CANN)
-        return ggml_backend_cann_get_device_count();
-    #endif
-        return count;
+        ComputeManager::init();
+        return (int)ggml_backend_dev_count();
     }
 
-    ggml_backend_t ComputeManager::init_backend_device(int index)
+    ggml_backend_t ComputeManager::init_backend_device(int index, const char *param)
     {
-    #if defined(GGML_USE_CUDA)
-        return ggml_backend_cuda_init(index);
-    #elif defined(GGML_USE_SYCL)
-        return ggml_backend_sycl_init(index);
-    #elif defined(GGML_USE_VULKAN)
-        return ggml_backend_vk_init(index);
-    #elif defined(GGML_USE_CANN)
-        return ggml_backend_cann_init(index);
-    #endif
-        return nullptr;
+        auto dev = ggml_backend_dev_get(index);
+        return dev ? ggml_backend_dev_init(dev, param) : nullptr;
     }
 
-    ggml_backend_allocator ComputeManager::get_default_allocator_offload(int gpu)
+    ggml_backend_allocator ComputeManager::get_default_allocator_offload(int device)
     {
         ggml_backend_allocator allocator = nullptr;
 
-    #if defined(GGML_USE_METAL)
-        allocator = ggml_backend_metal_buffer_type();
-    #elif defined(GGML_USE_CUDA)
-        allocator = ggml_backend_cuda_buffer_type(gpu);
-    #elif defined(GGML_USE_VULKAN)
-        allocator = ggml_backend_vk_buffer_type(gpu);
-    #elif defined(GGML_USE_SYCL)
-        allocator = ggml_backend_sycl_buffer_type(gpu);
-    #elif defined(GGML_USE_CANN)
-        allocator = ggml_backend_cann_buffer_type(gpu);
-    #endif
+        auto dev = ggml_backend_dev_get(device);
+        if (dev)
+            allocator = ggml_backend_dev_buffer_type(dev);
 
         if (allocator == nullptr)
             allocator = get_default_allocator_cpu(true, true);
@@ -376,47 +342,42 @@ namespace chatllm
     {
         size_t total = 0;
         size_t free = 0;
-    #if defined(GGML_USE_CUDA)
-        ggml_backend_cuda_get_device_memory(device, &free, &total);
-    #elif defined(GGML_USE_SYCL)
-        ggml_backend_sycl_get_device_memory(device, &free, &total);
-    #elif defined(GGML_USE_VULKAN)
-        ggml_backend_vk_get_device_memory(device, &free, &total);
-    #elif defined(GGML_USE_CANN)
-        ggml_backend_cann_get_device_memory(device, &free, &total);
-    #else
-        free = 1;
-    #endif
+
+        auto dev = ggml_backend_dev_get(device);
+        if (dev)
+            ggml_backend_dev_memory(dev, &free, &total);
+
         if (p_total) *p_total = total;
         return free;
     }
 
-    int ComputeManager::get_max_devices(void)
+    bool ComputeManager::get_device_info(int device, DeviceInfo &info)
     {
-    #if defined(GGML_USE_METAL)
-        return 1;
-    #elif defined(GGML_USE_CUDA)
-        return GGML_CUDA_MAX_DEVICES;
-    #elif defined(GGML_USE_SYCL)
-        return GGML_SYCL_MAX_DEVICES;
-    #elif defined(GGML_USE_VULKAN)
-        return GGML_VK_MAX_DEVICES;
-    #elif defined(GGML_USE_CANN)
-        return GGML_CANN_MAX_DEVICES;
-    #else
-        return 1;
-    #endif
+        auto dev = ggml_backend_dev_get(device);
+
+        if (nullptr == dev)
+            return false;
+
+        ggml_backend_dev_props props;
+        ggml_backend_dev_get_props(dev, &props);
+        info.type = (DeviceType)props.type;
+        info.backend_name = ggml_backend_reg_name(ggml_backend_dev_backend_reg(dev));
+        info.name = ggml_backend_dev_name(dev);
+        info.total_memory = props.memory_total;
+        info.free_memory = props.memory_free;
+        return true;
     }
 
-    bool ComputeManager::is_gpu_offload_supported(void)
+    void ComputeManager::get_devices_info(std::vector<DeviceInfo> &devs)
     {
-    #if defined(GGML_USE_CUDA) || defined(GGML_USE_METAL)   || defined(GGML_USE_VULKAN) || \
-        defined(GGML_USE_SYCL) || defined(GGML_USE_CANN)
-        // Defined when llama.cpp is compiled with support for offloading model layers to GPU.
-        return true;
-    #else
-        return false;
-    #endif
+        ComputeManager::init();
+        devs.clear();
+        for (int i = 0; i < get_device_count(); i++)
+        {
+            DeviceInfo info;
+            CHATLLM_CHECK(get_device_info(i, info)) << __func__ << ": failed to get device #" << i;
+            devs.push_back(info);
+        }
     }
 
     Backend::Backend(ggml_backend_t backend, int n_layers, bool use_gpu)
@@ -480,6 +441,7 @@ namespace chatllm
 
     BackendContext::BackendContext()
     {
+        ComputeManager::init();
     }
 
     bool BackendContext::is_using_gpu(void) const
@@ -487,7 +449,7 @@ namespace chatllm
         return backends.size() > 1;
     }
 
-    void BackendContext::init(const std::vector<gpu_cfg> &gpu_cfgs, const int n_layers, const size_t graph_max_nodes_num)
+    void BackendContext::init(const std::vector<gpu_cfg> &gpu_cfgs, const int n_layers, const size_t graph_max_nodes_num, const int n_threads)
     {
         int prolog_id = -1;
         int epilog_id = -1;
@@ -505,49 +467,46 @@ namespace chatllm
 
         buf_compute_meta.resize(ggml_tensor_overhead() * graph_max_nodes_num + ggml_graph_overhead_custom(graph_max_nodes_num, false));
 
-        if (ComputeManager::is_gpu_offload_supported())
+        auto init_device = [this, use_gpu, n_threads](int device, ggml_backend_dev_t dev, int n_layers)
         {
-            int dev_cnt = ComputeManager::get_device_count();
-            for (int i = 0; i < dev_cnt; i++)
+            auto reg = ggml_backend_dev_backend_reg(dev);
+
+            ggml_backend_t backend = ComputeManager::init_backend_device(device);
+            CHATLLM_CHECK(backend != nullptr) << __func__ << ": failed to initialize backend: #" << device;
+            backends.emplace_back(backend, n_layers, use_gpu);
+
+            if (n_threads > 0)
             {
-                size_t total = 0;
-                size_t free = ComputeManager::get_device_free_memory(0, &total);
-                ggml::log(GGML_LOG_LEVEL_INFO, "Device %d memory: total = %zd, free = %zd\n", i, total, free);
+                auto set_n_threads = (ggml_backend_set_n_threads_t)ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_n_threads");
+                if (set_n_threads)
+                    set_n_threads(backend, n_threads);
             }
-        }
+        };
 
-    #if defined(GGML_USE_METAL)
-        if (use_gpu)
-        {
-            CHATLLM_CHECK(gpu_cfgs.size() == 1) << __func__ << ": Metal backends number must be 1\n";
-
-            backend_metal = ggml_backend_metal_init();
-            CHATLLM_CHECK(backend_metal != nullptr) << __func__ << ": failed to initialize Metal backend\n";
-            backends.emplace_back(backend_metal, n_gpu_layers, use_gpu);
-        }
-    #elif defined(GGML_USE_CUDA) ||  defined(GGML_USE_VULKAN) || defined(GGML_USE_SYCL) || defined(GGML_USE_CANN)
         if (use_gpu)
         {
             for (auto cfg : gpu_cfgs)
             {
                 int device = cfg.id >= 0 ? cfg.id : 0;
-                ggml_backend_t backend = ComputeManager::init_backend_device(device);
-                CHATLLM_CHECK(backend != nullptr) << __func__ << ": failed to initialize backend: #" << device;
-                backends.emplace_back(backend, cfg.n_layers, use_gpu);
+                auto dev = ggml_backend_dev_get(device);
+                CHATLLM_CHECK(dev != nullptr) << __func__ << ": failed to found GPU device: #" << device;
+                CHATLLM_CHECK(ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_CPU) << __func__ << ": device #" << device << " is CPU";
+
+                init_device(device, dev, cfg.n_layers);
             }
         }
-    #endif
 
-    #ifdef GGML_USE_BLAS
-        #error TODO
-        backend_blas = ggml_backend_blas_init();
-        if (backend_blas)
-            backends.emplace_back(ctx->backend_blas, 0);
-    #endif
+        // append CPU backend
+        {
+            int device = ComputeManager::get_device_count() - 1;
+            auto dev = ggml_backend_dev_get(device);
+            CHATLLM_CHECK(dev != nullptr) << __func__ << ": failed to found CPU device: #" << device;
+            CHATLLM_CHECK(ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_CPU) << __func__ << ": device #" << device << " is not CPU, but " << ggml_backend_dev_type(dev);
 
-        backend_cpu = ggml_backend_cpu_init();
-        CHATLLM_CHECK(backend_cpu != nullptr) << __func__ << ": failed to initialize CPU backend";
-        backends.emplace_back(backend_cpu, n_layers - n_gpu_layers, use_gpu);
+            init_device(device, dev, n_layers - n_gpu_layers);
+
+            backend_cpu = backends[backends.size() - 1].backend;
+        }
 
         host_allocator.alloc_matrix = host_allocator.alloc_others = backends[backends.size() - 1].get_allocator(BufferType::Shared);
 
@@ -619,27 +578,12 @@ namespace chatllm
             return p->observe_tensor_callback(t, p->observe_tensor_callback_data);
     }
 
-    void BackendContext::compute_graph(ggml_cgraph *gf, int n_threads)
+    void BackendContext::compute_graph(ggml_cgraph *gf)
     {
-    #ifdef GGML_USE_METAL
-        if (ggml_backend_is_metal(backend_metal))
-        {
-            ggml_backend_metal_set_n_cb(backend_metal, n_threads);
-        }
-    #endif
-
         if (backend_cpu != nullptr)
         {
-            ggml_backend_cpu_set_n_threads(backend_cpu, n_threads);
             ggml_backend_cpu_set_abort_callback(backend_cpu, abort_callback, abort_callback_data);
         }
-
-    #ifdef GGML_USE_BLAS
-        if (backend_blas != nullptr)
-        {
-            ggml_backend_blas_set_n_threads(backend_blas, n_threads);
-        }
-    #endif
 
         if (observe_tensor_callback)
             ggml_backend_sched_set_eval_callback(sched, _backend_sched_eval_callback, this);
@@ -764,9 +708,9 @@ namespace chatllm
         return dynamic_cast<LayerBufAllocator *>(get_allocator())->get_backend();
     }
 
-    void ComputeContext::compute(int n_threads)
+    void ComputeContext::compute(void)
     {
-        backend_context->compute_graph(get_cgraph(), n_threads);
+        backend_context->compute_graph(get_cgraph());
     }
 
     void ComputeContext::synchronize(void)

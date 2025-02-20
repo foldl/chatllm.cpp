@@ -556,7 +556,6 @@ namespace chatllm
         int top_k;
         float top_p;
         float temperature;
-        int num_threads;
         float presence_penalty;
         float tfs_z;
         std::string sampling;
@@ -573,7 +572,7 @@ namespace chatllm
                          float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty, float tfs_z)
             : max_length(max_length), max_context_length(max_context_length),
               do_sample(do_sample), reversed_role(reversed_role), top_k(top_k),
-              top_p(top_p), temperature(temperature), num_threads(num_threads), presence_penalty(presence_penalty), tfs_z(tfs_z),
+              top_p(top_p), temperature(temperature), presence_penalty(presence_penalty), tfs_z(tfs_z),
               sampling(sampling), ai_prefix("") {}
 
         void set_ai_prefix(const std::string &prefix);
@@ -890,10 +889,11 @@ namespace chatllm
             std::string layer_spec;
             std::string gpu_layers;
             bool moe_on_cpu;
-            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers, bool moe_on_cpu)
-                : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu)
+            int n_threads;
+            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers, bool moe_on_cpu, int n_threads)
+                : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads)
             {}
-            extra_args() : extra_args(-1, "", "", false) {}
+            extra_args() : extra_args(-1, "", "", false, 1) {}
         };
 
         ModelObject(const std::string &path);
