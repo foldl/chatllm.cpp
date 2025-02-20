@@ -454,13 +454,15 @@ namespace chatllm
         int prolog_id = -1;
         int epilog_id = -1;
         int n_gpu_layers = 0;
-        for (auto &cfg : gpu_cfgs)
+        for (int i = 0; i < (int)gpu_cfgs.size(); i++)
         {
-            n_gpu_layers += cfg.n_layers;
+            auto &cfg = gpu_cfgs[i];
+            if (cfg.n_layers > 0)
+                n_gpu_layers += cfg.n_layers;
             if ((prolog_id < 0) && cfg.prolog)
-                prolog_id = cfg.id;
+                prolog_id = i;
             if ((epilog_id < 0) && cfg.epilog)
-                epilog_id = cfg.id;
+                epilog_id = i;
         }
 
         const bool use_gpu = n_gpu_layers > 0;
@@ -488,6 +490,8 @@ namespace chatllm
             for (auto cfg : gpu_cfgs)
             {
                 int device = cfg.id >= 0 ? cfg.id : 0;
+                CHATLLM_CHECK(device < ComputeManager::get_device_count()) << __func__ << ": GPU device: #" << device << " out of range";
+
                 auto dev = ggml_backend_dev_get(device);
                 CHATLLM_CHECK(dev != nullptr) << __func__ << ": failed to found GPU device: #" << device;
                 CHATLLM_CHECK(ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_CPU) << __func__ << ": device #" << device << " is CPU";

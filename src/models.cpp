@@ -862,23 +862,32 @@ namespace chatllm
         if (pos != std::string::npos)
         {
             cfg.id = atoi(part.c_str());
-            part = t.substr(pos + 1);
+            t = t.substr(pos + 1);
         }
 
-        if (part.size() > 0)
+        while (t.size() > 0)
         {
-            if (part.compare("all") == 0)
+            size_t pos = t.find_first_of(',');
+            part = t.substr(0, pos);
+
+            if (part.size() > 0)
             {
-                cfg.prolog = true;
-                cfg.epilog = true;
-                cfg.n_layers = 99999;
+                if (part.compare("all") == 0)
+                {
+                    cfg.prolog = true;
+                    cfg.epilog = true;
+                    cfg.n_layers = 99999;
+                }
+                else if (part.compare("prolog") == 0)
+                    cfg.prolog = true;
+                else if (part.compare("epilog") == 0)
+                    cfg.epilog = true;
+                else
+                    cfg.n_layers = std::max(atoi(part.c_str()), 0);
             }
-            else if (part.compare("prolog") == 0)
-                cfg.prolog = true;
-            else if (part.compare("epilog") == 0)
-                cfg.epilog = true;
-            else
-                cfg.n_layers = atoi(part.c_str());
+
+            if (pos == std::string::npos) break;
+            t = t.substr(pos + 1);
         }
 
         return (cfg.n_layers >= 1) || cfg.prolog || cfg.epilog;
@@ -897,7 +906,7 @@ namespace chatllm
         std::string t(s);
         while (t.size() > 0)
         {
-            size_t pos = t.find_first_of(',');
+            size_t pos = t.find_first_of(';');
 
             BackendContext::gpu_cfg cfg;
             if (parse_gpu_cfg(cfg, t.substr(0, pos)))
