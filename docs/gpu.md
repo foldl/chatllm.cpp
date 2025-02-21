@@ -46,6 +46,8 @@ Suppose there is a model with `10` hidden layers:
 The full format of `-ngl` is `-ngl id:layer_specs[;id:layer_specs]..`. `id` is GPU device ID. If `id` is omitted, `0` is assumed.
 `layer_spec` can be a positive integer, `prolog`, `epilog`, a combination of these; or just `all`.
 
+Use `--show_devices` to check all available devices.
+
 ## Known issues
 
 1. Custom operators (`ggml::map_custom...`);

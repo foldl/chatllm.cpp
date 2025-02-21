@@ -52,3 +52,8 @@ namespace base64
     void decode_to_utf8(const char *encoded_string, std::string &s);
     std::string encode_utf8(const std::string &s);
 }
+
+namespace utils
+{
+    std::string trim(const std::string& str);
+}

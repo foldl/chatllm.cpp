@@ -6,6 +6,14 @@
 #include "basics.h"
 #include "ggml-cpu.h"
 
+#ifdef GGML_USE_RPC
+#include "ggml-rpc.h"
+#endif
+
+#ifdef GGML_BACKEND_DL
+#error "GGML_BACKEND_DL is WIP"
+#endif
+
 namespace chatllm
 {
     static std::string str_format(const char* format, va_list args)
@@ -363,6 +371,7 @@ namespace chatllm
         info.type = (DeviceType)props.type;
         info.backend_name = ggml_backend_reg_name(ggml_backend_dev_backend_reg(dev));
         info.name = ggml_backend_dev_name(dev);
+        info.description = utils::trim(ggml_backend_dev_description(dev));
         info.total_memory = props.memory_total;
         info.free_memory = props.memory_free;
         return true;
@@ -378,6 +387,62 @@ namespace chatllm
             CHATLLM_CHECK(get_device_info(i, info)) << __func__ << ": failed to get device #" << i;
             devs.push_back(info);
         }
+    }
+
+    bool ComputeManager::prepre_rpc_devices(const std::string &endpoints)
+    {
+#ifdef GGML_USE_RPC
+        std::string s(endpoints);
+        while (s.size() > 0)
+        {
+            auto pos = s.find(';');
+            std::string endpoint = s.substr(0, pos);
+
+            if (endpoint.find(':') == std::string::npos)
+                endpoint = "127.0.0.1:" + endpoint;
+
+            ggml_backend_rpc_add_device(endpoint.c_str());
+
+            if (pos == std::string::npos) break;
+            s = s.substr(pos + 1);
+        }
+
+        return true;
+#else
+        return endpoints.size() < 1;
+#endif
+    }
+
+    bool ComputeManager::start_rpc_server(int device, const char *endpoint, size_t backend_mem)
+    {
+#ifdef GGML_USE_RPC
+        DeviceInfo dev;
+        if (!get_device_info(device, dev))
+            return false;
+
+        auto backend = ComputeManager::init_backend_device(device);
+        if (nullptr == backend)
+            return false;
+
+        if (backend_mem <= 0)
+            backend_mem = dev.free_memory;
+
+        std::string s(endpoint);
+        if (s.find(':') == std::string::npos)
+            s = "0.0.0.0:" + s;
+
+        ggml::log(GGML_LOG_LEVEL_INFO, "trying to start RPC server at %s, using\n", s.c_str());
+        ggml::log(GGML_LOG_LEVEL_INFO, "%s - %s (%s)\n", dev.backend_name.c_str(), dev.name.c_str(), dev.description.c_str());
+        ggml::log(GGML_LOG_LEVEL_INFO, "    type: %s\n", ComputeManager::dev_type_to_str(dev.type).c_str());
+        ggml::log(GGML_LOG_LEVEL_INFO, "    memory total: %zd B\n", dev.total_memory);
+        ggml::log(GGML_LOG_LEVEL_INFO, "    memory free : %zd B\n", dev.free_memory);
+
+        ggml_backend_rpc_start_server(backend, s.c_str(), backend_mem, backend_mem);
+        ggml_backend_free(backend);
+        return true;
+#else
+        return false;
+#endif
     }
 
     Backend::Backend(ggml_backend_t backend, int n_layers, bool use_gpu)

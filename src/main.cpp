@@ -45,6 +45,8 @@ struct Args
     std::string dump_dot;
     std::string emb_rank_query_sep;
     std::map<std::string, std::vector<std::string>> vector_stores;
+    std::string rpc_endpoints;
+    std::string serve_rpc;
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -127,7 +129,11 @@ void usage(const std::string &prog)
               << "Performance options:\n"
               << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
               << "  -ngl, --n_gpu_layers N  number of model layers to offload to a backend device (GPU) (default: GPU not used)\n"
+              << "                          N ::= one_spec;...\n"
+              << "                          one_spec ::= [id:]spec, where spec ::= [n|epilog|prolog|all]\n"
               << "  +moe_on_cpu             alway use CPU for sparse operations (MoE) (default: off)\n"
+              << "  --rpc_endpoints EP..    RPC endpoints (i.e. servers) for distributed inference (default: empty)\n"
+              << "                          EP1;EP2, where EP ::= host:port\n"
               << "Sampling options:\n"
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
               << "                          where, tfs = Tail Free Sampling\n"
@@ -187,6 +193,7 @@ void usage(const std::string &prog)
               << "  --show_devices          show info about backends and devices, then quit                                             [*]\n"
               << "  --dump_dot FILE         dump sched splits to a DOT file, and exit with -1\n"
               << "  --log_level             log level. (default: 4 - ERROR)\n"
+              << "  --serve_rpc [H:]P[@id]  as a RPC server on host:port (optional: host default to 127.0.0.1, id defaults to 0)        [#]\n"
               << "Additional key-value args:\n"
               << "  --kv                    start of additional args. all following options are interpreted as k-v pairs\n"
               << "  key value               a key-value pair of args\n"
@@ -358,6 +365,8 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--dump_dot",                    dump_dot,             std::string)
             handle_para0("--beam_size",                   beam_size,            std::stoi)
             handle_para0("--log_level",                   log_level,            std::stoi)
+            handle_para0("--rpc_endpoints",               rpc_endpoints,        std::string)
+            handle_para0("--serve_rpc",                   serve_rpc,            std::string)
             else
                 break;
 
@@ -889,6 +898,32 @@ void TextStreamer::end()
     cout << std::endl;
 }
 
+static void start_rpc_server(std::string endpoint)
+{
+    int device = 0;
+
+    auto pos = endpoint.find('@');
+    if (pos != std::string::npos)
+    {
+        device = std::stoi(endpoint.substr(pos + 1));
+        endpoint = endpoint.substr(0, pos);
+    }
+
+    if (!chatllm::ComputeManager::start_rpc_server(device, endpoint.c_str()))
+    {
+        chatllm::ggml::log(GGML_LOG_LEVEL_ERROR, "Failed to start RPC server at %s@%d", endpoint.c_str(), device);
+    }
+    else;
+}
+
+static void prepre_rpc_devices(const Args &args)
+{
+    if (!chatllm::ComputeManager::prepre_rpc_devices(args.rpc_endpoints))
+    {
+        chatllm::ggml::log(GGML_LOG_LEVEL_ERROR, "Failed to prepare RPC devices");
+    }
+}
+
 #if defined(_WIN32)
 std::string wstr_to_utf8(const wchar_t* wstr)
 {
@@ -949,7 +984,7 @@ static void show_devices(void)
     for (size_t i = 0; i < devs.size(); i++)
     {
         auto &dev = devs[i];
-        printf("%2zd: %s - %s\n", i, dev.backend_name.c_str(), dev.name.c_str());
+        printf("%2zd: %s - %s (%s)\n", i, dev.backend_name.c_str(), dev.name.c_str(), dev.description.c_str());
         printf("    type: %s\n", chatllm::ComputeManager::dev_type_to_str(dev.type).c_str());
         printf("    memory total: %zd B\n", dev.total_memory);
         printf("    memory free : %zd B\n", dev.free_memory);
@@ -986,13 +1021,9 @@ int main(int argc, const char **argv)
     }
 
     TextStreamer streamer(nullptr);
+    log_streamer = &streamer;
+    streamer.log_level = args.log_level;
     ggml_log_set(_ggml_log_callback, nullptr);
-
-    if (args.show_devices)
-    {
-        show_devices();
-        return 0;
-    }
 
     if (count < utf_args.size())
     {
@@ -1016,17 +1047,29 @@ int main(int argc, const char **argv)
         return 0;
     }
 
+    prepre_rpc_devices(args);
+
+    if (args.show_devices)
+    {
+        show_devices();
+        return 0;
+    }
+
     if (args.vector_store_in.size() > 0)
         return init_vector_store(args);
 
     if (args.merge_vs.size() > 0)
         return merge_vector_store(args);
 
+    if (args.serve_rpc.size() > 0)
+    {
+        start_rpc_server(args.serve_rpc);
+        return 0;
+    }
+
     try
     {
         DEF_ExtraArgs(pipe_args, args);
-        streamer.log_level = args.log_level;
-        log_streamer = &streamer;
 
         if (args.embedding_model_path.size() < 1)
         {

@@ -197,6 +197,7 @@ namespace chatllm
             DeviceType type;
             std::string backend_name;
             std::string name;
+            std::string description;
             size_t total_memory;
             size_t free_memory;
         };
@@ -218,6 +219,9 @@ namespace chatllm
 
         static bool get_device_info(int device, DeviceInfo &info);
         static void get_devices_info(std::vector<DeviceInfo> &devs);
+
+        static bool start_rpc_server(int device, const char *endpoints, size_t backend_mem = 0);
+        static bool prepre_rpc_devices(const std::string &endpoints);
     };
 
     enum BufferType

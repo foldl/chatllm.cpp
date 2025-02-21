@@ -1471,6 +1471,9 @@ static const struct ggml_backend_device_i ggml_backend_rpc_device_i = {
 
 // backend reg interface
 
+static std::unordered_map<std::string, ggml_backend_dev_t> dev_map;
+static std::vector<ggml_backend_dev_t> dev_list;
+
 static const char * ggml_backend_rpc_reg_get_name(ggml_backend_reg_t reg) {
     return "RPC";
 
@@ -1478,13 +1481,16 @@ static const char * ggml_backend_rpc_reg_get_name(ggml_backend_reg_t reg) {
 }
 
 static size_t ggml_backend_rpc_reg_get_device_count(ggml_backend_reg_t reg) {
-    return 0;
+    return dev_list.size();
 
     GGML_UNUSED(reg);
 }
 
 static ggml_backend_dev_t ggml_backend_rpc_reg_get_device(ggml_backend_reg_t reg, size_t index) {
-    GGML_ABORT("The RPC backend does not have enumerated devices - use ggml_backend_add_device instead");
+    if (index < dev_list.size()) {
+        return dev_list[index];
+    }
+    return nullptr;
 
     GGML_UNUSED(reg);
     GGML_UNUSED(index);
@@ -1517,8 +1523,6 @@ ggml_backend_reg_t ggml_backend_rpc_reg(void) {
 }
 
 ggml_backend_dev_t ggml_backend_rpc_add_device(const char * endpoint) {
-    static std::unordered_map<std::string, ggml_backend_dev_t> dev_map;
-
     static std::mutex mutex;
     std::lock_guard<std::mutex> lock(mutex);
 
@@ -1538,6 +1542,7 @@ ggml_backend_dev_t ggml_backend_rpc_add_device(const char * endpoint) {
     };
 
     dev_map[endpoint] = dev;
+    dev_list.push_back(dev);
 
     return dev;
 }
