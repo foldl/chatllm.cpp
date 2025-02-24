@@ -68,6 +68,8 @@ class ModelType(Enum):
     NuminaMath          = 0x303
     DeepSeekV2Light     = 0x320
     DeepSeekV2          = 0x321
+    DeepSeekV3Light     = 0x322
+    DeepSeekV3          = 0x323
 
     Yi = 0x400
     MAP_Neo = 0x401
@@ -150,6 +152,8 @@ class ModelType(Enum):
     TeleChat2       = 0x1e00
 
     HunYuanDense    = 0x1f00
+
+    MoonLight       = 0x2000
 
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
@@ -4726,6 +4730,7 @@ class DeepSeekV2Converter(BaseConverter):
         assert config.attention_bias == False, "attention_bias must be False"
         assert config.rope_scaling['type'] == 'yarn', "rope_scaling['type'] must be 'yarn'"
         assert config.scoring_func == 'softmax', "scoring_func must be 'softmax'"
+        assert config.ep_size == 1, "ep_size must be 1"
         if config.q_lora_rank is None:
             assert config.topk_method == 'greedy', "topk_method must be 'greedy'"
         else:
@@ -4836,6 +4841,86 @@ class DeepSeekV2Converter(BaseConverter):
 
         return weight_names
 
+class DeepSeekV3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.DeepSeekV3
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        return DeepSeekV2Converter.state_dict_pp(config, state_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        assert config.attention_bias == False, "attention_bias must be False"
+        assert config.ep_size == 1, "ep_size must be 1"
+        if config.rope_scaling is not None:
+            assert config.rope_scaling['type'] == 'yarn', "rope_scaling['type'] must be 'yarn'"
+        assert config.scoring_func == 'sigmoid', "scoring_func must be 'sigmoid'"
+        assert config.topk_method == 'noaux_tc', "topk_method must be 'noaux_tc'"
+        assert config.n_routed_experts is not None, "n_routed_experts must not be null"
+        has_scaling = config.rope_scaling is not None
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if isinstance(config.eos_token_id, int) else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads,
+            config.first_k_dense_replace,
+            config.kv_lora_rank,
+            config.moe_intermediate_size,
+            config.moe_layer_freq,
+            config.n_group,
+            config.n_routed_experts,
+            config.n_shared_experts,
+            1 if config.norm_topk_prob else 0,
+            config.num_experts_per_tok,
+            config.qk_nope_head_dim,
+            config.qk_rope_head_dim,
+            config.rope_scaling['original_max_position_embeddings'] if has_scaling else -1,
+            config.v_head_dim,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_scaling['beta_fast'] if has_scaling else 0.0,
+            config.rope_scaling['beta_slow'] if has_scaling else 0.0,
+            config.rope_scaling['factor'] if has_scaling else 0.0,
+            config.rope_scaling['mscale'] if has_scaling else 0.0,
+            config.rope_scaling['mscale_all_dim'] if has_scaling else 0.0,
+            config.rope_theta,
+            config.routed_scaling_factor,
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+        if config.q_lora_rank is not None:
+            config_values = [
+                config.q_lora_rank,
+                config.topk_group if config.topk_group is not None else 1,
+            ]
+            f.write(struct.pack("i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = DeepSeekV2Converter.get_weight_names(config)
+
+        for i in range(config.num_hidden_layers):
+            if (config.n_routed_experts is not None
+                and (i >= config.first_k_dense_replace)
+                and (i % config.moe_layer_freq == 0)):
+                weight_names += [
+                    f"model.layers.{i}.mlp.gate.e_score_correction_bias",
+                ]
+
+        return weight_names
+
 class IndexConverter(BaseConverter):
     MODEL_TYPE = ModelType.Index
 
@@ -4899,6 +4984,8 @@ class HunYuanDenseConverter(BaseConverter):
         assert config.tie_word_embeddings, "tie_word_embeddings must be True"
         assert config.attention_bias == False, "attention_bias must be False"
         assert config.mlp_bias == False, "mlp_bias must be False"
+        assert not config.use_cla, "use_cla must be False"
+        assert not config.use_mla, "use_mla must be False"
         assert config.rope_scaling['type'] == 'dynamic', "rope_scaling['type'] must be 'dynamic'"
         assert config.use_qk_norm, "use_qk_norm must be True"
         assert config.rope_scaling['alpha'] > 0, "rope_scaling['alpha'] must be > 0"
@@ -5058,6 +5145,9 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
         path9 = path / "hy.tiktoken"
         if path9.exists():
             return load_vocab_from_tiktok_mergeable_ranks(path9)
+        path9 = path / "tiktoken.model"
+        if path9.exists():
+            return load_vocab_from_tiktok_mergeable_ranks(path9)
 
     raise FileNotFoundError(
         f"Could not find tokenizer.model in {path} or its parent; "
@@ -5066,11 +5156,6 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
 def load_config(path: Path, config_fn: str) -> Any:
     with open(path / config_fn, 'r') as fp:
         r = json.load(fp)
-    if (path / 'generation_config.json').is_file():
-        with open(path / 'generation_config.json', 'r') as fp:
-            rr = json.load(fp)
-            for k in rr:
-                r[k] = rr[k]
     return r
 
 def load_some_model(path: Path) -> List[Path]:
@@ -5399,6 +5484,9 @@ def main():
         if config.q_lora_rank is not None:
             DeepSeekV2Converter.MODEL_TYPE = ModelType.DeepSeekV2
         DeepSeekV2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'moonlight':
+        DeepSeekV3Converter.MODEL_TYPE = ModelType.MoonLight
+        DeepSeekV3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'IndexForCausalLM':
         IndexConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OlmoeForCausalLM':

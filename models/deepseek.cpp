@@ -516,8 +516,8 @@ namespace v2_light
     template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class DeepSeekSparseMoE : public BaseSparseMLP
     {
     public:
-        DeepSeekSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
-            : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, false)
+        DeepSeekSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size, bool gate_use_bias)
+            : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, gate_use_bias)
         {
         }
     };
@@ -535,30 +535,41 @@ namespace v2_light
         ConditionalGeneration0(const Config &config, const RuntimeConfig &runtime_config) : ConditionalGeneration0(config, runtime_config, MODEL_TYPE_DEEPSEEK_V2_LIGHT, -1)
         {}
 
-        ConditionalGeneration0(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int q_lora_rank)
+        ConditionalGeneration0(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int q_lora_rank, BaseSparseMLP::ScoreFunc score_func = BaseSparseMLP::ScoreFunc::Softmax,
+            bool gate_use_bias = false, bool always_scaling = false)
             : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
               config(config)
         {
             const size_t tensor_ovhd = ggml_tensor_overhead();
-            const size_t num_tensors = 3 + (config.num_hidden_layers - 1) * (16 + 3) + 15
-                                + (q_lora_rank > 0 ? config.num_hidden_layers * 2 : 0);
+            const int moe_layer_num = get_moe_layer_num();
+            const int dense_layer_num = config.num_hidden_layers - moe_layer_num;
+            const size_t num_tensors = 3
+                                + moe_layer_num * (16 + 3 + (gate_use_bias ? 1 : 0))
+                                + dense_layer_num * 15
+                                + (q_lora_rank > 0 ? config.num_hidden_layers * 2 : 0) ;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
 
             CHATLLM_CHECK((NUM_EXPERTS == config.n_routed_experts)
                             && (EXPERTS_PER_TOK == config.num_experts_per_tok)
-                            && (EFFECTIVE_EXPERTS_PER_TOK <= EXPERTS_PER_TOK))
+                            && (EFFECTIVE_EXPERTS_PER_TOK <= EXPERTS_PER_TOK)
+                            && (config.n_group == 1))
                 << "unsupported MoE param";
 
             auto create_layer = [&](InitContext *ctx, int layer_index) -> Block * {
                 if (is_layer_moe(layer_index))
                 {
-                    return new DeepSeek2MoEBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
-                                                config.moe_intermediate_size, config.moe_intermediate_size * config.n_shared_experts,
-                                                config.num_key_value_heads, config.max_length,
-                                                q_lora_rank, config.kv_lora_rank, config.qk_rope_head_dim, config.qk_nope_head_dim, config.v_head_dim,
-                                                false);
+                    auto layer = new DeepSeek2MoEBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
+                        config.moe_intermediate_size, config.moe_intermediate_size * config.n_shared_experts,
+                        config.num_key_value_heads, config.max_length,
+                        q_lora_rank, config.kv_lora_rank, config.qk_rope_head_dim, config.qk_nope_head_dim, config.v_head_dim,
+                        false, gate_use_bias);
+                    auto sparse = dynamic_cast<BaseSparseMLP *>(&layer->mlp.mlp1);
+                    sparse->score_func = score_func;
+                    sparse->routed_scaling_factor = config.routed_scaling_factor;
+                    sparse->always_scaling = always_scaling;
+                    return layer;
                 }
                 else
                 {
@@ -573,24 +584,32 @@ namespace v2_light
                 &w_ctx_, config, false, create_layer);
             Base::transformer = transformer;
 
-            float m = yarn_get_mscale(config.factor, config.mscale) / yarn_get_mscale(config.factor, config.mscale_all_dim);
-            float attn_scaling_factor = 1 / sqrtf((float)(config.qk_rope_head_dim + config.qk_nope_head_dim));
-            float mscale = yarn_get_mscale(config.factor, config.mscale_all_dim);
-            attn_scaling_factor *= mscale * mscale;
-
-            m /= 1.0f + 0.1f * logf(config.factor);
+            float m = 1.0f;
+            float attn_scaling_factor = -1.0f;
+            if (config.original_max_position_embeddings > 0)
+            {
+                m = yarn_get_mscale(config.factor, config.mscale) / yarn_get_mscale(config.factor, config.mscale_all_dim);
+                attn_scaling_factor = 1 / sqrtf((float)(config.qk_rope_head_dim + config.qk_nope_head_dim));
+                float mscale = yarn_get_mscale(config.factor, config.mscale_all_dim);
+                attn_scaling_factor *= mscale * mscale;
+                m /= 1.0f + 0.1f * logf(config.factor);
+            }
 
             #define config_rope(attention)     do { \
                     attention.rope_mode      = RoPEMode::Original;                          \
+                    attention.freq_base      = config.rope_theta;                           \
+                    if (config.original_max_position_embeddings > 0)                        \
+                    {                                                                       \
                     attention.n_ctx          = config.max_length;                           \
                     attention.n_original_ctx = config.original_max_position_embeddings;     \
-                    attention.freq_base      = config.rope_theta;                           \
                     attention.freq_scale     = 1 / config.factor;                           \
                     attention.beta_fast      = config.beta_fast;                            \
                     attention.beta_slow      = config.beta_slow;                            \
                     attention.ext_factor               = 1.0f;                              \
                     attention.attn_factor              = m;                                 \
-                    attention.attn_scaling_factor      = attn_scaling_factor; } while (false)
+                    attention.attn_scaling_factor      = attn_scaling_factor;               \
+                    }                                                                       \
+                } while (false)
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
@@ -635,6 +654,11 @@ namespace v2_light
                     loader.read_tensor(layer_prefix + "mlp.mlp1.experts_up.weight",   layer_prefix + "mlp.experts.", config.n_routed_experts, ".up_proj.weight",   layer->mlp.mlp1.experts_up.weight);
 
                     loader.read_tensor(layer_prefix + "mlp.gate.weight", layer->mlp.mlp1.gate.weight);
+
+                    if ( layer->mlp.mlp1.gate_score_correction_bias)
+                    {
+                        loader.read_tensor(layer_prefix + "mlp.gate.e_score_correction_bias", layer->mlp.mlp1.gate_score_correction_bias);
+                    }
 
                     loader.read_tensor(layer_prefix + "mlp.shared_experts.down_proj.weight", layer->mlp.mlp2.down_proj.weight);
                     loader.read_tensor(layer_prefix + "mlp.shared_experts.gate_proj.weight", layer->mlp.mlp2.gate_proj.weight);
@@ -683,6 +707,17 @@ namespace v2_light
         {
             return (layer_index >= config.first_k_dense_replace) && (layer_index % config.moe_layer_freq == 0);
         }
+
+        int get_moe_layer_num()
+        {
+            int r = 0;
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                if (is_layer_moe(i))
+                    r++;
+            }
+            return r;
+        }
     };
 
     const int NUM_EXPERTS                   =  64;
@@ -710,6 +745,27 @@ namespace v2
 
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
             : v2_light::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK, EXPERTS_PER_TOK>(config, runtime_config, MODEL_TYPE_DEEPSEEK_V2, config.q_lora_rank)
+        {
+            CHATLLM_CHECK(config.topk_group == 1) << "unsupported MoE param";
+        }
+    };
+}
+
+namespace v3_light
+{
+    struct Config : public v2_light::Config
+    {
+    };
+
+    typedef v1::Tokenizer Tokenizer;
+
+    class ConditionalGeneration : public v2_light::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration() = default;
+
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_DEEPSEEK_V3_LIGHT)
+            : v2_light::ConditionalGeneration(config, runtime_config, type, -1, BaseSparseMLP::ScoreFunc::Sigmoid, true, true)
         {
         }
     };

@@ -734,14 +734,14 @@ namespace chatllm
                   int mlp_intermediate_size1, int mlp_intermediate_size2,
                   int num_kv_heads, int max_length,
                   int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
-                  bool use_bias)
+                  bool use_bias, bool gate_use_bias)
             : Base(ctx, hidden_size, num_attention_heads, intermediate_size,
                   mlp_intermediate_size1, mlp_intermediate_size2,
                   num_kv_heads, max_length,
                   q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim, use_bias),
               input_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
-              mlp(ctx, hidden_size, mlp_intermediate_size1, mlp_intermediate_size2) {}
+              mlp(ctx, hidden_size, mlp_intermediate_size1, mlp_intermediate_size2, gate_use_bias) {}
 
         LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
                   int num_kv_heads, int max_length,
@@ -1753,6 +1753,11 @@ namespace chatllm
                mlp2(ctx, hidden_size, intermediate_size2)
         {}
 
+        CombinedMLP(InitContext *ctx, int hidden_size, int intermediate_size1, int intermediate_size2, bool mlp1_use_bias)
+            :  mlp1(ctx, hidden_size, intermediate_size1, mlp1_use_bias),
+               mlp2(ctx, hidden_size, intermediate_size2)
+        {}
+
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override
         {
@@ -1778,18 +1783,27 @@ namespace chatllm
     class BaseSparseMLP : public Block
     {
     public:
+        enum ScoreFunc
+        {
+            Softmax,
+            Sigmoid,
+        };
         BaseSparseMLP() = default;
         BaseSparseMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
                   ActFunc act, bool gate_use_bias)
             :
               num_local_experts(num_local_experts), num_experts_per_tok(num_experts_per_tok),
-              gate(ctx, hidden_size, num_local_experts, gate_use_bias),
+              gate(ctx, hidden_size, num_local_experts, false),
               mover(new CPUMover(ctx, ctx->user_options.moe_on_cpu)),
               experts_gate(ctx, hidden_size, intermediate_size, num_local_experts),
               experts_down(ctx, intermediate_size, hidden_size, num_local_experts),
               experts_up  (ctx, hidden_size, intermediate_size, num_local_experts),
+              gate_score_correction_bias(gate_use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, num_local_experts) : nullptr),
               act(act),
-              norm_topk_prob(true)
+              norm_topk_prob(true),
+              score_func(ScoreFunc::Softmax),
+              routed_scaling_factor(-1.0f),
+              always_scaling(false)
         {
             delete mover;
             mover = nullptr;
@@ -1827,9 +1841,12 @@ namespace chatllm
         MultiLinear experts_gate;
         MultiLinear experts_down;
         MultiLinear experts_up;
+        ggml::tensor *gate_score_correction_bias;
         const ActFunc act;
         bool norm_topk_prob;
-
+        ScoreFunc score_func;
+        float routed_scaling_factor;
+        bool always_scaling;
     protected:
         virtual ggml::tensor *forward_with_experts(ComputeContext *ctx, ggml::tensor *hidden_states,
             ggml::tensor *selected_experts,

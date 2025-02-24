@@ -225,6 +225,8 @@ namespace chatllm
         MODEL_TYPE_NUMINAMATH        = 0x303,
         MODEL_TYPE_DEEPSEEK_V2_LIGHT = 0x320,
         MODEL_TYPE_DEEPSEEK_V2       = 0x321,
+        MODEL_TYPE_DEEPSEEK_V3_LIGHT = 0x322,   // DOES NOT EXIST
+        MODEL_TYPE_DEEPSEEK_V3       = 0x323,
 
         MODEL_TYPE_YI       = 0x400,
         MODEL_TYPE_MAP_NEO  = 0x401,
@@ -309,6 +311,8 @@ namespace chatllm
         MODEL_TYPE_TELECHAT2        = 0x1e00,
 
         MODEL_TYPE_HUNYUAN_DENSE    = 0x1f00,
+
+        MODEL_TYPE_MOONLIGHT        = 0x2000,
 
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
@@ -400,6 +404,9 @@ namespace chatllm
         case MODEL_TYPE_DEEPSEEK_V2:
         case MODEL_TYPE_DEEPSEEK_V2_LIGHT:
             return "DeepSeek-V2";
+        case MODEL_TYPE_DEEPSEEK_V3:
+        case MODEL_TYPE_DEEPSEEK_V3_LIGHT:
+                return "DeepSeek-V3";
         case MODEL_TYPE_YI:
             return "Yi";
         case MODEL_TYPE_MAP_NEO:
@@ -534,6 +541,8 @@ namespace chatllm
             return "MiniCPM-Embedding-Light";
         case MODEL_TYPE_MiniCPM_ReRanker_Light:
             return "MiniCPM-ReRanker-Light";
+        case MODEL_TYPE_MOONLIGHT:
+            return "Moonlight";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1835,6 +1844,11 @@ namespace chatllm
         #include "../models/hunyuan.cpp"
     }
 
+    namespace moonshot
+    {
+        #include "../models/moonshot.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2056,6 +2070,7 @@ namespace chatllm
         CASE(NUMINAMATH,            numinamath, 1)              \
         CASE(DEEPSEEK_V2_LIGHT,     deepseek::v2_light, 1)      \
         CASE(DEEPSEEK_V2,           deepseek::v2, 1)            \
+        CASE(DEEPSEEK_V3_LIGHT,     deepseek::v3_light, 1)      \
                                                                 \
         CASE(BAICHUANLLAMA,         baichuan::_7b, 1)           \
         CASE(BAICHUAN,              baichuan::larger, 1)        \
@@ -2142,6 +2157,8 @@ namespace chatllm
         CASE(TELECHAT2,             telechat::v2, 1)            \
                                                                 \
         CASE(HUNYUAN_DENSE,         hunyuan::dense, 1)          \
+                                                                \
+        CASE(MOONLIGHT,             moonshot::moonlight, 1)     \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

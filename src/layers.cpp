@@ -1452,10 +1452,28 @@ namespace chatllm
 
         CPUMover mover(ctx, ctx->user_options.moe_on_cpu);
 
-        ggml::tensor * probs = ggml::soft_max(ctx, logits); // [qlen, num_experts]
+        ggml::tensor * probs = nullptr;
+        switch (score_func)
+        {
+        case ScoreFunc::Softmax:
+            probs = ggml::soft_max(ctx, logits); // [qlen, num_experts]
+            break;
+        case ScoreFunc::Sigmoid:
+            probs = ggml::sigmoid(ctx, logits);  // [qlen, num_experts]
+            break;
+        default:
+            CHATLLM_CHECK(false) << "Invalid score_func!";
+            break;
+        }
+
+        ggml::tensor * corrected_score = probs;
+        if (gate_score_correction_bias)
+        {
+            corrected_score = ggml::add(ctx, corrected_score, gate_score_correction_bias);
+        }
 
         // select experts
-        ggml::tensor * selected_experts = ggml::top_k(ctx, probs, num_experts_per_tok); // [qlen, num_experts_per_tok]
+        ggml::tensor * selected_experts = ggml::top_k(ctx, corrected_score, num_experts_per_tok); // [qlen, num_experts_per_tok]
 
         ggml::tensor * weights = ggml::get_rows(ctx,
             ggml::reshape_3d(ctx, probs, 1, n_expert, qlen), selected_experts); // [1, num_experts_per_tok, qlen]
@@ -1467,7 +1485,17 @@ namespace chatllm
 
             weights = ggml::div(ctx, weights, weights_sum); // [num_experts_per_tok, n_tokens]
             weights = ggml::reshape_3d(ctx, weights, 1, num_experts_per_tok, qlen);
+
+            if (always_scaling && (routed_scaling_factor > 0))
+            {
+                weights = ggml::scale(ctx, weights, routed_scaling_factor);
+            }
         }
+        else
+        {
+            weights = ggml::scale(ctx, weights, routed_scaling_factor);
+        }
+
 
         return forward_with_experts(ctx, hidden_states, selected_experts, weights);
     }

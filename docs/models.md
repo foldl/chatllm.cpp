@@ -153,10 +153,12 @@
 * Zhinao (`ZhinaoForCausalLM`)
     * [x] [Chat-7B-4K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-4K), [Chat-7B-32K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-32K), [Chat-7B-360K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-360K)
 
-* DeepSeek (`DeepseekV2ForCausalLM`)
-    * [x] [V2-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Chat) (💣 not tested), [V2-Lite-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite-Chat)
+* DeepSeek (`DeepseekV2ForCausalLM`, `DeepseekV3ForCausalLM`)
+    * [x] v2: [Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Chat) (💣 not tested), [Lite-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite-Chat)
 
-    * [x] [Coder-V2-Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Instruct) (💣 not tested), [Coder-V2-Lite-Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct)
+    * [x] Coder v2: [Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Instruct) (💣 not tested), [Lite-Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct)
+
+    * [x] Moonlight: [Instruct-16B](https://huggingface.co/moonshotai/Moonlight-16B-A3B-Instruct) (`-a Moonlight`)
 
     Two optimization modes are defined: speed (default) and memory. See `BaseMLAttention`.
 

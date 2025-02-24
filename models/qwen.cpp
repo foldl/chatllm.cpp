@@ -47,6 +47,9 @@ namespace v1
     public:
         void encode(const std::string &text, std::vector<int> &ids, bool add_im_start, bool add_im_end, bool add_nl) const;
 
+    protected:
+        virtual size_t do_load(tokenizer::DataReader *buffer, int n_vocab);
+
     public:
         int im_start_token_id;
         int im_end_token_id;
@@ -66,7 +69,7 @@ namespace v1
         Config config;
     };
 
-    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
+    size_t Tokenizer::do_load(tokenizer::DataReader *buffer, int n_vocab)
     {
         tp = new tokenizer::BPEProcessor2(
             {
@@ -74,7 +77,12 @@ namespace v1
                 "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
             }
         );
-        size_t size = tp->Load(buffer, n_vocab);
+        return tp->Load(buffer, n_vocab);
+    }
+
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
+    {
+        size_t size = do_load(buffer, n_vocab);
         tp->EnableReturnSpecialToken(true);
 
         // for QAnything
