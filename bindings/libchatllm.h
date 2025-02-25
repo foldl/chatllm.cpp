@@ -323,6 +323,14 @@ DLL_DECL int API_CALL chatllm_async_start(struct chatllm_obj *obj, f_chatllm_pri
 DLL_DECL int API_CALL chatllm_async_user_input(struct chatllm_obj *obj, const char *utf8_str);
 
 /**
+ * @brief async version of `chatllm_ai_continue`
+
+ * @param   ...
+ * @return                      0 if started else -1
+ */
+DLL_DECL int API_CALL chatllm_async_ai_continue(struct chatllm_obj *obj, const char *utf8_str);
+
+/**
  * @brief async version of `chatllm_tool_input`
 
  * @param   ...

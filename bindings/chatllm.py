@@ -83,7 +83,10 @@ class LibChatLLM:
         self._chatllm_save_session      = self._lib.chatllm_save_session
         self._chatllm_load_session      = self._lib.chatllm_load_session
 
-        self._chatllm_async_user_input  = self._lib.chatllm_async_user_input
+        self._chatllm_async_user_input      = self._lib.chatllm_async_user_input
+        self._chatllm_async_ai_continue     = self._lib.chatllm_async_ai_continue
+        self._chatllm_async_tool_input      = self._lib.chatllm_async_tool_input
+        self._chatllm_async_tool_completion = self._lib.chatllm_async_tool_completion
 
         self._chatllm_create.restype = c_void_p
         self._chatllm_create.argtypes = []
@@ -99,6 +102,8 @@ class LibChatLLM:
 
         self._chatllm_ai_continue.restype = c_int
         self._chatllm_ai_continue.argtypes = [c_void_p, c_char_p]
+        self._chatllm_async_ai_continue.restype = c_int
+        self._chatllm_async_ai_continue.argtypes = [c_void_p, c_char_p]
 
         self._chatllm_user_input.restype = c_int
         self._chatllm_user_input.argtypes = [c_void_p, c_char_p]
@@ -107,9 +112,13 @@ class LibChatLLM:
 
         self._chatllm_tool_input.restype = c_int
         self._chatllm_tool_input.argtypes = [c_void_p, c_char_p]
+        self._chatllm_async_tool_input.restype = c_int
+        self._chatllm_async_tool_input.argtypes = [c_void_p, c_char_p]
 
         self._chatllm_tool_completion.restype = c_int
         self._chatllm_tool_completion.argtypes = [c_void_p, c_char_p]
+        self._chatllm_async_tool_completion.restype = c_int
+        self._chatllm_async_tool_completion.argtypes = [c_void_p, c_char_p]
 
         self._chatllm_text_embedding.restype = c_int
         self._chatllm_text_embedding.argtypes = [c_void_p, c_char_p]
@@ -219,6 +228,15 @@ class LibChatLLM:
 
     def tool_input(self, obj: c_void_p, user_input: str) -> int:
         return self._chatllm_tool_input(obj, c_char_p(user_input.encode()))
+
+    def async_tool_completion(self, obj: c_void_p, user_input: str) -> int:
+        return self._chatllm_async_tool_completion(obj, c_char_p(user_input.encode()))
+
+    def async_ai_continue(self, obj: c_void_p, suffix: str) -> int:
+        return self._chatllm_async_ai_continue(obj, c_char_p(suffix.encode()))
+
+    def async_tool_input(self, obj: c_void_p, user_input: str) -> int:
+        return self._chatllm_async_tool_input(obj, c_char_p(user_input.encode()))
 
     def tool_completion(self, obj: c_void_p, user_input: str) -> int:
         return self._chatllm_tool_completion(obj, c_char_p(user_input.encode()))
@@ -335,6 +353,25 @@ class ChatLLM:
         self.tool_completion_id = completion_id
         self.abort()
         r = self._lib.tool_completion(self._chat, user_input)
+        if r != 0:
+            raise Exception(f'ChatLLM: failed to `tool_completion()` with error code {r}')
+
+    def async_ai_continue(self, suffix: str) -> int:
+        self.is_generating = True
+        r = self._lib.async_ai_continue(self._chat, suffix)
+        if r != 0:
+            raise Exception(f'ChatLLM: failed to `ai_continue()` with error code {r}')
+
+    def async_tool_input(self, user_input: str, input_id = None) -> None:
+        self.tool_input_id = input_id
+        r = self._lib.async_tool_input(self._chat, user_input)
+        if r != 0:
+            raise Exception(f'ChatLLM: failed to `tool_input()` with error code {r}')
+
+    def async_tool_completion(self, user_input: str, completion_id = None) -> None:
+        self.tool_completion_id = completion_id
+        self.abort()
+        r = self._lib.async_tool_completion(self._chat, user_input)
         if r != 0:
             raise Exception(f'ChatLLM: failed to `tool_completion()` with error code {r}')
 
