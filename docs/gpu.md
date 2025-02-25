@@ -10,6 +10,7 @@ below backends.
 | Backend   | Target devices    |
 | ---       | ---               |
 | CUDA      | Nvidia GPU        |
+| RPC       | Any               |
 | Vulkan    | GPU               |
 
 ## Build

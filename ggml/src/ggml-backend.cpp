@@ -602,7 +602,7 @@ static struct ggml_tensor * ggml_dup_tensor_layout(struct ggml_context * ctx, co
     return dup;
 }
 
-static bool ggml_is_view_op(enum ggml_op op) {
+bool ggml_backend_is_view_op(enum ggml_op op) {
     return op == GGML_OP_VIEW || op == GGML_OP_RESHAPE || op == GGML_OP_PERMUTE || op == GGML_OP_TRANSPOSE;
 }
 
@@ -810,7 +810,7 @@ static void ggml_backend_sched_print_assignments(ggml_backend_sched_t sched, str
             cur_split++;
         }
         struct ggml_tensor * node = graph->nodes[i];
-        if (ggml_is_view_op(node->op)) {
+        if (ggml_backend_is_view_op(node->op)) {
             continue;
         }
         if (sched->debug > 1) {
@@ -857,24 +857,6 @@ static void ggml_backend_sched_set_if_supported(ggml_backend_sched_t sched, stru
         *node_backend_id = cur_backend_id;
         SET_CAUSE(node, "2.sup");
     }
-}
-
-static struct ggml_tensor *dbg_tensor = nullptr;
-void ggml_backend_check_tensor(struct ggml_tensor *t) {
-    dbg_tensor = t;
-}
-
-void ggml_backend_dbg_show(ggml_backend_sched_t sched, int line_no) {
-    if (dbg_tensor == nullptr) return;
-    int id = tensor_backend_id(dbg_tensor);
-    printf("DBG[%d]: %s - %s (%p) backend id = %d, ", line_no, dbg_tensor->name, ggml_op_name(dbg_tensor->op), dbg_tensor, id);
-    if (dbg_tensor->buffer) {
-        printf("buft: %s,", ggml_backend_buft_name(dbg_tensor->buffer->buft));
-    }
-    else {
-        printf("not allocated");
-    }
-    printf("\n");
 }
 
 // assigns backends to ops and splits the graph into subgraphs that can be computed on the same backend
@@ -944,7 +926,7 @@ static void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct gg
         int cur_backend_id = -1;
         for (int i = 0; i < graph->n_nodes; i++) {
             struct ggml_tensor * node = graph->nodes[i];
-            if (ggml_is_view_op(node->op)) {
+            if (ggml_backend_is_view_op(node->op)) {
                 continue;
             }
             int * node_backend_id = &tensor_backend_id(node);
@@ -965,7 +947,7 @@ static void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct gg
         int cur_backend_id = -1;
         for (int i = graph->n_nodes - 1; i >= 0; i--) {
             struct ggml_tensor * node = graph->nodes[i];
-            if (ggml_is_view_op(node->op)) {
+            if (ggml_backend_is_view_op(node->op)) {
                 continue;
             }
             int * node_backend_id = &tensor_backend_id(node);
@@ -986,7 +968,7 @@ static void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct gg
         int cur_backend_id = -1;
         for (int i = 0; i < graph->n_nodes; i++) {
             struct ggml_tensor * node = graph->nodes[i];
-            if (ggml_is_view_op(node->op)) {
+            if (ggml_backend_is_view_op(node->op)) {
                 continue;
             }
             int * node_backend_id = &tensor_backend_id(node);
@@ -1002,7 +984,7 @@ static void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct gg
         int cur_backend_id = -1;
         for (int i = graph->n_nodes - 1; i >= 0; i--) {
             struct ggml_tensor * node = graph->nodes[i];
-            if (ggml_is_view_op(node->op)) {
+            if (ggml_backend_is_view_op(node->op)) {
                 continue;
             }
             int * node_backend_id = &tensor_backend_id(node);
@@ -1024,7 +1006,7 @@ static void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct gg
     // only nodes that could not be assigned during expansion due to the backend not supporting the op should be unassigned at this point
     for (int i = 0; i < graph->n_nodes; i++) {
         struct ggml_tensor * node = graph->nodes[i];
-        if (ggml_is_view_op(node->op)) {
+        if (ggml_backend_is_view_op(node->op)) {
             continue;
         }
         int * node_backend_id = &tensor_backend_id(node);
@@ -1110,7 +1092,7 @@ static void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct gg
         int i = 0;
         for (; i < graph->n_nodes; i++) {
             struct ggml_tensor * node = graph->nodes[i];
-            if (!ggml_is_view_op(node->op)) {
+            if (!ggml_backend_is_view_op(node->op)) {
                 split->backend_id = tensor_backend_id(node);
                 break;
             }
@@ -1121,7 +1103,7 @@ static void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct gg
         for (; i < graph->n_nodes; i++) {
             struct ggml_tensor * node = graph->nodes[i];
 
-            if (ggml_is_view_op(node->op)) {
+            if (ggml_backend_is_view_op(node->op)) {
                 continue;
             }
 
@@ -1855,7 +1837,7 @@ bool ggml_backend_compare_graph_backend(ggml_backend_t backend1, ggml_backend_t 
         ggml_backend_graph_compute(backend1, &g1v);
         ggml_backend_graph_compute(backend2, &g2v);
 
-        if (ggml_is_view_op(t1->op)) {
+        if (ggml_backend_is_view_op(t1->op)) {
             continue;
         }
 

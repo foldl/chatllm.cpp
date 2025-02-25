@@ -728,10 +728,10 @@ namespace chatllm
             //struct ggml_backend_buffer *buffer = tensor->buffer;
             //if (buffer && ggml_backend_supports_buft(get_backend()->backend, ggml_backend_buffer_get_type(buffer)))
 
-            if (!ggml::is_view_op(tensor))
-            {
-                ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
-            }
+            //if (!ggml::is_view_op(tensor))
+            //{
+            //    ggml_backend_sched_set_tensor_backend(get_sched(), tensor, get_backend()->backend);
+            //}
         }
         else
         {

@@ -40,7 +40,7 @@ namespace chatllm
     bool ggml::is_view_op(ggml::tensor *a)
     {
         enum ggml_op op = a->op;
-        return op == GGML_OP_VIEW || op == GGML_OP_RESHAPE || op == GGML_OP_PERMUTE || op == GGML_OP_TRANSPOSE;
+        return ggml_backend_is_view_op(op);
     }
 
     const char *ggml::op_name(ggml::tensor *a)
