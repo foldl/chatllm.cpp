@@ -247,6 +247,7 @@ struct vk_device_struct {
     vk_pipeline pipeline_relu_f32;
     vk_pipeline pipeline_leaky_relu_f32;
     vk_pipeline pipeline_tanh_f32;
+    vk_pipeline pipeline_sigmoid_f32;
     vk_pipeline pipeline_diag_mask_inf_f32;
     vk_pipeline pipeline_soft_max_f32, pipeline_soft_max_f32_f16;
     vk_pipeline pipeline_soft_max_f32_wg512, pipeline_soft_max_f32_f16_wg512;
@@ -2183,6 +2184,7 @@ static void ggml_vk_load_shaders(vk_device& device) {
     ggml_vk_create_pipeline(device, device->pipeline_relu_f32, "relu_f32", relu_f32_len, relu_f32_data, "main", 2, sizeof(vk_op_push_constants), {512, 1, 1}, {}, 1);
     ggml_vk_create_pipeline(device, device->pipeline_leaky_relu_f32, "leaky_relu_f32", leaky_relu_f32_len, leaky_relu_f32_data, "main", 2, sizeof(vk_op_push_constants), {512, 1, 1}, {}, 1);
     ggml_vk_create_pipeline(device, device->pipeline_tanh_f32, "tanh_f32", tanh_f32_len, tanh_f32_data, "main", 2, sizeof(vk_op_push_constants), {512, 1, 1}, {}, 1);
+    ggml_vk_create_pipeline(device, device->pipeline_sigmoid_f32, "sigmoid_f32", sigmoid_f32_len, sigmoid_f32_data, "main", 2, sizeof(vk_op_push_constants), {512, 1, 1}, {}, 1);
 
     ggml_vk_create_pipeline(device, device->pipeline_diag_mask_inf_f32, "diag_mask_inf_f32", diag_mask_inf_f32_len, diag_mask_inf_f32_data, "main", 2, sizeof(vk_op_diag_mask_push_constants), {1, 512, 1}, {}, 1, true);
 
@@ -5325,6 +5327,11 @@ static vk_pipeline ggml_vk_op_get_pipeline(ggml_backend_vk_context * ctx, const 
                     return ctx->device->pipeline_tanh_f32;
                 }
                 break;
+            case GGML_UNARY_OP_SIGMOID:
+                if (src0->type == GGML_TYPE_F32 && dst->type == GGML_TYPE_F32) {
+                    return ctx->device->pipeline_sigmoid_f32;
+                }
+                break;
             default:
                 break;
         }
@@ -7295,6 +7302,7 @@ static bool ggml_vk_build_graph(ggml_backend_vk_context * ctx, ggml_tensor * nod
         case GGML_UNARY_OP_GELU_QUICK:
         case GGML_UNARY_OP_RELU:
         case GGML_UNARY_OP_TANH:
+        case GGML_UNARY_OP_SIGMOID:
             break;
         default:
             return false;
@@ -7495,6 +7503,7 @@ static bool ggml_vk_build_graph(ggml_backend_vk_context * ctx, ggml_tensor * nod
         case GGML_UNARY_OP_GELU_QUICK:
         case GGML_UNARY_OP_RELU:
         case GGML_UNARY_OP_TANH:
+        case GGML_UNARY_OP_SIGMOID:
             ggml_vk_unary(ctx, compute_ctx, src0, node, dryrun);
             break;
         default:
@@ -7670,6 +7679,7 @@ static bool ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_tensor *
         case GGML_UNARY_OP_GELU_QUICK:
         case GGML_UNARY_OP_RELU:
         case GGML_UNARY_OP_TANH:
+        case GGML_UNARY_OP_SIGMOID:
             buf = tensor->buffer;
             break;
         default:
@@ -8371,6 +8381,7 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
                 case GGML_UNARY_OP_SILU:
                 case GGML_UNARY_OP_RELU:
                 case GGML_UNARY_OP_TANH:
+                case GGML_UNARY_OP_SIGMOID:
                     return ggml_is_contiguous(op->src[0]);
                 default:
                     return false;
@@ -9017,6 +9028,9 @@ static void ggml_vk_check_results_0(ggml_tensor * tensor) {
             break;
         case GGML_UNARY_OP_TANH:
             tensor_clone = ggml_tanh(ggml_ctx, src_clone[0]);
+            break;
+        case GGML_UNARY_OP_SIGMOID:
+            tensor_clone = ggml_sigmoid(ggml_ctx, src_clone[0]);
             break;
         default:
             std::cerr << "Missing vk_check_results OP: " << ggml_op_name(tensor->op) << std::endl;
