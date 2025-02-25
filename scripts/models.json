@@ -2022,5 +2022,21 @@
                 }
             }
         }
+    },
+    "moonlight": {
+        "brief": "Moonlight, a 3B/16B-parameter Mixture-of-Expert (MoE) model trained with 5.7T tokens using Muon.",
+        "default": "3b",
+        "license": "MIT",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 16963505344,
+                        "url": "chatllm_quantized_moonshot/moonlight.bin"
+                    }
+                }
+            }
+        }
     }
 }
