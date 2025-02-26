@@ -1,34 +1,34 @@
 type
-  PrintType* = enum
-    PRINT_CHAT_CHUNK = 0,           ##  below items share the same value with BaseStreamer::TextType
-    PRINTLN_META = 1,               ##  print a whole line: general information
-    PRINTLN_ERROR = 2,              ##  print a whole line: error message
-    PRINTLN_REF = 3,                ##  print a whole line: reference
-    PRINTLN_REWRITTEN_QUERY = 4,    ##  print a whole line: rewritten query
-    PRINTLN_HISTORY_USER = 5,       ##  print a whole line: user input history
-    PRINTLN_HISTORY_AI = 6,         ##  print a whole line: AI output history
-    PRINTLN_TOOL_CALLING = 7,       ##  print a whole line: tool calling (supported by only a few models)
-    PRINTLN_EMBEDDING = 8,          ##  print a whole line: embedding (example: "0.1,0.3,...")
-    PRINTLN_RANKING = 9,            ##  print a whole line: ranking (example: "0.8")
-    PRINTLN_TOKEN_IDS = 10,         ##  print a whole line: token ids (example: "1,3,5,8,...")
-    PRINTLN_LOGGING =11,            ## print a whole line: internal logging with the first char indicating level
-                                    ## (space): None; D: Debug; I: Info; W: Warn; E: Error; .: continue
-    PRINTLN_BEAM_SEARCH =12,        ## print a whole line: a result of beam search with a prefix of probability
-                                    ## (example: "0.8,....")
-    PRINT_EVT_ASYNC_COMPLETED = 100 ##  last async operation completed (utf8_str is null)
+    PrintType* = enum
+        PRINT_CHAT_CHUNK = 0,           ##  below items share the same value with BaseStreamer::TextType
+        PRINTLN_META = 1,               ##  print a whole line: general information
+        PRINTLN_ERROR = 2,              ##  print a whole line: error message
+        PRINTLN_REF = 3,                ##  print a whole line: reference
+        PRINTLN_REWRITTEN_QUERY = 4,    ##  print a whole line: rewritten query
+        PRINTLN_HISTORY_USER = 5,       ##  print a whole line: user input history
+        PRINTLN_HISTORY_AI = 6,         ##  print a whole line: AI output history
+        PRINTLN_TOOL_CALLING = 7,       ##  print a whole line: tool calling (supported by only a few models)
+        PRINTLN_EMBEDDING = 8,          ##  print a whole line: embedding (example: "0.1,0.3,...")
+        PRINTLN_RANKING = 9,            ##  print a whole line: ranking (example: "0.8")
+        PRINTLN_TOKEN_IDS = 10,         ##  print a whole line: token ids (example: "1,3,5,8,...")
+        PRINTLN_LOGGING =11,            ## print a whole line: internal logging with the first char indicating level
+                                        ## (space): None; D: Debug; I: Info; W: Warn; E: Error; .: continue
+        PRINTLN_BEAM_SEARCH =12,        ## print a whole line: a result of beam search with a prefix of probability
+                                        ## (example: "0.8,....")
+        PRINT_EVT_ASYNC_COMPLETED = 100 ##  last async operation completed (utf8_str is null)
 
 type
-  chatllm_obj = object
-  f_chatllm_print* = proc (user_data: pointer; print_type: cint; utf8_str: cstring) {.cdecl.}
-  f_chatllm_end* = proc (user_data: pointer) {.cdecl.}
+    chatllm_obj = object
+    f_chatllm_print* = proc (user_data: pointer; print_type: cint; utf8_str: cstring) {.cdecl.}
+    f_chatllm_end* = proc (user_data: pointer) {.cdecl.}
 
 
 when defined(windows):
-  const libName = "libchatllm.dll"
+    const libName = "libchatllm.dll"
 elif defined(macosx):
-  const libName = "libchatllm.dylib"
+    const libName = "libchatllm.dylib"
 else:
-  const libName = "libchatllm.so"
+    const libName = "libchatllm.so"
 
 ##
 ## @brief create ChatLLM object
