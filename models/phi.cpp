@@ -438,7 +438,8 @@ namespace v3
             if (type_token_id >= 0)
             {
                 ids.push_back(type_token_id);
-                ids.push_back(nl_token_id);
+                if (nl_token_id >= 0)
+                    ids.push_back(nl_token_id);
             }
             BaseTokenizer::encode(msg, ids);
             if (end_token_id >= 0)
@@ -560,6 +561,13 @@ namespace v3_su
         float long_factor[MAX_FACTOR_LEN];
     };
 
+    static int get_factor_len(const Config &config)
+    {
+        int i = MAX_FACTOR_LEN - 1;
+        for (; (i >= 0) && (config.short_factor[i] == 0.0f); i--) ;
+        return i + 1;
+    }
+
     typedef v3::Phi3Tokenizer Tokenizer;
 
     class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<Phi3SUBlock>
@@ -571,8 +579,8 @@ namespace v3_su
         {}
 
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
-                            int num_key_value_heads, int max_length)
-            : llama::v2::GenericConditionalGeneration<Phi3SUBlock>(config, runtime_config, type, num_key_value_heads, max_length, 13)
+                            int num_key_value_heads, int max_length, bool tie_lm_head = false)
+            : llama::v2::GenericConditionalGeneration<Phi3SUBlock>(config, runtime_config, type, num_key_value_heads, max_length, 13, tie_lm_head)
         {
             CHATLLM_CHECK(config.sliding_window >= config.max_length)
                 << "sliding_window (" << config.sliding_window << ") must >= " << config.max_length;
@@ -589,10 +597,10 @@ namespace v3_su
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
-                attention.config(config.original_max_position_embeddings, config.rope_theta,
+                attention.config(&w_ctx_, config.original_max_position_embeddings, config.rope_theta,
                                  scaling_factor,
                                  scaling_factor,
-                                 config.hidden_size / config.num_attention_heads / 2,
+                                 get_factor_len(config),
                                  config.short_factor,
                                  config.long_factor);
             }
@@ -637,7 +645,7 @@ namespace v3_su3
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
-                attention.config(config.original_max_position_embeddings, config.rope_theta,
+                attention.config(&w_ctx_, config.original_max_position_embeddings, config.rope_theta,
                                  config.short_mscale,
                                  config.long_mscale,
                                  config.hidden_size / config.num_attention_heads / 2,
@@ -757,7 +765,7 @@ namespace v3_moe
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 auto &attention = Base::get_typed_transformer<ModelClass>()->layers[i].attention;
-                attention.config(config.original_max_position_embeddings, config.rope_theta,
+                attention.config(&w_ctx_, config.original_max_position_embeddings, config.rope_theta,
                                  config.short_mscale,
                                  config.long_mscale,
                                  config.hidden_size / config.num_attention_heads / 2,
@@ -925,5 +933,45 @@ namespace v4
             : llama::v3::ConditionalGeneration(config, runtime_config, MODEL_TYPE_PHI4)
         {
         }
+    };
+}
+
+namespace v4_mini
+{
+    typedef v3_su::Config Config;
+
+    class Tokenizer : public v3_su::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config)
+            : v3_su::Tokenizer(config)
+        {
+        }
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            tp = new tokenizer::BPEProcessor2();
+            size_t size = tp->Load(buffer, n_vocab);
+
+            system_token_id     = tp->PieceToId("<|system|>");
+            user_token_id       = tp->PieceToId("<|user|>");
+            assistant_token_id  = tp->PieceToId("<|assistant|>");
+            end_token_id        = tp->PieceToId("<|end|>");
+            nl_token_id         = -1;
+
+            pad_token_id = eos_token_id;
+            terminate_ids.insert(end_token_id);
+
+            return size;
+        }
+    };
+
+    class ConditionalGeneration : public v3_su::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration() = default;
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_PHI4_MINI)
+            : v3_su::ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length, true)
+        {}
     };
 }

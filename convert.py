@@ -84,6 +84,7 @@ class ModelType(Enum):
     Phi3_ScalingSU3     = 0x523
     Phi3MoE_ScalingSU   = 0x530
     Phi4                = 0x531
+    Phi4_Mini           = 0x532
 
     Mistral = 0x600
     Mixtral = 0x601
@@ -3058,8 +3059,12 @@ class Phi3Converter(BaseConverter):
                 wk = tensor[q_size : q_size + kv_size, ...]
                 wv = tensor[q_size + kv_size :, ...]
 
-                new_dict[name.replace('qkv_proj.weight', 'q_proj.weight')] = permute(wq, config.num_attention_heads)
-                new_dict[name.replace('qkv_proj.weight', 'k_proj.weight')] = permute(wk, config.num_key_value_heads)
+                if config.partial_rotary_factor is None:
+                    new_dict[name.replace('qkv_proj.weight', 'q_proj.weight')] = permute(wq, config.num_attention_heads)
+                    new_dict[name.replace('qkv_proj.weight', 'k_proj.weight')] = permute(wk, config.num_key_value_heads)
+                else:
+                    new_dict[name.replace('qkv_proj.weight', 'q_proj.weight')] = permute2(wq, config.num_attention_heads, config.partial_rotary_factor)
+                    new_dict[name.replace('qkv_proj.weight', 'k_proj.weight')] = permute2(wk, config.num_key_value_heads, config.partial_rotary_factor)
                 new_dict[name.replace('qkv_proj.weight', 'v_proj.weight')] = wv
             else:
                 new_dict[name] = tensor
@@ -3153,7 +3158,10 @@ class Phi3SUConverter(BaseConverter):
 
     @staticmethod
     def get_weight_names(config):
-        return Phi3Converter.get_weight_names(config)
+        weight_names = Phi3Converter.get_weight_names(config)
+        if config.tie_word_embeddings:
+            weight_names.remove("lm_head.weight")
+        return weight_names
 
 class Phi3SU3Converter(BaseConverter):
     MODEL_TYPE = ModelType.Phi3_ScalingSU3
@@ -5334,6 +5342,11 @@ def main():
             Phi2Converter.MODEL_TYPE = ModelType.Phi2_v2
         Phi2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Phi3ForCausalLM':
+        if config._name_or_path == 'Phi-4-mini-instruct':
+            assert not ('long_mscale' in config.rope_scaling)
+            Phi3SUConverter.MODEL_TYPE = ModelType.Phi4_Mini
+            Phi3SUConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            return
         if config.rope_scaling is None:
             if config.sliding_window is None:
                 Phi4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

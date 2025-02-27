@@ -1423,8 +1423,15 @@ namespace chatllm
         return nullptr;
     }
 
-    void Phi3SUSelfAttention::config(int original_max_position_embeddings, float rope_theta, float short_scaling_factor, float long_scaling_factor, int factor_len, const float *short_factor, const float *long_factor)
+    void Phi3SUSelfAttention::config(InitContext *ctx, int original_max_position_embeddings, float rope_theta, float short_scaling_factor, float long_scaling_factor, int factor_len, const float *short_factor, const float *long_factor)
     {
+        if (freq_factors == nullptr)
+        {
+            rope_dim = factor_len * 2;
+            freq_factors = ggml::new_tensor_1d(ctx, GGML_TYPE_F32, factor_len);
+            ctx->get_allocator()->alloc(freq_factors);
+        }
+
         const float *factors = nullptr;
         this->freq_base = rope_theta;
         if (max_length > original_max_position_embeddings)
@@ -1438,7 +1445,7 @@ namespace chatllm
             factors = short_factor;
         }
 
-        CHATLLM_CHECK(freq_factors->ne[0] == factor_len) << "factor_len mismatch!";
+        CHATLLM_CHECK(rope_dim == factor_len * 2) << "factor_len mismatch!";
 
         Backend::write_tensor_data(freq_factors, factors);
     }

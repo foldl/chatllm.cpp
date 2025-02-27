@@ -616,6 +616,15 @@
                         "url": "chatllm_quantized_phi4/phi-4_q4_0.bin"
                     }
                 }
+            },
+            "mini": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4082416720,
+                        "url": "chatllm_quantized_phi4/phi-4-mini.bin"
+                    }
+                }
             }
         }
     },
@@ -1307,6 +1316,22 @@
                     "q8": {
                         "size": 8683703024,
                         "url": "chatllm_quantized_granite_3.0/granite-3-8b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "granite3.2-dense": {
+        "brief": "Granite-3.2 are long-context AI models fine-tuned for thinking capabilities.",
+        "default": "2b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2693566832,
+                        "url": "chatllm_quantized_granite_3.0/granite-3.2-2b.bin"
                     }
                 }
             }
