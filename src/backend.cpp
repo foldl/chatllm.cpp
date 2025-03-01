@@ -14,6 +14,8 @@
 #error "GGML_BACKEND_DL is WIP"
 #endif
 
+extern void log_internal(int level, const char * text);
+
 namespace chatllm
 {
     static std::string str_format(const char* format, va_list args)
@@ -37,8 +39,6 @@ namespace chatllm
 
     void ggml::log(enum ggml_log_level level, const char * format, ...)
     {
-        void log_internal(int level, const char * text);
-
         va_list args;
         va_start(args, format);
         auto s = str_format(format, args);
