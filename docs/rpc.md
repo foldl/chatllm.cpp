@@ -22,7 +22,7 @@ Don't forget to use `--show_devices` to check device IDs, and `--log_level 2` to
 ```sh
 main --serve_rpc 80 --log_level 2
 Itrying to start RPC server at 0.0.0.0:80, using
-IVulkan - Vulkan0 (...)
+IVulkan - Vulkan0 (NVIDIA GeForce ...)
 I    type: GPU
 I    memory total: .. B
 I    memory free : .. B
@@ -38,7 +38,7 @@ Use `--show_devices` to check if everything is Okay:
 ```sh
 main --rpc_endpoints 80 --show_devices
  0: .....
- 1: RPC - RPC[127.0.0.1:80] (RPC[127.0.0.1:80])
+ 1: RPC - RPC[127.0.0.1:80] (NVIDIA GeForce ...)
     type: GPU
     memory total: .. B
     memory free : .. B

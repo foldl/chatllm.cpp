@@ -71,9 +71,12 @@ struct rpc_tensor {
 
 static_assert(sizeof(rpc_tensor) % 8 == 0, "rpc_tensor size must be multiple of 8");
 
+#define RPC_PROTO_VERSION       1
+
 // RPC commands
 enum rpc_cmd {
-    RPC_CMD_ALLOC_BUFFER = 0,
+    RPC_CMD_HELLO = 0,
+    RPC_CMD_ALLOC_BUFFER,
     RPC_CMD_GET_ALIGNMENT,
     RPC_CMD_GET_MAX_SIZE,
     RPC_CMD_BUFFER_GET_BASE,
@@ -83,10 +86,16 @@ enum rpc_cmd {
     RPC_CMD_GET_TENSOR,
     RPC_CMD_COPY_TENSOR,
     RPC_CMD_GRAPH_COMPUTE,
-    RPC_CMD_GET_DEVICE_MEMORY,
     RPC_CMD_INIT_TENSOR,
     RPC_CMD_GET_ALLOC_SIZE,
     RPC_CMD_COUNT,
+};
+
+struct rpc_msg_hello_rsp {
+    uint64_t free_mem;
+    uint64_t total_mem;
+     int32_t proto_version;
+        char description[GGML_MAX_NAME];
 };
 
 struct rpc_msg_get_alloc_size_req {
@@ -154,10 +163,6 @@ struct rpc_msg_graph_compute_rsp {
     uint8_t result;
 };
 
-struct rpc_msg_get_device_memory_rsp {
-    uint64_t free_mem;
-    uint64_t total_mem;
-};
 #pragma pack(pop)
 
 // RPC data structures
@@ -375,16 +380,31 @@ static bool send_rpc_cmd(const std::shared_ptr<socket_t> & sock, enum rpc_cmd cm
 
 // RPC client-side implementation
 
-static std::shared_ptr<socket_t> get_socket(const std::string & endpoint) {
+// information about RPC server used by client
+struct rpc_client_server_t
+{
+    std::shared_ptr<socket_t> socket;
+    std::string description;
+    uint64_t free_mem;
+    uint64_t total_mem;
+};
+
+static void ggml_backend_rpc_hello(const std::shared_ptr<socket_t> & sock, rpc_msg_hello_rsp &rsp) {
+    bool status = send_rpc_cmd(sock, RPC_CMD_HELLO, nullptr, 0, &rsp, sizeof(rsp));
+    GGML_ASSERT(status);
+    GGML_ASSERT(rsp.proto_version == RPC_PROTO_VERSION);
+}
+
+static std::shared_ptr<rpc_client_server_t> get_server(const std::string & endpoint) {
     static std::mutex mutex;
     std::lock_guard<std::mutex> lock(mutex);
-    static std::unordered_map<std::string, std::weak_ptr<socket_t>> sockets;
+    static std::unordered_map<std::string, std::shared_ptr<rpc_client_server_t>> servers;
     static bool initialized = false;
 
-    auto it = sockets.find(endpoint);
-    if (it != sockets.end()) {
-        if (auto sock = it->second.lock()) {
-            return sock;
+    auto it = servers.find(endpoint);
+    if (it != servers.end()) {
+        if (auto server = it->second) {
+            return server;
         }
     }
     std::string host;
@@ -409,8 +429,21 @@ static std::shared_ptr<socket_t> get_socket(const std::string & endpoint) {
         return nullptr;
     }
     GGML_PRINT_DEBUG("[%s] connected to %s, sockfd=%d\n", __func__, endpoint.c_str(), sock->fd);
-    sockets[endpoint] = sock;
-    return sock;
+
+    rpc_msg_hello_rsp hello;
+    ggml_backend_rpc_hello(sock, hello);
+
+    auto server = std::make_shared<rpc_client_server_t>(rpc_client_server_t{sock, std::string(hello.description), hello.free_mem, hello.total_mem});
+    servers[endpoint] = server;
+    return server;
+}
+
+static std::shared_ptr<socket_t> get_socket(const std::string & endpoint) {
+    auto server = get_server(endpoint);
+    if (server) {
+        return server->socket;
+    }
+    return nullptr;
 }
 
 static void ggml_backend_rpc_buffer_free_buffer(ggml_backend_buffer_t buffer) {
@@ -749,22 +782,10 @@ bool ggml_backend_is_rpc(ggml_backend_t backend) {
     return backend != NULL && ggml_guid_matches(backend->guid, ggml_backend_rpc_guid());
 }
 
-static void get_device_memory(const std::shared_ptr<socket_t> & sock, size_t * free, size_t * total) {
-    rpc_msg_get_device_memory_rsp response;
-    bool status = send_rpc_cmd(sock, RPC_CMD_GET_DEVICE_MEMORY, nullptr, 0, &response, sizeof(response));
-    GGML_ASSERT(status);
-    *free = response.free_mem;
-    *total = response.total_mem;
-}
-
 void ggml_backend_rpc_get_device_memory(const char * endpoint, size_t * free, size_t * total) {
-    auto sock = get_socket(endpoint);
-    if (sock == nullptr) {
-        *free = 0;
-        *total = 0;
-        return;
-    }
-    get_device_memory(sock, free, total);
+    auto server = get_server(endpoint);
+    *free = server ? server->free_mem : 0;
+    *total = server ? server->total_mem : 0;
 }
 
 // RPC server-side implementation
@@ -774,6 +795,7 @@ public:
     rpc_server(ggml_backend_t backend) : backend(backend) {}
     ~rpc_server();
 
+    void hello(rpc_msg_hello_rsp & response);
     void alloc_buffer(const rpc_msg_alloc_buffer_req & request, rpc_msg_alloc_buffer_rsp & response);
     void get_alignment(rpc_msg_get_alignment_rsp & response);
     void get_max_size(rpc_msg_get_max_size_rsp & response);
@@ -827,6 +849,16 @@ bool rpc_server::get_alloc_size(const rpc_msg_get_alloc_size_req & request, rpc_
 
     ggml_free(ctx);
     return true;
+}
+
+void rpc_server::hello(rpc_msg_hello_rsp & response) {
+    response.proto_version = RPC_PROTO_VERSION;
+    memset(response.description, 0, sizeof(response.description));
+    auto dev = ggml_backend_get_device(backend);
+    if (dev) {
+        auto description = ggml_backend_dev_description(dev);
+        strncpy(response.description, description, sizeof(response.description) - 1);
+    }
 }
 
 void rpc_server::alloc_buffer(const rpc_msg_alloc_buffer_req & request, rpc_msg_alloc_buffer_rsp & response) {
@@ -1160,6 +1192,19 @@ static void rpc_serve_client(ggml_backend_t backend, sockfd_t sockfd, size_t fre
             break;
         }
         switch (cmd) {
+            case RPC_CMD_HELLO: {
+                rpc_msg_hello_rsp response;
+                if (!recv_msg(sockfd, nullptr, 0)) {
+                    return;
+                }
+                server.hello(response);
+                response.free_mem  = free_mem;
+                response.total_mem = total_mem;
+                if (!send_msg(sockfd, &response, sizeof(response))) {
+                    return;
+                }
+                break;
+            }
             case RPC_CMD_ALLOC_BUFFER: {
                 rpc_msg_alloc_buffer_req request;
                 if (!recv_msg(sockfd, &request, sizeof(request))) {
@@ -1314,18 +1359,6 @@ static void rpc_serve_client(ggml_backend_t backend, sockfd_t sockfd, size_t fre
                 }
                 break;
             }
-            case RPC_CMD_GET_DEVICE_MEMORY: {
-                if (!recv_msg(sockfd, nullptr, 0)) {
-                    return;
-                }
-                rpc_msg_get_device_memory_rsp response;
-                response.free_mem = free_mem;
-                response.total_mem = total_mem;
-                if (!send_msg(sockfd, &response, sizeof(response))) {
-                    return;
-                }
-                break;
-            }
             default: {
                 fprintf(stderr, "Unknown command: %d\n", cmd);
                 return;
@@ -1387,6 +1420,11 @@ static const char * ggml_backend_rpc_device_get_name(ggml_backend_dev_t dev) {
 
 static const char * ggml_backend_rpc_device_get_description(ggml_backend_dev_t dev) {
     ggml_backend_rpc_device_context * ctx = (ggml_backend_rpc_device_context *)dev->context;
+
+    auto server = get_server(ctx->endpoint.c_str());
+    if (server) {
+        return server->description.c_str();
+    }
 
     return ctx->name.c_str();
 }

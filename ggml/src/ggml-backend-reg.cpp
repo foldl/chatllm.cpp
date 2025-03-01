@@ -151,6 +151,7 @@ struct ggml_backend_reg_entry {
 struct ggml_backend_registry {
     std::vector<ggml_backend_reg_entry> backends;
     std::vector<ggml_backend_dev_t> devices;
+    bool devices_loaded = false;
 
     ggml_backend_registry() {
 #ifdef GGML_USE_CUDA
@@ -205,8 +206,15 @@ struct ggml_backend_registry {
             __func__, ggml_backend_reg_name(reg), ggml_backend_reg_dev_count(reg));
 #endif
         backends.push_back({ reg, std::move(handle) });
-        for (size_t i = 0; i < ggml_backend_reg_dev_count(reg); i++) {
-            register_device(ggml_backend_reg_dev_get(reg, i));
+    }
+
+    void register_devices(void) {
+        if (devices_loaded) return;
+        devices_loaded = true;
+        for (auto &reg : backends) {
+            for (size_t i = 0; i < ggml_backend_reg_dev_count(reg.reg); i++) {
+                register_device(ggml_backend_reg_dev_get(reg.reg, i));
+            }
         }
     }
 
@@ -298,10 +306,6 @@ void ggml_backend_register(ggml_backend_reg_t reg) {
     get_reg().register_backend(reg);
 }
 
-void ggml_backend_device_register(ggml_backend_dev_t device) {
-    get_reg().register_device(device);
-}
-
 // Backend (reg) enumeration
 static bool striequals(const char * a, const char * b) {
     for (; *a && *b; a++, b++) {
@@ -333,6 +337,7 @@ ggml_backend_reg_t ggml_backend_reg_by_name(const char * name) {
 
 // Device enumeration
 size_t ggml_backend_dev_count() {
+    ggml_backend_load_all_devices();
     return get_reg().devices.size();
 }
 
@@ -553,6 +558,10 @@ static ggml_backend_reg_t ggml_backend_load_best(const char * name, bool silent,
 
 void ggml_backend_load_all() {
     ggml_backend_load_all_from_path(nullptr);
+}
+
+void ggml_backend_load_all_devices() {
+    get_reg().register_devices();
 }
 
 void ggml_backend_load_all_from_path(const char * dir_path) {
