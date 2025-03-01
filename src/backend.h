@@ -300,6 +300,8 @@ namespace chatllm
 
         void reset();
 
+        void dump_graph(ggml_cgraph *gf, const char *file_name);
+
         void set_abort_callback(struct llama_context *ctx, bool (*abort_callback)(void * data), void * abort_callback_data);
 
         void set_eval_observe_callback(ggml::need_observe_tensor_evaluation_callback need_observe_tensor_callback,

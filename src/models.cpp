@@ -1247,7 +1247,7 @@ namespace chatllm
 
             if (gen_config.dump_dot.size() > 0)
             {
-                ggml_backend_sched_dump_dot(backend_context.sched, ctx.get_cgraph(), gen_config.dump_dot.c_str());
+                backend_context.dump_graph(ctx.get_cgraph(), gen_config.dump_dot.c_str());
                 exit(-1);
             }
 

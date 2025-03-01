@@ -668,6 +668,12 @@ namespace chatllm
         ggml_backend_sched_reset(sched);
     }
 
+    void BackendContext::dump_graph(ggml_cgraph *gf, const char *file_name)
+    {
+        ggml_backend_sched_dump_dot(sched, gf, file_name);
+        ggml::log(GGML_LOG_LEVEL_INFO, "dot -Tsvg %s -o %s.svg && open %s.svg\n", file_name, file_name, file_name);
+    }
+
     void BackendContext::set_abort_callback(struct llama_context * ctx, bool (*abort_callback)(void * data), void * abort_callback_data)
     {
         this->abort_callback      = abort_callback;
