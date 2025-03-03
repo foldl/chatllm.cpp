@@ -4979,8 +4979,8 @@ class HunYuanDenseConverter(BaseConverter):
                 wk = v[:, -2,          ...].reshape(h * 1         * head_dim, config.hidden_size)
                 wv = v[:, -1,          ...].reshape(h * 1         * head_dim, config.hidden_size)
 
-                new_dict[name.replace('qkv_proj.weight', 'q_proj.weight')] = permute(wq, config.num_attention_heads)
-                new_dict[name.replace('qkv_proj.weight', 'k_proj.weight')] = permute(wk, config.num_key_value_heads)
+                new_dict[name.replace('qkv_proj.weight', 'q_proj.weight')] = wq
+                new_dict[name.replace('qkv_proj.weight', 'k_proj.weight')] = wk
                 new_dict[name.replace('qkv_proj.weight', 'v_proj.weight')] = wv
             else:
                 new_dict[name] = tensor

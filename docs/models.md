@@ -184,6 +184,9 @@
 * TeleChat (`TeleChat2ForCausalLM`)
     * [x] v2: [3B](https://huggingface.co/Tele-AI/TeleChat2-3B), [7B](https://huggingface.co/Tele-AI/TeleChat2-7B), [115B](https://huggingface.co/Tele-AI/TeleChat2-115B)
 
+* HunYuan (`HunYuanForCausalLM`)
+    * [x] Dense: [Instruct-7B](https://huggingface.co/tencent/Hunyuan-7B-Instruct)
+
 ## Base Models
 
 Please use `--format completion` for these models.

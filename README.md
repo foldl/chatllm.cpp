@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-03-03: HunYuan Dense
 * 2025-02-27: Granite-3.2, Phi-4 Mini
 * 2025-02-24: Moonlight
 * 2025-02-21: [Distributed inference](./docs/rpc.md)

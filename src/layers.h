@@ -2460,6 +2460,7 @@ namespace chatllm
         bool post_norm;
     };
 
+    // FIXME: this seems problemic. LayerNorm is used in `apply_pos_embedding_xx`, while not `inplace`.
     class PersimmonSelfAttention : public QKNormedAttention<LayerNorm, BaseAttention>
     {
     public:

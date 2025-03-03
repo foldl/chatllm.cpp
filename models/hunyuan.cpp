@@ -91,11 +91,11 @@ namespace dense
     {
     }
 
-    class HunyuanSelfAttention : public QKNormedAttention<RMSNorm, BaseAttention>
+    class HunyuanSelfAttention : public QKNormedAttention<RMSNormInplace, BaseAttention>
     {
     public:
         HunyuanSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-            : QKNormedAttention<RMSNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
+            : QKNormedAttention<RMSNormInplace, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
     };
 
     class HunyuanBlock : public LMBlock1<RMSNorm, HunyuanSelfAttention, RMSNorm, SiLUMLP>

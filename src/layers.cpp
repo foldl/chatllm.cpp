@@ -655,7 +655,7 @@ namespace chatllm
     ggml::tensor *RMSNorm::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         ggml::tensor *output = inplace ? ggml::rms_norm_inplace(ctx, input, eps) : ggml::rms_norm(ctx, input, eps);
-        output = ggml::mul(ctx, output, weight);
+        output = inplace ? ggml::mul_inplace(ctx, output, weight) : ggml::mul(ctx, output, weight);
         return output;
     }
 
