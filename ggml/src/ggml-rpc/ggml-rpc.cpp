@@ -34,6 +34,16 @@ using ssize_t = __int64;
 typedef int sockfd_t;
 #endif
 
+#define GGML_RPC_COMPRESS_FLAG  true
+#define GGML_RPC_LZ4_ACC        200
+#include "lz4.c"
+
+struct compression_header
+{
+    uint32_t size;
+    uint32_t compressed_size;
+};
+
 // cross-platform socket
 struct socket_t {
     sockfd_t fd;
@@ -287,7 +297,7 @@ static std::shared_ptr<socket_t> create_server_socket(const char * host, int por
 static bool send_data(sockfd_t sockfd, const void * data, size_t size) {
     size_t bytes_sent = 0;
     while (bytes_sent < size) {
-        ssize_t n = send(sockfd, (const char *)data + bytes_sent, size - bytes_sent, 0);
+        ssize_t n = send(sockfd, (const char *)data + bytes_sent, (int)(size - bytes_sent), 0);
         if (n < 0) {
             return false;
         }
@@ -299,7 +309,7 @@ static bool send_data(sockfd_t sockfd, const void * data, size_t size) {
 static bool recv_data(sockfd_t sockfd, void * data, size_t size) {
     size_t bytes_recv = 0;
     while (bytes_recv < size) {
-        ssize_t n = recv(sockfd, (char *)data + bytes_recv, size - bytes_recv, 0);
+        ssize_t n = recv(sockfd, (char *)data + bytes_recv, (int)(size - bytes_recv), 0);
         if (n <= 0) {
             return false;
         }
@@ -308,7 +318,21 @@ static bool recv_data(sockfd_t sockfd, void * data, size_t size) {
     return true;
 }
 
-static bool send_msg(sockfd_t sockfd, const void * msg, size_t msg_size) {
+static bool send_msg(sockfd_t sockfd, const void * msg, size_t msg_size, bool compress = false) {
+    std::vector<uint8_t> compressed;
+    if (compress) {
+        compressed.resize(LZ4_compressBound((int)msg_size) + sizeof(compression_header));
+        int s = LZ4_compress_fast((const char *)msg, (char *)compressed.data() + sizeof(compression_header), (int)msg_size, (int)compressed.size(), GGML_RPC_LZ4_ACC);
+        compressed.resize(s + sizeof(compression_header));
+
+        compression_header *header = (compression_header *)compressed.data();
+        header->compressed_size = s;
+        header->size = (uint32_t)msg_size;
+
+        msg = compressed.data();
+        msg_size = compressed.size();
+    }
+
     if (!send_data(sockfd, &msg_size, sizeof(msg_size))) {
         return false;
     }
@@ -326,18 +350,58 @@ static bool recv_msg(sockfd_t sockfd, void * msg, size_t msg_size) {
     return recv_data(sockfd, msg, msg_size);
 }
 
-static bool recv_msg(sockfd_t sockfd, std::vector<uint8_t> & input) {
+static bool recv_msg(sockfd_t sockfd, std::vector<uint8_t> & input, bool decompress = false) {
     uint64_t size;
+    std::vector<uint8_t> compressed;
+    std::vector<uint8_t> *p = decompress ? &compressed : &input;
     if (!recv_data(sockfd, &size, sizeof(size))) {
         return false;
     }
     try {
-        input.resize(size);
+        p->resize(size);
     } catch (const std::bad_alloc & e) {
         fprintf(stderr, "Failed to allocate input buffer of size %" PRIu64 "\n", size);
         return false;
     }
-    return recv_data(sockfd, input.data(), size);
+    if (!recv_data(sockfd, p->data(), size)) {
+        return false;
+    }
+
+    if (!decompress) {
+        return true;
+    }
+
+    compression_header *header = (compression_header *)p->data();
+    try {
+        input.resize(header->size);
+    } catch (const std::bad_alloc & e) {
+        fprintf(stderr, "Failed to allocate input buffer of size %" PRIu64 "\n", size);
+        return false;
+    }
+    const int decompress_size = LZ4_decompress_safe((const char *)p->data() + sizeof(compression_header), (char *)input.data(), header->compressed_size, header->size);
+    GGML_ASSERT(decompress_size == header->size);
+
+    return true;
+}
+
+static bool recv_msg(sockfd_t sockfd, void * msg, size_t msg_size, bool decompress) {
+    if (decompress) {
+        std::vector<uint8_t> compressed;
+        if (!recv_msg(sockfd, compressed, false)) {
+            return false;
+        }
+        GGML_ASSERT(compressed.size() > sizeof(compression_header));
+
+        compression_header *header = (compression_header *)compressed.data();
+        GGML_ASSERT(header->size == msg_size);
+
+        const int decompress_size = LZ4_decompress_safe((const char *)compressed.data() + sizeof(compression_header), (char *)msg, header->compressed_size, header->size);
+        GGML_ASSERT(header->size == decompress_size);
+        return true;
+    }
+    else {
+        return recv_msg(sockfd, msg, msg_size);
+    }
 }
 
 static bool parse_endpoint(const std::string & endpoint, std::string & host, int & port) {
@@ -352,27 +416,20 @@ static bool parse_endpoint(const std::string & endpoint, std::string & host, int
 
 // RPC request : | rpc_cmd (1 byte) | request_size (8 bytes) | request_data (request_size bytes) |
 // RPC response: | response_size (8 bytes) | response_data (response_size bytes) |
-static bool send_rpc_cmd(const std::shared_ptr<socket_t> & sock, enum rpc_cmd cmd, const void * input, size_t input_size, void * output, size_t output_size) {
+static bool send_rpc_cmd(const std::shared_ptr<socket_t> & sock, enum rpc_cmd cmd, const void * input, size_t input_size, void * output, size_t output_size,
+                         const bool compress_cmd = false,
+                         const bool decompress_output = false) {
     uint8_t cmd_byte = cmd;
     if (!send_data(sock->fd, &cmd_byte, sizeof(cmd_byte))) {
         return false;
     }
-    if (!send_data(sock->fd, &input_size, sizeof(input_size))) {
-        return false;
-    }
-    if (!send_data(sock->fd, input, input_size)) {
+
+    if (!send_msg(sock->fd, input, input_size, compress_cmd)) {
         return false;
     }
     // TODO: currently the output_size is always known, do we need support for commands with variable output size?
     // even if we do, we can skip sending output_size from the server for commands with known output size
-    uint64_t out_size;
-    if (!recv_data(sock->fd, &out_size, sizeof(out_size))) {
-        return false;
-    }
-    if (out_size != output_size) {
-        return false;
-    }
-    if (!recv_data(sock->fd, output, output_size)) {
+    if (!recv_msg(sock->fd, output, output_size, decompress_output)) {
         return false;
     }
     return true;
@@ -479,8 +536,8 @@ static rpc_tensor serialize_tensor(const ggml_tensor * tensor) {
         result.buffer = 0;
     }
     for (uint32_t i = 0; i < GGML_MAX_DIMS; i++) {
-        result.ne[i] = tensor->ne[i];
-        result.nb[i] = tensor->nb[i];
+        result.ne[i] = (uint32_t)tensor->ne[i];
+        result.nb[i] = (uint32_t)tensor->nb[i];
     }
     result.op = tensor->op;
     for (uint32_t i = 0; i < GGML_MAX_OP_PARAMS / sizeof(int32_t); i++) {
@@ -522,7 +579,7 @@ static void ggml_backend_rpc_buffer_set_tensor(ggml_backend_buffer_t buffer, ggm
     memcpy(input.data(), &rpc_tensor, sizeof(rpc_tensor));
     memcpy(input.data() + sizeof(rpc_tensor), &offset, sizeof(offset));
     memcpy(input.data() + sizeof(rpc_tensor) + sizeof(offset), data, size);
-    bool status = send_rpc_cmd(ctx->sock, RPC_CMD_SET_TENSOR, input.data(), input.size(), nullptr, 0);
+    bool status = send_rpc_cmd(ctx->sock, RPC_CMD_SET_TENSOR, input.data(), input.size(), nullptr, 0, GGML_RPC_COMPRESS_FLAG);
     GGML_ASSERT(status);
 }
 
@@ -532,7 +589,7 @@ static void ggml_backend_rpc_buffer_get_tensor(ggml_backend_buffer_t buffer, con
     request.tensor = serialize_tensor(tensor);
     request.offset = offset;
     request.size = size;
-    bool status = send_rpc_cmd(ctx->sock, RPC_CMD_GET_TENSOR, &request, sizeof(request), data, size);
+    bool status = send_rpc_cmd(ctx->sock, RPC_CMD_GET_TENSOR, &request, sizeof(request), data, size, false, GGML_RPC_COMPRESS_FLAG);
     GGML_ASSERT(status);
 }
 
@@ -691,7 +748,7 @@ static void serialize_graph(const ggml_cgraph * cgraph, std::vector<uint8_t> & o
     }
     // serialization format:
     // | n_nodes (4 bytes) | nodes (n_nodes * sizeof(uint64_t) | n_tensors (4 bytes) | tensors (n_tensors * sizeof(rpc_tensor)) |
-    uint32_t n_tensors = tensors.size();
+    uint32_t n_tensors = (uint32_t)tensors.size();
     int output_size = sizeof(uint32_t) + n_nodes * sizeof(uint64_t) + sizeof(uint32_t) + n_tensors * sizeof(rpc_tensor);
     output.resize(output_size, 0);
     memcpy(output.data(), &n_nodes, sizeof(n_nodes));
@@ -710,7 +767,7 @@ static enum ggml_status ggml_backend_rpc_graph_compute(ggml_backend_t backend, g
     serialize_graph(cgraph, input);
     rpc_msg_graph_compute_rsp response;
     auto sock = get_socket(rpc_ctx->endpoint);
-    bool status = send_rpc_cmd(sock, RPC_CMD_GRAPH_COMPUTE, input.data(), input.size(), &response, sizeof(response));
+    bool status = send_rpc_cmd(sock, RPC_CMD_GRAPH_COMPUTE, input.data(), input.size(), &response, sizeof(response), GGML_RPC_COMPRESS_FLAG);
     GGML_ASSERT(status);
     return (enum ggml_status)response.result;
 }
@@ -1293,7 +1350,7 @@ static void rpc_serve_client(ggml_backend_t backend, sockfd_t sockfd, size_t fre
             }
             case RPC_CMD_SET_TENSOR: {
                 std::vector<uint8_t> input;
-                if (!recv_msg(sockfd, input)) {
+                if (!recv_msg(sockfd, input, GGML_RPC_COMPRESS_FLAG)) {
                     return;
                 }
                 if (!server.set_tensor(input)) {
@@ -1326,7 +1383,7 @@ static void rpc_serve_client(ggml_backend_t backend, sockfd_t sockfd, size_t fre
                 if (!server.get_tensor(request, response)) {
                     return;
                 }
-                if (!send_msg(sockfd, response.data(), response.size())) {
+                if (!send_msg(sockfd, response.data(), response.size(), GGML_RPC_COMPRESS_FLAG)) {
                     return;
                 }
                 break;
@@ -1347,7 +1404,7 @@ static void rpc_serve_client(ggml_backend_t backend, sockfd_t sockfd, size_t fre
             }
             case RPC_CMD_GRAPH_COMPUTE: {
                 std::vector<uint8_t> input;
-                if (!recv_msg(sockfd, input)) {
+                if (!recv_msg(sockfd, input, GGML_RPC_COMPRESS_FLAG)) {
                     return;
                 }
                 rpc_msg_graph_compute_rsp response;
