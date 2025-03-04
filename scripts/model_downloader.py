@@ -145,13 +145,13 @@ def check_default():
 if __name__ == '__main__':
     import sys
     args = sys.argv[1:]
-    if len(args) > 0:
-        if args[0] == 'check':
-            enum_missing()
-            check_default()
-            exit(0)
+    if len(args) == 0:
+        show()
+        exit()
 
-        if args[0].startswith(':'):
-            print(preprocess_args(args, DEF_STORAGE_DIR))
-            exit(0)
-    show()
+    if args[0] == 'check':
+        enum_missing()
+        check_default()
+        exit(0)
+
+    print(preprocess_args(args, DEF_STORAGE_DIR))
