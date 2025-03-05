@@ -1733,6 +1733,22 @@
             }
         }
     },
+    "baichuan-m1": {
+        "brief": "Baichuan-14B-M1 is the industry's first open-source large language model developed from scratch by Baichuan Intelligence, specifically optimized for medical scenarios.",
+        "default": "14b",
+        "license": "https://github.com/baichuan-inc/Baichuan-M1-14B/blob/main/Baichuan-M1-14B%E6%A8%A1%E5%9E%8B%E7%A4%BE%E5%8C%BA%E8%AE%B8%E5%8F%AF%E5%8D%8F%E8%AE%AE.pdf",
+        "variants": {
+            "14b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 15378383344,
+                        "url": "chatllm_quantized_baichuan/baichuan-m1-14b.bin"
+                    }
+                }
+            }
+        }
+    },
     "dolphin2.6": {
         "brief": "This model is based on Phi-2 and is governed by MIT licence.",
         "default": "phi2",

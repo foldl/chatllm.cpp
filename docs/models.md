@@ -39,8 +39,9 @@
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
 
-* Baichuan (`BaichuanForCausalLM`)
+* Baichuan (`BaichuanForCausalLM`, `BaichuanM1ForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat), [Chat-13B](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat)
+    * [x] M1: [Instruct-14B](https://huggingface.co/baichuan-inc/Baichuan-M1-14B-Instruct)
 
 * ChatGLM (`ChatGLMModel`):
     * [x] ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)

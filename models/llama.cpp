@@ -22,7 +22,7 @@ namespace v2
             : Tokenizer(config, &_chat_encoder)
         {}
 
-        Tokenizer(const Config &config, BaseHistoryEncoder *encoder)
+        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
             : BaseTokenizer::BaseTokenizer(config, encoder)
         {
             sys_prompt = R"""(You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.

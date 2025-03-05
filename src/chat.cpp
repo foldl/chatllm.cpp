@@ -720,7 +720,7 @@ namespace chatllm
         }
 
         this->original_type = ggml::type_of(tensor);
-        tensor.type = target_type;
+        ggml::change_type(&tensor, target_type);
         data = alloc->alloc(alloc->get_alloc_size(&tensor, usage), usage);
         data->assign_to(&tensor);
         this->alloc = alloc;
@@ -745,6 +745,9 @@ namespace chatllm
             if (  (ggml::type::GGML_TYPE_F32 == original_type)
                && (ggml::type::GGML_TYPE_F16 == target_type))
                 return read_tensor_data_f32_f16(reader, read_offset, write_offset, data_size);
+            else if (  (ggml::type::GGML_TYPE_F16 == original_type)
+                    && (ggml::type::GGML_TYPE_F32 == target_type))
+                return read_tensor_data_f16_f32(reader, read_offset, write_offset, data_size);
             else
             {
                 CHATLLM_THROW << "type conversion not supported: " << original_type << ", " << target_type;
@@ -823,6 +826,27 @@ namespace chatllm
         for (size_t i = 0; i < data_size / 2; i++)
         {
             p16[i] = ggml_fp32_to_fp16(p32[i]);
+        }
+
+        if (data->is_host())
+            memcpy((uint8_t *)data->get_base() + write_offset, buf.data(), data_size);
+        else
+            alloc->get_backend()->write_tensor_data(&tensor, buf.data(), write_offset, data_size);
+
+        return data_size;
+    }
+
+    size_t TensorInfo::read_tensor_data_f16_f32(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size)
+    {
+        std::vector<uint8_t> buf;
+        buf.resize(data_size);
+        reader->read_buffer(buf.data(), data_size / 2);
+
+        ggml_fp16_t *p16 = (ggml_fp16_t *)buf.data();
+           float    *p32 = (      float *)buf.data();
+        for (int i = (int)data_size / sizeof(float) - 1; i >= 0; i--)
+        {
+            p32[i] = ggml_fp16_to_fp32(p16[i]);
         }
 
         if (data->is_host())

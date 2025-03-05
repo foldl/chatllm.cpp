@@ -128,13 +128,19 @@ namespace chatllm
             result->ne[i] = ne[i];
         }
 
-        result->nb[0] = ggml_type_size(type);
-        result->nb[1] = result->nb[0]*(result->ne[0]/ggml_blck_size(type));
-        for (int i = 2; i < GGML_MAX_DIMS; i++) {
-            result->nb[i] = result->nb[i - 1]*result->ne[i - 1];
-        }
+        change_type(result, type);
 
         return result;
+    }
+
+    void ggml::change_type(ggml::tensor  *tensor, ggml::type type)
+    {
+        tensor->type = type;
+        tensor->nb[0] = ggml_type_size(type);
+        tensor->nb[1] = tensor->nb[0]*(tensor->ne[0]/ggml_blck_size(type));
+        for (int i = 2; i < GGML_MAX_DIMS; i++) {
+            tensor->nb[i] = tensor->nb[i - 1]*tensor->ne[i - 1];
+        }
     }
 
     size_t ggml::element_size(const ggml::tensor * tensor)
@@ -297,6 +303,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::view_4d(ComputeContext *ctx, ggml::tensor  *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3, size_t nb1, size_t nb2, size_t nb3, size_t offset)
+    {
+        ggml::tensor *tensor = ggml_view_4d(ctx->get_ctx(), a, ne0, ne1, ne2, ne3, nb1, nb2, nb3, offset);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::reshape_1d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0)
     {
         ggml::tensor *tensor = ggml_reshape_1d(ctx->get_ctx(), a, ne0);
@@ -314,6 +327,13 @@ namespace chatllm
     ggml::tensor *ggml::reshape_3d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2)
     {
         ggml::tensor *tensor = ggml_reshape_3d(ctx->get_ctx(), a, ne0, ne1, ne2);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::reshape_4d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
+    {
+        ggml::tensor *tensor = ggml_reshape_4d(ctx->get_ctx(), a, ne0, ne1, ne2, ne3);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -657,6 +677,45 @@ namespace chatllm
         ggml::tensor *output = inplace ? ggml::rms_norm_inplace(ctx, input, eps) : ggml::rms_norm(ctx, input, eps);
         output = inplace ? ggml::mul_inplace(ctx, output, weight) : ggml::mul(ctx, output, weight);
         return output;
+    }
+
+
+    FIR2::FIR2(InitContext *ctx, int dim, int hidden_size)
+        : weight(ggml::new_tensor_2d(ctx, GGML_TYPE_F32, 2, dim)),
+          x0(ggml::new_tensor_1d(ctx, GGML_TYPE_F32, hidden_size)),
+          dim(dim)
+    {
+        ctx->get_allocator()->alloc(x0);
+    }
+
+    ggml::tensor *FIR2::forward(ComputeContext *ctx, ggml::tensor *input, int n_past)
+    {
+        auto last_x = x0;
+        if (n_past == 0)
+        {
+            last_x = ggml::scale_inplace(ctx, x0, 0.0f);
+            ggml::build_forward_expand(ctx, last_x);
+        }
+
+        last_x = ggml::reshape_4d(ctx, last_x, input->ne[0], input->ne[1], input->ne[2], input->ne[3]);
+
+        CHATLLM_CHECK(input->ne[1] == dim) << "ne[1] must == dim: " << input->ne[1] << ", " << dim;
+
+        auto w0 = ggml::view_2d(ctx, weight, 1, dim, 2 * ggml::element_size(weight), 0);
+        auto w1 = ggml::view_2d(ctx, weight, 1, dim, 2 * ggml::element_size(weight), ggml::element_size(weight));
+        auto x0w = ggml::mul(ctx, last_x, w0);
+        auto x1w = ggml::mul(ctx, input, w1);
+
+        auto r = ggml::add(ctx, x0w, x1w);
+
+        ggml::build_forward_expand(ctx, r);
+
+        {
+            last_x = ggml::cpy(ctx, input, last_x);
+            ggml::build_forward_expand(ctx, last_x);
+        }
+
+        return r;
     }
 
     ggml::tensor *RobertaPooler::forward(ComputeContext *ctx, ggml::tensor *hidden_states)

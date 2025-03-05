@@ -79,10 +79,12 @@ namespace chatllm
         ggml::tensor *view_1d(ComputeContext *ctx, ggml::tensor  *a, int64_t ne0, size_t offset);
         ggml::tensor *view_2d(ComputeContext *ctx, ggml::tensor  *a, int64_t ne0, int64_t ne1, size_t nb1, size_t offset);
         ggml::tensor *view_3d(ComputeContext *ctx, ggml::tensor  *a, int64_t ne0, int64_t ne1, int64_t ne2, size_t nb1, size_t nb2, size_t offset);
+        ggml::tensor *view_4d(ComputeContext *ctx, ggml::tensor  *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3, size_t nb1, size_t nb2, size_t nb3, size_t offset);
 
         ggml::tensor *reshape_1d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0);
         ggml::tensor *reshape_2d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1);
         ggml::tensor *reshape_3d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2);
+        ggml::tensor *reshape_4d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
 
         ggml::tensor *permute(ComputeContext *ctx, ggml::tensor *a, int axis0, int axis1, int axis2, int axis3);
 
@@ -350,6 +352,27 @@ namespace chatllm
             : LayerNorm(ctx, normalized_shape, false)
         {
         }
+    };
+
+    class FIR2 : public Block
+    {
+    public:
+        FIR2(): weight(nullptr), dim(0) {}
+        FIR2(InitContext *ctx, int dim, int hidden_size);
+
+        using Block::forward;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int n_past) override;
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            if (weight) r += ggml::nelements(weight);
+            return r;
+        }
+    public:
+        ggml::tensor *weight;
+        ggml::tensor *x0;
+        const int dim;
     };
 
     class RobertaEmbedding : public Block

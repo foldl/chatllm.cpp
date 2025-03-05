@@ -18,6 +18,7 @@ namespace chatllm
                             ggml::type     type,
                             int            n_dims,
                             const int64_t *ne);
+        void change_type(ggml::tensor  *tensor, ggml::type type);
 
         size_t element_size(const ggml::tensor *tensor);
         size_t nbytes(const ggml::tensor *tensor);

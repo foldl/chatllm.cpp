@@ -457,6 +457,7 @@ namespace chatllm
 
     protected:
         size_t read_tensor_data_f32_f16(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size);
+        size_t read_tensor_data_f16_f32(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size);
 
     public:
         ggml::tensor tensor;

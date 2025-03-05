@@ -59,8 +59,9 @@ class ModelType(Enum):
     Megrez      = 0x157
     Falcon3     = 0x158
 
-    BaiChuanLlama = 0x200
-    BaiChuan = 0x201
+    BaiChuanLlama   = 0x200
+    BaiChuan        = 0x201
+    BaiChuanM1      = 0x202
 
     DeepSeek            = 0x300
     DeepSeekCoder       = 0x301
@@ -362,7 +363,6 @@ def tabulate(data, headers = []) -> str:
         r = 0
         for i in range(len(all)):
             row = all[i]
-            print(f"row[{i}] = {row}")
             if n < len(row): r = max(r, len(row[n]))
         return r
 
@@ -2381,6 +2381,95 @@ class BaiChuanConverter(BaseConverter):
 
 class BaiChuanLlamaConverter(BaiChuanConverter):
     MODEL_TYPE = ModelType.BaiChuanLlama
+
+class BaiChuanM1Converter(BaseConverter):
+    MODEL_TYPE = ModelType.BaiChuanM1
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+
+        def split_w(name, tensor, hidden_size, num_attention_heads, num_key_value_heads):
+            nonlocal new_dict
+
+            head_dim = hidden_size // num_attention_heads
+            k_size = head_dim * num_key_value_heads
+            wq = tensor[0:hidden_size, :]
+            wk = tensor[hidden_size:hidden_size + k_size, :]
+            wv = tensor[hidden_size + k_size:, :]
+
+            new_dict[name.replace('W_pack', 'q_proj')] = wq
+            new_dict[name.replace('W_pack', 'k_proj')] = wk
+            new_dict[name.replace('W_pack', 'v_proj')] = wv
+
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            if name == 'lm_head.weight':
+                new_dict[name] = nn.functional.normalize(tensor)
+            elif name.endswith('W_pack.weight'):
+                layer_id = int(re.findall('layers.([0-9]*).self_attn', name)[0])
+                if layer_id in config.sliding_window_layers:
+                    split_w(name, tensor, config.hidden_size, config.num_swa_attention_heads, config.num_swa_key_value_heads)
+                else:
+                    split_w(name, tensor, config.hidden_size, config.num_attention_heads, config.num_key_value_heads)
+            elif name.endswith('.conv_k') or name.endswith('.conv_v'):
+                s = tensor.shape
+                new_dict[name] = tensor.view(s[2], s[4])
+            else:
+                new_dict[name] = tensor
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.conv_window == 2, 'conv_window must be 2'
+        assert config.model_max_length == config.max_position_embeddings, 'max_position_embeddings must == model_max_length'
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        sliding_window_pattern = config.sliding_window_layers[1] - config.sliding_window_layers[0]
+
+        sw_layers = list(range(1, config.num_hidden_layers, sliding_window_pattern))
+        assert sw_layers == config.sliding_window_layers, 'unsupported sliding_window_layers'
+
+        config_values = [
+            config.num_key_value_heads,
+            config.conv_window,
+            config.num_swa_attention_heads,
+            config.num_swa_key_value_heads,
+            config.sliding_window,
+            sliding_window_pattern
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_theta
+        ]
+        f.write(struct.pack("f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.conv_k",
+                f"model.layers.{i}.self_attn.conv_v",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
 
 class BlueLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.BlueLM
@@ -5332,6 +5421,8 @@ def main():
         else:
             config.max_position_embeddings = config.model_max_length
             BaiChuanConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'BaichuanM1ForCausalLM':
+        BaiChuanM1Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'yi':
         YiConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'map-neo':

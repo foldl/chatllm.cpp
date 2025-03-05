@@ -216,8 +216,9 @@ namespace chatllm
         MODEL_TYPE_MEGREZ           = 0x157,
         MODEL_TYPE_FALCON3          = 0x158,
 
-        MODEL_TYPE_BAICHUANLLAMA = 0x200,
-        MODEL_TYPE_BAICHUAN      = 0x201,
+        MODEL_TYPE_BAICHUANLLAMA    = 0x200,
+        MODEL_TYPE_BAICHUAN         = 0x201,
+        MODEL_TYPE_BAICHUAN_M1      = 0x202,
 
         MODEL_TYPE_DEEPSEEK = 0x300,
         MODEL_TYPE_DEEPSEEK_CODER   = 0x301,
@@ -394,6 +395,8 @@ namespace chatllm
         case MODEL_TYPE_BAICHUAN:
         case MODEL_TYPE_BAICHUANLLAMA:
             return "Baichuan";
+        case MODEL_TYPE_BAICHUAN_M1:
+            return "Baichuan-M1";
         case MODEL_TYPE_DEEPSEEK:
             return "DeepSeek-LLM";
         case MODEL_TYPE_DEEPSEEK_CODER:
@@ -562,6 +565,7 @@ namespace chatllm
             return "书生·浦语";
         case MODEL_TYPE_BAICHUAN:
         case MODEL_TYPE_BAICHUANLLAMA:
+        case MODEL_TYPE_BAICHUAN_M1:
             return "百川";
         case MODEL_TYPE_PHI2:
         case MODEL_TYPE_PHI2_V2:
@@ -2076,6 +2080,7 @@ namespace chatllm
                                                                 \
         CASE(BAICHUANLLAMA,         baichuan::_7b, 1)           \
         CASE(BAICHUAN,              baichuan::larger, 1)        \
+        CASE(BAICHUAN_M1,           baichuan::m1, 1)            \
                                                                 \
         CASE(YI,                    yi, 1)                      \
         CASE(MAP_NEO,               m_a_p::neo, 1)              \
