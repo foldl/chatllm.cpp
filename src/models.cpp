@@ -650,7 +650,7 @@ namespace chatllm
 
         int sampling(float *logits, const int vocab_size) override
         {
-            token_scores.reserve(vocab_size);
+            g.resize(vocab_size, 0);
             token_scores.resize(vocab_size);
 
             if (temp_en)
@@ -663,7 +663,7 @@ namespace chatllm
             {
                 for (int i = 0; i < vocab_size; i++)
                 {
-                    if (g.find(i) != g.end())
+                    if (g[i] > 0)
                         logits[i] *= logits[i] > 0 ? inv_presence_penalty : presence_penalty;
                 }
             }
@@ -695,7 +695,7 @@ namespace chatllm
             std::discrete_distribution<> dist(logits, logits + token_scores.size());
             int next_token_id = token_scores[dist(gen)].id;
 
-            g.emplace(next_token_id);
+            g[next_token_id] += 1;
             return next_token_id;
         }
 
@@ -734,7 +734,7 @@ namespace chatllm
         float presence_penalty;
         int top_k;
         std::vector<TokenIdScore> token_scores;
-        std::set<int> g;
+        std::vector<int> g;
     };
 
     class TopPSampler : public NonGreedySampler

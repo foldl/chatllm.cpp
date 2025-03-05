@@ -51,7 +51,7 @@ struct Args
     int max_context_length = 512;
     bool interactive = false;
     bool show = false;
-    int top_k = 0;
+    int top_k = 20;
     float top_p = 0.7f;
     float temp = 0.7f;
     float tfs_z = 0.95f;
@@ -138,7 +138,7 @@ void usage(const std::string &prog)
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
               << "                          where, tfs = Tail Free Sampling\n"
               << "  -t, --temp T            temperature (default: 0.7) (Note: `-t 0` also sets sampling algorithm to greedy)\n"
-              << "  --top_k N               top-k sampling (default: 0)\n"
+              << "  --top_k N               top-k sampling (default: 20)\n"
               << "  --top_p N               top-p sampling (default: 0.7)\n"
               << "  --tfs_z Z               Z param for TFS (default: 0.95)\n"
               << "  --presence_penalty N    presence repetition penalty (default: 1.0, no penalty)\n"
