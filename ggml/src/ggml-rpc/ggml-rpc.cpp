@@ -36,7 +36,7 @@ typedef int sockfd_t;
 
 #define GGML_RPC_COMPRESS_FLAG  true
 #define GGML_RPC_LZ4_ACC        200
-#include "lz4.c"
+#include "lz4.h"
 
 struct compression_header
 {
