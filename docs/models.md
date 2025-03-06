@@ -121,7 +121,7 @@
     * [x] v2.5-Coder: [Instruct-1.5B](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct), [Instruct-7B](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct)
     * [x] v2.5-Math: [Instruct-1.5B](https://huggingface.co/Qwen/Qwen2.5-Math-1.5B-Instruct), [Instruct-7B](https://huggingface.co/Qwen/Qwen2.5-Math-7B-Instruct), [Instruct-72B](https://huggingface.co/Qwen/Qwen2.5-Math-72B-Instruct)
     * [x] [Marco-o1](https://huggingface.co/AIDC-AI/Marco-o1) (`-a Marco-o1`)
-    * [x] [QwQ-32B-Preview](https://huggingface.co/Qwen/QwQ-32B-Preview) (`-a QwQ`)
+    * [x] QwQ: [32B-Preview](https://huggingface.co/Qwen/QwQ-32B-Preview), [32B](https://huggingface.co/Qwen/QwQ-32B) (`-a QwQ`)
     * [x] [ReaderLM-v2](https://huggingface.co/jinaai/ReaderLM-v2) (`-a ReaderLM-v2`)
     * [x] DeepSeek-R1-Distill-QWen: [1.5B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B), [7B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B), [14B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B), [32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B), [DeepScaleR-1.5B-Preview](https://huggingface.co/agentica-org/DeepScaleR-1.5B-Preview) (`-a DeepSeek-R1-Distill-QWen`)
 

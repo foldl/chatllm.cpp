@@ -53,8 +53,28 @@ def download_file(url: str, fn: str, prefix: str):
     return flag
 
 def show():
+    total = 0
+
+    def format_number(num):
+        if num >= 1_000_000_000_000:
+            return f"{num / 1_000_000_000_000:.2f} T"
+        elif num >= 1_000_000_000:
+            return f"{num / 1_000_000_000:.2f} G"
+        elif num >= 1_000_000:
+            return f"{num / 1_000_000:.2f} M"
+        elif num >= 1_000:
+            return f"{num / 1_000:.2f} K"
+        else:
+            return str(num)
+
+    def acc_file_size(variant: dict):
+        nonlocal total
+        for q, o in variant['quantized'].items():
+            total += o['size']
+
     def show_variants(info, default):
         sizes = [s for s in info.keys()]
+        [acc_file_size(variant) for variant in info.values()]
         variants = [m + ":" + s for s in sizes]
         all_var = ', '.join(variants)
         print(f"Available: {all_var}")
@@ -70,6 +90,8 @@ def show():
 
     for m in sorted(all_models.keys()):
         show_model(m)
+
+    print(f"\n-------\nTotal: {format_number(total)}B")
 
 def parse_model_id(model_id: str):
     parts = model_id.split(':')

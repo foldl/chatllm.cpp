@@ -1934,6 +1934,15 @@
                 "default": "q4_0",
                 "quantized": {
                     "q4_0": {
+                        "size": 18437831360,
+                        "url": "chatllm_quantized_qwen2/qwb-rel-32b-q4_0.bin"
+                    }
+                }
+            },
+            "32b-preview": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
                         "size": 18437831280,
                         "url": "chatllm_quantized_20250101_1/qwb-32b-q4_0.bin"
                     }
