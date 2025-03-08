@@ -194,6 +194,10 @@ extern "C" {
     typedef ggml_backend_buffer_type_t * (*ggml_backend_dev_get_extra_bufts_t)(ggml_backend_dev_t device);
     // Set the abort callback for the backend
     typedef void                         (*ggml_backend_set_abort_callback_t)(ggml_backend_t backend, ggml_abort_callback abort_callback, void * abort_callback_data);
+    // Set tensor data from an object which is specified by a string with an offset
+    // Example: object_id = file name, object_offset = offset within the file
+    typedef void                         (*ggml_backend_tensor_set_from_object_t)(struct ggml_tensor * tensor, const char * object_id, size_t object_offset, size_t offset, size_t size);
+
     // Get a list of feature flags supported by the backend (returns a NULL-terminated array)
     struct ggml_backend_feature {
         const char * name;
