@@ -176,6 +176,8 @@ ConditionalGeneration::ConditionalGeneration(const Config &config, const Runtime
     w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
     w_ctx_.dtype = config.dtype;
 
+    CHATLLM_CHECK(false) << "regression: ChatGLM is not available. Bye.";
+
     transformer = new TransformerClass(&w_ctx_, config, nullptr,
                             config.hidden_size, config.num_attention_heads, config.num_hidden_layers,
                             config.max_length);

@@ -5200,11 +5200,14 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
             path2 = path / "tokenizer.model"
             # Use `.parent` instead of /.. to handle the symlink case better.
             path3 = path.parent / "tokenizer.model"
+            path4 = path / "ice_text.model"
 
             if path2.exists():
                 return load_spm(path2)
             elif path3.exists():
                 return load_spm(path3)
+            elif path4.exists():
+                return load_spm(path4)
 
         # path20 = path / "sentencepiece.bpe.model"
 
@@ -5335,7 +5338,7 @@ def main():
     #    model = model.merge_and_unload()
 
     if arch == 'ChatGLMModel':
-        if hasattr(config, "multi_query_attention"):
+        if config.multi_query_attention is not None:
             if config.rope_ratio is not None:
                 ChatGLM4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
             else:

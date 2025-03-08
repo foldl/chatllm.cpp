@@ -484,124 +484,6 @@ namespace chatllm
             : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true) {}
     };
 
-    class GLMSelfAttention : public Block
-    {
-    public:
-        // TODO: kv cache type
-        GLMSelfAttention() : num_attention_heads(0), n_ctx(0) {}
-        GLMSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
-            : query_key_value(ctx, hidden_size, 3 * hidden_size), dense(ctx, hidden_size, hidden_size),
-              num_attention_heads(num_attention_heads),
-              k_cache(ggml::new_tensor_3d(ctx, GGML_TYPE_F16, hidden_size / num_attention_heads, max_length,
-                                         num_attention_heads)),
-              v_cache(ggml::new_tensor_3d(ctx, GGML_TYPE_F16, max_length, hidden_size / num_attention_heads,
-                                         num_attention_heads)),
-              pos(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length)),
-              n_ctx(0),
-              shift_pending()
-        {
-            v_pos.resize(max_length);
-
-            ctx->get_allocator()->alloc(pos);
-        }
-        using Block::forward;
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
-
-        void set_ctx(int n_ctx) override { this->n_ctx = n_ctx; }
-        void shift_cache(int shift, int total) override
-        {
-            shift_pending = ShiftPending(shift, total);
-        }
-
-        int64_t get_param_num(bool effective_only) const override
-        {
-            int64_t r = 0;
-            r += query_key_value.get_param_num(effective_only);
-            r += dense.get_param_num(effective_only);
-            return r;
-        }
-
-        size_t get_cache_size(void) const override
-        {
-            return ggml::nbytes(k_cache) + ggml::nbytes(v_cache);
-        }
-
-        void  set_cache_buffer(BackendBuffer *buffer) override
-        {
-            buffer->assign_to(k_cache, 0);
-            buffer->assign_to(v_cache, ggml::nbytes(k_cache));
-        }
-
-        size_t read_cache_data(void *buffer, size_t buffer_size) const override;
-        size_t write_cache_data(const void *buffer, size_t buffer_size) override;
-
-    public:
-        Linear query_key_value;
-        Linear dense;
-        int num_attention_heads;
-        ggml::tensor *k_cache; // [n_head, maxlen, head_size]
-        ggml::tensor *v_cache; // [n_head, head_size, maxlen]
-        ggml::tensor *pos;
-        int n_ctx;
-    private:
-        ShiftPending shift_pending;
-        std::vector<int> v_pos;
-    };
-
-    class GLMBlock : public Block
-    {
-    public:
-        GLMBlock() : num_hidden_layers(0) {}
-        GLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int num_hidden_layers, int max_length)
-            : input_layernorm(ctx, hidden_size),
-              attention(ctx, hidden_size, num_attention_heads, max_length),
-              post_attention_layernorm(ctx, hidden_size),
-              mlp(ctx, hidden_size),
-              num_hidden_layers(num_hidden_layers) {}
-
-        using Block::forward;
-        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
-
-        void set_ctx(int n_ctx) override { attention.set_ctx(n_ctx); }
-
-        int64_t get_param_num(bool effective_only) const override
-        {
-            int64_t r = 0;
-            r += input_layernorm.get_param_num(effective_only);
-            r += attention.get_param_num(effective_only);
-            r += post_attention_layernorm.get_param_num(effective_only);
-            r += mlp.get_param_num(effective_only);
-            return r;
-        }
-
-        size_t get_cache_size(void) const override
-        {
-            return attention.get_cache_size();
-        }
-
-        void  set_cache_buffer(BackendBuffer *buffer) override
-        {
-            return attention.set_cache_buffer(buffer);
-        }
-
-        size_t read_cache_data(void *buffer, size_t buffer_size) const override
-        {
-            return attention.read_cache_data(buffer, buffer_size);
-        }
-
-        size_t write_cache_data(const void *buffer, size_t buffer_size) override
-        {
-            return attention.write_cache_data(buffer, buffer_size);
-        }
-
-    public:
-        LayerNorm input_layernorm;
-        GLMSelfAttention attention;
-        LayerNorm post_attention_layernorm;
-        GLMMLP mlp;
-        int num_hidden_layers;
-    };
-
     class GLM2MLP : public Block
     {
     public:
@@ -1660,6 +1542,69 @@ namespace chatllm
             return ggml::rope_ext_inplace(ctx, q, past, freq_factors, rope_dim, rope_mode, n_original_ctx,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
         }
+    };
+
+    class GLMSelfAttention : public RoPESelfAttention<BaseConsolidatedQKVAttention>
+    {
+    public:
+        GLMSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, true)
+        {
+            rope_dim = (hidden_size / num_attention_heads) / 2;
+        }
+    };
+
+    class GLMBlock : public Block
+    {
+    public:
+        GLMBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int num_hidden_layers, int max_length)
+            : input_layernorm(ctx, hidden_size),
+              attention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length),
+              post_attention_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size),
+              num_hidden_layers(num_hidden_layers) {}
+
+        using Block::forward;
+        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
+
+        void set_ctx(int n_ctx) override { attention.set_ctx(n_ctx); }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += input_layernorm.get_param_num(effective_only);
+            r += attention.get_param_num(effective_only);
+            r += post_attention_layernorm.get_param_num(effective_only);
+            r += mlp.get_param_num(effective_only);
+            return r;
+        }
+
+        size_t get_cache_size(void) const override
+        {
+            return attention.get_cache_size();
+        }
+
+        void  set_cache_buffer(BackendBuffer *buffer) override
+        {
+            return attention.set_cache_buffer(buffer);
+        }
+
+        size_t read_cache_data(void *buffer, size_t buffer_size) const override
+        {
+            return attention.read_cache_data(buffer, buffer_size);
+        }
+
+        size_t write_cache_data(const void *buffer, size_t buffer_size) override
+        {
+            return attention.write_cache_data(buffer, buffer_size);
+        }
+
+    public:
+        LayerNorm input_layernorm;
+        GLMSelfAttention attention;
+        LayerNorm post_attention_layernorm;
+        GLMMLP mlp;
+        int num_hidden_layers;
     };
 
     class GLM2SelfAttention : public RoPESelfAttention<BaseConsolidatedQKVAttention>
