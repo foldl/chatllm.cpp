@@ -103,31 +103,14 @@ Note: Appropriately, only HF format is supported (with a few exceptions); Format
 
 In order to build this project you have several different options.
 
-- Using `make`:
-
-  Prepare for using `make` on Windows:
-
-  1. Download the latest fortran version of [w64devkit](https://github.com/skeeto/w64devkit/releases).
-  2. Extract `w64devkit` on your pc.
-  3. Run `w64devkit.exe`, then `cd` to the `chatllm.cpp` folder.
-
-  ```sh
-  make
-  ```
-
-  The executable is `./obj/main`.
-
 - Using `CMake`:
 
   ```sh
   cmake -B build
-  # On Linux, WSL:
-  cmake --build build -j
-  # On Windows with MSVC:
   cmake --build build -j --config Release
   ```
 
-  The executable is `./build/obj/main`.
+  The executable is `./build/bin/main`.
 
 ### Run
 

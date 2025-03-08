@@ -20,36 +20,26 @@ def print_progress_bar (iteration, total, prefix = '', suffix = '', decimals = 1
 
 def download_file(url: str, fn: str, prefix: str):
     flag = False
+    try:
+        import requests
+    except:
+        print(f"`requests` is required. use `pip install requests` to install it.")
+        return flag
+
     print(f"downloading {prefix}")
-    import http.client
-    from urllib.parse import urlparse
+    with open(fn, 'wb') as f:
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            total = int(r.headers.get('content-length', 0))
 
-    parsed_url = urlparse(url)
-    path = parsed_url.path
-    if parsed_url.query:
-        path += "?" + parsed_url.query  # Append the query string (e.g., "?query=param")
-    if parsed_url.fragment:
-        path += "#" + parsed_url.fragment
+            progress = 0
 
-    conn = http.client.HTTPSConnection(f"{parsed_url.netloc}")
-    conn.request("GET", path)
-    response = conn.getresponse()
+            for chunk in r.iter_content(chunk_size=8192):
+                progress += len(chunk)
+                f.write(chunk)
+                print_progress_bar(progress, total)
 
-    if response.status != 200: return flag
-
-    total = int(response.getheader("Content-Length", 0))
-    progress = 0
-
-    with open(fn, "wb") as file:
-        while True:
-            chunk = response.read(1024 * 8)
-            if not chunk: break
-            file.write(chunk)
-            progress += len(chunk)
-            print_progress_bar(progress, total)
-
-    flag = progress == total
-
+            flag = progress == total
     return flag
 
 def show():
