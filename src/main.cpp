@@ -916,9 +916,9 @@ static void start_rpc_server(std::string endpoint)
     else;
 }
 
-static void prepre_rpc_devices(const Args &args)
+static void prepare_rpc_devices(const Args &args)
 {
-    if (!chatllm::ComputeManager::prepre_rpc_devices(args.rpc_endpoints))
+    if (!chatllm::ComputeManager::prepare_rpc_devices(args.rpc_endpoints))
     {
         chatllm::ggml::log(GGML_LOG_LEVEL_ERROR, "Failed to prepare RPC devices");
     }
@@ -1047,7 +1047,7 @@ int main(int argc, const char **argv)
         return 0;
     }
 
-    prepre_rpc_devices(args);
+    prepare_rpc_devices(args);
 
     if (args.show_devices)
     {

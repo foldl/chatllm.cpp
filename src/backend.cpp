@@ -4,14 +4,12 @@
 
 #include "backend.h"
 #include "basics.h"
-#include "ggml-cpu.h"
 
-#ifdef GGML_USE_RPC
 #include "ggml-rpc.h"
-#endif
 
-#ifdef GGML_BACKEND_DL
-#error "GGML_BACKEND_DL is WIP"
+#ifndef GGML_USE_CPU
+//#error "GGML_BACKEND_DL is WIP"
+#define GGML_BACKEND_DL
 #endif
 
 extern void log_internal(int level, const char * text);
@@ -273,15 +271,27 @@ namespace chatllm
         return id;
     }
 
+    ggml_backend_reg_t ComputeManager::backend_rpc = nullptr;
+
     void ComputeManager::init(void)
     {
-#if GGML_BACKEND_DL
+#ifdef GGML_BACKEND_DL
         static bool initialized = false;
         if (initialized) return;
         initialized = true;
-
+        ggml::log(GGML_LOG_LEVEL_INFO, "loading backends...");
         ggml_backend_load_all();
 #endif
+
+        for (int i = 0; i < ggml_backend_reg_count(); i++)
+        {
+            auto reg = ggml_backend_reg_get(i);
+            if (ggml_backend_reg_name(reg) == "RPC")
+            {
+                ComputeManager::backend_rpc = reg;
+                break;
+            }
+        }
     }
 
     std::string ComputeManager::dev_type_to_str(DeviceType type)
@@ -389,9 +399,21 @@ namespace chatllm
         }
     }
 
-    bool ComputeManager::prepre_rpc_devices(const std::string &endpoints)
+    bool ComputeManager::prepare_rpc_devices(const std::string &endpoints)
     {
-#ifdef GGML_USE_RPC
+        if (endpoints.size() < 1) return true;
+
+        if (!ComputeManager::backend_rpc)
+        {
+            ggml::log(GGML_LOG_LEVEL_ERROR, "%s: RPC backend not available", __FUNCTION__);
+            return false;
+        }
+
+        auto rpc_add_device =
+            (ggml_backend_rpc_add_device_t)ggml_backend_reg_get_proc_address(ComputeManager::backend_rpc,
+                                                                             "ggml_backend_rpc_add_device");
+        CHATLLM_CHECK(rpc_add_device) << __FUNCTION__ << ": ggml_backend_rpc_add_device() not found in RPC backend";
+
         std::string s(endpoints);
         while (s.size() > 0)
         {
@@ -401,21 +423,28 @@ namespace chatllm
             if (endpoint.find(':') == std::string::npos)
                 endpoint = "127.0.0.1:" + endpoint;
 
-            ggml_backend_rpc_add_device(endpoint.c_str());
+            rpc_add_device(endpoint.c_str());
 
             if (pos == std::string::npos) break;
             s = s.substr(pos + 1);
         }
 
         return true;
-#else
-        return endpoints.size() < 1;
-#endif
     }
 
     bool ComputeManager::start_rpc_server(int device, const char *endpoint, size_t backend_mem)
     {
-#ifdef GGML_USE_RPC
+        if (!ComputeManager::backend_rpc)
+        {
+            ggml::log(GGML_LOG_LEVEL_ERROR, "%s: RPC backend not available", __FUNCTION__);
+            return false;
+        }
+
+        auto rpc_start_server =
+            (ggml_backend_rpc_start_server_t)ggml_backend_reg_get_proc_address(ComputeManager::backend_rpc,
+                                                                               "ggml_backend_rpc_start_server");
+        CHATLLM_CHECK(rpc_start_server) << __FUNCTION__ << ": ggml_backend_rpc_start_server() not found in RPC backend";
+
         DeviceInfo dev;
         if (!get_device_info(device, dev))
             return false;
@@ -437,23 +466,21 @@ namespace chatllm
         ggml::log(GGML_LOG_LEVEL_INFO, "    memory total: %zd B\n", dev.total_memory);
         ggml::log(GGML_LOG_LEVEL_INFO, "    memory free : %zd B\n", dev.free_memory);
 
-        ggml_backend_rpc_start_server(backend, s.c_str(), backend_mem, backend_mem);
+        rpc_start_server(backend, s.c_str(), backend_mem, backend_mem);
         ggml_backend_free(backend);
         return true;
-#else
-        return false;
-#endif
     }
 
     Backend::Backend(ggml_backend_t backend, int n_layers, bool use_gpu)
         : backend(backend), n_layers(n_layers), use_gpu(use_gpu)
     {
-
+        // FIXME: find a better way
+        _is_cpu = ggml_backend_name(backend) == "CPU";
     }
 
     bool Backend::is_cpu(void) const
     {
-        return ggml_backend_is_cpu(backend);
+        return _is_cpu;
     }
 
     ggml_backend_allocator Backend::get_allocator(BufferType bt)
@@ -651,7 +678,10 @@ namespace chatllm
     {
         if (backend_cpu != nullptr)
         {
-            ggml_backend_cpu_set_abort_callback(backend_cpu, abort_callback, abort_callback_data);
+            auto reg = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend_cpu));
+            ggml_backend_set_abort_callback_t set_abort_callback =
+                (ggml_backend_set_abort_callback_t)ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_abort_callback");
+            set_abort_callback(backend_cpu, abort_callback, abort_callback_data);
         }
 
         if (observe_tensor_callback)

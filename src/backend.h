@@ -222,7 +222,10 @@ namespace chatllm
         static void get_devices_info(std::vector<DeviceInfo> &devs);
 
         static bool start_rpc_server(int device, const char *endpoints, size_t backend_mem = 0);
-        static bool prepre_rpc_devices(const std::string &endpoints);
+        static bool prepare_rpc_devices(const std::string &endpoints);
+
+    protected:
+        static ggml_backend_reg_t backend_rpc;
     };
 
     enum BufferType
@@ -260,6 +263,8 @@ namespace chatllm
         ggml_backend_t backend;
         const int n_layers;
         const bool use_gpu;
+    private:
+        bool _is_cpu;
     };
 
     class BackendContext
