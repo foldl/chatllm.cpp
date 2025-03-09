@@ -286,7 +286,7 @@ namespace chatllm
         for (int i = 0; i < ggml_backend_reg_count(); i++)
         {
             auto reg = ggml_backend_reg_get(i);
-            if (ggml_backend_reg_name(reg) == "RPC")
+            if (std::string(ggml_backend_reg_name(reg)) == "RPC")
             {
                 ComputeManager::backend_rpc = reg;
                 break;

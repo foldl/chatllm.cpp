@@ -1047,6 +1047,7 @@ int main(int argc, const char **argv)
         return 0;
     }
 
+    chatllm::ComputeManager::init();
     prepare_rpc_devices(args);
 
     if (args.show_devices)
