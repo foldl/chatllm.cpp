@@ -2106,7 +2106,7 @@
         }
     },
     "instella": {
-        "brief": "Hunyuan-7B is developed by Tencent and stands out from many large-scale language models and is currently one of the strongest Chinese 7B Dense models.",
+        "brief": "A family of fully open state-of-the-art 3-billion-parameter language models (LMs) trained from scratch on AMD Instinct™ MI300X GPUs",
         "default": "3b",
         "license": "ResearchRAIL license",
         "variants": {
