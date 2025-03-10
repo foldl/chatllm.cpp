@@ -316,6 +316,8 @@ namespace chatllm
 
         MODEL_TYPE_MOONLIGHT        = 0x2000,
 
+        MODEL_TYPE_INSTELLA         = 0x2100,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -548,6 +550,8 @@ namespace chatllm
             return "MiniCPM-ReRanker-Light";
         case MODEL_TYPE_MOONLIGHT:
             return "Moonlight";
+        case MODEL_TYPE_INSTELLA:
+            return "Instella";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1855,6 +1859,11 @@ namespace chatllm
         #include "../models/moonshot.cpp"
     }
 
+    namespace instella
+    {
+        #include "../models/instella.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2167,6 +2176,8 @@ namespace chatllm
         CASE(HUNYUAN_DENSE,         hunyuan::dense, 1)          \
                                                                 \
         CASE(MOONLIGHT,             moonshot::moonlight, 1)     \
+                                                                \
+        CASE(INSTELLA,              instella, 1)                \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

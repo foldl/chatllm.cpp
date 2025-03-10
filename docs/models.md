@@ -188,6 +188,9 @@
 * HunYuan (`HunYuanForCausalLM`)
     * [x] Dense: [Instruct-7B](https://huggingface.co/tencent/Hunyuan-7B-Instruct)
 
+* Instella (`InstellaForCausalLM`)
+    * [x] [Instruct-3B](https://huggingface.co/amd/Instella-3B-Instruct)
+
 ## Base Models
 
 Please use `--format completion` for these models.

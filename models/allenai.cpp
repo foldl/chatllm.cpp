@@ -42,7 +42,7 @@ namespace moe
         void append_ai_opening(int round_idx, std::vector<int> &ids) const override
         {
             std::ostringstream oss;
-            oss << "'<|assistant|>";
+            oss << "'<|assistant|>\n";
             tokenizer->encode(oss.str(), ids);
         }
     };
