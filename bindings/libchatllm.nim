@@ -80,6 +80,24 @@ proc chatllm_set_gen_max_tokens*(obj: ptr chatllm_obj; gen_max_tokens: cint) {.s
 ##
 proc chatllm_restart*(obj: ptr chatllm_obj; utf8_sys_prompt: cstring) {.stdcall, dynlib: libName, importc.}
 
+type
+    RoleType* = enum
+        ROLE_USER = 2,
+        ROLE_ASSISTANT = 3,
+        ROLE_TOOL = 4,
+
+##
+## @brief push back a message to the end of chat history.
+##
+## This can be used to restore session after `chatllm_restart`.
+## This would not trigger generation. Use `chatllm_user_input`, etc  to start generation.
+##
+## @param[in] obj               model object
+## @param[in] role_type         message type (see `RoleType`)
+## @param[in] utf8_str          content
+##
+proc chatllm_history_append*(obj: ptr chatllm_obj; role_type: int; utf8_str: cstring) {.stdcall, dynlib: libName, importc.}
+
 ##
 ##  @brief user input
 ##

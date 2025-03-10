@@ -1411,17 +1411,19 @@ int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
 {
     int r = 0;
     DEF_CHAT_STREAMER();
+    auto role_user = chat->gen_config.reversed_role ? chatllm::MsgRole::Assistant : chatllm::MsgRole::User;
+    auto role_asst = chat->gen_config.reversed_role ? chatllm::MsgRole::User : chatllm::MsgRole::Assistant;
 
     if (!streamer->is_prompt) return -1;
 
     if (chat->pipeline->is_loaded() && (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Chat))
         return -1;
 
-    chat->history.push_back(utf8_str, chatllm::MsgRole::User);
+    chat->history.push_back(utf8_str, role_user);
 
 generate:
     std::string output = chat->pipeline->chat(chat->history, chat->gen_config, streamer);
-    chat->history.push_back(output, chatllm::MsgRole::Assistant);
+    chat->history.push_back(output, role_asst);
 
     if (chat->tool_completion.size() > 0)
         chatllm_continue_chat(chat);

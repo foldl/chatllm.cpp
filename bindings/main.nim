@@ -153,10 +153,14 @@ let chat = chatllm_create()
 # related front end parameters are ignored by `libchatllm`
 var prompt: string = "hello"
 var interactive: bool = false
+var reversed_role = false
 
 for i in 1 .. paramCount():
     if paramStr(i) in ["-i", "--interactive"]:
         interactive = true
+
+    if paramStr(i) in ["--reversed_role"]:
+        reversed_role = true
 
     if (i > 1) and (paramStr(i - 1) in ["-p", "--prompt"]):
         prompt = paramStr(i)
@@ -174,12 +178,20 @@ if r != 0:
     quit(r)
 
 if interactive:
+    let user_tag = "You  > "
+    let   ai_tag = "A.I. > "
+
+    if reversed_role:
+        stdout.write(ai_tag)
+        stdout.writeLine(prompt)
+        chatllm_history_append(chat, ord(RoleType.ROLE_USER), prompt.cstring)
+
     while true:
-        stdout.write("You  > ")
+        stdout.write(user_tag)
         let input = stdin.readLine()
         if input.isEmptyOrWhitespace(): continue
 
-        stdout.write("A.I. > ")
+        stdout.write(ai_tag)
         let r = chatllm_user_input(chat, input.cstring)
         if r != 0:
             echo ">>> chatllm_user_input error: ", r
