@@ -47,6 +47,7 @@ struct Args
     std::map<std::string, std::vector<std::string>> vector_stores;
     std::string rpc_endpoints;
     std::string serve_rpc;
+    std::string ggml_dir;
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -194,6 +195,7 @@ void usage(const std::string &prog)
               << "  --dump_dot FILE         dump sched splits to a DOT file, and exit with -1\n"
               << "  --log_level             log level. (default: 4 - ERROR)\n"
               << "  --serve_rpc [H:]P[@id]  as a RPC server on host:port (optional: host default to 127.0.0.1, id defaults to 0)        [#]\n"
+              << "  --ggml_dir DIR          specify directory of GGML\n"
               << "Additional key-value args:\n"
               << "  --kv                    start of additional args. all following options are interpreted as k-v pairs\n"
               << "  key value               a key-value pair of args\n"
@@ -367,6 +369,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--log_level",                   log_level,            std::stoi)
             handle_para0("--rpc_endpoints",               rpc_endpoints,        std::string)
             handle_para0("--serve_rpc",                   serve_rpc,            std::string)
+            handle_para0("--ggml_dir",                    ggml_dir,             std::string)
             else
                 break;
 
@@ -1047,7 +1050,7 @@ int main(int argc, const char **argv)
         return 0;
     }
 
-    chatllm::ComputeManager::init();
+    chatllm::ComputeManager::init(args.ggml_dir);
     prepare_rpc_devices(args);
 
     if (args.show_devices)
@@ -1125,6 +1128,49 @@ int main(int argc, const char **argv)
 #endif
 
 #include "../bindings/libchatllm.h"
+
+static std::vector<std::string> init_params;
+static Args init_args;
+
+void chatllm_append_init_param(const char *utf8_str)
+{
+    if (init_params.size() == 0) init_params.push_back("");
+    init_params.push_back(utf8_str);
+}
+
+static int chatllm_do_init(const std::vector<std::string> *p_obj_params = nullptr)
+{
+    static bool initialized = false;
+    if (initialized) return 0;
+
+    initialized = true;
+
+    // it's ok to call this multiple times
+    ggml_log_set(_ggml_log_callback, nullptr);
+
+    if (p_obj_params && (init_params.size() == 0))
+    {
+        auto count = parse_args(init_args, *p_obj_params);
+        if (count < p_obj_params->size())
+            return (int)count;
+    }
+    else
+    {
+        auto count = parse_args(init_args, init_params);
+        if (count < init_params.size())
+            return (int)count;
+    }
+
+    chatllm::ComputeManager::init(init_args.ggml_dir);
+    prepare_rpc_devices(init_args);
+
+    return 0;
+}
+
+int API_CALL chatllm_init(void)
+{
+    return chatllm_do_init();
+}
 
 class Chat
 {
@@ -1290,6 +1336,9 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
     Chat *chat = reinterpret_cast<Chat *>(obj);
     Args &args = chat->args;
 
+    auto r = chatllm_do_init(&chat->params);
+    if (r != 0) return r;
+
     auto count = parse_args(args, chat->params);
 
     if (count < chat->params.size())
@@ -1300,7 +1349,7 @@ int chatllm_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chatllm_en
 
     args.interactive = true;
     chat->streamer = std::unique_ptr<chatllm::BaseStreamer>(new FFIStreamer(nullptr, f_print, f_end, user_data));
-    chat->streamer->log_level = args.log_level;
+    chat->streamer->log_level = init_args.log_level;
 
     try
     {

@@ -273,15 +273,21 @@ namespace chatllm
 
     ggml_backend_reg_t ComputeManager::backend_rpc = nullptr;
 
-    void ComputeManager::init(void)
+    void ComputeManager::init(const std::string &ggml_dir)
     {
 #ifdef GGML_BACKEND_DL
         static bool initialized = false;
         if (initialized) return;
         initialized = true;
         ggml::log(GGML_LOG_LEVEL_INFO, "loading backends...");
-        ggml_backend_load_all();
+        ggml_backend_load_all_from_path(ggml_dir.size() > 0 ? ggml_dir.c_str() : nullptr);
 #endif
+
+        if (ggml_backend_reg_count() < 1)
+        {
+            ggml::log(GGML_LOG_LEVEL_ERROR, "FATAL: no backend is loaded. check dll directories?");
+            exit(-1);
+        }
 
         for (int i = 0; i < ggml_backend_reg_count(); i++)
         {

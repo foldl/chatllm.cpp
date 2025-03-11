@@ -203,7 +203,7 @@ namespace chatllm
             size_t free_memory;
         };
 
-        static void init(void);
+        static void init(const std::string &ggml_dir = "");
 
         static std::string dev_type_to_str(DeviceType type);
 

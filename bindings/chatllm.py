@@ -36,13 +36,14 @@ class LibChatLLM:
     _obj2id = {}
     _id2obj = {}
 
-    def __init__(self, lib: str = '', model_storage: str = '') -> None:
+    def __init__(self, lib: str = '', model_storage: str = '', init_params: list[str] = []) -> None:
 
         if lib == '':
             lib = os.path.dirname(os.path.abspath(sys.argv[0]))
         self._lib_path = lib
         self.model_storage = os.path.abspath(model_storage if model_storage != '' else os.path.join(lib, '..', 'quantized'))
 
+        init_params = ['--ggml_dir', lib] + init_params
         lib = os.path.join(lib, 'libchatllm.')
         if sys.platform == 'win32':
             import re
@@ -63,6 +64,17 @@ class LibChatLLM:
             self._lib = cdll.LoadLibrary(lib)
             self._PRINTFUNC = CFUNCTYPE(None, c_void_p, c_int, c_char_p)
             self._ENDFUNC = CFUNCTYPE(None, c_void_p)
+
+        _chatllm_append_init_param = self._lib.chatllm_append_init_param
+        _chatllm_append_init_param.restype = None
+        _chatllm_append_init_param.argtypes = [c_char_p]
+        _chatllm_init = self._lib.chatllm_init
+        _chatllm_init.restype = c_int
+        _chatllm_init.argtypes = []
+
+        for s in init_params:
+            _chatllm_append_init_param(c_char_p(s.encode()))
+        assert _chatllm_init() == 0
 
         self._chatllm_create            = self._lib.chatllm_create
         self._chatllm_append_param      = self._lib.chatllm_append_param
@@ -415,7 +427,7 @@ class ChatLLM:
         self.references.append(s)
 
     def callback_print_log(self, s: str) -> None:
-        pass
+        print(s)
 
     def callback_print_beam_search(self, s: str) -> None:
         l = s.split(',', maxsplit=1)

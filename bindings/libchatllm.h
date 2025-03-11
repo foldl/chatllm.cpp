@@ -50,6 +50,24 @@ enum PrintType
 typedef void (*f_chatllm_print)(void *user_data, int print_type, const char *utf8_str);
 typedef void (*f_chatllm_end)(void *user_data);
 
+/**
+ * @brief append an initialization command line option (optional)
+ *
+ * some command line options apply globally, such as `--rpc_endpoints ...`, `--log_level ...`.
+ *
+ * Treating `--rpc_endpoints ...` globally make things clearer: all backend devices are **hard**ware.
+ *
+ * @param[in] utf8_str          a command line option
+ */
+DLL_DECL void API_CALL chatllm_append_init_param(const char *utf8_str);
+
+/**
+ * @brief init the library with parameters (optional)
+ *
+ * @return                      0 if succeeded
+ */
+DLL_DECL int API_CALL chatllm_init(void);
+
 struct chatllm_obj;
 
 /**
