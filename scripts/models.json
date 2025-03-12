@@ -2106,7 +2106,7 @@
         }
     },
     "instella": {
-        "brief": "A family of fully open state-of-the-art 3-billion-parameter language models (LMs) trained from scratch on AMD Instinct™ MI300X GPUs",
+        "brief": "A family of fully open state-of-the-art 3-billion-parameter language models (LMs) trained from scratch on AMD Instinct™ MI300X GPUs.",
         "default": "3b",
         "license": "ResearchRAIL license",
         "variants": {
@@ -2116,6 +2116,22 @@
                     "q8": {
                         "size": 3309549408,
                         "url": "chatllm_quantized_instella/instella-3b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "reka-flash-3": {
+        "brief": "Reka Flash 3 is a 21B general-purpose reasoning model that was trained from scratch.",
+        "default": "21b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "21b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 11763674544,
+                        "url": "chatllm_quantized_reka/reka-flash-3-q4_0.bin"
                     }
                 }
             }

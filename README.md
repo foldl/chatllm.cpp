@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-03-12: Reka-Flash-3
 * 2025-03-10: Instella
 * 2025-03-05: Baichuan-M1
 * 2025-03-03: HunYuan Dense

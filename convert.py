@@ -58,6 +58,7 @@ class ModelType(Enum):
     LlaMA2Plus  = 0x156
     Megrez      = 0x157
     Falcon3     = 0x158
+    RekaFlash3  = 0x159
 
     BaiChuanLlama   = 0x200
     BaiChuan        = 0x201
@@ -359,7 +360,6 @@ def tabulate(data, headers = []) -> str:
         all.append(row)
         col_num = max(col_num, len(row))
 
-    print(all)
     def get_col_width(n: int) -> int:
         nonlocal all
         r = 0
@@ -5663,6 +5663,11 @@ def main():
         HunYuanDenseConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InstellaForCausalLM':
         InstellaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'reka-flash-3':
+        assert config.rope_scaling is None, 'config.rope_scaling must be null'
+        assert not config.tie_word_embeddings, 'config.tie_word_embeddings must be false'
+        Llama3Converter.MODEL_TYPE = ModelType.RekaFlash3
+        Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

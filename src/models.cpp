@@ -215,6 +215,7 @@ namespace chatllm
         MODEL_TYPE_LLAMA2PLUS       = 0x156,
         MODEL_TYPE_MEGREZ           = 0x157,
         MODEL_TYPE_FALCON3          = 0x158,
+        MODEL_TYPE_REKA_FLASH3      = 0x159,
 
         MODEL_TYPE_BAICHUANLLAMA    = 0x200,
         MODEL_TYPE_BAICHUAN         = 0x201,
@@ -392,6 +393,8 @@ namespace chatllm
             return "Megrez";
         case MODEL_TYPE_FALCON3:
             return "Falcon3";
+        case MODEL_TYPE_REKA_FLASH3:
+            return "Reka-Flash-3";
         case MODEL_TYPE_CODELLAMA:
             return "CodeLlaMa";
         case MODEL_TYPE_BAICHUAN:
@@ -1864,6 +1867,11 @@ namespace chatllm
         #include "../models/instella.cpp"
     }
 
+    namespace reka
+    {
+        #include "../models/reka.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2076,6 +2084,7 @@ namespace chatllm
         CASE(LLAMA3_2,              llama::v3_2, 1)             \
         CASE(MEGREZ,                megrez::chat, 1)            \
         CASE(FALCON3,               falcon::v3, 1)              \
+        CASE(REKA_FLASH3,           reka::flash, 1)             \
         CASE(EXAONE,                exaone, 1)                  \
         CASE(DEEPSEEK_R1_DISTILL_LLAMA, llama::ds_r1_distill, 1)\
                                                                 \

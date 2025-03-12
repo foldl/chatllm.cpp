@@ -14,8 +14,14 @@ try:
 except:
     raise Exception('package `rich` is missing. install it: `pip install rich`')
 
-TAG_THINK_START = '<think>'
-TAG_THINK_END = '</think>'
+# sorted by length!
+THINK_TAGS = [
+    ('<think>', '</think>'),
+    ('<reasoning>', '</reasoning>'),
+]
+
+TAG_THINK_START = ''
+TAG_THINK_END = ''
 
 class RichChatLLM(ChatLLM):
     chunk_acc = ''
@@ -53,17 +59,28 @@ class RichChatLLM(ChatLLM):
         return s
 
     def callback_print(self, s: str) -> None:
+        global TAG_THINK_START, TAG_THINK_END
         if self.detecting:
             self.acc = (self.acc + s).lstrip(" \n\r")
-            if len(self.acc) < len(TAG_THINK_START):
-                return
-            self.detecting = False
-            if self.acc.startswith(TAG_THINK_START):
-                self.thoughts_acc = self.acc[len(TAG_THINK_START):]
-                self.think_start = time.perf_counter()
-                self.think_time = 0
-            else:
+            padding = False
+            for tags in THINK_TAGS:
+                if len(self.acc) < len(tags[0]):
+                    padding = True
+                    break
+                if self.acc.startswith(tags[0]):
+                    TAG_THINK_START = tags[0]
+                    TAG_THINK_END = tags[1]
+
+                    self.thoughts_acc = self.acc[len(TAG_THINK_START):]
+                    self.think_start = time.perf_counter()
+                    self.think_time = 0
+                    self.detecting = False
+
+                    break
+
+            if (not padding) and self.detecting:
                 self.is_thinking = False
+                self.detecting = False
                 self.chunk_acc = self.acc
             return
 
