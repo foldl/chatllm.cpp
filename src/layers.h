@@ -383,13 +383,13 @@ namespace chatllm
             : word_weight(ggml::new_tensor_2d(ctx, ctx->dtype, embedding_dim, num_embeddings)),
               position_weight(ggml::new_tensor_2d(ctx, ctx->dtype, embedding_dim, pos_max)),
               indices(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, pos_max)),
-              ln(ctx, embedding_dim),
-              pad_index(2)
+              ln(ctx, embedding_dim)
         {
+            const int pad_index = 2;
             std::vector<int> v_indices;
             v_indices.resize(pos_max);
             for (int i = 0; i < pos_max; i++)
-                v_indices[i] = i;
+                v_indices[i] = pad_index + i;
 
             ctx->get_allocator()->alloc(indices);
             Backend::write_tensor_data(indices, v_indices.data());
@@ -411,7 +411,6 @@ namespace chatllm
         ggml::tensor *position_weight;
         ggml::tensor *indices;
         LayerNorm    ln;
-        int          pad_index;
     };
 
     class RMSNorm : public Block
