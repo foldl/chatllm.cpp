@@ -221,8 +221,8 @@ public:
         return input;
     }
 public:
-    float scale_pre;
-    float scale_post;
+    const float scale_pre;
+    const float scale_post;
 };
 
 template <class Layer> static void setup_layer(Block *block, const Config &config, Block *attn_scores_pp)
@@ -336,5 +336,197 @@ public:
     BaseConfig config;
     TanhScaling logits_pp;
     TanhScaling attn_scores_pp;
+};
+}
+
+namespace v3
+{
+struct Config : public BaseConfig
+{
+    int num_key_value_heads;
+    int head_dim;
+    int query_pre_attn_scalar;
+    int sliding_window;
+    int sliding_window_pattern;
+
+    float rope_local_base_freq;
+    float rope_theta;
+    float rope_scaling_factor;
+};
+
+typedef v1::Tokenizer Tokenizer;
+
+template <int sliding_window_len> class Gemma3SWASelfAttention : public QKNormedAttention<RMSNorm, SlidingWindowAttentionImpl<sliding_window_len>>
+{
+public:
+    Gemma3SWASelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
+        : QKNormedAttention<RMSNorm, SlidingWindowAttentionImpl<sliding_window_len>>
+            (ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
+};
+
+template <int sliding_window_len> class Gemma3SWABlock : public LMBlock4<RMSNorm, Gemma3SWASelfAttention<sliding_window_len>, RMSNorm, RMSNorm, GELUMLP, RMSNorm>
+{
+public:
+    Gemma3SWABlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
+        : LMBlock4<RMSNorm, Gemma3SWASelfAttention<sliding_window_len>, RMSNorm, RMSNorm, GELUMLP, RMSNorm>
+                  (ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
+    {}
+};
+
+class Gemma3FullSelfAttention : public QKNormedAttention<RMSNorm, BaseAttention>
+{
+public:
+    Gemma3FullSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
+        : QKNormedAttention<RMSNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
+};
+
+class Gemma3FullBlock : public LMBlock4<RMSNorm, Gemma3FullSelfAttention, RMSNorm, RMSNorm, GELUMLP, RMSNorm>
+{
+public:
+    Gemma3FullBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
+        : LMBlock4(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
+    {}
+};
+
+typedef Gemma3SWABlock<512> Gemma3SWABlock512;
+typedef Gemma3SWABlock<1024> Gemma3SWABlock1024;
+
+template <class Layer> static void setup_layer(Block *block, const Config &config, float rope_theta, float rope_scaling_factor = -1.0f)
+{
+    auto layer = dynamic_cast<Layer *>(block);
+    auto &attention = layer->attention;
+    attention.freq_base = rope_theta;
+    attention.attn_scaling_factor = powf((float)config.query_pre_attn_scalar, -0.5);
+    if (rope_scaling_factor > 0)
+        attention.freq_scale = 1 / rope_scaling_factor;
+}
+
+template <class Layer> static void load_layer(ModelLoader &loader, const std::string &layer_prefix, Block *block)
+{
+    auto layer = dynamic_cast<Layer *>(block);
+    loader.read_tensor(layer_prefix + "input_layernorm.weight",             layer->pre_attention_layernorm.weight);
+    loader.read_tensor(layer_prefix + "mlp.down_proj.weight",               layer->mlp.down_proj.weight);
+    loader.read_tensor(layer_prefix + "mlp.gate_proj.weight",               layer->mlp.gate_proj.weight);
+    loader.read_tensor(layer_prefix + "mlp.up_proj.weight",                 layer->mlp.up_proj.weight);
+    loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",    layer->post_attention_layernorm.weight);
+    loader.read_tensor(layer_prefix + "pre_feedforward_layernorm.weight",   layer->pre_mlp_layernorm.weight);
+    loader.read_tensor(layer_prefix + "post_feedforward_layernorm.weight",  layer->post_mlp_layernorm.weight);
+
+    loader.read_tensor(layer_prefix + "self_attn.k_norm.weight", layer->attention.k_layernorm.weight);
+    loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", layer->attention.k_proj.weight);
+    loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", layer->attention.o_proj.weight);
+    loader.read_tensor(layer_prefix + "self_attn.q_norm.weight", layer->attention.q_layernorm.weight);
+    loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", layer->attention.q_proj.weight);
+    loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", layer->attention.v_proj.weight);
+}
+
+class ConditionalGeneration : public BaseModelForConditionalGeneration
+{
+public:
+    typedef HeterogeneousModel<BaseConfig, Embedding, RMSNorm> ModelClass;
+public:
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA2)
+        : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config),
+          sliding_window(config.sliding_window),
+          sliding_window_pattern(config.sliding_window_pattern)
+    {
+        const size_t tensor_ovhd = ggml_tensor_overhead();
+        size_t num_tensors = 2;
+        for (int i = 0; i < config.num_hidden_layers; i++) num_tensors += is_sliding(i) ? 17 : 16;
+        const size_t ctx_size = num_tensors * tensor_ovhd;
+        w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+        w_ctx_.dtype = config.dtype;
+
+        CHATLLM_CHECK((512 == sliding_window) || (1024 == sliding_window))<< "unsupported SWA param";
+
+        auto create_layer = [&](InitContext *ctx, int layer_index) -> Block *
+        {
+            if (is_sliding(layer_index))
+            {
+                switch (sliding_window)
+                {
+                case 512:
+                    return new Gemma3SWABlock512(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
+                        config.num_key_value_heads, config.head_dim, config.max_length);
+                default:
+                    return new Gemma3SWABlock1024(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
+                        config.num_key_value_heads, config.head_dim, config.max_length);
+                }
+            }
+            else
+            {
+                return new Gemma3FullBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
+                                            config.num_key_value_heads, config.head_dim, config.max_length);
+            }
+        };
+
+        transformer = new ModelClass(&w_ctx_, config, nullptr, create_layer);
+
+        for (int i = 0; i < config.num_hidden_layers; i++)
+        {
+            if (is_sliding(i))
+            {
+                switch (sliding_window)
+                {
+                case 512:
+                    setup_layer<Gemma3SWABlock512>(get_typed_transformer<ModelClass>()->get_layer(i), config, config.rope_local_base_freq);
+                    break;
+                default:
+                    setup_layer<Gemma3SWABlock1024>(get_typed_transformer<ModelClass>()->get_layer(i), config, config.rope_local_base_freq);
+                    break;
+                }
+
+            }
+            else
+            {
+                setup_layer<Gemma3FullBlock>(get_typed_transformer<ModelClass>()->get_layer(i), config, config.rope_theta, config.rope_scaling_factor);
+            }
+        }
+
+        batch_input = false;
+    }
+
+    void load(ModelLoader &loader) override
+    {
+        auto transformer = get_typed_transformer<ModelClass>();
+
+        loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+        for (int i = 0; i < config.num_hidden_layers; i++)
+        {
+            std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
+            if (is_sliding(i))
+            {
+                switch (sliding_window)
+                {
+                case 512:
+                    load_layer<Gemma3SWABlock512>(loader, layer_prefix, transformer->get_layer(i));
+                    break;
+                default:
+                    load_layer<Gemma3SWABlock1024>(loader, layer_prefix, transformer->get_layer(i));
+                    break;
+                }
+            }
+            else
+            {
+                load_layer<Gemma3FullBlock>(loader, layer_prefix, transformer->get_layer(i));
+            }
+        }
+        loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+
+        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
+            << "corrupted model weights";
+    }
+
+public:
+
+    bool is_sliding(int layer_id)
+    {
+        return ((layer_id + 1) % sliding_window_pattern) != 0;
+    }
+
+public:
+    BaseConfig config;
+    const int sliding_window;
+    const int sliding_window_pattern;
 };
 }

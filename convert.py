@@ -121,6 +121,7 @@ class ModelType(Enum):
 
     Gemma       = 0x1300
     Gemma2      = 0x1301
+    Gemma3      = 0x1302
 
     CohereCommand       = 0x1400
     CohereAya23         = 0x1401
@@ -4330,6 +4331,130 @@ class Gemma2Converter(BaseConverter):
 
         return weight_names
 
+class Gemma3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Gemma3
+    FILE_VERSION = 1
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name == 'model.embed_tokens.weight':
+            return tensor * (config.hidden_size ** 0.5)
+        elif name.endswith('input_layernorm.weight') or \
+            name.endswith('post_attention_layernorm.weight') or \
+            name.endswith('post_feedforward_layernorm.weight') or \
+            name.endswith('pre_feedforward_layernorm.weight') or \
+            name.endswith('k_norm.weight') or \
+            name.endswith('q_norm.weight') or \
+            name == 'model.norm.weight':
+            return 1 + tensor
+        else:
+            return tensor
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+
+        new_dict = {}
+        for k in state_dict:
+            kk = k
+            if kk.startswith('language_model.'):
+                kk = kk[len('language_model.'):]
+
+            if not kk.startswith('model.'): continue
+
+            new_dict[kk] = Gemma3Converter.pp(config, kk, state_dict[k])
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+
+        if config.text_config is not None:
+            for k in config.text_config.keys():
+                config[k] = config.text_config[k]
+
+        if isinstance(config.eos_token_id, list):
+            config.eos_token_id = config.eos_token_id[0]
+        if config.bos_token_id is None:
+            config.bos_token_id = 2
+
+        if config.vocab_size is None:
+            config.vocab_size=262_208
+        if config.hidden_size is None:
+            config.hidden_size = 2304
+        if config.intermediate_size is None:
+            config.intermediate_size = 9216
+        if config.max_position_embeddings is None:
+            config.max_position_embeddings = 131_072
+        if config.num_attention_heads is None:
+            config.num_attention_heads = 8
+        if config.num_key_value_heads is None:
+            config.num_key_value_heads = 4
+        if config.head_dim is None:
+            config.head_dim = 256
+        if config.sliding_window_pattern is None:
+            config.sliding_window_pattern = 6
+        if config.query_pre_attn_scalar is None:
+            config.query_pre_attn_scalar = 256
+        if config.rope_local_base_freq is None:
+            config.rope_local_base_freq = 10000.0
+        if config.rope_theta is None:
+            config.rope_theta = 1_000_000.0
+
+        assert (config.attention_bias is None) or (config.attention_bias == False), 'attention_bias must == False'
+        assert (config.hidden_activation is None) or (config.hidden_activation == 'gelu_pytorch_tanh'), "hidden_activation must  == 'gelu_pytorch_tanh'"
+        assert config.final_logit_softcapping is None, 'final_logit_softcapping must be null'
+        assert config.attn_logit_softcapping is None, 'attn_logit_softcapping must be null'
+
+        rope_scaling_factor = -1
+        if config.rope_scaling is not None:
+            assert config.rope_scaling['rope_type'] == 'linear'
+            rope_scaling_factor = config.rope_scaling['factor']
+
+        # fake it for LlamaConverter
+        config.hidden_act = 'silu'
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+            config.query_pre_attn_scalar,
+            config.sliding_window,
+            config.sliding_window_pattern,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_local_base_freq,
+            config.rope_theta,
+            rope_scaling_factor,
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.post_feedforward_layernorm.weight",
+                f"model.layers.{i}.pre_feedforward_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_norm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_norm.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        return weight_names
+
 class Grok1Converter(BaseConverter):
     MODEL_TYPE = ModelType.Grok1
     tensor_map = []
@@ -5624,6 +5749,11 @@ def main():
         GemmaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Gemma2ForCausalLM':
         Gemma2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Gemma3ForCausalLM':
+        Gemma3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Gemma3ForConditionalGeneration':
+        print(f"WARNING: only LM is supported")
+        Gemma3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'CohereForCausalLM':
         CohereCommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Cohere2ForCausalLM':

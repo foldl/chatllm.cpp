@@ -280,6 +280,7 @@ namespace chatllm
 
         MODEL_TYPE_GEMMA    = 0x1300,
         MODEL_TYPE_GEMMA2   = 0x1301,
+        MODEL_TYPE_GEMMA3   = 0x1302,
 
         MODEL_TYPE_COHERE_COMMAND_R     = 0x1400,
         MODEL_TYPE_COHERE_AYA_23        = 0x1401,
@@ -489,6 +490,8 @@ namespace chatllm
             return "Gemma";
         case MODEL_TYPE_GEMMA2:
             return "Gemma-2";
+        case MODEL_TYPE_GEMMA3:
+            return "Gemma-3";
         case MODEL_TYPE_COHERE_COMMAND_R:
             return "Command-R";
         case MODEL_TYPE_COHERE_COMMAND_R7B:
@@ -2154,6 +2157,7 @@ namespace chatllm
                                                                 \
         CASE(GEMMA,                 gemma::v1, 1)               \
         CASE(GEMMA2,                gemma::v2, 2)               \
+        CASE(GEMMA3,                gemma::v3, 1)               \
                                                                 \
         CASE(COHERE_COMMAND_R,      cohere::command_r, 1)       \
         CASE(COHERE_AYA_23,         cohere::aya_23, 1)          \

@@ -1421,7 +1421,7 @@ namespace chatllm
             int64_t offset = cache_offset + n_past + qlen - len;
 
             // patch memory estimation
-            if (offset + len > sliding_window_len)
+            if (offset + len > cache_length)
                 offset = 0;
 
             CHATLLM_CHECK(offset >= 0) << "offset must >= 0";
@@ -1445,7 +1445,7 @@ namespace chatllm
             int64_t offset = cache_offset + n_past + qlen - len;
 
             // patch for memory estimation
-            if (offset + len > sliding_window_len)
+            if (offset + len > cache_length)
                 offset = 0;
 
             ggml::tensor * value_layer = ggml::view_3d(ctx,
@@ -2381,6 +2381,15 @@ namespace chatllm
     {
     public:
         QKNormedAttention() : BaseAttn() {}
+
+        QKNormedAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
+            : RoPESelfAttention<BaseAttn>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias),
+              k_layernorm(ctx, head_dim),
+              q_layernorm(ctx, head_dim),
+              post_norm(false)
+        {
+            RoPESelfAttention<BaseAttn>::rope_mode = RoPEMode::Original;
+        }
 
         QKNormedAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
             : RoPESelfAttention<BaseAttn>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),

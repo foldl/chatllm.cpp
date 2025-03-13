@@ -876,6 +876,49 @@
             }
         }
     },
+    "gemma3": {
+        "brief": "The Gemma 3 models are multimodal—processing text and images—and feature a 128K context window with support for over 140 languages.",
+        "default": "4b-lm",
+        "license": "https://ai.google.dev/gemma/terms",
+        "variants": {
+            "1b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1066931520,
+                        "url": "chatllm_quantized_gemma-3/gemma-3-1b.bin"
+                    }
+                }
+            },
+            "4b-lm": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4128026048,
+                        "url": "chatllm_quantized_gemma-3/gemma-3-4b-lm.bin"
+                    }
+                }
+            },
+            "12b-lm": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 12507837472,
+                        "url": "chatllm_quantized_gemma-3/gemma-3-12b-lm.bin"
+                    }
+                }
+            },
+            "27b-lm": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 15201602176,
+                        "url": "chatllm_quantized_gemma-3/gemma-3-27b-lm-q4_0.bin"
+                    }
+                }
+            }
+        }
+    },
     "llama3": {
         "brief": "Meta Llama 3: The most capable openly available LLM to date.",
         "default": "8b",
