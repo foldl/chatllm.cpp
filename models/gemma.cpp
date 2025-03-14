@@ -425,7 +425,7 @@ class ConditionalGeneration : public BaseModelForConditionalGeneration
 public:
     typedef HeterogeneousModel<BaseConfig, Embedding, RMSNorm> ModelClass;
 public:
-    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA2)
+    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA3)
         : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config),
           sliding_window(config.sliding_window),
           sliding_window_pattern(config.sliding_window_pattern)
