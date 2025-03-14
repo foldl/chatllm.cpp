@@ -1039,7 +1039,12 @@ namespace chatllm
             while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
             {
                 std::vector<float> lm_logits;
-                generate_next_token(curr_input_ids, gen_config, lm_logits);
+                if (!generate_next_token(curr_input_ids, gen_config, lm_logits))
+                {
+                    ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
+                    aborted = true;
+                    break;
+                }
 
                 if (first_call)
                 {
@@ -1113,29 +1118,35 @@ namespace chatllm
         void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                     std::vector<float> &embedding) override
         {
-            run_model(input_ids, gen_config, 0, embedding);
+            auto r = run_model(input_ids, gen_config, 0, embedding);
+            if (!r) ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
         }
 
         float qa_rank(const GenerationConfig &gen_config, const std::vector<int> &input_ids) override
         {
             std::vector<float> output;
-            run_model(input_ids, gen_config, 0, output);
+            auto r = run_model(input_ids, gen_config, 0, output);
+            if (!r) ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
             CHATLLM_CHECK(output.size() == 1) << "ouput must be scaler";
 
             return output[0];
         }
 
-        void generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override
+        bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override
         {
             if (batch_input)
             {
-                run_model(input_ids, gen_config, n_past + n_past_offset, lm_logits);
+                return run_model(input_ids, gen_config, n_past + n_past_offset, lm_logits);
             }
             else
             {
                 int past = n_past + n_past_offset;
                 for (size_t i = 0 ; (i < input_ids.size()) & !aborted; i++, past++)
-                    run_model({input_ids[i]}, gen_config, past, lm_logits);
+                {
+                    if (!run_model({input_ids[i]}, gen_config, past, lm_logits))
+                        return false;
+                }
+                return true;
             }
         }
 
@@ -1218,7 +1229,7 @@ namespace chatllm
             return s;
         }
 
-        virtual void run_model(const std::vector<int> &input_ids,
+        virtual bool run_model(const std::vector<int> &input_ids,
                                        const GenerationConfig &gen_config,
                                        int past,
                                        std::vector<float> &output)
@@ -1228,7 +1239,8 @@ namespace chatllm
                 initial_run = true;
                 int past = gen_config.max_length - (int)input_ids.size();
                 if (past < 0) past = 0;
-                CHATLLM_CHECK(before_initial_run(input_ids, gen_config, past)) << "failed to reserve memory.";
+                if (!before_initial_run(input_ids, gen_config, past))
+                    return false;
             }
 
             ForwardContext ctx(&backend_context);
@@ -1255,7 +1267,7 @@ namespace chatllm
 
             output.resize(ggml::nbytes(r) / sizeof(output[0]));
 
-            CHATLLM_CHECK(ctx.allocate()) << "failed to allocate memory for graph";
+            if (!ctx.allocate()) return false;
 
             Backend::write_tensor_data(input_ids_tensor, input_ids.data());
 
@@ -1270,6 +1282,8 @@ namespace chatllm
             Backend::read_tensor_data(r, output.data());
 
             ctx.reset();
+
+            return true;
         }
 
         virtual bool is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output)

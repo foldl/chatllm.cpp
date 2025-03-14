@@ -651,7 +651,7 @@ namespace chatllm
                                             int gen_max_tokens,
                                             BaseStreamer *streamer = nullptr) = 0;
 
-        virtual void generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) {};
+        virtual bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) { return true; };
 
         virtual void abort_generation(void) = 0;
 
@@ -719,9 +719,9 @@ namespace chatllm
             return model->generate(input_ids, gen_config, continuous, completed, performance, gen_max_tokens, streamer);
         }
 
-        void generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override
+        bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override
         {
-            model->generate_next_token(input_ids, gen_config, lm_logits);
+            return model->generate_next_token(input_ids, gen_config, lm_logits);
         }
 
         void abort_generation(void) override { model->abort_generation(); }
