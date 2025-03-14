@@ -1949,6 +1949,15 @@
                         "url": "chatllm_quantized_olmo-2/olmo-2-7b.bin"
                     }
                 }
+            },
+            "32b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q8": {
+                        "size": 18137886064,
+                        "url": "chatllm_quantized_olmo-2/olmo-2-32b-q4_0.bin"
+                    }
+                }
             }
         }
     },
