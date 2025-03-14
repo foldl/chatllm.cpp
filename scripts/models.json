@@ -1953,7 +1953,7 @@
             "32b": {
                 "default": "q4_0",
                 "quantized": {
-                    "q8": {
+                    "q4_0": {
                         "size": 18137886064,
                         "url": "chatllm_quantized_olmo-2/olmo-2-32b-q4_0.bin"
                     }
