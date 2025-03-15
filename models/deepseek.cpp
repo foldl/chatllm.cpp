@@ -167,7 +167,7 @@ namespace v2_light
     // for opt_speed == false:
     //      k_pe    -> K cache;
     //      kv_lora -> V cache.
-    //      GGML_TYPE_F32 is used because GGML complains
+    // FIXME: for opt_speed == false, GGML_TYPE_F32 is used because GGML complains
     template <bool opt_speed> class BaseMLAttention : public KVCacheAttention
     {
     public:
@@ -181,12 +181,13 @@ namespace v2_light
         BaseMLAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length,
                       int q_lora_rank, int kv_lora_rank, int rope_dim, int qk_nope_head_dim, int v_head_dim,
                       bool use_bias,
-                      ggml::type cache_type, int cache_length)
-            : KVCacheAttention(ctx, num_attention_heads, num_kv_heads,
+                      int cache_length)
+            : KVCacheAttention(CacheTypeChanger(ctx, opt_speed ? ctx->cache_dtype : ggml::type::GGML_TYPE_F32),
+                               num_attention_heads, num_kv_heads,
                                opt_speed ? (qk_nope_head_dim + rope_dim) * num_kv_heads : rope_dim * 1,
                                opt_speed ? v_head_dim * num_kv_heads : kv_lora_rank,
                                max_length,
-                               opt_speed ? cache_type : GGML_TYPE_F32, cache_length),
+                               cache_length),
               d_kv_proj(ctx, hidden_size, kv_lora_rank, nullptr, use_bias),
               k_pe_proj(ctx, hidden_size, rope_dim, nullptr, use_bias),
               u_k_nope_proj(ctx, kv_lora_rank, qk_nope_head_dim * num_kv_heads, nullptr, false),
@@ -207,7 +208,7 @@ namespace v2_light
             : BaseMLAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length,
                               q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim,
                               use_bias,
-                              GGML_TYPE_F16, max_length)
+                              max_length)
         {}
 
         int64_t get_param_num(bool effective_only) const override

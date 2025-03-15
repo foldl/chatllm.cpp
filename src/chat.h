@@ -273,11 +273,37 @@ namespace chatllm
     {
     public:
         InitContext(BackendContext *backend_context = nullptr) : ComputeContext(backend_context)
-        {}
-       struct ggml_context *get_ctx() override { return gctx.get(); }
+        {
+            cache_dtype = ggml::type::GGML_TYPE_F16;
+        }
+        struct ggml_context *get_ctx() override { return gctx.get(); }
     public:
         GGMLContext gctx;
         ggml::type dtype;
+        ggml::type cache_dtype;
+    };
+
+    class CacheTypeChanger
+    {
+    public:
+        CacheTypeChanger(InitContext *ctx, ggml::type cache_dtype): ctx(ctx)
+        {
+            _type = ctx->cache_dtype;
+            ctx->cache_dtype = cache_dtype;
+        }
+
+        ~CacheTypeChanger()
+        {
+            ctx->cache_dtype = _type;
+        }
+
+        operator InitContext *() const
+        {
+            return ctx;
+        }
+    private:
+        InitContext *ctx;
+        ggml::type   _type;
     };
 
     class LayerMover
@@ -891,10 +917,12 @@ namespace chatllm
             std::string gpu_layers;
             bool moe_on_cpu;
             int n_threads;
-            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers, bool moe_on_cpu, int n_threads)
-                : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads)
+            std::string cache_type;
+            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers, bool moe_on_cpu, int n_threads, const std::string &cache_type)
+                : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads),
+                  cache_type(cache_type)
             {}
-            extra_args() : extra_args(-1, "", "", false, 1) {}
+            extra_args() : extra_args(-1, "", "", false, 1, "") {}
         };
 
         ModelObject(const std::string &path);

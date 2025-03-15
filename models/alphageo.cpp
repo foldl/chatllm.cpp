@@ -204,7 +204,7 @@ class AlphaGeoSelfAttention: public BaseAttention
 public:
     AlphaGeoSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, int max_distance, int num_buckets)
         : BaseAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, hidden_size / num_attention_heads, max_length, false, false,
-                       GGML_TYPE_F32, max_length),
+                        max_length),
           rel_embedding(ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F16, num_attention_heads, num_buckets)),
           attention_scale(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, num_attention_heads)),
           pos_bucket(nullptr)
@@ -544,6 +544,7 @@ public:
         const size_t ctx_size = num_tensors * tensor_ovhd;
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
+        w_ctx_.cache_dtype = ggml::type::GGML_TYPE_F32;
 
         CHATLLM_CHECK(config.dtype == ggml::type::GGML_TYPE_F32) << "this model must be quantized to F32";
 

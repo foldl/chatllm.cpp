@@ -28,8 +28,9 @@ namespace chatllm
         std::string gpu_layers;
         bool moe_on_cpu;
         int n_threads;
-        RuntimeConfig(const std::string &gpu_layers, bool moe_on_cpu, int n_threads):
-            gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads)
+        ggml::type cache_type;
+        RuntimeConfig(const std::string &gpu_layers, bool moe_on_cpu, int n_threads, ggml::type cache_type):
+            gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads), cache_type(cache_type)
         {}
     };
 
@@ -960,6 +961,7 @@ namespace chatllm
               w_ctx_(&backend_context),
               config_(config)
         {
+            w_ctx_.cache_dtype = runtime_config.cache_type;
             prepare(runtime_config);
             for (int i = 0; i < config.num_hidden_layers; i++)
                 layer_ids.push_back(i);
@@ -1986,7 +1988,7 @@ namespace chatllm
             config.num_hidden_layers = (int)layers.size();
         }
 
-        RuntimeConfig rt_config(args.gpu_layers, args.moe_on_cpu, args.n_threads);
+        RuntimeConfig rt_config(args.gpu_layers, args.moe_on_cpu, args.n_threads, ggml::parse(args.cache_type));
 
         // load model
         ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);

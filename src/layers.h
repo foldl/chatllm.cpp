@@ -810,13 +810,13 @@ namespace chatllm
     public:
         CoreAttention() : num_attention_heads(0), num_kv_heads(0), max_length(0) {}
 
-        CoreAttention(InitContext *ctx, int num_attention_heads, int num_kv_heads, int max_length, ggml::type cache_type,
+        CoreAttention(InitContext *ctx, int num_attention_heads, int num_kv_heads, int max_length,
               int k_cache_ele_num, int v_cache_ele_num)
             : num_attention_heads(num_attention_heads),
               num_kv_heads(num_kv_heads),
-              k_cache(k_cache_ele_num > 0 ? ggml::new_tensor_1d(ctx, cache_type, k_cache_ele_num)
+              k_cache(k_cache_ele_num > 0 ? ggml::new_tensor_1d(ctx, ctx->cache_dtype, k_cache_ele_num)
                                        : nullptr),
-              v_cache(v_cache_ele_num > 0 ? ggml::new_tensor_1d(ctx, cache_type, v_cache_ele_num)
+              v_cache(v_cache_ele_num > 0 ? ggml::new_tensor_1d(ctx, ctx->cache_dtype, v_cache_ele_num)
                                        : nullptr),
               pos(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length)),
               max_length(max_length),
@@ -947,8 +947,8 @@ namespace chatllm
         KVCacheAttention() : CoreAttention(), k_hidden_size(0), v_hidden_size(0), cache_length(0) {}
 
         KVCacheAttention(InitContext *ctx, int num_attention_heads, int num_kv_heads, int k_hidden_size, int v_hidden_size, int max_length,
-                         ggml::type cache_type, int cache_length)
-            : CoreAttention(ctx, num_attention_heads, num_kv_heads, max_length, cache_type,
+                         int cache_length)
+            : CoreAttention(ctx, num_attention_heads, num_kv_heads, max_length,
                             k_hidden_size * cache_length,
                             v_hidden_size * cache_length),
               k_hidden_size(k_hidden_size),
@@ -982,15 +982,15 @@ namespace chatllm
         BaseConsolidatedQKVAttention() : KVCacheAttention() {}
 
         BaseConsolidatedQKVAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
-            : BaseConsolidatedQKVAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, GGML_TYPE_F16, max_length)
+            : BaseConsolidatedQKVAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, max_length)
         {}
 
         BaseConsolidatedQKVAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias,
-                                     ggml::type cache_type, int cache_length)
+                                     int cache_length)
             : KVCacheAttention(ctx, num_attention_heads, num_kv_heads,
                                head_dim * num_kv_heads,
                                head_dim * num_kv_heads,
-                               max_length, cache_type, cache_length),
+                               max_length, cache_length),
               query_key_value(ctx, hidden_size, hidden_size + 2 * (hidden_size / num_attention_heads) * num_kv_heads, qkv_bias),
               dense(ctx, hidden_size, hidden_size, o_bias)
         {
@@ -1019,8 +1019,8 @@ namespace chatllm
 
         BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length,
                       bool qkv_bias, bool o_bias,
-                      ggml::type cache_type, int cache_length)
-            : KVCacheAttention(ctx, num_attention_heads, num_kv_heads, head_dim * num_kv_heads, head_dim * num_kv_heads, max_length, cache_type, cache_length),
+                      int cache_length)
+            : KVCacheAttention(ctx, num_attention_heads, num_kv_heads, head_dim * num_kv_heads, head_dim * num_kv_heads, max_length, cache_length),
               q_proj(ctx, hidden_size, head_dim * num_attention_heads, nullptr, qkv_bias),
               k_proj(ctx, hidden_size, head_dim * num_kv_heads, nullptr, qkv_bias),
               v_proj(ctx, hidden_size, head_dim * num_kv_heads, nullptr, qkv_bias),
@@ -1030,20 +1030,20 @@ namespace chatllm
 
         BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length,
                       bool qkv_bias, bool o_bias,
-                      ggml::type cache_type, int cache_length)
+                      int cache_length)
             : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length, qkv_bias, o_bias,
-                            cache_type, cache_length)
+                            cache_length)
         {}
 
         BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
             : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, hidden_size / num_attention_heads, max_length, qkv_bias, o_bias,
-                            GGML_TYPE_F16, max_length)
+                            max_length)
         {}
 
         BaseAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length,
              bool qkv_bias, bool o_bias)
             : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias,
-                            GGML_TYPE_F16, max_length)
+                            max_length)
         {}
 
         int64_t get_param_num(bool effective_only) const override
@@ -1111,7 +1111,7 @@ namespace chatllm
         {}
 
         BaseCachelessAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
-            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, GGML_TYPE_F16, 0),
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, 0),
               raw_k(nullptr),
               raw_v(nullptr)
         {}
@@ -1138,7 +1138,7 @@ namespace chatllm
     {
     public:
         BaseSlidingWindowAttentionRingCache(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
-            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias, GGML_TYPE_F16, sliding_window_len),
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias, sliding_window_len),
               cache_offset(0),
               indices(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, sliding_window_len))
         {
@@ -1268,7 +1268,7 @@ namespace chatllm
         }
 
         BaseSlidingWindowAttentionFullCache(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
-            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, GGML_TYPE_F16, max_length),
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, max_length),
               indices(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, 1)) // to ensure number of tensors are the same
         {
         }
@@ -1332,7 +1332,7 @@ namespace chatllm
         }
 
         BaseSlidingWindowAttentionPartialCache(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
-            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, GGML_TYPE_F16, sliding_window_len + extra_len),
+            : BaseAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias, sliding_window_len + extra_len),
               indices(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, 1)), // to ensure number of tensors are the same
               cache_offset(0)
         {

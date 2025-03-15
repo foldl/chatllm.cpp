@@ -37,6 +37,19 @@ namespace chatllm
         return a.type;
     }
 
+    ggml::type ggml::parse(const std::string &type)
+    {
+        if (type == "f32")
+            return type::GGML_TYPE_F32;
+        if ((type == "q8") || (type == "q8_0"))
+            return type::GGML_TYPE_Q8_0;
+        if (type == "q4_0")
+            return type::GGML_TYPE_Q4_0;
+        if (type == "q4_1")
+            return type::GGML_TYPE_Q4_1;
+        return type::GGML_TYPE_F16;
+    }
+
     bool ggml::is_view_op(ggml::tensor *a)
     {
         enum ggml_op op = a->op;

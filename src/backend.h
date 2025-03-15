@@ -27,6 +27,7 @@ namespace chatllm
 
         type type_of(const ggml::tensor *tensor);
         type type_of(const ggml::tensor &tensor);
+        type parse(const std::string &type);
 
         // why param type is `ggml::tensor`, but not `op`? `tensor` is an operation (a map) mathematically.
         bool is_view_op(ggml::tensor *a);
