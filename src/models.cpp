@@ -254,6 +254,7 @@ namespace chatllm
         MODEL_TYPE_STARLING     = 0x604,
         MODEL_TYPE_WIZARDLM2_MOE  = 0x605,
         MODEL_TYPE_MISTRAL2       = 0x606,
+        MODEL_TYPE_DEEPHERMES3_MISTRAL = 0x607,
 
         MODEL_TYPE_QWEN     = 0x700,
         MODEL_TYPE_QWEN2    = 0x710,
@@ -447,6 +448,8 @@ namespace chatllm
         case MODEL_TYPE_MISTRAL:
         case MODEL_TYPE_MISTRAL2:
             return "Mistral";
+        case MODEL_TYPE_DEEPHERMES3_MISTRAL:
+            return "DeepHermes-3-Mistral";
         case MODEL_TYPE_MIXTRAL:
             return "Mixtral MoE";
         case MODEL_TYPE_OPENCHAT:
@@ -1891,6 +1894,11 @@ namespace chatllm
         #include "../models/reka.cpp"
     }
 
+    namespace hermes
+    {
+        #include "../models/hermes.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2140,6 +2148,7 @@ namespace chatllm
         CASE(OPENCHAT,              openchat, 1)                \
         CASE(MIXTRAL,               mistral::mixtral, 1)        \
         CASE(MISTRAL2,              mistral::mistral2, 1)       \
+        CASE(DEEPHERMES3_MISTRAL,   hermes::_mistral, 1)        \
                                                                 \
         CASE(QWEN,                  qwen::v1, 2)                \
         CASE(QWEN2,                 qwen::v2, 1)                \

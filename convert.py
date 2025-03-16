@@ -95,6 +95,7 @@ class ModelType(Enum):
     Starling = 0x604
     WizardLMMoE = 0x605
     Mistral2 = 0x606
+    DeepHermes3Mistral = 0x607
 
     QWen    = 0x700
     QWen2   = 0x710
@@ -5798,6 +5799,9 @@ def main():
         assert not config.tie_word_embeddings, 'config.tie_word_embeddings must be false'
         Llama3Converter.MODEL_TYPE = ModelType.RekaFlash3
         Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'deephermes-3-mistral':
+        Mistral2Converter.MODEL_TYPE = ModelType.DeepHermes3Mistral
+        Mistral2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

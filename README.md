@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-03-16: DeepHermes-Mistral
 * 2025-03-13: Gemma-3 (Language model)
 * 2025-03-12: Reka-Flash-3
 * 2025-03-10: Instella

@@ -2080,7 +2080,7 @@
     "deephermes3": {
         "brief": "DeepHermes 3 Preview is the latest version of our flagship Hermes series of LLMs by Nous Research, and one of the first models in the world to unify Reasoning (long chains of thought that improve answer accuracy) and normal LLM response modes into one model. We have also improved LLM annotation, judgement, and function calling.",
         "default": "llama3.1-8b",
-        "license": "LLAMA 3.1 COMMUNITY LICENSE AGREEMENT",
+        "license": "LLAMA 3.1 COMMUNITY LICENSE AGREEMENT, Apache License 2.0",
         "variants": {
             "llama3.1-8b": {
                 "default": "q8",
@@ -2088,6 +2088,15 @@
                     "q8": {
                         "size": 8538752192,
                         "url": "chatllm_quantized_deephermes-3-llama/deephermes-3-8b.bin"
+                    }
+                }
+            },
+            "mistral-24b-preview": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 13266823216,
+                        "url": "chatllm_quantized_deephermes-3/deephermes-mistral-24b-q4_0.bin"
                     }
                 }
             }
