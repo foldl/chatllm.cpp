@@ -1377,6 +1377,15 @@
                         "url": "chatllm_quantized_granite_3.0/granite-3.2-2b.bin"
                     }
                 }
+            },
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8683703024,
+                        "url": "chatllm_quantized_granite_3.0/granite-3.2-8b.bin"
+                    }
+                }
             }
         }
     },
