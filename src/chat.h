@@ -917,12 +917,13 @@ namespace chatllm
             std::string gpu_layers;
             bool moe_on_cpu;
             int n_threads;
+            int batch_size;
             std::string cache_type;
-            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers, bool moe_on_cpu, int n_threads, const std::string &cache_type)
+            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers, bool moe_on_cpu, int n_threads, int batch_size, const std::string &cache_type)
                 : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads),
-                  cache_type(cache_type)
+                  batch_size(batch_size), cache_type(cache_type)
             {}
-            extra_args() : extra_args(-1, "", "", false, 1, "") {}
+            extra_args() : extra_args(-1, "", "", false, 1, 0, "") {}
         };
 
         ModelObject(const std::string &path);

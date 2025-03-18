@@ -79,6 +79,7 @@ struct Args
     int beam_size = -1;
     int log_level = 4;
     bool moe_on_cpu = false;
+    int batch_size = 4096;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -137,6 +138,8 @@ void usage(const std::string &prog)
               << "  --rpc_endpoints EP..    RPC endpoints (i.e. servers) for distributed inference (default: empty)\n"
               << "                          EP1;EP2, where EP ::= host:port\n"
               << "  --cache_type T          cache type, T ::= f32 | f16 (default: f16)\n"
+              << "  --batch_size N          batch size (default: 4096)\n"
+              << "                          note: trade-off between prompt throughput and memory usage.\n"
               << "Sampling options:\n"
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
               << "                          where, tfs = Tail Free Sampling\n"
@@ -373,6 +376,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--serve_rpc",                   serve_rpc,            std::string)
             handle_para0("--ggml_dir",                    ggml_dir,             std::string)
             handle_para0("--cache_type",                  cache_type,           std::string)
+            handle_para0("--batch_size",                  batch_size,           std::stoi)
             else
                 break;
 
@@ -668,7 +672,7 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
                                          gen_config.emb_rank_query_sep = args.emb_rank_query_sep;
 
 #define DEF_ExtraArgs(pipe_args, args)  \
-    chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers, args.moe_on_cpu, args.num_threads, args.cache_type)
+    chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers, args.moe_on_cpu, args.num_threads, args.batch_size, args.cache_type)
 
 chatllm::BaseStreamer *get_streamer_for_log(void);
 

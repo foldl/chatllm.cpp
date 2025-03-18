@@ -28,9 +28,10 @@ namespace chatllm
         std::string gpu_layers;
         bool moe_on_cpu;
         int n_threads;
+        int batch_input_size;
         ggml::type cache_type;
-        RuntimeConfig(const std::string &gpu_layers, bool moe_on_cpu, int n_threads, ggml::type cache_type):
-            gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads), cache_type(cache_type)
+        RuntimeConfig(const std::string &gpu_layers, bool moe_on_cpu, int n_threads, int batch_input_size, ggml::type cache_type):
+            gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads), batch_input_size(batch_input_size), cache_type(cache_type)
         {}
     };
 
@@ -960,7 +961,7 @@ namespace chatllm
             : BaseModel(model_type, to_string(model_type), to_native_string(model_type), get_model_purpose(model_type)),
               transformer(nullptr),
               GRAPH_SIZE(GRAPH_SIZE),
-              batch_input(true), logit_scale(-1.0f),
+              batch_input(runtime_config.batch_input_size), logit_scale(-1.0f),
               w_ctx_(&backend_context),
               config_(config)
         {
@@ -1139,20 +1140,19 @@ namespace chatllm
 
         bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override
         {
-            if (batch_input)
+            int batch = batch_input > 1 ? batch_input : 1;
+
+            const int *p = input_ids.data();
+            int remain = (int)input_ids.size();
+            int past = n_past + n_past_offset;
+
+            for (; (remain > batch) && !aborted; p += batch, remain -= batch, past += batch)
             {
-                return run_model(input_ids, gen_config, n_past + n_past_offset, lm_logits);
+                if (!run_model(p, batch, gen_config, past, lm_logits))
+                    return false;
             }
-            else
-            {
-                int past = n_past + n_past_offset;
-                for (size_t i = 0 ; (i < input_ids.size()) & !aborted; i++, past++)
-                {
-                    if (!run_model({input_ids[i]}, gen_config, past, lm_logits))
-                        return false;
-                }
-                return true;
-            }
+
+            return run_model(p, remain, gen_config,past, lm_logits);
         }
 
         int save_session(FILE *f) const override
@@ -1206,7 +1206,7 @@ namespace chatllm
 
         }
 
-        virtual bool before_initial_run(const std::vector<int> &input_ids,
+        virtual bool before_initial_run(const int ids_count,
                                        const GenerationConfig &gen_config,
                                        int past)
         {
@@ -1217,7 +1217,7 @@ namespace chatllm
             ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
             ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
-            ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, input_ids.size());
+            ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, ids_count);
 
             ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
 
@@ -1234,17 +1234,25 @@ namespace chatllm
             return s;
         }
 
-        virtual bool run_model(const std::vector<int> &input_ids,
-                                       const GenerationConfig &gen_config,
-                                       int past,
-                                       std::vector<float> &output)
+        bool run_model(const std::vector<int> &input_ids,
+            const GenerationConfig &gen_config,
+            int past,
+            std::vector<float> &output)
+        {
+            return run_model(input_ids.data(), (int)input_ids.size(), gen_config, past, output);
+        }
+
+        virtual bool run_model(const int *input_ids, const int ids_count,
+                                const GenerationConfig &gen_config,
+                                int past,
+                                std::vector<float> &output)
         {
             if (!initial_run)
             {
                 initial_run = true;
-                int past = gen_config.max_length - (int)input_ids.size();
+                int past = gen_config.max_length - ids_count;
                 if (past < 0) past = 0;
-                if (!before_initial_run(input_ids, gen_config, past))
+                if (!before_initial_run(ids_count, gen_config, past))
                     return false;
             }
 
@@ -1257,7 +1265,7 @@ namespace chatllm
             dbg_ctx = &ctx;
 
             ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
-            ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, input_ids.size());
+            ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, ids_count);
 
             ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
 
@@ -1274,7 +1282,7 @@ namespace chatllm
 
             if (!ctx.allocate()) return false;
 
-            Backend::write_tensor_data(input_ids_tensor, input_ids.data());
+            Backend::write_tensor_data(input_ids_tensor, input_ids);
 
             if (gen_config.dump_dot.size() > 0)
             {
@@ -1334,7 +1342,7 @@ namespace chatllm
     protected:
         ModelBlock *transformer;
         const size_t GRAPH_SIZE;
-        bool batch_input;
+        int batch_input;
         float logit_scale;
         std::vector<int> layer_ids;
         BackendContext backend_context;
@@ -1996,7 +2004,7 @@ namespace chatllm
             config.num_hidden_layers = (int)layers.size();
         }
 
-        RuntimeConfig rt_config(args.gpu_layers, args.moe_on_cpu, args.n_threads, ggml::parse(args.cache_type));
+        RuntimeConfig rt_config(args.gpu_layers, args.moe_on_cpu, args.n_threads, args.batch_size, ggml::parse(args.cache_type));
 
         // load model
         ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);
