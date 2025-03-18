@@ -16,8 +16,9 @@ except:
 
 # sorted by length!
 THINK_TAGS = [
-    ('<think>', '</think>'),
-    ('<reasoning>', '</reasoning>'),
+    ('<think>',         '</think>'),
+    ('<thought>',       '</thought>'),
+    ('<reasoning>',     '</reasoning>'),
 ]
 
 TAG_THINK_START = ''

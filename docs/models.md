@@ -186,6 +186,7 @@
 
 * EXAONE (`ExaoneForCausalLM`)
     * [x] v3.5: [Instruct-2.4B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct), [Instruct-7.8B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct), [Instruct-32B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-32B-Instruct)
+    * [x] Deep: [2.4B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-2.4B/tree/b9e0d963cc9be39abce33381f40a8da4324cf4bb), [7.8B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-7.8B/tree/19948cbbd0e9afb0f7b5a918eb7e2eb18341e076), [32B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-32B/tree/dfa797fc8d8ae6ecc0e5f7a450317cc1433b2545)
 
 * TeleChat (`TeleChat2ForCausalLM`)
     * [x] v2: [3B](https://huggingface.co/Tele-AI/TeleChat2-3B), [7B](https://huggingface.co/Tele-AI/TeleChat2-7B), [115B](https://huggingface.co/Tele-AI/TeleChat2-115B)

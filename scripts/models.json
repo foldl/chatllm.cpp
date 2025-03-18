@@ -1552,6 +1552,22 @@
             }
         }
     },
+    "exaone-deep": {
+        "brief": "EXAONE Deep, which exhibits superior capabilities in various reasoning tasks including math and coding benchmarks, ranging from 2.4B to 32B parameters developed and released by LG AI Research.",
+        "default": "2.4b",
+        "license": "EXAONE AI Model License Agreement 1.1 - NC",
+        "variants": {
+            "2.4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2559193504,
+                        "url": "chatllm_quantized_exaone/exaone-deep-2.4b.bin"
+                    }
+                }
+            }
+        }
+    },
     "telechat2": {
         "brief": "TeleChat2 is a large language model trained by the Artificial Intelligence Research Institute of China Telecom.",
         "default": "3b",
