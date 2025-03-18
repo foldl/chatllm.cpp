@@ -1964,6 +1964,53 @@ class Mistral2Converter(BaseConverter):
     def get_weight_names(config):
         return MistralConverter.get_weight_names(config)
 
+class MistralSmall31Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Mistral2
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        d = {}
+        for name in state_dict:
+            if name.startswith('vision_encoder.'): continue
+
+            t = state_dict[name]
+            if name == 'norm.weight':
+                new_name = 'model.norm.weight'
+            elif name == 'output.weight':
+                new_name = 'lm_head.weight'
+            elif name == 'tok_embeddings.weight':
+                new_name = 'model.embed_tokens.weight'
+            elif name.startswith('layers.'):
+                new_name = 'model.' + name
+                mapping = {
+                    'attention.wk.weight': 'self_attn.k_proj.weight',
+                    'attention.wo.weight': 'self_attn.o_proj.weight',
+                    'attention.wq.weight': 'self_attn.q_proj.weight',
+                    'attention.wv.weight': 'self_attn.v_proj.weight',
+                    'attention_norm.weight': 'input_layernorm.weight',
+                    'feed_forward.w1.weight': 'mlp.gate_proj.weight',
+                    'feed_forward.w2.weight': 'mlp.down_proj.weight',
+                    'feed_forward.w3.weight': 'mlp.up_proj.weight',
+                    'ffn_norm.weight': 'post_attention_layernorm.weight',
+                }
+                for x in mapping:
+                    if name.endswith(x):
+                        new_name = new_name.replace(x, mapping[x])
+                        break
+            else:
+                print(f'ignore tensor: {name}')
+                continue
+            d[new_name] = t # Mistral2Converter.pp(config, new_name, t)
+        return d
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        Mistral2Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return Mistral2Converter.get_weight_names(config)
+
 def make_experts_id_map(experts):
     r = {}
     for i in range(len(experts)):
@@ -5653,6 +5700,8 @@ def main():
             Mistral2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             MistralConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'mistral-small-3.1':
+        MistralSmall31Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MixtralForCausalLM':
         if args.experts != '':
             config.experts = sorted([int(x, 0) for x in args.experts.split(',')])

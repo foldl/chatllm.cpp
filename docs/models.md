@@ -99,6 +99,9 @@
     * [x] Mistral-Nemo: [Nemo-Instruct-2407](https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407)
     * [x] Small: [Instruct-24B](https://huggingface.co/mistralai/Mistral-Small-24B-Instruct-2501)
     * [x] DeepHermes-3-Mistral: [24B-Preview](https://huggingface.co/NousResearch/DeepHermes-3-Mistral-24B-Preview/tree/48072dc6c0594a3198eb862c13613c4ab1119009) (`-a DeepHermes-3-Mistral`. Default: Thinking model.)
+    * [x] Small-3.1: [Instruct-24B](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/tree/9d6393981603defaeab8131cf223412c4fdcb99a)
+
+        Note: Please download `config.json` & `tokenizer.json` from [here](https://huggingface.co/mistralai/Mistral-Small-24B-Instruct-2501/tree/20b2ed1c4e9af44b9ad125f79f713301e27737e2).
 
 * Phi (`PhiForCausalLM`, `Phi3ForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4)

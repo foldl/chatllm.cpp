@@ -216,6 +216,15 @@
                         "url": "chatllm_quantized_mistral_small/mistral-small-24b-q4_1.bin"
                     }
                 }
+            },
+            "24b-2503": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 13266788560,
+                        "url": "chatllm_quantized_mistral_small/mistral-small-3.1-24b-q4_0.bin"
+                    }
+                }
             }
         }
     },
