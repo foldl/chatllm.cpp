@@ -1574,6 +1574,15 @@
                         "url": "chatllm_quantized_exaone/exaone-deep-2.4b.bin"
                     }
                 }
+            },
+            "7.8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8310959696,
+                        "url": "chatllm_quantized_exaone/exaone-deep-7.8b.bin"
+                    }
+                }
             }
         }
     },
@@ -2227,6 +2236,22 @@
                     "q4_0": {
                         "size": 11763674544,
                         "url": "chatllm_quantized_reka/reka-flash-3-q4_0.bin"
+                    }
+                }
+            }
+        }
+    },
+    "llama3-nemotron": {
+        "brief": "Reasoning models that are post trained and/or derived from Llama 3.1-8B-Instruct, 3.3-70B-Instruct for reasoning, human chat preferences, and tasks, such as RAG and tool calling.",
+        "default": "8b",
+        "license": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/",
+        "variants": {
+            "8b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 8538752192,
+                        "url": "chatllm_quantized_llama3.1-nemotron/llama3.1-nemotron-8b.bin"
                     }
                 }
             }
