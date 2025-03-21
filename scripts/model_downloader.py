@@ -10,6 +10,32 @@ with open(os.path.join(binding.PATH_SCRIPTS, 'models.json'), encoding='utf-8') a
 
 DEF_STORAGE_DIR = '../quantized'
 
+# Ref: https://thepythoncode.com/article/calculate-word-error-rate-in-python
+def calculate_wer(ref_words, hyp_words):
+    d =  [[0 for _ in range(len(hyp_words) + 1)] for _ in range(len(ref_words) + 1)]
+    for i in range(len(ref_words) + 1):
+        d[i][0] = i
+    for j in range(len(hyp_words) + 1):
+        d[0][j] = j
+    for i in range(1, len(ref_words) + 1):
+        for j in range(1, len(hyp_words) + 1):
+            if ref_words[i - 1] == hyp_words[j - 1]:
+                d[i][j] = d[i - 1][j - 1]
+            else:
+                substitution = d[i - 1][j - 1] + 1
+                insertion    = d[i    ][j - 1] + 1
+                deletion     = d[i - 1][j    ] + 1
+                d[i][j] = min(substitution, insertion, deletion)
+    wer = d[len(ref_words)][len(hyp_words)] / len(ref_words)
+    return wer
+
+def calculate_cer(ref: str, hyp: str):
+    return calculate_wer(list(ref), list(hyp))
+
+def find_nearest_item(s: str, candidates: list[str]) -> str:
+    l = sorted(candidates, key=lambda x: calculate_cer(s, x))
+    return l[0]
+
 def print_progress_bar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 60, fill = '█', printEnd = "\r", auto_nl = True):
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filledLength = int(length * iteration // total)
@@ -44,6 +70,7 @@ def download_file(url: str, fn: str, prefix: str):
 
 def show():
     total = 0
+    model_count = 0
 
     def format_number(num):
         if num >= 1_000_000_000_000:
@@ -63,7 +90,9 @@ def show():
             total += o['size']
 
     def show_variants(info, default):
+        nonlocal model_count
         sizes = [s for s in info.keys()]
+        model_count += len(sizes)
         [acc_file_size(variant) for variant in info.values()]
         variants = [m + ":" + s for s in sizes]
         all_var = ', '.join(variants)
@@ -81,14 +110,23 @@ def show():
     for m in sorted(all_models.keys()):
         show_model(m)
 
-    print(f"\n-------\nTotal: {format_number(total)}B")
+    print(f"\n-------\nTotal: {format_number(total)}B ({model_count} models)")
 
 def parse_model_id(model_id: str):
     parts = model_id.split(':')
-    model = all_models[parts[0]]
+    id = parts[0]
+    if not (id in all_models):
+        guess = find_nearest_item(id, all_models.keys())
+        raise Exception(f'`{id}` is recognized as a model id. Did you mean `{guess}`?')
+    model = all_models[id]
     variants = model['variants']
-    var = variants[parts[1] if len(parts) >= 2 else model['default']]
+    var = parts[1] if len(parts) >= 2 else model['default']
+    if not (var in variants):
+        raise Exception(f'`{var}` is recognized as a valid variant of `{id}`')
+    var = variants[var]
     q = parts[2] if len(parts) >= 3 else var['default']
+    if not (q in var['quantized']):
+        raise Exception(f'`{q}` is recognized as a valid quantization of the variant')
     r =  copy.deepcopy(var['quantized'][q])
     url = r['url'].split('/')
     r['url'] = get_model_url_on_modelscope(*url)

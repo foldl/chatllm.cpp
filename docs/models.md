@@ -130,6 +130,7 @@
     * [x] QwQ: [32B-Preview](https://huggingface.co/Qwen/QwQ-32B-Preview), [32B](https://huggingface.co/Qwen/QwQ-32B) (`-a QwQ`)
     * [x] [ReaderLM-v2](https://huggingface.co/jinaai/ReaderLM-v2) (`-a ReaderLM-v2`)
     * [x] DeepSeek-R1-Distill-QWen: [1.5B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B), [7B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B), [14B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B), [32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B), [DeepScaleR-1.5B-Preview](https://huggingface.co/agentica-org/DeepScaleR-1.5B-Preview) (`-a DeepSeek-R1-Distill-QWen`)
+    * [x] OlympicCoder: [7B](https://huggingface.co/open-r1/OlympicCoder-7B/tree/097f57223ba8fee3130ce7f739dabae3dd0ad0b9), [32B](https://huggingface.co/open-r1/OlympicCoder-32B/tree/34113aee9d255591a1fa75b60d1e3422e82c3b1f)
 
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
