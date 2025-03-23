@@ -202,6 +202,9 @@
 * Instella (`InstellaForCausalLM`)
     * [x] [Instruct-3B](https://huggingface.co/amd/Instella-3B-Instruct)
 
+* DeciLM (`DeciLMForCausalLM`)
+    * Nemotron: [Llama-3.3-Nemotron-Super-49B-v1](https://huggingface.co/nvidia/Llama-3_3-Nemotron-Super-49B-v1/tree/1a2cb800fde0e2c100cf576215d7be3a5bffe717)
+
 ## Base Models
 
 Please use `--format completion` for these models.

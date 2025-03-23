@@ -323,6 +323,8 @@ namespace chatllm
 
         MODEL_TYPE_INSTELLA         = 0x2100,
 
+        MODEL_TYPE_DECILM           = 0x2200,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -563,6 +565,8 @@ namespace chatllm
             return "Moonlight";
         case MODEL_TYPE_INSTELLA:
             return "Instella";
+        case MODEL_TYPE_DECILM:
+            return "DeciLM";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1907,6 +1911,11 @@ namespace chatllm
         #include "../models/hermes.cpp"
     }
 
+    namespace decilm
+    {
+        #include "../models/decilm.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2224,6 +2233,8 @@ namespace chatllm
         CASE(MOONLIGHT,             moonshot::moonlight, 1)     \
                                                                 \
         CASE(INSTELLA,              instella, 1)                \
+                                                                \
+        CASE(DECILM,                decilm, 1)                  \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

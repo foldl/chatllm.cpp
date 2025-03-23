@@ -714,6 +714,49 @@ namespace chatllm
         float scale_depth = -1.0;
     };
 
+    template <class PostNormBlock,
+              class MLPBlock> class LMNoAttnBlock : public Block
+    {
+    public:
+        LMNoAttnBlock() = default;
+        LMNoAttnBlock(InitContext *ctx, int hidden_size, int intermediate_size)
+            : post_attention_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, intermediate_size) {}
+
+        using Block::forward;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override
+        {
+            ggml::tensor *residual = ggml::dup(ctx, hidden_states);
+            ggml::build_forward_expand(ctx, residual);
+
+            hidden_states = post_attention_layernorm.forward(ctx, hidden_states);
+            hidden_states = mlp.forward(ctx, hidden_states);
+
+            hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
+
+            return hidden_states;
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += post_attention_layernorm.get_param_num(effective_only);
+            r += mlp.get_param_num(effective_only);
+            return r;
+        }
+
+        void set_id(int id) override
+        {
+            Block::set_id(id);
+            post_attention_layernorm.set_id(id);
+            mlp.set_id(id);
+        }
+
+    public:
+        PostNormBlock post_attention_layernorm;
+        MLPBlock mlp;
+    };
+
     template <class PreAttnNormBlock,
               class AttentionBlock,
               class PostAttnNormBlock,

@@ -2247,11 +2247,20 @@
         "license": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/",
         "variants": {
             "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8538752192,
+                        "url": "chatllm_quantized_llama3.1-nemotron/llama3.1-nemotron-8b.bin"
+                    }
+                }
+            },
+            "49b": {
                 "default": "q4_0",
                 "quantized": {
                     "q4_0": {
-                        "size": 8538752192,
-                        "url": "chatllm_quantized_llama3.1-nemotron/llama3.1-nemotron-8b.bin"
+                        "size": 28059766048,
+                        "url": "chatllm_quantized_llama3.1-nemotron/llama-3.3-nemotron-49b-v1-q4_0.bin"
                     }
                 }
             }

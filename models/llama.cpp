@@ -446,7 +446,7 @@ namespace v3_1
 
     static class ToolCallingInterceptor interceptor;
 
-    static void init_llama3_freq_factors(std::vector<float> &freq_factors, int rope_dim,
+    void init_llama3_freq_factors(std::vector<float> &freq_factors, int rope_dim,
                 float theta, float scaling_factor, float scaling_low_freq_factor, float scaling_high_freq_factor, int original_max_position_embeddings)
     {
         std::vector<float > inv_freq;

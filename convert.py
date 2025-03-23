@@ -162,6 +162,8 @@ class ModelType(Enum):
 
     Instella        = 0x2100
 
+    DeciLM          = 0x2200
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -1243,6 +1245,99 @@ class Llama32Converter(BaseConverter):
         weight_names = Llama31Converter.get_weight_names(config)
         if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
             weight_names.remove('lm_head.weight')
+        return weight_names
+
+class DeciLMConverter(BaseConverter):
+    MODEL_TYPE = ModelType.DeciLM
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+
+        if name.endswith('k_proj.weight'):
+            r = re.findall('model\.layers.([0-9]*)\.', name)
+            layer_id = int(r[0])
+            num_key_value_heads = config.block_configs[layer_id]['attention']['n_heads_in_group']
+            return permute(tensor, num_key_value_heads)
+        elif name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        else:
+            return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MAX_LAYERS = 100
+
+        assert config.num_hidden_layers <= MAX_LAYERS, f'num_hidden_layers must <= {MAX_LAYERS}'
+        assert not config.mlp_bias, '`mlp_bias` must be False'
+        assert config.num_key_value_heads is None, 'num_key_value_heads must be null'
+
+        config.num_key_value_heads = 0
+        config.intermediate_size = 0
+
+        Llama31Converter.dump_config(f, config, ggml_type)
+
+        def _ffn_mult_to_intermediate_size(ffn_mult: float, n_embd: int) -> int:
+            def _find_multiple(n: int, k: int) -> int:
+                if n % k == 0:
+                    return n
+                return n + k - (n % k)
+
+            intermediate_size = int(2 * ffn_mult * n_embd / 3)
+            return _find_multiple(intermediate_size, 256)
+
+        config_values = []
+        for i in range(config.num_hidden_layers):
+            cfg = config.block_configs[i]
+            att_cfg = AttributeDict(cfg['attention'])
+            ffn_cfg = AttributeDict(cfg['ffn'])
+            assert att_cfg.num_sink_tokens is None
+            assert not att_cfg.replace_with_linear
+            assert att_cfg.sparsify is None
+            assert not att_cfg.unshifted_sink
+            assert not att_cfg.use_prefill_window_in_sink_attention
+            assert att_cfg.window_length is None
+
+            if att_cfg.no_op:
+                assert att_cfg.n_heads_in_group is None
+
+            assert not ffn_cfg.no_op
+            assert not ffn_cfg.replace_with_linear
+            assert ffn_cfg.sparsify is None
+
+            config_values.append(0 if att_cfg.no_op else att_cfg.n_heads_in_group)
+            config_values.append(_ffn_mult_to_intermediate_size(ffn_cfg.ffn_mult, config.hidden_size))
+
+        for i in range(config.num_hidden_layers, MAX_LAYERS):
+            config_values.append(0)
+            config_values.append(0)
+
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+            ]
+
+            if not config.block_configs[i]['attention']['no_op']:
+                weight_names += [
+                    f"model.layers.{i}.input_layernorm.weight",
+                    f"model.layers.{i}.self_attn.k_proj.weight",
+                    f"model.layers.{i}.self_attn.o_proj.weight",
+                    f"model.layers.{i}.self_attn.q_proj.weight",
+                    f"model.layers.{i}.self_attn.v_proj.weight",
+                ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
         return weight_names
 
 class InternLM3Converter(BaseConverter):
@@ -5843,6 +5938,8 @@ def main():
         HunYuanDenseConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InstellaForCausalLM':
         InstellaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'DeciLMForCausalLM':
+        DeciLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'reka-flash-3':
         assert config.rope_scaling is None, 'config.rope_scaling must be null'
         assert not config.tie_word_embeddings, 'config.tie_word_embeddings must be false'
