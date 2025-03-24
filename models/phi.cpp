@@ -856,7 +856,7 @@ namespace v4
             size_t size = tp->Load(buffer, n_vocab);
 
             im_start_token_id     = tp->PieceToId("<|im_start|>");
-            im_sep_token_id       = tp->PieceToId("<|im_start|>");
+            im_sep_token_id       = tp->PieceToId("<|im_sep|>");
             im_end_token_id       = tp->PieceToId("<|im_end|>");
 
             pad_token_id = eos_token_id;
