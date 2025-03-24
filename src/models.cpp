@@ -325,6 +325,8 @@ namespace chatllm
 
         MODEL_TYPE_DECILM           = 0x2200,
 
+        MODEL_TYPE_SOLARPRO         = 0x2300,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -567,6 +569,8 @@ namespace chatllm
             return "Instella";
         case MODEL_TYPE_DECILM:
             return "DeciLM";
+        case MODEL_TYPE_SOLARPRO:
+            return "Solar-Pro";
         default:
             CHATLLM_THROW << "unknown model type: " << model_type;
             return "???";
@@ -1916,6 +1920,11 @@ namespace chatllm
         #include "../models/decilm.cpp"
     }
 
+    namespace solar
+    {
+        #include "../models/solar.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2069,7 +2078,34 @@ namespace chatllm
         // load magic
         loader.seek(0, SEEK_SET);
         std::string magic = loader.read_string(4);
-        CHATLLM_CHECK(magic == "ggml") << "model file is broken (bad magic)";
+
+        if (magic == "ggml")
+        {
+            loader.ff = ModelLoader::FileFormat::GGML;
+        }
+        else if (magic == "ggmm")
+        {
+            loader.ff = ModelLoader::FileFormat::GGMM;
+            const uint32_t GGMM_VER = 1;
+            uint32_t ver = loader.read_basic<uint32_t>();
+            CHATLLM_CHECK(GGMM_VER == ver) << "GGMM file version error: " << ver;
+
+            loader.ggml_header = loader.read_basic<ModelLoader::GGMMHeader>();
+            if ((int64_t)loader.ggml_header.offset_config > loader.tell())
+            {
+                loader.meta = loader.read_string(loader.ggml_header.offset_config - loader.tell());
+                size_t last_non_null = loader.meta.find_last_not_of('\0');
+                if (last_non_null != std::string::npos)
+                    loader.meta.erase(last_non_null + 1);
+                else
+                    loader.meta.clear();
+            }
+            loader.seek(loader.ggml_header.offset_config, 0);
+        }
+        else
+        {
+            CHATLLM_CHECK(false) << "model file is broken (bad magic): " << magic;
+        }
 
         loader.model_type = loader.read_basic<int>();
         loader.version = loader.read_basic<int>();
@@ -2082,7 +2118,7 @@ namespace chatllm
         std::ostringstream oss;
         oss << "Model name  : " << to_string((ModelType(loader.model_type))) << std::endl
             << "Model type  : " << to_string(get_model_purpose((ModelType(loader.model_type)))) << std::endl
-            << "File version: " << loader.version << std::endl << std::endl
+            << "File version: " << loader.version << " (" << ModelLoader::ff_to_str(loader.ff) << ")" << std::endl << std::endl
 
             << "vocab_size          : " << config.vocab_size << std::endl
             << "hidden_size         : " << config.hidden_size << std::endl
@@ -2095,6 +2131,11 @@ namespace chatllm
             << "eos_token_id        : " << config.eos_token_id << std::endl
             << "pad_token_id        : " << config.pad_token_id << std::endl
             << "sep_token_id        : " << config.sep_token_id << std::endl;
+
+            if (loader.meta.size() > 0)
+            {
+                ggml::log(GGML_LOG_LEVEL_INFO, "meta: %s", loader.meta.c_str());
+            }
 
         return oss.str();
     }
@@ -2235,6 +2276,8 @@ namespace chatllm
         CASE(INSTELLA,              instella, 1)                \
                                                                 \
         CASE(DECILM,                decilm, 1)                  \
+                                                                \
+        CASE(SOLARPRO,              solar::pro, 1)              \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

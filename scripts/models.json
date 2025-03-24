@@ -2281,5 +2281,21 @@
                 }
             }
         }
+    },
+    "solar-pro": {
+        "brief": "Solar Pro Preview, an advanced large language model (LLM) with 22 billion parameters designed to fit into a single GPU.",
+        "default": "22b",
+        "license": "MIT",
+        "variants": {
+            "22b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_0": {
+                        "size": 13840223024,
+                        "url": "chatllm_quantized_solar-pro/solarpro-22b-q4_1.bin"
+                    }
+                }
+            }
+        }
     }
 }

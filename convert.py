@@ -164,6 +164,8 @@ class ModelType(Enum):
 
     DeciLM          = 0x2200
 
+    SolarPro        = 0x2300
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -882,12 +884,30 @@ class BaseConverter:
     @classmethod
     def convert(cls, config, model_files, vocab: Any, ggml_type, save_path):
 
+        def write_size_to_pos(f, offset):
+            size = f.seek(0, 2)
+            f.seek(offset)
+            f.write(struct.pack("i", size))
+            f.seek(0, 2)
+
         # convert all weights to fp16
         with open(save_path, "wb") as f:
-            f.write(b"ggml")  # magic
+            f.write(b"ggmm")  # magic
+            GGMM_VER = 1
+            f.write(struct.pack("i" * 4, GGMM_VER, 0, 0, 0))
+
+            config_bytes = json.dumps(config, ensure_ascii=False).encode()
+            rounded_len = ((len(config_bytes) + 3) // 4) * 4
+            config_bytes += b'\x00' * (rounded_len - len(config_bytes))
+            f.write(config_bytes)
+            write_size_to_pos(f, 8)
+
             f.write(struct.pack("ii", cls.MODEL_TYPE.value, cls.FILE_VERSION))  # model type & version
             cls.dump_config(f, config, ggml_type)
+            write_size_to_pos(f, 12)
+
             vocab.write_vocab(f)
+            write_size_to_pos(f, 16)
 
             weight_names = cls.get_weight_names(config)
             dump_state_dict(f, weight_names, model_files, ggml_type, config, cls.state_dict_pp)
@@ -5441,6 +5461,53 @@ class HunYuanDenseConverter(BaseConverter):
 
         return weight_names
 
+class SolarConverter(BaseConverter):
+    MODEL_TYPE = ModelType.SolarPro
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        elif name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+
+        MAX_LEN = 20
+
+        assert config.rope_scaling is None, "rope_scaling must be null"
+        assert len(config.bskcn_1) == len(config.bskcn_3)
+        assert len(config.bskcn_2) == len(config.bskcn_4)
+        assert len(config.bskcn_tv) == 2
+
+        forwarding_ids = list(zip(config.bskcn_1, config.bskcn_3)) + list(zip(config.bskcn_2, config.bskcn_4))
+        pairs = len(forwarding_ids)
+        assert pairs <= MAX_LEN
+        forwarding_ids = forwarding_ids + [(-1, -1)] * (MAX_LEN - pairs)
+        # flatten(forwarding_ids)
+        forwarding_ids = list(sum(forwarding_ids, ()))
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.sliding_window,
+            pairs,
+        ] + forwarding_ids
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        float_values = [
+            config.rope_theta,
+            config.bskcn_tv[1],
+        ]
+        f.write(struct.pack("<" + "f" * len(float_values), *float_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return LlamaConverter.get_weight_names(config)
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -5940,6 +6007,8 @@ def main():
         InstellaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'DeciLMForCausalLM':
         DeciLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'SolarForCausalLM':
+        SolarConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'reka-flash-3':
         assert config.rope_scaling is None, 'config.rope_scaling must be null'
         assert not config.tie_word_embeddings, 'config.tie_word_embeddings must be false'

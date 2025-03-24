@@ -556,7 +556,8 @@ namespace chatllm
             : _file(std::unique_ptr<tokenizer::DataReader>(mapped_file)),
               offset_config(0),
               offset_tokenizer(0),
-              model_type(-1), version(-1)
+              model_type(-1), version(-1),
+              ff(FileFormat::Unknown)
         {
         }
 
@@ -570,6 +571,37 @@ namespace chatllm
         std::map<std::string, TensorInfo> tensor_dict;
     protected:
         LayerAllocatorManager *alloc_manager = nullptr;
+
+    public:
+        enum FileFormat
+        {
+            Unknown,
+            GGML,
+            GGMM,
+        };
+
+        static std::string ff_to_str(FileFormat f)
+        {
+            switch (f)
+            {
+            case FileFormat::GGML:
+                return "GGML";
+            case FileFormat::GGMM:
+                return "GGMM";
+            default:
+                return "??";
+            }
+        }
+
+        struct GGMMHeader
+        {
+            uint32_t offset_config;
+            uint32_t offset_tokenizer;
+            uint32_t offset_tensors;
+        };
+        GGMMHeader ggml_header;
+        FileFormat ff;
+        std::string meta;
     };
 
     // ===== generation =====
