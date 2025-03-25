@@ -165,12 +165,16 @@
 * Zhinao (`ZhinaoForCausalLM`)
     * [x] [Chat-7B-4K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-4K), [Chat-7B-32K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-32K), [Chat-7B-360K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-360K)
 
-* DeepSeek (`DeepseekV2ForCausalLM`, `DeepseekV3ForCausalLM`)
+* DeepSeek (`DeepseekForCausalLM`, `DeepseekV2ForCausalLM`, `DeepseekV3ForCausalLM`)
+    * [x] v1: [Chat-16B](https://huggingface.co/deepseek-ai/deepseek-moe-16b-chat/tree/eefd8ac7e8dc90e095129fe1a537d5e236b2e57c)
+
     * [x] v2: [Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Chat) (💣 not tested), [Lite-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite-Chat)
 
     * [x] Coder v2: [Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Instruct) (💣 not tested), [Lite-Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct)
 
     * [x] Moonlight: [Instruct-16B](https://huggingface.co/moonshotai/Moonlight-16B-A3B-Instruct) (`-a Moonlight`)
+
+    * [x] GigaChat: [Instruct-20B](https://huggingface.co/ai-sage/GigaChat-20B-A3B-instruct/tree/5105af38a6a174b06a2bc25719c5ad5ce680a207) (`-a GigaChat`)
 
     Two optimization modes are defined: speed (default) and memory. See `BaseMLAttention`.
 

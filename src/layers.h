@@ -1785,6 +1785,13 @@ namespace chatllm
             return r;
         }
 
+        void set_id(int id) override
+        {
+            Block::set_id(id);
+            mlp1.set_id(id);
+            mlp2.set_id(id);
+        }
+
     public:
         MLP1 mlp1;
         MLP2 mlp2;
@@ -1882,6 +1889,9 @@ namespace chatllm
 
         LlamaSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
             : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
+
+        LlamaSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
+            : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
     };
 
     class LlamaBlock : public LMBlock1<RMSNorm, LlamaSelfAttention, RMSNorm, SiLUMLP>

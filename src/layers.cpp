@@ -1437,7 +1437,8 @@ namespace chatllm
         }
         else
         {
-            weights = ggml::scale(ctx, weights, routed_scaling_factor);
+            if (routed_scaling_factor > 0.0f)
+                weights = ggml::scale(ctx, weights, routed_scaling_factor);
         }
 
 

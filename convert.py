@@ -72,6 +72,8 @@ class ModelType(Enum):
     DeepSeekV2          = 0x321
     DeepSeekV3Light     = 0x322
     DeepSeekV3          = 0x323
+    DeepSeekV1          = 0x324
+    GigaChat            = 0x325
 
     Yi = 0x400
     MAP_Neo = 0x401
@@ -139,6 +141,7 @@ class ModelType(Enum):
     LlaMA32       = 0x1704
     Exaone        = 0x1705
     DeepSeek_R1_Distill_LlaMA = 0x1706
+    AquilaDense   = 0x1707
 
     StarCoder2    = 0x1800
 
@@ -5118,6 +5121,98 @@ class StarCoder2Converter(BaseConverter):
 
         return weight_names
 
+class DeepSeekV1Converter(BaseConverter):
+    MODEL_TYPE = ModelType.DeepSeekV1
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name.endswith('q_proj.weight'):
+            return permute(tensor, config.num_attention_heads)
+        elif name.endswith('k_proj.weight'):
+            return permute(tensor, config.num_key_value_heads)
+        return tensor
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        assert config.attention_bias == False, "attention_bias must be False"
+        assert config.rope_scaling is None, "rope_scaling must be null"
+        assert config.scoring_func == 'softmax', "scoring_func must be 'softmax'"
+        assert config.n_routed_experts is not None, "n_routed_experts must not be null"
+        if config.head_dim is not None:
+            assert config.head_dim == config.hidden_size // config.num_attention_heads
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads,
+            config.first_k_dense_replace,
+            config.moe_intermediate_size,
+            config.moe_layer_freq,
+            config.n_routed_experts,
+            config.n_shared_experts,
+            1 if config.norm_topk_prob else 0,
+            config.num_experts_per_tok,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_theta,
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight",
+                        "model.norm.weight",
+                        "lm_head.weight"]
+        for i in range(config.num_hidden_layers):
+
+            weight_names += [
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+            ]
+
+            if (config.n_routed_experts is not None
+                and (i >= config.first_k_dense_replace)
+                and (i % config.moe_layer_freq == 0)):
+                weight_names += [
+                    f"model.layers.{i}.mlp.gate.weight",
+                    f"model.layers.{i}.mlp.shared_experts.gate_proj.weight",
+                    f"model.layers.{i}.mlp.shared_experts.up_proj.weight",
+                    f"model.layers.{i}.mlp.shared_experts.down_proj.weight",
+                ]
+                for j in range(config.n_routed_experts):
+                    weight_names += [
+                        f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                    ]
+            else:
+                weight_names += [
+                    f"model.layers.{i}.mlp.gate_proj.weight",
+                    f"model.layers.{i}.mlp.up_proj.weight",
+                    f"model.layers.{i}.mlp.down_proj.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+            ]
+
+        return weight_names
+
 class DeepSeekV2Converter(BaseConverter):
     MODEL_TYPE = ModelType.DeepSeekV2Light
 
@@ -5668,6 +5763,8 @@ def main():
     parser.add_argument("-t", "--type", type=str, default="q8_0", choices=["f32", "f16", "q8_0", "q4_0", "q4_1"])
     parser.add_argument("--vocab_dir", type=str, default='')
     parser.add_argument("--experts", type=str, default='')
+    parser.add_argument("--name", type=str, default='')
+    parser.add_argument("--native_name", type=str, default='')
     args = parser.parse_args()
 
     arch = args.arch.lower()
@@ -5713,6 +5810,13 @@ def main():
         return
 
     model_files = load_some_model(Path(args.model_name_or_path))
+
+    if args.arch != '':
+        config.model_name = args.arch
+    if args.name != '':
+        config.model_name = args.name
+    if args.native_name != '':
+        config.model_native_name = args.name
 
     #if args.lora_model_name_or_path is not None:
     #    from peft import PeftModel
@@ -5984,6 +6088,11 @@ def main():
     elif arch == 'moonlight':
         DeepSeekV3Converter.MODEL_TYPE = ModelType.MoonLight
         DeepSeekV3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'DeepseekForCausalLM':
+        DeepSeekV1Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'gigachat':
+        DeepSeekV1Converter.MODEL_TYPE = ModelType.GigaChat
+        DeepSeekV1Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'IndexForCausalLM':
         IndexConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OlmoeForCausalLM':

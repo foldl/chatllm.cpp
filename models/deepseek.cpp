@@ -106,6 +106,184 @@ namespace v1
     }
 }
 
+namespace v1_moe
+{
+    struct Config : public v1::Config
+    {
+        int num_key_value_heads;
+        int first_k_dense_replace;
+        int moe_intermediate_size;
+        int moe_layer_freq;
+        int n_routed_experts;
+        int n_shared_experts;
+        int norm_topk_prob;
+        int num_experts_per_tok;
+
+        float rope_theta;
+    };
+
+    typedef v1::Tokenizer Tokenizer;
+
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class DeepSeekSparseMoE : public BaseSparseMLP
+    {
+    public:
+        DeepSeekSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
+            : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, false)
+        {
+        }
+    };
+
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK, int EFFECTIVE_EXPERTS_PER_TOK> class ConditionalGeneration0 : public BaseModelForConditionalGeneration
+    {
+    public:
+        typedef CombinedMLP<DeepSeekSparseMoE<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, SiLUMLP> DeepSeekMoEMLP;
+        typedef LMBlock1<RMSNorm, LlamaSelfAttention, RMSNorm, DeepSeekMoEMLP> DeepSeekMoEBlock;
+        typedef BaseModelForConditionalGeneration Base;
+        typedef HeterogeneousModel<Config, Embedding, RMSNorm> ModelClass;
+    public:
+        ConditionalGeneration0() = default;
+
+        ConditionalGeneration0(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_DEEPSEEK_V1_MoE)
+            : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
+              config(config)
+        {
+            const size_t tensor_ovhd = ggml_tensor_overhead();
+            const int moe_layer_num = get_moe_layer_num();
+            const int dense_layer_num = config.num_hidden_layers - moe_layer_num;
+            const size_t num_tensors = 3
+                                + moe_layer_num * (12 + 4)
+                                + dense_layer_num * 12;
+            const size_t ctx_size = num_tensors * tensor_ovhd;
+            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+            w_ctx_.dtype = config.dtype;
+
+            CHATLLM_CHECK((NUM_EXPERTS == config.n_routed_experts)
+                            && (EXPERTS_PER_TOK == config.num_experts_per_tok)
+                            && (EFFECTIVE_EXPERTS_PER_TOK <= EXPERTS_PER_TOK))
+                << "unsupported MoE param";
+
+            auto create_layer = [&](InitContext *ctx, int layer_index) -> Block * {
+                if (is_layer_moe(layer_index))
+                {
+                    auto layer = new DeepSeekMoEBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
+                        config.moe_intermediate_size, config.moe_intermediate_size * config.n_shared_experts,
+                        config.num_key_value_heads,
+                        config.hidden_size / config.num_attention_heads,
+                        config.max_length);
+                    return layer;
+                }
+                else
+                {
+                    return new LlamaBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
+                                                config.num_key_value_heads, config.max_length);
+                }
+            };
+
+            auto transformer = new ModelClass(&w_ctx_, config, false, create_layer);
+            Base::transformer = transformer;
+
+            #define config_rope(attention)     do { \
+                    attention.freq_base      = config.rope_theta;                           \
+                } while (false)
+
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                if (is_layer_moe(i))
+                {
+                    auto *layer = dynamic_cast<DeepSeekMoEBlock *>(transformer->get_layer(i));
+                    config_rope(layer->attention);
+                    layer->mlp.mlp1.norm_topk_prob = config.norm_topk_prob != 0;
+                }
+                else
+                {
+                    auto *layer = dynamic_cast<LlamaBlock *>(transformer->get_layer(i));
+                    config_rope(layer->attention);
+                }
+            }
+
+            #undef config_rope
+
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
+                << "corrupted model weights";
+        }
+
+        void load(ModelLoader &loader) override
+        {
+            auto transformer = get_typed_transformer<ModelClass>();
+
+            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
+
+            LlamaSelfAttention *attention = nullptr;
+
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
+
+                if (is_layer_moe(i))
+                {
+                    auto layer = dynamic_cast<DeepSeekMoEBlock *>(transformer->get_layer(i));
+                    attention = &layer->attention;
+
+                    loader.read_tensor(layer_prefix + "input_layernorm.weight",          layer->input_layernorm.weight);
+                    loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", layer->post_attention_layernorm.weight);
+
+                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_down.weight", layer_prefix + "mlp.experts.", config.n_routed_experts, ".down_proj.weight", layer->mlp.mlp1.experts_down.weight);
+                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_gate.weight", layer_prefix + "mlp.experts.", config.n_routed_experts, ".gate_proj.weight", layer->mlp.mlp1.experts_gate.weight);
+                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_up.weight",   layer_prefix + "mlp.experts.", config.n_routed_experts, ".up_proj.weight",   layer->mlp.mlp1.experts_up.weight);
+
+                    loader.read_tensor(layer_prefix + "mlp.gate.weight", layer->mlp.mlp1.gate.weight);
+
+                    loader.read_tensor(layer_prefix + "mlp.shared_experts.down_proj.weight", layer->mlp.mlp2.down_proj.weight);
+                    loader.read_tensor(layer_prefix + "mlp.shared_experts.gate_proj.weight", layer->mlp.mlp2.gate_proj.weight);
+                    loader.read_tensor(layer_prefix + "mlp.shared_experts.up_proj.weight",   layer->mlp.mlp2.up_proj.weight);
+                }
+                else
+                {
+                    auto *layer = dynamic_cast<LlamaBlock *>(transformer->get_layer(i));
+                    attention = &layer->attention;
+
+                    loader.read_tensor(layer_prefix + "input_layernorm.weight",          layer->input_layernorm.weight);
+                    loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", layer->post_attention_layernorm.weight);
+
+                    loader.read_tensor(layer_prefix + "mlp.down_proj.weight", layer->mlp.down_proj.weight);
+                    loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", layer->mlp.gate_proj.weight);
+                    loader.read_tensor(layer_prefix + "mlp.up_proj.weight",   layer->mlp.up_proj.weight);
+                }
+
+                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight",            attention->k_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight",            attention->v_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight",            attention->q_proj.weight);
+                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight",            attention->o_proj.weight);
+            }
+        }
+
+    public:
+        Config config;
+
+        bool is_layer_moe(int layer_index)
+        {
+            return (layer_index >= config.first_k_dense_replace) && (layer_index % config.moe_layer_freq == 0);
+        }
+
+        int get_moe_layer_num()
+        {
+            int r = 0;
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                if (is_layer_moe(i))
+                    r++;
+            }
+            return r;
+        }
+    };
+
+    const int NUM_EXPERTS                   =  64;
+    const int EXPERTS_PER_TOK               =  6;
+    typedef ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK, EXPERTS_PER_TOK> ConditionalGeneration;
+}
+
 namespace v2_light
 {
     extern "C" void _compute_forward_zero(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, void * userdata)
@@ -626,6 +804,8 @@ namespace v2_light
                     config_rope(layer->attention);
                 }
             }
+
+            #undef config_rope
         }
 
         void load(ModelLoader &loader) override

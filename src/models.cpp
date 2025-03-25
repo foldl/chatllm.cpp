@@ -231,6 +231,8 @@ namespace chatllm
         MODEL_TYPE_DEEPSEEK_V2       = 0x321,
         MODEL_TYPE_DEEPSEEK_V3_LIGHT = 0x322,   // DOES NOT EXIST
         MODEL_TYPE_DEEPSEEK_V3       = 0x323,
+        MODEL_TYPE_DEEPSEEK_V1_MoE   = 0x324,
+        MODEL_TYPE_GIGACHAT          = 0x325,
 
         MODEL_TYPE_YI       = 0x400,
         MODEL_TYPE_MAP_NEO  = 0x401,
@@ -423,7 +425,11 @@ namespace chatllm
             return "DeepSeek-V2";
         case MODEL_TYPE_DEEPSEEK_V3:
         case MODEL_TYPE_DEEPSEEK_V3_LIGHT:
-                return "DeepSeek-V3";
+            return "DeepSeek-V3";
+        case MODEL_TYPE_DEEPSEEK_V1_MoE:
+            return "DeepSeek-V1-MoE";
+        case MODEL_TYPE_GIGACHAT:
+            return "GigaChat";
         case MODEL_TYPE_YI:
             return "Yi";
         case MODEL_TYPE_MAP_NEO:
@@ -1925,6 +1931,11 @@ namespace chatllm
         #include "../models/solar.cpp"
     }
 
+    namespace gigachat
+    {
+        #include "../models/gigachat.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2180,6 +2191,7 @@ namespace chatllm
         CASE(DEEPSEEK_V2_LIGHT,     deepseek::v2_light, 1)      \
         CASE(DEEPSEEK_V2,           deepseek::v2, 1)            \
         CASE(DEEPSEEK_V3_LIGHT,     deepseek::v3_light, 1)      \
+        CASE(DEEPSEEK_V1_MoE,       deepseek::v1_moe, 1)        \
                                                                 \
         CASE(BAICHUANLLAMA,         baichuan::_7b, 1)           \
         CASE(BAICHUAN,              baichuan::larger, 1)        \
@@ -2278,6 +2290,8 @@ namespace chatllm
         CASE(DECILM,                decilm, 1)                  \
                                                                 \
         CASE(SOLARPRO,              solar::pro, 1)              \
+                                                                \
+        CASE(GIGACHAT,              gigachat, 1)                \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \
