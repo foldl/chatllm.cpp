@@ -2,6 +2,80 @@
 
 ## Chat/Instruct Models
 
+* Adept Persimmon (`PersimmonForCausalLM`)
+    * [x] [Chat-8B](https://huggingface.co/adept/persimmon-8b-chat)
+
+* Baichuan (`BaichuanForCausalLM`, `BaichuanM1ForCausalLM`)
+    * [x] [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat), [Chat-13B](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat)
+    * [x] M1: [Instruct-14B](https://huggingface.co/baichuan-inc/Baichuan-M1-14B-Instruct)
+
+* BlueLM (`BlueLMForCausalLM`)
+    * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
+
+* ChatGLM (`ChatGLMModel`):
+    * [x] ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)
+    * [x] ChatGLM2 family: [ChatGLM2 6B](https://huggingface.co/THUDM/chatglm2-6b), [CodeGeeX2 6B](https://huggingface.co/THUDM/codegeex2-6b), [ChatGLM3 6B](https://huggingface.co/THUDM/chatglm3-6b)
+
+        Tip on CodeGeeX2: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
+
+    * [x] CharacterGLM: [6B](https://huggingface.co/thu-coai/CharacterGLM-6B) (`-a CharacterGLM`)
+
+        Note: Use additional key-value pair arguments to specify characters, `--kv user_name "..." bot_name "..." user_info "..." bot_info "..."`.
+
+    * [x] GLM-4: [Chat-9B-128k](https://huggingface.co/THUDM/glm-4-9b-chat), [Chat-9B-1M](https://huggingface.co/THUDM/glm-4-9b-chat-1m)
+    * [x] CodeGeeX4: [9B](https://huggingface.co/THUDM/codegeex4-all-9b) (`-a CodeGeeX4`)
+
+* Cohere (`CohereForCausalLM`)
+    * [x] [C4AI Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
+    * [x] [Aya-23-8B](https://huggingface.co/CohereForAI/aya-23-8B), [Aya-23-35B](https://huggingface.co/CohereForAI/aya-23-35B) (`-a Aya-23`, fully compatible with Command-R)
+    * [x] [C4AI Command R7B](https://huggingface.co/CohereForAI/c4ai-command-r7b-12-2024)
+
+* DeciLM (`DeciLMForCausalLM`)
+    * Nemotron: [Llama-3.3-Nemotron-Super-49B-v1](https://huggingface.co/nvidia/Llama-3_3-Nemotron-Super-49B-v1/tree/1a2cb800fde0e2c100cf576215d7be3a5bffe717)
+
+* DeepSeek (`DeepseekForCausalLM`, `DeepseekV2ForCausalLM`, `DeepseekV3ForCausalLM`)
+    * [x] v1: [Chat-16B](https://huggingface.co/deepseek-ai/deepseek-moe-16b-chat/tree/eefd8ac7e8dc90e095129fe1a537d5e236b2e57c)
+
+    * [x] v2: [Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Chat) (💣 not tested), [Lite-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite-Chat)
+
+    * [x] Coder v2: [Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Instruct) (💣 not tested), [Lite-Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct)
+
+    * [x] Moonlight: [Instruct-16B](https://huggingface.co/moonshotai/Moonlight-16B-A3B-Instruct) (`-a Moonlight`)
+
+    * [x] GigaChat: [Instruct-20B](https://huggingface.co/ai-sage/GigaChat-20B-A3B-instruct/tree/5105af38a6a174b06a2bc25719c5ad5ce680a207) (`-a GigaChat`)
+
+    Two optimization modes are defined: speed (default) and memory. See `BaseMLAttention`.
+
+* EXAONE (`ExaoneForCausalLM`)
+    * [x] v3.5: [Instruct-2.4B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct), [Instruct-7.8B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct), [Instruct-32B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-32B-Instruct)
+    * [x] Deep: [2.4B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-2.4B/tree/b9e0d963cc9be39abce33381f40a8da4324cf4bb), [7.8B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-7.8B/tree/19948cbbd0e9afb0f7b5a918eb7e2eb18341e076), [32B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-32B/tree/dfa797fc8d8ae6ecc0e5f7a450317cc1433b2545)
+
+* Gemma (`GemmaForCausalLM`)
+    * [x] v1.0: [Instruct-2B](https://huggingface.co/google/gemma-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-7b-it)
+    * [x] v1.1: [Instruct-2B](https://huggingface.co/google/gemma-1.1-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-1.1-7b-it)
+    * [x] CodeGemma v1.1: [Instruct-7B](https://huggingface.co/google/codegemma-1.1-7b-it)
+    * [x] v2: [Instruct-2B](https://huggingface.co/google/gemma-2-2b-it), [Instruct-9B](https://huggingface.co/google/gemma-2-9b-it), [Instruct-27B](https://huggingface.co/google/gemma-2-27b-it)
+    * [x] v3: [Instruct-1B](https://huggingface.co/google/gemma-3-1b-it/tree/9b99be88fdd7a2496bf644baade44348ad736c95), [Instruct-4B](https://huggingface.co/google/gemma-3-4b-it/tree/dbd91bbaf64a0e591f4340ce8b66fd1dba9ab6bd), [Instruct-12B](https://huggingface.co/google/gemma-3-12b-it/tree/7553b6f39c33dc229bfbfe3831f7bcdbb6b738c7), [Instruct-27B](https://huggingface.co/google/gemma-3-27b-it/tree/dfb98f29ff907e391ceed2be3834ca071ea260f1)
+
+    Note: Only download `tokenizer.model`, but not `tokenizer.json` when converting.
+
+* Granite (`GraniteForCausalLM`, `GraniteMoeForCausalLM`)
+    * [x] v3.0: [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.0-1b-a400m-instruct), [Instruct-3B-A800M](https://huggingface.co/ibm-granite/granite-3.0-3b-a800m-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.0-2b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.0-8b-instruct)
+    * [x] v3.1: [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.1-1b-a400m-instruct), [Instruct-3B-A800M](https://huggingface.co/ibm-granite/granite-3.1-3b-a800m-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.1-2b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.1-8b-instruct)
+    * [x] v3.2: [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.2-2b-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.2-8b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.2-8b-instruct/tree/0276d996f60d5eb0b376b6d06622042d4ef3eb4b)
+
+* HunYuan (`HunYuanForCausalLM`)
+    * [x] Dense: [Instruct-7B](https://huggingface.co/tencent/Hunyuan-7B-Instruct)
+
+* Instella (`InstellaForCausalLM`)
+    * [x] [Instruct-3B](https://huggingface.co/amd/Instella-3B-Instruct)
+
+* InternLM (`InternLMForCausalLM`, `InternLM2ForCausalLM`)
+    * [x] v1: [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1), [Chat-20B](https://huggingface.co/internlm/internlm-chat-20b)
+    * [x] v2: [Chat-1.8B](https://huggingface.co/internlm/internlm2-chat-1_8b), [Chat-7B](https://huggingface.co/internlm/internlm2-chat-7b), [Chat-20B](https://huggingface.co/internlm/internlm2-chat-20b), [Math-Plus-1.8B](https://huggingface.co/internlm/internlm2-math-plus-1_8b), [Math-Plus-7B](https://huggingface.co/internlm/internlm2-math-plus-7), [Math-Plus-20](https://huggingface.co/internlm/internlm2-math-plus-20b)
+    * [x] v2.5: [Chat-1.8B](https://huggingface.co/internlm/internlm2_5-1_8b-chat), [Chat-7B](https://huggingface.co/internlm/internlm2_5-7b-chat), [Chat-7B-1M](https://huggingface.co/internlm/internlm2_5-7b-chat-1m), [Chat-20B](https://huggingface.co/internlm/internlm2_5-20b-chat)
+    * [x] v3: [Instruct-8B](https://huggingface.co/internlm/internlm3-8b-instruct)
+
 * LlaMA-like (`LlamaForCausalLM`):
     * [x] All LlaMA-1 models
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
@@ -41,29 +115,12 @@
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
 
-* Baichuan (`BaichuanForCausalLM`, `BaichuanM1ForCausalLM`)
-    * [x] [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat), [Chat-13B](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat)
-    * [x] M1: [Instruct-14B](https://huggingface.co/baichuan-inc/Baichuan-M1-14B-Instruct)
-
-* ChatGLM (`ChatGLMModel`):
-    * [x] ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)
-    * [x] ChatGLM2 family: [ChatGLM2 6B](https://huggingface.co/THUDM/chatglm2-6b), [CodeGeeX2 6B](https://huggingface.co/THUDM/codegeex2-6b), [ChatGLM3 6B](https://huggingface.co/THUDM/chatglm3-6b)
-
-        Tip on CodeGeeX2: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.
-
-    * [x] CharacterGLM: [6B](https://huggingface.co/thu-coai/CharacterGLM-6B) (`-a CharacterGLM`)
-
-        Note: Use additional key-value pair arguments to specify characters, `--kv user_name "..." bot_name "..." user_info "..." bot_info "..."`.
-
-    * [x] GLM-4: [Chat-9B-128k](https://huggingface.co/THUDM/glm-4-9b-chat), [Chat-9B-1M](https://huggingface.co/THUDM/glm-4-9b-chat-1m)
-    * [x] CodeGeeX4: [9B](https://huggingface.co/THUDM/codegeex4-all-9b) (`-a CodeGeeX4`)
-
-
-* InternLM (`InternLMForCausalLM`, `InternLM2ForCausalLM`)
-    * [x] v1: [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1), [Chat-20B](https://huggingface.co/internlm/internlm-chat-20b)
-    * [x] v2: [Chat-1.8B](https://huggingface.co/internlm/internlm2-chat-1_8b), [Chat-7B](https://huggingface.co/internlm/internlm2-chat-7b), [Chat-20B](https://huggingface.co/internlm/internlm2-chat-20b), [Math-Plus-1.8B](https://huggingface.co/internlm/internlm2-math-plus-1_8b), [Math-Plus-7B](https://huggingface.co/internlm/internlm2-math-plus-7), [Math-Plus-20](https://huggingface.co/internlm/internlm2-math-plus-20b)
-    * [x] v2.5: [Chat-1.8B](https://huggingface.co/internlm/internlm2_5-1_8b-chat), [Chat-7B](https://huggingface.co/internlm/internlm2_5-7b-chat), [Chat-7B-1M](https://huggingface.co/internlm/internlm2_5-7b-chat-1m), [Chat-20B](https://huggingface.co/internlm/internlm2_5-20b-chat)
-    * [x] v3: [Instruct-8B](https://huggingface.co/internlm/internlm3-8b-instruct)
+* MiniCPM (`MiniCPMForCausalLM`, `MiniCPM3ForCausalLM`)
+    * [x] [DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16), [SFT-2B](https://huggingface.co/openbmb/MiniCPM-2B-sft-bf16),
+          [SFT-1B](https://huggingface.co/openbmb/MiniCPM-1B-sft-bf16)🔥
+    * [x] [2B-128k](https://huggingface.co/openbmb/MiniCPM-2B-128k) (Note: `--temp 0` is recommended.)
+    * [x] [MoE-8x2B](https://huggingface.co/openbmb/MiniCPM-MoE-8x2B)
+    * [x] [4B](https://huggingface.co/openbmb/MiniCPM3-4B)
 
 * Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
     * [x] Mistral: [Instruct-7B-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), [Instruct-7B-v0.3](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3)
@@ -104,6 +161,13 @@
 
         Note: Please download `config.json` & `tokenizer.json` from [here](https://huggingface.co/mistralai/Mistral-Small-24B-Instruct-2501/tree/20b2ed1c4e9af44b9ad125f79f713301e27737e2).
 
+* Olm (`OlmoeForCausalLM`, `Olmo2ForCausalLM`)
+    * [x] OLMoE: [Instruct-7B](https://huggingface.co/allenai/OLMoE-1B-7B-0924-Instruct)
+    * [x] OLM-2: [Instruct-7B](https://huggingface.co/allenai/OLMo-2-1124-7B-Instruct), [Instruct-13B](https://huggingface.co/allenai/OLMo-2-1124-13B-Instruct), [Instruct-32B](https://huggingface.co/allenai/OLMo-2-0325-32B-Instruct/tree/5942a2f5e0bc38c2a5f5200cec2ea236d5984547)
+
+* Orion (`OrionForCausalLM`)
+    * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
+
 * Phi (`PhiForCausalLM`, `Phi3ForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4)
 
@@ -132,97 +196,29 @@
     * [x] DeepSeek-R1-Distill-QWen: [1.5B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B), [7B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B), [14B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B), [32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B), [DeepScaleR-1.5B-Preview](https://huggingface.co/agentica-org/DeepScaleR-1.5B-Preview) (`-a DeepSeek-R1-Distill-QWen`)
     * [x] OlympicCoder: [7B](https://huggingface.co/open-r1/OlympicCoder-7B/tree/097f57223ba8fee3130ce7f739dabae3dd0ad0b9), [32B](https://huggingface.co/open-r1/OlympicCoder-32B/tree/34113aee9d255591a1fa75b60d1e3422e82c3b1f)
 
-* BlueLM (`BlueLMForCausalLM`)
-    * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
+* Solor (`SolarForCausalLM`)
+    * [x] [Pro](https://huggingface.co/upstage/solar-pro-preview-instruct/tree/dd4bcf7006df9b1ce3f87711e702e4063832aae3)
 
-* Orion (`OrionForCausalLM`)
-    * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
-
-* MiniCPM (`MiniCPMForCausalLM`, `MiniCPM3ForCausalLM`)
-    * [x] [DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16), [SFT-2B](https://huggingface.co/openbmb/MiniCPM-2B-sft-bf16),
-          [SFT-1B](https://huggingface.co/openbmb/MiniCPM-1B-sft-bf16)🔥
-    * [x] [2B-128k](https://huggingface.co/openbmb/MiniCPM-2B-128k) (Note: `--temp 0` is recommended.)
-    * [x] [MoE-8x2B](https://huggingface.co/openbmb/MiniCPM-MoE-8x2B)
-    * [x] [4B](https://huggingface.co/openbmb/MiniCPM3-4B)
-
-* Adept Persimmon (`PersimmonForCausalLM`)
-    * [x] [Chat-8B](https://huggingface.co/adept/persimmon-8b-chat)
-
-* Gemma (`GemmaForCausalLM`)
-    * [x] v1.0: [Instruct-2B](https://huggingface.co/google/gemma-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-7b-it)
-    * [x] v1.1: [Instruct-2B](https://huggingface.co/google/gemma-1.1-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-1.1-7b-it)
-    * [x] CodeGemma v1.1: [Instruct-7B](https://huggingface.co/google/codegemma-1.1-7b-it)
-    * [x] v2: [Instruct-2B](https://huggingface.co/google/gemma-2-2b-it), [Instruct-9B](https://huggingface.co/google/gemma-2-9b-it), [Instruct-27B](https://huggingface.co/google/gemma-2-27b-it)
-    * [x] v3: [Instruct-1B](https://huggingface.co/google/gemma-3-1b-it/tree/9b99be88fdd7a2496bf644baade44348ad736c95), [Instruct-4B](https://huggingface.co/google/gemma-3-4b-it/tree/dbd91bbaf64a0e591f4340ce8b66fd1dba9ab6bd), [Instruct-12B](https://huggingface.co/google/gemma-3-12b-it/tree/7553b6f39c33dc229bfbfe3831f7bcdbb6b738c7), [Instruct-27B](https://huggingface.co/google/gemma-3-27b-it/tree/dfb98f29ff907e391ceed2be3834ca071ea260f1)
-
-    Note: Only download `tokenizer.model`, but not `tokenizer.json` when converting.
-
-* Cohere (`CohereForCausalLM`)
-    * [x] [C4AI Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)
-    * [x] [Aya-23-8B](https://huggingface.co/CohereForAI/aya-23-8B), [Aya-23-35B](https://huggingface.co/CohereForAI/aya-23-35B) (`-a Aya-23`, fully compatible with Command-R)
-    * [x] [C4AI Command R7B](https://huggingface.co/CohereForAI/c4ai-command-r7b-12-2024)
-
-* Zhinao (`ZhinaoForCausalLM`)
-    * [x] [Chat-7B-4K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-4K), [Chat-7B-32K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-32K), [Chat-7B-360K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-360K)
-
-* DeepSeek (`DeepseekForCausalLM`, `DeepseekV2ForCausalLM`, `DeepseekV3ForCausalLM`)
-    * [x] v1: [Chat-16B](https://huggingface.co/deepseek-ai/deepseek-moe-16b-chat/tree/eefd8ac7e8dc90e095129fe1a537d5e236b2e57c)
-
-    * [x] v2: [Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Chat) (💣 not tested), [Lite-Chat](https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite-Chat)
-
-    * [x] Coder v2: [Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Instruct) (💣 not tested), [Lite-Instruct](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct)
-
-    * [x] Moonlight: [Instruct-16B](https://huggingface.co/moonshotai/Moonlight-16B-A3B-Instruct) (`-a Moonlight`)
-
-    * [x] GigaChat: [Instruct-20B](https://huggingface.co/ai-sage/GigaChat-20B-A3B-instruct/tree/5105af38a6a174b06a2bc25719c5ad5ce680a207) (`-a GigaChat`)
-
-    Two optimization modes are defined: speed (default) and memory. See `BaseMLAttention`.
+* TeleChat (`TeleChat2ForCausalLM`)
+    * [x] v2: [3B](https://huggingface.co/Tele-AI/TeleChat2-3B), [7B](https://huggingface.co/Tele-AI/TeleChat2-7B), [115B](https://huggingface.co/Tele-AI/TeleChat2-115B)
 
 * XVERSE (`XverseForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/xverse/XVERSE-7B-Chat), [Chat-13B](https://huggingface.co/xverse/XVERSE-13B-Chat), [Chat-65B](https://huggingface.co/xverse/XVERSE-65B-Chat)
 
     Note: Tokenizer's behavior is not 100% identical.
 
-* AllenAI (`OlmoeForCausalLM`, `Olmo2ForCausalLM`)
-    * [x] OLMoE: [Instruct-7B](https://huggingface.co/allenai/OLMoE-1B-7B-0924-Instruct)
-    * [x] OLM-2: [Instruct-7B](https://huggingface.co/allenai/OLMo-2-1124-7B-Instruct), [Instruct-13B](https://huggingface.co/allenai/OLMo-2-1124-13B-Instruct), [Instruct-32B](https://huggingface.co/allenai/OLMo-2-0325-32B-Instruct/tree/5942a2f5e0bc38c2a5f5200cec2ea236d5984547)
-
-* Granite (`GraniteForCausalLM`, `GraniteMoeForCausalLM`)
-    * [x] v3.0: [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.0-1b-a400m-instruct), [Instruct-3B-A800M](https://huggingface.co/ibm-granite/granite-3.0-3b-a800m-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.0-2b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.0-8b-instruct)
-    * [x] v3.1: [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.1-1b-a400m-instruct), [Instruct-3B-A800M](https://huggingface.co/ibm-granite/granite-3.1-3b-a800m-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.1-2b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.1-8b-instruct)
-    * [x] v3.2: [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.2-2b-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.2-8b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.2-8b-instruct/tree/0276d996f60d5eb0b376b6d06622042d4ef3eb4b)
-
-* EXAONE (`ExaoneForCausalLM`)
-    * [x] v3.5: [Instruct-2.4B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct), [Instruct-7.8B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct), [Instruct-32B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-32B-Instruct)
-    * [x] Deep: [2.4B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-2.4B/tree/b9e0d963cc9be39abce33381f40a8da4324cf4bb), [7.8B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-7.8B/tree/19948cbbd0e9afb0f7b5a918eb7e2eb18341e076), [32B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-32B/tree/dfa797fc8d8ae6ecc0e5f7a450317cc1433b2545)
-
-* TeleChat (`TeleChat2ForCausalLM`)
-    * [x] v2: [3B](https://huggingface.co/Tele-AI/TeleChat2-3B), [7B](https://huggingface.co/Tele-AI/TeleChat2-7B), [115B](https://huggingface.co/Tele-AI/TeleChat2-115B)
-
-* HunYuan (`HunYuanForCausalLM`)
-    * [x] Dense: [Instruct-7B](https://huggingface.co/tencent/Hunyuan-7B-Instruct)
-
-* Instella (`InstellaForCausalLM`)
-    * [x] [Instruct-3B](https://huggingface.co/amd/Instella-3B-Instruct)
-
-* DeciLM (`DeciLMForCausalLM`)
-    * Nemotron: [Llama-3.3-Nemotron-Super-49B-v1](https://huggingface.co/nvidia/Llama-3_3-Nemotron-Super-49B-v1/tree/1a2cb800fde0e2c100cf576215d7be3a5bffe717)
-
-* Solor (`SolarForCausalLM`)
-    * [x] [Pro](https://huggingface.co/upstage/solar-pro-preview-instruct/tree/dd4bcf7006df9b1ce3f87711e702e4063832aae3)
+* Zhinao (`ZhinaoForCausalLM`)
+    * [x] [Chat-7B-4K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-4K), [Chat-7B-32K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-32K), [Chat-7B-360K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-360K)
 
 ## Base Models
 
 Please use `--format completion` for these models.
 
-* LlaMA-like (`LlamaForCausalLM`):
-    * [x] DeepSeek: [Coder-Base-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-base) (`-a DeepSeekCoder`), [Coder-Base-6.7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-base) (`-a DeepSeekCoder`)
+* AlphaGeometry-LM (`-a AlphaGeometry-LM`)
+    * [x] [geometry.757](https://bit.ly/alphageometry)
 
 * DeepSeek (`DeepseekV2ForCausalLM`)
     * [x] [Coder-V2-Base](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Base) (💣 not tested), [Coder-V2-Lite-Base](https://huggingface.co/deepseek-ai/DeepSeek-Coder-V2-Lite-Base)
-
-* Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
-    * [x] Mistral: [Base-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1), [Base-7B-v0.3](https://huggingface.co/mistralai/Mistral-7B-v0.3)
 
 * Gemma (`GemmaForCausalLM`)
     * [x] CodeGemma v1.1: [Base-2B](https://huggingface.co/google/codegemma-1.1-2b), [Base-7B](https://huggingface.co/google/codegemma-1.1-7b)
@@ -232,14 +228,18 @@ Please use `--format completion` for these models.
 
         About [Grok-1](grok.md).
 
-* StarCoder (`Starcoder2ForCausalLM`)
-    * [x] [Base-3B](https://huggingface.co/bigcode/starcoder2-7b), [Base-7B](https://huggingface.co/bigcode/starcoder2-7b), [Base-15B](https://huggingface.co/bigcode/starcoder2-15b)
+* LlaMA-like (`LlamaForCausalLM`):
+    * [x] DeepSeek: [Coder-Base-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-base) (`-a DeepSeekCoder`), [Coder-Base-6.7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-base) (`-a DeepSeekCoder`)
+
+
+* Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
+    * [x] Mistral: [Base-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1), [Base-7B-v0.3](https://huggingface.co/mistralai/Mistral-7B-v0.3)
 
 * Stable-LM (`StableLMEpochModel`)
     * [x] [Code-3B](https://huggingface.co/stabilityai/stable-code-3b)
 
-* AlphaGeometry-LM (`-a AlphaGeometry-LM`)
-    * [x] [geometry.757](https://bit.ly/alphageometry)
+* StarCoder (`Starcoder2ForCausalLM`)
+    * [x] [Base-3B](https://huggingface.co/bigcode/starcoder2-7b), [Base-7B](https://huggingface.co/bigcode/starcoder2-7b), [Base-15B](https://huggingface.co/bigcode/starcoder2-15b)
 
 ## RAG Models
 
