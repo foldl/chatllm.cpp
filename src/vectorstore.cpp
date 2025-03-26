@@ -383,4 +383,15 @@ namespace utils
         size_t last = str.find_last_not_of(" \t\n\r\f\v");
         return str.substr(first, last - first + 1);
     }
+
+    std::string join(const std::vector<std::string>& vec, const std::string& sep)
+    {
+        std::string result;
+        for (size_t i = 0; i < vec.size(); ++i)
+        {
+            if (i != 0) result += sep;
+            result += vec[i];
+        }
+        return result;
+    }
 }

@@ -359,6 +359,33 @@ namespace chatllm
         }
     }
 
+    ChatModelAccessPoints get_chat_model_access_points(ModelType model_type)
+    {
+        if (get_model_purpose(model_type) != ModelPurpose::Chat) return 0;
+
+        switch (model_type)
+        {
+        case MODEL_TYPE_LLAMA_MULTI:
+            return ChatModelAccessPoint::Text;
+        }
+
+        ChatModelAccessPoints tag = model_type >> 24;
+        return (tag << 1) | 1;
+    }
+
+    std::string format_access_points(ChatModelAccessPoints bitmap)
+    {
+        const static std::vector<std::string> names({
+            "Text", "Image Input", "Image Output", "Audio Input", "Audio Output"
+        });
+
+        std::vector<std::string> aps;
+        for (size_t i = 0; i < names.size(); i++)
+            if (bitmap & (1 << i))
+                aps.push_back(names[i]);
+        return "{" + utils::join(aps, ", ") + "}";
+    }
+
     std::string to_string(ModelPurpose purpose)
     {
         switch (purpose)
@@ -2145,14 +2172,19 @@ namespace chatllm
         load_file_header(loader);
         BaseConfig config = loader.read_basic<BaseConfig>();
         std::ostringstream oss;
+        auto model_type = (ModelType)(loader.model_type);
+        auto purpose = get_model_purpose(model_type);
         oss << "Model name  : " << loader.model_name;
         if (loader.model_native_name.size() > 0)
             oss << " (" << loader.model_native_name << ")";
         oss << std::endl;
 
-        oss << "Model type  : " << to_string(get_model_purpose((ModelType(loader.model_type)))) << std::endl
-            << "File version: " << loader.version << " (" << ModelLoader::ff_to_str(loader.ff) << ")" << std::endl << std::endl
+        oss << "Model type  : " << to_string(purpose);
+        if (ModelPurpose::Chat == purpose)
+            oss << " " << format_access_points(get_chat_model_access_points(model_type));
+        oss << std::endl;
 
+        oss << "File version: " << loader.version << " (" << ModelLoader::ff_to_str(loader.ff) << ")" << std::endl << std::endl
             << "vocab_size          : " << config.vocab_size << std::endl
             << "hidden_size         : " << config.hidden_size << std::endl
             << "num_attention_heads : " << config.num_attention_heads << std::endl

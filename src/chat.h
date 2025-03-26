@@ -30,6 +30,17 @@ namespace chatllm
         Ranker,
     };
 
+    enum ChatModelAccessPoint
+    {
+        Text            = 0x01,
+        ImageInput      = 0x02,
+        ImageOutput     = 0x04,
+        AudioInput      = 0x08,
+        AudioOutput     = 0x10,
+    };
+
+    typedef uint16_t ChatModelAccessPoints;
+
     enum MsgRole
     {
         Auto = 0,

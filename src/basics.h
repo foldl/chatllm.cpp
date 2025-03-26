@@ -56,4 +56,6 @@ namespace base64
 namespace utils
 {
     std::string trim(const std::string& str);
+
+    std::string join(const std::vector<std::string>& vec, const std::string& sep);
 }
