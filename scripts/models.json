@@ -761,6 +761,15 @@
                         "url": "chatllm_quantized_deepseek/deepseek-7b.bin"
                     }
                 }
+            },
+            "moe": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 17402792304,
+                        "url": "chatllm_quantized_deepseek/deepseek-moe.bin"
+                    }
+                }
             }
         }
     },
@@ -2309,6 +2318,22 @@
                     "q8": {
                         "size": 13840223024,
                         "url": "chatllm_quantized_aquilachat2/aquilachat2-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "gigachat": {
+        "brief": "Dialogue model from the GigaChat family of models, based on GigaChat-20B-A3B-base.",
+        "default": "20b",
+        "license": "MIT",
+        "variants": {
+            "20b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 21881540560,
+                        "url": "chatllm_quantized_gigachat/gigachat-20b.bin"
                     }
                 }
             }
