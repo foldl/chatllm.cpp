@@ -8,9 +8,12 @@ not used yet. A use case will be customizing model name shown in banner:
 
 ```json
 {
-    "model_name": "..."
+    "model_name": "...",
+    "model_native_name": "...",
 }
 ```
+
+For example, `python chatllm.py -m :aqualichat2:7b`.
 
 ## Why the name?
 

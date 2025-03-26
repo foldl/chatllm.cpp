@@ -5,6 +5,9 @@
 * Adept Persimmon (`PersimmonForCausalLM`)
     * [x] [Chat-8B](https://huggingface.co/adept/persimmon-8b-chat)
 
+* Aquila (`AquilaForCausalLM`)
+    * [x] [Chat2-7B](https://huggingface.co/BAAI/AquilaChat2-7B/tree/9905960de19ea9e573c0dc3fbdf54d4ddcc610d3), [Chat2-34B](https://huggingface.co/BAAI/AquilaChat2-34B/commit/5c7990b198c94b63dfbfa022462b9cf672dbcfa0), [Chat2-7B-16K](https://huggingface.co/BAAI/AquilaChat2-7B-16K/commit/fb46d48479d05086ccf6952f19018322fcbb54cd), [Chat2-34B-16K](https://huggingface.co/BAAI/AquilaChat2-34B-16K/tree/9f19774f3e7afad2fc3d51fe308eac5a2d88c8b1)
+
 * Baichuan (`BaichuanForCausalLM`, `BaichuanM1ForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat), [Chat-13B](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat)
     * [x] M1: [Instruct-14B](https://huggingface.co/baichuan-inc/Baichuan-M1-14B-Instruct)

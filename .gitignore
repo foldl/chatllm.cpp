@@ -17,6 +17,7 @@ build-*/
 
 # model
 *.bin
+*.ggmm
 quantized/
 dump/
 obj/

@@ -20,6 +20,7 @@
 #include <unordered_map>
 
 #include "layers.h"
+#include "JSON.h"
 
 namespace chatllm
 {
@@ -302,6 +303,7 @@ namespace chatllm
         MODEL_TYPE_LLAMA3_2         = 0x1704,
         MODEL_TYPE_EXAONE           = 0x1705,
         MODEL_TYPE_DEEPSEEK_R1_DISTILL_LLAMA = 0x1706,
+        MODEL_TYPE_AQUILA2                   = 0x1707,
 
         MODEL_TYPE_STARCODER2       = 0x1800,
 
@@ -565,6 +567,8 @@ namespace chatllm
             return "DeepSeek-R1-Distill-QWen";
         case MODEL_TYPE_DEEPSEEK_R1_DISTILL_LLAMA:
             return "DeepSeek-R1-Distill-LlaMA";
+        case MODEL_TYPE_AQUILA2:
+            return "Aquila2";
         case MODEL_TYPE_MiniCPM_Embedding_Light:
             return "MiniCPM-Embedding-Light";
         case MODEL_TYPE_MiniCPM_ReRanker_Light:
@@ -578,7 +582,7 @@ namespace chatllm
         case MODEL_TYPE_SOLARPRO:
             return "Solar-Pro";
         default:
-            CHATLLM_THROW << "unknown model type: " << model_type;
+            ggml::log(GGML_LOG_LEVEL_WARN, "unknown model type: %d", model_type);
             return "???";
         }
     }
@@ -972,7 +976,7 @@ namespace chatllm
     {
     public:
         BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 4096)
-            : BaseModel(model_type, to_string(model_type), to_native_string(model_type), get_model_purpose(model_type)),
+            : BaseModel(model_type, get_model_purpose(model_type)),
               transformer(nullptr),
               GRAPH_SIZE(GRAPH_SIZE),
               batch_input(runtime_config.batch_input_size), logit_scale(-1.0f),
@@ -1936,6 +1940,11 @@ namespace chatllm
         #include "../models/gigachat.cpp"
     }
 
+    namespace aquila
+    {
+        #include "../models/aquila.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2037,6 +2046,7 @@ namespace chatllm
 
         // load model
         ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);
+        model->set_names(loader.model_name, loader.model_native_name);
         if (layers.size() > 0)
             model->set_layer_ids(layers);
         loader.set_allocator_manager(model->get_alloc_manager());
@@ -2108,8 +2118,11 @@ namespace chatllm
                 size_t last_non_null = loader.meta.find_last_not_of('\0');
                 if (last_non_null != std::string::npos)
                     loader.meta.erase(last_non_null + 1);
-                else
-                    loader.meta.clear();
+                else;
+
+                auto meta = giri::json::JSON::Load(loader.meta);
+                loader.model_name        = meta["model_name"].ToString();
+                loader.model_native_name = meta["model_native_name"].ToString();
             }
             loader.seek(loader.ggml_header.offset_config, 0);
         }
@@ -2120,6 +2133,11 @@ namespace chatllm
 
         loader.model_type = loader.read_basic<int>();
         loader.version = loader.read_basic<int>();
+
+        if (loader.model_name.size() < 1)
+            loader.model_name = to_string((ModelType(loader.model_type)));
+        if (loader.model_native_name.size() < 1)
+            loader.model_native_name = to_native_string((ModelType(loader.model_type)));
     }
 
     std::string ModelFactory::load_info(ModelLoader &loader)
@@ -2127,8 +2145,12 @@ namespace chatllm
         load_file_header(loader);
         BaseConfig config = loader.read_basic<BaseConfig>();
         std::ostringstream oss;
-        oss << "Model name  : " << to_string((ModelType(loader.model_type))) << std::endl
-            << "Model type  : " << to_string(get_model_purpose((ModelType(loader.model_type)))) << std::endl
+        oss << "Model name  : " << loader.model_name;
+        if (loader.model_native_name.size() > 0)
+            oss << " (" << loader.model_native_name << ")";
+        oss << std::endl;
+
+        oss << "Model type  : " << to_string(get_model_purpose((ModelType(loader.model_type)))) << std::endl
             << "File version: " << loader.version << " (" << ModelLoader::ff_to_str(loader.ff) << ")" << std::endl << std::endl
 
             << "vocab_size          : " << config.vocab_size << std::endl
@@ -2228,6 +2250,7 @@ namespace chatllm
         CASE(QWQ,                   qwen::qwq, 1)               \
         CASE(READERLM2,             jina::readerlm, 1)          \
         CASE(DEEPSEEK_R1_DISTILL_QWEN, qwen::ds_r1_distill, 1)  \
+        CASE(AQUILA2,               aquila::v2, 1)              \
                                                                 \
         CASE(TIGERBOT,              tigerbot, 1)                \
                                                                 \

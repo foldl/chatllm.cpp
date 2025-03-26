@@ -2290,9 +2290,25 @@
             "22b": {
                 "default": "q4_1",
                 "quantized": {
-                    "q4_0": {
+                    "q4_1": {
                         "size": 13840223024,
                         "url": "chatllm_quantized_solar-pro/solarpro-22b-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "aquilachat2": {
+        "brief": "Aquila2 series, which comprises a wide range of bilingual models with parameter sizes of 7, 34, and 70 billion.",
+        "default": "7b",
+        "license": "BAAI Aquila Model Licence Agreement",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 13840223024,
+                        "url": "chatllm_quantized_aquilachat2/aquilachat2-7b.bin"
                     }
                 }
             }

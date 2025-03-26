@@ -602,6 +602,8 @@ namespace chatllm
         GGMMHeader ggml_header;
         FileFormat ff;
         std::string meta;
+        std::string model_name;
+        std::string model_native_name;
     };
 
     // ===== generation =====
@@ -724,6 +726,7 @@ namespace chatllm
         virtual std::string type_name() const = 0;
         virtual std::string native_name() const = 0;
         virtual ModelPurpose get_purpose() const = 0;
+        virtual void set_names(const std::string &name, const std::string &native_name) = 0;
 
         virtual void load(ModelLoader &loader) = 0;
 
@@ -798,6 +801,7 @@ namespace chatllm
         std::string type_name() const  override { return model->type_name(); }
         std::string native_name() const  override { return model->native_name(); }
         ModelPurpose get_purpose() const  override { return model->get_purpose(); }
+        void set_names(const std::string &name, const std::string &native_name) override { model->set_names(name, native_name); }
 
         void load(ModelLoader &loader) override { return model->load(loader); }
 
@@ -837,8 +841,8 @@ namespace chatllm
     class BaseModel : public AbstractModel
     {
     public:
-        BaseModel(int type, std::string name, std::string native_name, ModelPurpose purpose) :
-            type_(type), name_(name), native_name_(native_name), n_past(0),
+        BaseModel(int type, ModelPurpose purpose) :
+            type_(type), n_past(0),
             n_past_offset(0), tokenizer(nullptr),
             purpose(purpose), aborted(false)
         {}
@@ -883,6 +887,12 @@ namespace chatllm
         std::string type_name() const override { return name_; }
         std::string native_name() const override { return native_name_; }
         ModelPurpose get_purpose() const override { return purpose; }
+
+        void set_names(const std::string &name, const std::string &native_name) override
+        {
+            name_ = name;
+            native_name_ = native_name;
+        }
 
         void set_tokenizer(BaseTokenizer *tokenizer) override
         {

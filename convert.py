@@ -6,7 +6,7 @@ from ast import Dict, Tuple
 from collections import OrderedDict
 import json
 import struct
-import time
+import time, os
 import io
 import pickle
 import re
@@ -141,7 +141,7 @@ class ModelType(Enum):
     LlaMA32       = 0x1704
     Exaone        = 0x1705
     DeepSeek_R1_Distill_LlaMA = 0x1706
-    AquilaDense   = 0x1707
+    Aquila2       = 0x1707
 
     StarCoder2    = 0x1800
 
@@ -348,6 +348,7 @@ class LoRAState:
         return tensor
 
 g_lora: LoRAState = None
+g_model_meta = {}
 
 def load_all_model_files(model_files) -> Dict:
     global g_lora
@@ -888,7 +889,7 @@ class BaseConverter:
     def convert(cls, config, model_files, vocab: Any, ggml_type, save_path):
 
         def write_size_to_pos(f, offset):
-            size = f.seek(0, 2)
+            size = f.tell()
             f.seek(offset)
             f.write(struct.pack("i", size))
             f.seek(0, 2)
@@ -899,10 +900,10 @@ class BaseConverter:
             GGMM_VER = 1
             f.write(struct.pack("i" * 4, GGMM_VER, 0, 0, 0))
 
-            config_bytes = json.dumps(config, ensure_ascii=False).encode()
-            rounded_len = ((len(config_bytes) + 3) // 4) * 4
-            config_bytes += b'\x00' * (rounded_len - len(config_bytes))
-            f.write(config_bytes)
+            meta_bytes = json.dumps(g_model_meta, ensure_ascii=False).encode()
+            rounded_len = ((len(meta_bytes) + 3) // 4) * 4
+            meta_bytes += b'\x00' * (rounded_len - len(meta_bytes))
+            f.write(meta_bytes)
             write_size_to_pos(f, 8)
 
             f.write(struct.pack("ii", cls.MODEL_TYPE.value, cls.FILE_VERSION))  # model type & version
@@ -1081,7 +1082,6 @@ class InternLM2Converter(BaseConverter):
             eos_token_id = config.eos_token_id[0]
         else:
             eos_token_id = config.eos_token_id
-
 
         config_values = [
             ggml_type.value,
@@ -5603,6 +5603,37 @@ class SolarConverter(BaseConverter):
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
 
+class AquilaConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Aquila2
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return Llama31Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        if config.num_key_value_heads is None:
+            config.num_key_value_heads = config.num_attention_heads
+        if config.rope_theta is None:
+            config.rope_theta = 10000.0
+        rope_scaling_factor = -1
+        if config.rope_scaling is not None:
+            assert config.rope_scaling['rope_type'] == 'linear'
+            rope_scaling_factor = config.rope_scaling['factor']
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.rope_theta,
+            rope_scaling_factor
+        ]
+        f.write(struct.pack("<iff", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return Llama32Converter.get_weight_names(config)
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -5696,6 +5727,9 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
         path5 = path / "qwen.tiktoken"
         if path5.exists():
             return TikTokenizerVocab(path, None)
+        path5 = path / "tokenizer.tiktoken"
+        if path5.exists():
+            return TikTokenizerVocab(path, None)
 
         path4 = path / "tokenizer.json"
         if path4.exists():
@@ -5734,6 +5768,17 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
 def load_config(path: Path, config_fn: str) -> Any:
     with open(path / config_fn, 'r') as fp:
         r = json.load(fp)
+    return r
+
+def load_some_info(path: Path) -> dict:
+    r = {}
+    if path.is_dir():
+        globs = ["config.json", "configuration.json", "special_tokens_map.json",
+                 "tokenizer_config.json", ]
+        for glob in globs:
+            files = list(path.glob(glob))
+            for f in files:
+                r[os.path.basename(f.name)] = load_config(path, f.name)
     return r
 
 def load_some_model(path: Path) -> List[Path]:
@@ -5811,12 +5856,15 @@ def main():
 
     model_files = load_some_model(Path(args.model_name_or_path))
 
+    global g_model_meta
+    g_model_meta = load_some_info(Path(args.model_name_or_path))
+
     if args.arch != '':
-        config.model_name = args.arch
+        g_model_meta['model_name'] = args.arch
     if args.name != '':
-        config.model_name = args.name
+        g_model_meta['model_name'] = args.name
     if args.native_name != '':
-        config.model_native_name = args.name
+        g_model_meta['model_native_name'] = args.native_name
 
     #if args.lora_model_name_or_path is not None:
     #    from peft import PeftModel
@@ -6118,6 +6166,8 @@ def main():
         DeciLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'SolarForCausalLM':
         SolarConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'AquilaForCausalLM':
+        AquilaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'reka-flash-3':
         assert config.rope_scaling is None, 'config.rope_scaling must be null'
         assert not config.tie_word_embeddings, 'config.tie_word_embeddings must be false'
