@@ -33,21 +33,25 @@ For more information, please checkout [Build llama.cpp locally](https://github.c
 
 ## Usage
 
-Use `-ngl` (`--n_gpu_layers`) to specify number of layers to be deployed to GPU. We name the staffs before the first layer as "Prolog", and
+Use `-ngl` (`--n_gpu_layers`) to specify number of layers to be deployed to different backend devices
+(Just treat the word `gpu` as an alias of _backend device_).
+We name the staffs before the first layer as "Prolog", and
 staffs after the last layer as "Epilog". "Prolog" and "Epilog" are treated as special layers, and they can also be configured from `-ngl`
 by including `prolog` and `epilog` respectively.
 Suppose there is a model with `10` hidden layers:
 
-* `-ngl 5`: put the first 5 layers to GPU;
-* `-ngl 100`: put all layers to GPU;
-* `-ngl 5,prolog`: put the first 5 layers, and "Prolog" layer to GPU;
-* `-ngl 100,prolog,epilog`: put all layers, "Prolog" layer and "Epilog" layer to GPU.
+* `-ngl 5`: put the first 5 layers to the first device;
+* `-ngl 100`: put all layers to the first device;
+* `-ngl 5,prolog`: put the first 5 layers, and "Prolog" layer to the first device;
+* `-ngl 100,prolog,epilog`: put all layers, "Prolog" layer and "Epilog" layer to the first device.
 * `-ngl all`: equivalent to `-ngl 99999,prolog,epilog`.
 
-The full format of `-ngl` is `-ngl [id:]layer_specs[;id:layer_specs]..`. `id` is GPU device ID. If `id` is omitted, `0` is assumed.
+The full format of `-ngl` is `-ngl [id:]layer_specs[;id:layer_specs]..`. `id` is device ID. If `id` is omitted, `0` is assumed.
 `layer_spec` can be a positive integer, `prolog`, `epilog`, a combination of these; or just `all`.
+Suppose device 0 is GPU, and device 1 is CPU, `-ngl 1:5;0:10` will put the first 5 layers to CPU, the next 10 layers to GPU,
+and all other layers to CPU as default.
 
-Use `--show_devices` to check all available devices.
+Tip: Use `--show_devices` to check all available devices and `--show` to check basic hyper parameters of a model.
 
 ## Known issues
 

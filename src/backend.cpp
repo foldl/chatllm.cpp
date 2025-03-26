@@ -588,11 +588,10 @@ namespace chatllm
             for (auto cfg : gpu_cfgs)
             {
                 int device = cfg.id >= 0 ? cfg.id : 0;
-                CHATLLM_CHECK(device < ComputeManager::get_device_count()) << __func__ << ": GPU device: #" << device << " out of range";
+                CHATLLM_CHECK(device < ComputeManager::get_device_count()) << __func__ << ": backend device: #" << device << " out of range";
 
                 auto dev = ggml_backend_dev_get(device);
-                CHATLLM_CHECK(dev != nullptr) << __func__ << ": failed to found GPU device: #" << device;
-                CHATLLM_CHECK(ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_CPU) << __func__ << ": device #" << device << " is CPU";
+                CHATLLM_CHECK(dev != nullptr) << __func__ << ": failed to found backend device: #" << device;
 
                 init_device(device, dev, cfg.n_layers);
             }
