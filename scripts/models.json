@@ -2338,5 +2338,21 @@
                 }
             }
         }
+    },
+    "bailing": {
+        "brief": "Ling is a MoE LLM provided and open-sourced by InclusionAI.",
+        "default": "lite",
+        "license": "MIT",
+        "variants": {
+            "lite": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 17856646160,
+                        "url": "chatllm_quantized_bailing/bailing-lite.bin"
+                    }
+                }
+            }
+        }
     }
 }

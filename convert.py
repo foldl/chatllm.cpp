@@ -74,6 +74,7 @@ class ModelType(Enum):
     DeepSeekV3          = 0x323
     DeepSeekV1          = 0x324
     GigaChat            = 0x325
+    BailingMoE          = 0x326
 
     Yi = 0x400
     MAP_Neo = 0x401
@@ -5213,6 +5214,64 @@ class DeepSeekV1Converter(BaseConverter):
 
         return weight_names
 
+class BailingMoeConverter(BaseConverter):
+    MODEL_TYPE = ModelType.BailingMoE
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            if name == 'model.word_embeddings.weight':
+                r['model.embed_tokens.weight'] = tensor
+            elif name == "lm_head.weight":
+                tensor = tensor / (torch.norm(tensor, p=2, dim=0, keepdim=True) + 1e-7)
+                r[name] = tensor
+            elif name.endswith('query_key_value.weight'):
+                head_dim = config.head_dim
+                num_heads = config.num_attention_heads
+                num_key_value_heads = config.num_key_value_heads
+
+                q, k, v = tensor.split([num_heads * head_dim, num_key_value_heads * head_dim, num_key_value_heads * head_dim], dim=-2)
+
+                r[name.replace('attention.query_key_value', 'self_attn.q_proj')] = permute(q, num_heads)
+                r[name.replace('attention.query_key_value', 'self_attn.k_proj')] = permute(k, num_key_value_heads)
+                r[name.replace('attention.query_key_value', 'self_attn.v_proj')] = v
+
+            elif name.endswith('attention.dense.weight'):
+                r[name.replace('attention.dense', 'self_attn.o_proj')] = tensor
+            else:
+                r[name] = tensor
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.norm_head
+        if config.moe_layer_freq is None: config.moe_layer_freq = 1
+        if config.attention_bias is None: config.attention_bias = False
+        if config.scoring_func is None: config.scoring_func = 'softmax'
+        config.n_routed_experts = config.num_experts
+        config.n_shared_experts = config.num_shared_experts
+        head_dim = config.head_dim or config.hidden_size // config.num_attention_heads
+
+        # make DeepSeekV1Converter.dump_config happy
+        if head_dim != config.hidden_size // config.num_attention_heads:
+            config.head_dim = config.hidden_size // config.num_attention_heads
+            assert config.moe_layer_freq == 1
+
+        DeepSeekV1Converter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            head_dim,
+        ]
+        f.write(struct.pack("<i", *config_values))
+
+        config.head_dim = head_dim
+
+    @staticmethod
+    def get_weight_names(config):
+        return DeepSeekV1Converter.get_weight_names(config)
+
 class DeepSeekV2Converter(BaseConverter):
     MODEL_TYPE = ModelType.DeepSeekV2Light
 
@@ -6168,6 +6227,8 @@ def main():
         SolarConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'AquilaForCausalLM':
         AquilaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'BailingMoeForCausalLM':
+        BailingMoeConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'reka-flash-3':
         assert config.rope_scaling is None, 'config.rope_scaling must be null'
         assert not config.tie_word_embeddings, 'config.tie_word_embeddings must be false'

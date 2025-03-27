@@ -13,7 +13,8 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
-* 2025-03-25: AquilaChat2
+* 2025-03-27: Ling (Bailing)
+* 2025-03-26: AquilaChat2
 * 2025-03-25: DeepSeek v1 & GigaChat
 * 2025-03-24: Solar-Pro & [GGMM](./docs/ggmm.md) file format
 * 2025-03-23: Llama-3.3-Nemotron-Super-49B-v1

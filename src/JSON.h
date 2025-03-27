@@ -1367,8 +1367,13 @@ namespace giri {
                 else {
                     if( !exp_str.empty() )
                         Number = std::stol( val ) * std::pow( 10, exp );
-                    else
-                        Number = std::stol( val );
+                    else {
+                        try {
+                            Number = std::stoll( val );
+                        } catch (...) {
+                            Number = std::stod( val );
+                        }
+                    }
                 }
                 return Number;
             }

@@ -79,6 +79,9 @@
     * [x] v2.5: [Chat-1.8B](https://huggingface.co/internlm/internlm2_5-1_8b-chat), [Chat-7B](https://huggingface.co/internlm/internlm2_5-7b-chat), [Chat-7B-1M](https://huggingface.co/internlm/internlm2_5-7b-chat-1m), [Chat-20B](https://huggingface.co/internlm/internlm2_5-20b-chat)
     * [x] v3: [Instruct-8B](https://huggingface.co/internlm/internlm3-8b-instruct)
 
+* Ling (`BailingMoeForCausalLM`)
+    * [x] [Lite](https://huggingface.co/inclusionAI/Ling-lite/tree/a80ae6c479251f1ae33dda517ab83cdc6a312f99), [Coder-Lite](https://huggingface.co/inclusionAI/Ling-Coder-lite/tree/4a8647acf9d3855d599adaaaf4bf6ca14239d2ab)
+
 * LlaMA-like (`LlamaForCausalLM`):
     * [x] All LlaMA-1 models
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc

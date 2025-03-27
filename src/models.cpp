@@ -234,6 +234,7 @@ namespace chatllm
         MODEL_TYPE_DEEPSEEK_V3       = 0x323,
         MODEL_TYPE_DEEPSEEK_V1_MoE   = 0x324,
         MODEL_TYPE_GIGACHAT          = 0x325,
+        MODEL_TYPE_BAILINGMOE        = 0x326,
 
         MODEL_TYPE_YI       = 0x400,
         MODEL_TYPE_MAP_NEO  = 0x401,
@@ -608,6 +609,8 @@ namespace chatllm
             return "DeciLM";
         case MODEL_TYPE_SOLARPRO:
             return "Solar-Pro";
+        case MODEL_TYPE_BAILINGMOE:
+            return "Bailing";
         default:
             ggml::log(GGML_LOG_LEVEL_WARN, "unknown model type: %d", model_type);
             return "???";
@@ -1972,6 +1975,11 @@ namespace chatllm
         #include "../models/aquila.cpp"
     }
 
+    namespace bailing
+    {
+        #include "../models/bailing.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2246,6 +2254,7 @@ namespace chatllm
         CASE(DEEPSEEK_V2,           deepseek::v2, 1)            \
         CASE(DEEPSEEK_V3_LIGHT,     deepseek::v3_light, 1)      \
         CASE(DEEPSEEK_V1_MoE,       deepseek::v1_moe, 1)        \
+        CASE(BAILINGMOE,            bailing::moe, 1)            \
                                                                 \
         CASE(BAICHUANLLAMA,         baichuan::_7b, 1)           \
         CASE(BAICHUAN,              baichuan::larger, 1)        \

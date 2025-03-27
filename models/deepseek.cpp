@@ -143,7 +143,7 @@ namespace v1_moe
     public:
         ConditionalGeneration0() = default;
 
-        ConditionalGeneration0(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_DEEPSEEK_V1_MoE)
+        ConditionalGeneration0(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_DEEPSEEK_V1_MoE, int head_dim = -1)
             : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
               config(config)
         {
@@ -162,13 +162,18 @@ namespace v1_moe
                             && (EFFECTIVE_EXPERTS_PER_TOK <= EXPERTS_PER_TOK))
                 << "unsupported MoE param";
 
+            if (head_dim < 1)
+                head_dim = config.hidden_size / config.num_attention_heads;
+            if (head_dim != config.hidden_size / config.num_attention_heads)
+                CHATLLM_CHECK(dense_layer_num == 0) << "customized head_dim";
+
             auto create_layer = [&](InitContext *ctx, int layer_index) -> Block * {
                 if (is_layer_moe(layer_index))
                 {
                     auto layer = new DeepSeekMoEBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
                         config.moe_intermediate_size, config.moe_intermediate_size * config.n_shared_experts,
                         config.num_key_value_heads,
-                        config.hidden_size / config.num_attention_heads,
+                        head_dim,
                         config.max_length);
                     return layer;
                 }
