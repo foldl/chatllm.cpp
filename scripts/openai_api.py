@@ -318,7 +318,7 @@ if __name__ == '__main__':
     chat_args = ['-m']
     fim_args = ['-m']
     emb_args = ['-m']
-    current = []
+    current = None
     for a in args:
         if a.startswith(ARG_SEP):
             t = a[len(ARG_SEP):]
@@ -326,8 +326,10 @@ if __name__ == '__main__':
             elif t == 'fim': current = fim_args
             elif t == 'emb': current = emb_args
             else:
-                current = []
+                current = None
         else:
+            if current is None:
+                raise Exception(f'error. Use ---TYPE to specify a type. Example: ---chat :qwen2.5')
             current.append(a)
 
     if len(chat_args) > 1:
@@ -340,5 +342,6 @@ if __name__ == '__main__':
     if len(emb_args) > 1:
         emb_model_obj = ChatLLM(LibChatLLM(PATH_BINDS), emb_args)
 
+    print("LLM Loaded. Starting server...")
     http_server = HTTPServer(('0.0.0.0', 3000), HttpHandler)
     http_server.serve_forever()
