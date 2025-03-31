@@ -801,6 +801,15 @@ namespace chatllm
         Backend::write_tensor_data(pos, v_pos.data(), 0, qlen * sizeof(v_pos[0]));
     }
 
+    ggml::tensor *GLMSelfAttention::apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const
+    {
+        return ggml::map_custom2_inplace(ctx, k, past, ggml_compute_forward_chatglm1_rope, GGML_N_TASKS_MAX, (void *)this);    // [qlen, heads, head_size]
+    }
+    ggml::tensor *GLMSelfAttention::apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const
+    {
+        return ggml::map_custom2_inplace(ctx, q, past, ggml_compute_forward_chatglm1_rope, GGML_N_TASKS_MAX, (void *)this);    // [qlen, heads, head_size]
+    }
+
     ggml::tensor *GLMBlock::forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past)
     {
         float alpha = sqrtf(2.f * (float)num_hidden_layers);

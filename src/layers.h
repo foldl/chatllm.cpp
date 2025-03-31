@@ -1594,6 +1594,11 @@ namespace chatllm
         {
             rope_dim = (hidden_size / num_attention_heads) / 2;
         }
+
+    protected:
+        // input & output: [qlen, heads, head_size]
+        ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override;
+        ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override;
     };
 
     class GLMBlock : public Block
