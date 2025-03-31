@@ -584,7 +584,7 @@ static void show_banner(chatllm::Pipeline &pipeline, bool show, chatllm::BaseStr
         if (total_param_num == total_effective_param_num)
             oss    << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << (double)total_param_num / 1000000000. << "B) parameters." << '\n';
         else
-            oss    << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << (double)total_effective_param_num / 1000000000. << "B effect.) parameters." << '\n';
+            oss    << "with " << total_param_num << " (" << std::fixed << std::setprecision(1) << (double)total_effective_param_num / 1000000000. << "B active) parameters." << '\n';
     }
     else
     {
