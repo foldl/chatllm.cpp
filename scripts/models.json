@@ -2354,5 +2354,21 @@
                 }
             }
         }
+    },
+    "openhands-lm": {
+        "brief": "OpenHands LM is built on the foundation of Qwen Coder 2.5 Instruct 32B, leveraging its powerful base capabilities for coding tasks.",
+        "default": "32b",
+        "license": "MIT",
+        "variants": {
+            "32b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 18437839088,
+                        "url": "chatllm_quantized_openhands/openhands-32b-q4_0.bin"
+                    }
+                }
+            }
+        }
     }
 }
