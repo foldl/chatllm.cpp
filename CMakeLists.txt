@@ -52,5 +52,5 @@ set_target_properties(libchatllm
   LIBRARY_OUTPUT_DIRECTORY "../bindings"
 )
 
-add_executable(main src/main.cpp src/chat.cpp src/backend.cpp src/vectorstore.cpp src/layers.cpp src/tokenizer.cpp src/models.cpp src/unicode.cpp src/unicode-data.cpp)
+add_executable(main src/main.cpp src/chat.cpp src/backend.cpp src/vectorstore.cpp src/layers.cpp src/tokenizer.cpp src/models.cpp src/unicode.cpp src/unicode-data.cpp src/vision_process.cpp)
 target_link_libraries(main PRIVATE ggml)

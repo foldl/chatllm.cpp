@@ -405,10 +405,11 @@ namespace chatllm
     ggml::tensor *ggml::rope_ext(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c,
                                             int   n_dims, int   mode, int   n_ctx_orig,
                                             float freq_base, float freq_scale, float ext_factor,
-                                            float attn_factor, float beta_fast, float beta_slow)
+                                            float attn_factor, float beta_fast, float beta_slow,
+                                            const int *sections)
     {
-        ggml::tensor *tensor = ggml_rope_ext(ctx->get_ctx(), a, b, c,
-                                n_dims, mode, n_ctx_orig,
+        ggml::tensor *tensor = ggml_rope_multi(ctx->get_ctx(), a, b, c,
+                                n_dims, (int *)sections, mode, n_ctx_orig,
                                 freq_base, freq_scale, ext_factor,
                                 attn_factor, beta_fast, beta_slow);
         ctx->cb_op_tensor(tensor);
@@ -425,12 +426,20 @@ namespace chatllm
     ggml::tensor *ggml::rope_ext_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c,
                                             int   n_dims, int   mode, int   n_ctx_orig,
                                             float freq_base, float freq_scale, float ext_factor,
-                                            float attn_factor, float beta_fast, float beta_slow)
+                                            float attn_factor, float beta_fast, float beta_slow,
+                                            const int *sections)
     {
         ggml::tensor *tensor = ggml_rope_ext_inplace(ctx->get_ctx(), a, b, c,
                                 n_dims, mode, n_ctx_orig,
                                 freq_base, freq_scale, ext_factor,
                                 attn_factor, beta_fast, beta_slow);
+
+                                #if (0)
+        ggml::tensor *tensor = ggml_rope_multi_inplace(ctx->get_ctx(), a, b, c,
+                                n_dims, (int *)sections, mode, n_ctx_orig,
+                                freq_base, freq_scale, ext_factor,
+                                attn_factor, beta_fast, beta_slow);
+                                #endif
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -688,6 +697,11 @@ namespace chatllm
         return output;
     }
 
+    ggml::tensor *L2Norm::forward(ComputeContext *ctx, ggml::tensor *input)
+    {
+        ggml::tensor *output = inplace ? ggml::rms_norm_inplace(ctx, input, eps) : ggml::rms_norm(ctx, input, eps);
+        return output;
+    }
 
     FIR2::FIR2(InitContext *ctx, int dim, int hidden_size)
         : weight(ggml::new_tensor_2d(ctx, GGML_TYPE_F32, 2, dim)),
@@ -999,9 +1013,21 @@ namespace chatllm
         return attn_scores;
     }
 
-    void CoreAttention::before_forward(ComputeContext *ctx, const int n_past, const int qlen)
+    void CoreAttention::allocate_pos_tensor(InitContext *ctx)
+    {
+        pos = ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length);
+        v_pos.resize(max_length);
+        ctx->get_allocator()->alloc(pos);
+    }
+
+    void CoreAttention::prepare_pos_tensor(ComputeContext *ctx, const int n_past, const int qlen)
     {
         fill_pos_vector(ctx, v_pos, pos, n_past, qlen);
+    }
+
+    void CoreAttention::before_forward(ComputeContext *ctx, const int n_past, const int qlen)
+    {
+        prepare_pos_tensor(ctx, n_past, qlen);
     }
 
     size_t CoreAttention::read_cache_data(void *buffer, size_t buffer_size) const
@@ -1464,6 +1490,10 @@ namespace chatllm
         const int64_t qlen        = hidden_states->ne[1];
 
         hidden_states = ggml::reshape_3d(ctx, hidden_states, hidden_size, 1, qlen);
+        if (pre_weighting)
+        {
+            hidden_states = ggml::mul(ctx, hidden_states, weights);
+        }
         ggml::tensor *gated = experts_gate.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
         ggml::tensor *act = ggml::inplace_act(ctx, this->act, gated);
         ggml::tensor *up = experts_up.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
@@ -1471,7 +1501,11 @@ namespace chatllm
         ggml::tensor *par = ggml::mul_inplace(ctx, up, act); // [n_ff, num_experts_per_tok, qlen]
 
         ggml::tensor * experts = experts_down.forward(ctx, par, selected_experts); // [hidden_size, num_experts_per_tok, qlen]
-        experts = ggml::mul(ctx, experts, weights);
+
+        if (!pre_weighting)
+        {
+            experts = ggml::mul(ctx, experts, weights);
+        }
 
         ggml::tensor * moe_out = nullptr;
         for (int i = 0; i < num_experts_per_tok; ++i)

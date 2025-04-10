@@ -82,7 +82,7 @@
 * Ling (`BailingMoeForCausalLM`)
     * [x] [Lite](https://huggingface.co/inclusionAI/Ling-lite/tree/a80ae6c479251f1ae33dda517ab83cdc6a312f99), [Coder-Lite](https://huggingface.co/inclusionAI/Ling-Coder-lite/tree/4a8647acf9d3855d599adaaaf4bf6ca14239d2ab)
 
-* LlaMA-like (`LlamaForCausalLM`):
+* LlaMA-like (`LlamaForCausalLM`, `Llama4ForConditionalGeneration`):
     * [x] All LlaMA-1 models
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
     * [x] LlaMA-3: [Instruct-8B](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct), [Instruct-70B](https://huggingface.co/meta-llama/Meta-Llama-3-70B-Instruct), other derivations such as [Llama3-8B-Chinese-Chat](https://huggingface.co/shenzhi-wang/Llama3-8B-Chinese-Chat)
@@ -118,6 +118,7 @@
     * [x] Watt-tool: [8B](https://huggingface.co/watt-ai/watt-tool-8B), [70B](https://huggingface.co/watt-ai/watt-tool-70B)
     * [x] Reke-Flash: [Flash-3](https://huggingface.co/RekaAI/reka-flash-3/tree/69cea64942e4db4809b757ae2b0d312b4b610263) (`-a Reka-Flash-3`)
     * [x] Nemotron: [Llama-3.1-Nemotron-Nano-8B](https://huggingface.co/nvidia/Llama-3.1-Nemotron-Nano-8B-v1/tree/42f62a403ee352e019834442673256e3fe3de275)
+    * [x] LlaMA-4: [Scout-Instruct](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct/tree/7dab2f5f854fe665b6b2f1eccbd3c48e5f627ad8), [Maverick-Instruct](https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E-Instruct/tree/f0ee6477b90b7a6aaefd2cfdf1b4a05d36184137)
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
 

@@ -37,6 +37,8 @@ namespace chatllm
         ImageOutput     = 0x04,
         AudioInput      = 0x08,
         AudioOutput     = 0x10,
+        VideoInput      = 0x20,
+        VideoOutput     = 0x40,
     };
 
     typedef uint16_t ChatModelAccessPoints;
@@ -728,11 +730,22 @@ namespace chatllm
 
         virtual void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                     std::vector<float> &embedding) = 0;
-
         virtual float qa_rank(const GenerationConfig &gen_config,
                               const std::vector<int> &input_ids) = 0;
-
         virtual int get_text_embedding_dim(void) const = 0;
+
+        // image input
+        virtual int append_image(const uint8_t *rgb_pixels, int width, int height) = 0;
+        virtual void clear_images(void) = 0;
+
+        // video input
+        virtual int append_video_snippet(int width, int height, float fps) = 0;
+        virtual int video_snippet_append_frame(const uint8_t *rgb_pixels, int width = 0, int height = 0) = 0;
+        virtual void clear_video_snippets(void) = 0;
+
+        // audio input
+        virtual int append_audio_snippet(const int16_t *pcm_samples, int sample_rate, int sample_num, int channel_num = 1) = 0;
+        virtual void clear_audio_snippets(void) = 0;
 
         virtual std::string type_name() const = 0;
         virtual std::string native_name() const = 0;
@@ -808,6 +821,41 @@ namespace chatllm
                               const std::vector<int> &input_ids) override { return model->qa_rank(gen_config, input_ids); }
 
         int get_text_embedding_dim(void) const override { return model->get_text_embedding_dim(); }
+
+        int append_image(const uint8_t *rgb_pixels, int width, int height) override
+        {
+            return model->append_image(rgb_pixels, width, height);
+        }
+
+        void clear_images(void) override
+        {
+            model->clear_images();
+        }
+
+        // video input
+        int append_video_snippet(int width, int height, float fps) override
+        {
+            return model->append_video_snippet(width, height, fps);
+        }
+        int video_snippet_append_frame(const uint8_t *rgb_pixels, int width = 0, int height = 0) override
+        {
+            return model->video_snippet_append_frame(rgb_pixels, width, height);
+        }
+        void clear_video_snippets(void) override
+        {
+            model->clear_video_snippets();
+        }
+
+        // audio input
+        int append_audio_snippet(const int16_t *pcm_samples, int sample_rate, int sample_num, int channel_num = 1) override
+        {
+            return model->append_audio_snippet(pcm_samples, sample_rate, sample_num, channel_num);
+        }
+
+        void clear_audio_snippets(void) override
+        {
+            model->clear_audio_snippets();
+        }
 
         std::string type_name() const  override { return model->type_name(); }
         std::string native_name() const  override { return model->native_name(); }
@@ -894,6 +942,42 @@ namespace chatllm
         }
 
         int get_text_embedding_dim(void) const override { return -1; }
+
+        int append_image(const uint8_t *rgb_pixels, int width, int height) override
+        {
+            CHATLLM_CHECK(false) << "Image Input not supported!";
+            return -1;
+        }
+
+        void clear_images(void) override
+        {
+        }
+
+        // video input
+        int append_video_snippet(int width, int height, float fps) override
+        {
+            CHATLLM_CHECK(false) << "Video Input not supported!";
+            return -1;
+        }
+        int video_snippet_append_frame(const uint8_t *rgb_pixels, int width = 0, int height = 0) override
+        {
+            CHATLLM_CHECK(false) << "Video Input not supported!";
+            return -1;
+        }
+        void clear_video_snippets(void) override
+        {
+        }
+
+        // audio input
+        int append_audio_snippet(const int16_t *pcm_samples, int sample_rate, int sample_num, int channel_num = 1) override
+        {
+            CHATLLM_CHECK(false) << "Audio Input not supported!";
+            return -1;
+        }
+
+        void clear_audio_snippets(void) override
+        {
+        }
 
         std::string type_name() const override { return name_; }
         std::string native_name() const override { return native_name_; }

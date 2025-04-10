@@ -90,8 +90,11 @@ namespace chatllm
         case GGML_TYPE_F16:
             {
                 ggml_fp16_t * p = (ggml_fp16_t *)data.data();
-                for (size_t i = 0; i < ggml::nbytes(tensor) / sizeof(ggml_fp16_t); i++)
+                const size_t n = ggml::nbytes(tensor) / sizeof(ggml_fp16_t);
+                for (size_t i = 0; i < n; i++)
                 {
+                    if (!full && ((50 < i) && (i < n - 50))) continue;
+
                     printf("[%3d] = %+3.18f\n", (int)i,  ggml_fp16_to_fp32(p[i]));
                 }
             }
@@ -193,6 +196,11 @@ namespace chatllm
 
         dbg_ctx->get_backend_context()->set_eval_observe_callback(need_observe_tensor_evaluation_callback, observe_tensor_evaluation_callback, nullptr);
     }
+
+    #define MAKE_TYPE_TAG(v)            (((uint32_t)(v) >> 1) << 24)
+    #define MODEL_TYPE_TAG_ChatImageIn                              MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput)
+    #define MODEL_TYPE_TAG_ChatImageInVideoIn                       MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::VideoInput)
+    #define MODEL_TYPE_TAG_ChatImageInVideoInAudioInAudioOut        MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::VideoInput + ChatModelAccessPoint::AudioInput + ChatModelAccessPoint::AudioOutput)
 
     enum ModelType
     {
@@ -339,8 +347,11 @@ namespace chatllm
         MODEL_TYPE_MiniCPM_Embedding_Light  = 0x10000104,
         MODEL_TYPE_MiniCPM_ReRanker_Light   = 0x10000105,
 
-
         MODEL_TYPE_LLAMA_MULTI      = 0x20000001,
+
+        MODEL_TYPE_LLAMA4           = MODEL_TYPE_TAG_ChatImageIn + 0x0000001,
+
+        MODEL_TYPE_QWEN2_5_VL       = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000001,
     };
 
     ModelPurpose get_model_purpose(ModelType model_type)
@@ -377,7 +388,7 @@ namespace chatllm
     std::string format_access_points(ChatModelAccessPoints bitmap)
     {
         const static std::vector<std::string> names({
-            "Text", "Image Input", "Image Output", "Audio Input", "Audio Output"
+            "Text", "Image Input", "Image Output", "Audio Input", "Audio Output", "Video Input", "Video Output"
         });
 
         std::vector<std::string> aps;
@@ -2156,8 +2167,12 @@ namespace chatllm
                 else;
 
                 auto meta = giri::json::JSON::Load(loader.meta);
-                loader.model_name        = meta["model_name"].ToString();
-                loader.model_native_name = meta["model_native_name"].ToString();
+                auto name = meta["model_name"];
+                auto native = meta["model_native_name"];
+                if (name.IsString())
+                    loader.model_name        = name.ToString();
+                if (native.IsString())
+                    loader.model_native_name = native.ToString();
             }
             loader.seek(loader.ggml_header.offset_config, 0);
         }
@@ -2245,6 +2260,7 @@ namespace chatllm
         CASE(REKA_FLASH3,           reka::flash, 1)             \
         CASE(EXAONE,                exaone, 1)                  \
         CASE(DEEPSEEK_R1_DISTILL_LLAMA, llama::ds_r1_distill, 1)\
+        CASE(LLAMA4,                llama::v4, 1)               \
                                                                 \
         CASE(DEEPSEEK,              deepseek::v1, 1)            \
         CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \
@@ -2292,6 +2308,7 @@ namespace chatllm
         CASE(READERLM2,             jina::readerlm, 1)          \
         CASE(DEEPSEEK_R1_DISTILL_QWEN, qwen::ds_r1_distill, 1)  \
         CASE(AQUILA2,               aquila::v2, 1)              \
+        CASE(QWEN2_5_VL,            qwen::v2_5_vl, 1)           \
                                                                 \
         CASE(TIGERBOT,              tigerbot, 1)                \
                                                                 \

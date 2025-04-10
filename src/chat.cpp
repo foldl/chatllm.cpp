@@ -975,6 +975,12 @@ namespace chatllm
             auto search = tensor_dict.find(concat_list[i]);
             CHATLLM_CHECK(search != tensor_dict.end()) << "tensor " << concat_list[i] << " not exists.";
 
+            for (int j = 0; j < GGML_MAX_DIMS; j++)
+            {
+                if (search->second.tensor.ne[j] == 1) break;
+                CHATLLM_CHECK(tensor->ne[j] == search->second.tensor.ne[j]) << concat_list[i] << ": shape mismatch dim[" << j << "]: " << tensor->ne[j] << " != " << search->second.tensor.ne[j];
+            }
+
             size_t size = search->second.get_nbytes();
             t.read_tensor_data(_file.get(), search->second._offset, write_offset, size, tensor->type);
 

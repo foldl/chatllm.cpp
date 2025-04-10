@@ -13,6 +13,7 @@
 #include <map>
 
 #include "vectorstore.h"
+#include "vision_process.h"
 
 #if defined(_WIN32)
 #include <fcntl.h>
@@ -1021,6 +1022,9 @@ int main(int argc, const char **argv)
     for (int i = 0; i < argc; i++)
         utf_args.push_back(argv[i]);
 #endif
+
+    //vision::test(utf_args[1].c_str());
+    //return -1;
 
     Args args;
     auto count = parse_args(args, utf_args);

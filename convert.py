@@ -35,6 +35,19 @@ class GGMLType(Enum):
     Q4_1 = 3
     Q8_0 = 8
 
+class ChatModelAP(IntEnum):
+    Text            = 0x01
+    ImageInput      = 0x02
+    ImageOutput     = 0x04
+    AudioInput      = 0x08
+    AudioOutput     = 0x10
+    VideoInput      = 0x20
+    VideoOutput     = 0x40
+
+ModelTypeTagChatImageIn = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value) >> 1) << 24
+ModelTypeTagChatImageVideoIn = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value) >> 1) << 24
+ModelTypeTagChatImageVideoAudioInAudioOut = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value + ChatModelAP.AudioInput.value + ChatModelAP.AudioOutput.value) >> 1) << 24
+
 class ModelType(Enum):
     CHATGLM = 1
     CHATGLM2 = 2
@@ -179,9 +192,11 @@ class ModelType(Enum):
 
     LlaMAMulti    = 0x20000001
 
-    Qwen2VL         = 0x30000001
+    LlaMA4                  = ModelTypeTagChatImageIn + 0x0000001
 
-    MiniCPM_O       = 0x30000101
+    Qwen2_5VL               = ModelTypeTagChatImageVideoIn + 0x0000001
+
+    MiniCPM_O               = ModelTypeTagChatImageVideoAudioInAudioOut + 0x0000001
 
 class TokenType(Enum):
     UNDEFINED    = 0
@@ -199,6 +214,11 @@ class TokenizerType(Enum):
 g_tokenizer_type = TokenizerType.BPE1
 
 g_special_tokens: Dict = {}
+
+def pad_to_len(l: list, to_len: int, v = 0) -> list:
+    assert len(l) <= to_len
+    n = len(l)
+    return l + [v] * (to_len - n)
 
 def quantize_q8_0(tensor: torch.Tensor) -> torch.CharTensor:
     # equivalent to ggml_quantize_q8_0 in ggml.c
@@ -442,7 +462,8 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
         remaining = remaining[len(this_round):]
 
         for x in state_dict:
-            state_dict_cache[x] = state_dict[x]
+            if x in remaining:
+                state_dict_cache[x] = state_dict[x]
 
         for name in tqdm(this_round.keys(), desc="Dumping ..."):
             tensor: torch.Tensor = this_round[name]
@@ -1269,6 +1290,132 @@ class Llama32Converter(BaseConverter):
         weight_names = Llama31Converter.get_weight_names(config)
         if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
             weight_names.remove('lm_head.weight')
+        return weight_names
+
+class Llama4Converter(BaseConverter):
+    MODEL_TYPE = ModelType.LlaMA4
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return Llama3Converter.pp(config, name, tensor)
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        config = AttributeDict(config.text_config)
+        new_dict = {}
+        for k in state_dict:
+            kk: str = k
+            tensor: torch.Tensor = state_dict[kk]
+            if kk.startswith('language_model.'):
+
+                kk = kk[len('language_model.'):]
+                kk = kk.replace('.feed_forward.', '.mlp.')
+
+                if kk.endswith('mlp.experts.down_proj'):
+                    shape = tensor.shape
+                    for j in range(shape[0]):
+                        kkk = kk.replace('mlp.experts.down_proj', f'mlp.experts.{j}.down_proj.weight')
+                        new_dict[kkk] = tensor[j].T.contiguous()
+                elif kk.endswith('mlp.experts.gate_up_proj'):
+                    shape = tensor.shape
+                    gate = tensor[:, :, : shape[2] // 2]
+                    up   = tensor[:, :, shape[2] // 2 : ]
+                    for j in range(shape[0]):
+                        kkk = kk.replace('mlp.experts.gate_up_proj', f'mlp.experts.{j}.gate_proj.weight')
+                        new_dict[kkk] = gate[j].T.contiguous()
+                        kkk = kk.replace('mlp.experts.gate_up_proj', f'mlp.experts.{j}.up_proj.weight')
+                        new_dict[kkk] = up[j].T.contiguous()
+                elif kk.endswith('mlp.router.weight'):
+                    new_dict[kk.replace('mlp.router.weight', 'mlp.gate.weight')] = tensor
+                else:
+                    new_dict[kk] = tensor
+            else:
+                new_dict[kk] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        config = AttributeDict(config.text_config)
+        if config.rope_scaling is not None:
+            assert isinstance(config.rope_scaling, dict), 'rope_scaling must be a dict'
+            assert config.rope_scaling['rope_type'] == 'llama3', 'rope_scaling.rope_type must be `llama3`'
+        assert not config.attention_bias
+        assert not config.for_llm_compressor
+        if config.no_rope_layers is not None:
+            assert config.no_rope_layers == []
+
+        if isinstance(config.eos_token_id, list):
+            config.eos_token_id = config.eos_token_id[0]
+
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            config.attention_chunk_size,
+            config.head_dim,
+            config.interleave_moe_layer_step,
+            config.intermediate_size_mlp,
+            config.num_experts_per_tok,
+            config.num_local_experts,
+            1 if config.use_qk_norm else 0,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        config_values = [
+            config.router_aux_loss_coef,
+            config.rope_theta,
+            config.rope_scaling['original_max_position_embeddings'] if config.rope_scaling is not None else -1,
+            config.rope_scaling['factor'] if config.rope_scaling is not None else -1.0,
+            config.rope_scaling['low_freq_factor'] if config.rope_scaling is not None else -1.0,
+            config.rope_scaling['high_freq_factor'] if config.rope_scaling is not None else -1.0,
+        ]
+        f.write(struct.pack("<ffifff", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        config = AttributeDict(config.text_config)
+        moe_layers = list(range(config.interleave_moe_layer_step - 1, config.num_hidden_layers, config.interleave_moe_layer_step))
+        def is_moe(layer_idx):
+            nonlocal moe_layers
+            return layer_idx in moe_layers
+
+        for i in range(config.num_hidden_layers):
+
+            if is_moe(i):
+                for j in range(config.num_local_experts):
+                    weight_names += [
+                        f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                    ]
+
+                weight_names += [
+                    f"model.layers.{i}.mlp.gate.weight",
+                    f"model.layers.{i}.mlp.shared_expert.down_proj.weight",
+                    f"model.layers.{i}.mlp.shared_expert.gate_proj.weight",
+                    f"model.layers.{i}.mlp.shared_expert.up_proj.weight",
+                ]
+            else:
+                weight_names += [
+                    f"model.layers.{i}.mlp.down_proj.weight",
+                    f"model.layers.{i}.mlp.gate_proj.weight",
+                    f"model.layers.{i}.mlp.up_proj.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
         return weight_names
 
 class DeciLMConverter(BaseConverter):
@@ -3695,45 +3842,42 @@ class QWen2Converter(BaseConverter):
 
         return weight_names
 
-class QWen2VLConverter(BaseConverter):
-    MODEL_TYPE = ModelType.Qwen2VL
+class QWen2_5VLConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Qwen2_5VL
 
     @classmethod
-    def pp(cls, config, name: str, tensor):
-        if name == 'visual.patch_embed.proj.weight':
-            shape = tensor.shape
-            return tensor.view(shape[0], shape[1] * shape[2] * shape[3] * shape[4])
-        else:
-            return tensor
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            if name == 'visual.patch_embed.proj.weight':
+                shape = tensor.shape
+                assert len(shape) == 5
+                r[name] = tensor.view(shape[0], shape[1] * shape[2] * shape[3] * shape[4])
+            elif name.endswith('.attn.qkv.bias') or name.endswith('.attn.qkv.weight'):
+                #print(f'shape: {name} = {tensor.shape}')
+                num_heads = config.vision_config['hidden_size']
+                q, k, v = tensor.split([num_heads, num_heads, num_heads], dim=0)
+                r[name.replace('.attn.qkv.', '.attn.q_proj.')] = q
+                r[name.replace('.attn.qkv.', '.attn.k_proj.')] = k
+                r[name.replace('.attn.qkv.', '.attn.v_proj.')] = v
+            else:
+                r[name] = tensor
+
+        return r
 
     @staticmethod
     def dump_config(f, config, ggml_type):
-        assert config.vision_config['hidden_size'] == config.hidden_size, 'vision_config.hidden_size must == hidden_size'
         assert config.rope_scaling['type'] == 'mrope', 'rope_scaling must be mrope'
+        assert config.vision_config['hidden_act'] == 'silu'
 
         QWen2Converter.dump_config(f, config, ggml_type)
-        config_values = [
-            config.vision_start_token_id,
-            config.vision_end_token_id,
-            config.vision_token_id,
-            config.image_token_id,
-            config.video_token_id,
-            1 if config.tie_word_embeddings else 0,
-            len(config.rope_scaling['mrope_section']),
-        ] + config.rope_scaling['mrope_section']
-        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        MROPE_SECTION_MAX = 4
 
         config_values = [
-            config.vision_config['depth'],
-            config.vision_config['embed_dim'],
-            config.vision_config['mlp_ratio'] * config.vision_config['embed_dim'],
-            config.vision_config['num_heads'],
-            config.vision_config['in_chans'],
-            config.vision_config['patch_size'],
-            config.vision_config['spatial_merge_size'],
-            config.vision_config['spatial_patch_size'],
-            config.vision_config['temporal_patch_size'],
-        ]
+            config.tie_word_embeddings if config.tie_word_embeddings is not None else 0
+        ] + pad_to_len(config.rope_scaling['mrope_section'], MROPE_SECTION_MAX)
         f.write(struct.pack("<" + "i" * len(config_values), *config_values))
 
     @staticmethod
@@ -3744,20 +3888,23 @@ class QWen2VLConverter(BaseConverter):
             weight_names += [
                 f"visual.blocks.{i}.attn.proj.bias",
                 f"visual.blocks.{i}.attn.proj.weight",
-                f"visual.blocks.{i}.attn.qkv.bias",
-                f"visual.blocks.{i}.attn.qkv.weight",
-                f"visual.blocks.{i}.mlp.fc1.bias",
-                f"visual.blocks.{i}.mlp.fc1.weight",
-                f"visual.blocks.{i}.mlp.fc2.bias",
-                f"visual.blocks.{i}.mlp.fc2.weight",
-                f"visual.blocks.{i}.norm1.bias",
+                f"visual.blocks.{i}.attn.q_proj.bias",
+                f"visual.blocks.{i}.attn.q_proj.weight",
+                f"visual.blocks.{i}.attn.k_proj.bias",
+                f"visual.blocks.{i}.attn.k_proj.weight",
+                f"visual.blocks.{i}.attn.v_proj.bias",
+                f"visual.blocks.{i}.attn.v_proj.weight",
+                f"visual.blocks.{i}.mlp.down_proj.bias",
+                f"visual.blocks.{i}.mlp.down_proj.weight",
+                f"visual.blocks.{i}.mlp.gate_proj.bias",
+                f"visual.blocks.{i}.mlp.gate_proj.weight",
+                f"visual.blocks.{i}.mlp.up_proj.bias",
+                f"visual.blocks.{i}.mlp.up_proj.weight",
                 f"visual.blocks.{i}.norm1.weight",
-                f"visual.blocks.{i}.norm2.bias",
                 f"visual.blocks.{i}.norm2.weight",
             ]
 
         weight_names += [
-            "visual.merger.ln_q.bias",
             "visual.merger.ln_q.weight",
             "visual.merger.mlp.0.bias",
             "visual.merger.mlp.0.weight",
@@ -5865,10 +6012,10 @@ def main():
     parser.add_argument("-l", "--lora_model_name_or_path", type=str, default=None)
     parser.add_argument("-o", "--save_path", type=Path)
     parser.add_argument("-t", "--type", type=str, default="q8_0", choices=["f32", "f16", "q8_0", "q4_0", "q4_1"])
+    parser.add_argument("-n", "--name", type=str, required=True, help='model name in English')
     parser.add_argument("--vocab_dir", type=str, default='')
     parser.add_argument("--experts", type=str, default='')
-    parser.add_argument("--name", type=str, default='')
-    parser.add_argument("--native_name", type=str, default='')
+    parser.add_argument("--native_name", type=str, default='', help='model native name')
     args = parser.parse_args()
 
     arch = args.arch.lower()
@@ -5977,6 +6124,8 @@ def main():
                 Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Llama4ForConditionalGeneration':
+        Llama4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-llama':
         assert isinstance(config.rope_scaling, dict), 'rope_scaling must be a dict'
         Llama32Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_LlaMA
@@ -6119,8 +6268,8 @@ def main():
             QWen2Converter.MODEL_TYPE = ModelType.ReaderLM2
             assert config.tie_word_embeddings
         QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
-    elif arch == 'Qwen2VLForConditionalGeneration':
-        QWen2VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Qwen2_5_VLForConditionalGeneration':
+        QWen2_5VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen':
         QWen2TieConverter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen
         QWen2TieConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

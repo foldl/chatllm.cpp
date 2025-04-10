@@ -624,7 +624,6 @@ namespace ds_r1_distill
             tp = new tokenizer::BPEProcessor2(
                 {
                     // "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
-                    // "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
                     "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
                 }
             );
@@ -691,5 +690,80 @@ namespace ds_r1_distill
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_DEEPSEEK_R1_DISTILL_QWEN)
             : v2::ConditionalGeneration(config, runtime_config, type, config.tie != 0)
         {}
+    };
+}
+
+namespace v2_5_vl
+{
+
+    const int MROPE_SECTION_MAX = 4;
+
+    struct Config : v2::Config
+    {
+        int tie_word_embeddings;
+        int mrope_section[MROPE_SECTION_MAX];
+    };
+
+    class Tokenizer : public v2::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config) : v2::Tokenizer(config)
+        {}
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            size_t r = v2::Tokenizer::load(buffer, n_vocab);
+
+
+
+            return r;
+        }
+    public:
+        int object_ref_start_token_id;
+        int object_ref_end_token_id;
+        int box_start_token_id;
+        int box_end_token_id;
+        int quad_start_token_id;
+        int quad_end_token_id;
+        int vision_start_token_id;
+        int vision_end_token_id;
+        int vision_pad_token_id;
+        int image_pad_token_id;
+        int video_pad_token_id;
+    };
+
+    class ConditionalGeneration : public v2::ConditionalGeneration
+    {
+    struct rgb_image
+    {
+        std::vector<uint8_t> rgb_pixels;
+        int height;
+        int width;
+    };
+
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : v2::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_QWEN2, config.tie_word_embeddings != 0)
+        {
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto &layer = get_typed_transformer<ModelClass>()->layers[i];
+
+            }
+        }
+
+        int append_image(const uint8_t *rgb_pixels, int width, int height) override
+        {
+            //return model->append_image(rgb_pixels, width, height);
+            return 0;
+        }
+
+        void clear_images(void) override
+        {
+            images.clear();
+        }
+
+    public:
+        std::vector<rgb_image> images;
     };
 }

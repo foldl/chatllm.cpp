@@ -98,12 +98,14 @@ namespace chatllm
         ggml::tensor *rope_ext(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c,
                                             int   n_dims, int   mode, int   n_ctx_orig,
                                             float freq_base, float freq_scale, float ext_factor,
-                                            float attn_factor, float beta_fast, float beta_slow);
+                                            float attn_factor, float beta_fast, float beta_slow,
+                                            const int *sections = nullptr);
         ggml::tensor *rope_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int n_dims, int mode);
         ggml::tensor *rope_ext_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c,
                                             int   n_dims, int   mode, int   n_ctx_orig,
                                             float freq_base, float freq_scale, float ext_factor,
-                                            float attn_factor, float beta_fast, float beta_slow);
+                                            float attn_factor, float beta_fast, float beta_slow,
+                                            const int *sections = nullptr);
 
         ggml::tensor *soft_max(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *soft_max_inplace(ComputeContext *ctx, ggml::tensor *a);
@@ -432,6 +434,22 @@ namespace chatllm
 
     public:
         ggml::tensor *weight;
+        float eps;
+        const bool inplace;
+    };
+
+    class L2Norm : public Block
+    {
+    public:
+        L2Norm() : inplace(true) {}
+        L2Norm(InitContext *ctx, int normalized_shape, bool inplace = false)
+            : eps(1e-5f),
+              inplace(inplace) {}
+
+        using Block::forward;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+
+    public:
         float eps;
         const bool inplace;
     };
@@ -854,14 +872,14 @@ namespace chatllm
         CoreAttention() : num_attention_heads(0), num_kv_heads(0), max_length(0) {}
 
         CoreAttention(InitContext *ctx, int num_attention_heads, int num_kv_heads, int max_length,
-              int k_cache_ele_num, int v_cache_ele_num)
+              int64_t k_cache_ele_num, int64_t v_cache_ele_num)
             : num_attention_heads(num_attention_heads),
               num_kv_heads(num_kv_heads),
               k_cache(k_cache_ele_num > 0 ? ggml::new_tensor_1d(ctx, ctx->cache_dtype, k_cache_ele_num)
                                        : nullptr),
               v_cache(v_cache_ele_num > 0 ? ggml::new_tensor_1d(ctx, ctx->cache_dtype, v_cache_ele_num)
                                        : nullptr),
-              pos(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length)),
+              pos(nullptr),
               max_length(max_length),
               attn_scaling_factor(-1.0f),
               attn_scores_pp(nullptr),
@@ -879,9 +897,7 @@ namespace chatllm
                 ggml::set_name(v_cache, "v_cache");
             }
 
-            v_pos.resize(max_length);
-
-            ctx->get_allocator()->alloc(pos);
+            allocate_pos_tensor(ctx);
         }
 
         void shift_cache(int shift, int total) override
@@ -925,6 +941,9 @@ namespace chatllm
         size_t write_cache_data(const void *buffer, size_t buffer_size) override;
 
     protected:
+        virtual void allocate_pos_tensor(InitContext *ctx);
+        virtual void prepare_pos_tensor(ComputeContext *ctx, const int n_past, const int qlen);
+
         // k: [heads, qlen, head_size]
         // q: [heads, qlen, head_size]
         // v: [heads, head_size, klen]
@@ -992,8 +1011,8 @@ namespace chatllm
         KVCacheAttention(InitContext *ctx, int num_attention_heads, int num_kv_heads, int k_hidden_size, int v_hidden_size, int max_length,
                          int cache_length)
             : CoreAttention(ctx, num_attention_heads, num_kv_heads, max_length,
-                            k_hidden_size * cache_length,
-                            v_hidden_size * cache_length),
+                            (int64_t)k_hidden_size * cache_length,
+                            (int64_t)v_hidden_size * cache_length),
               k_hidden_size(k_hidden_size),
               v_hidden_size(v_hidden_size),
               cache_length(cache_length)
@@ -1534,6 +1553,10 @@ namespace chatllm
               beta_fast(0.0f),
               beta_slow(0.0f),
               rope_dim(head_dim),
+              n_ctx(0),
+              n_original_ctx(0),
+              mrope_sections(nullptr),
+              use_rope(true),
               freq_factors(nullptr),
               rope_mode(RoPEMode::Interleaved)
         {
@@ -1553,6 +1576,8 @@ namespace chatllm
               rope_dim(rope_dim),
               n_ctx(0),
               n_original_ctx(0),
+              mrope_sections(nullptr),
+              use_rope(true),
               freq_factors(nullptr),
               rope_mode(RoPEMode::Original)
         {
@@ -1569,6 +1594,8 @@ namespace chatllm
         int   rope_dim;
         int   n_ctx;
         int   n_original_ctx;
+        int  *mrope_sections;
+        bool  use_rope;
         ggml::tensor *freq_factors;
         RoPEMode rope_mode;
 
@@ -1576,11 +1603,13 @@ namespace chatllm
         // input & output: [qlen, heads, head_size]
         ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override
         {
+            if (!use_rope) return k;
             return ggml::rope_ext_inplace(ctx, k, past, freq_factors, rope_dim, rope_mode, n_original_ctx,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size]
         }
         ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override
         {
+            if (!use_rope) return q;
             return ggml::rope_ext_inplace(ctx, q, past, freq_factors, rope_dim, rope_mode, n_original_ctx,
                             freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);    // [qlen, heads, head_size];
         }
@@ -1825,7 +1854,8 @@ namespace chatllm
               norm_topk_prob(true),
               score_func(ScoreFunc::Softmax),
               routed_scaling_factor(-1.0f),
-              always_scaling(false)
+              always_scaling(false),
+              pre_weighting(false)
         {
             delete mover;
             mover = nullptr;
@@ -1869,6 +1899,7 @@ namespace chatllm
         ScoreFunc score_func;
         float routed_scaling_factor;
         bool always_scaling;
+        bool pre_weighting;
     protected:
         virtual ggml::tensor *forward_with_experts(ComputeContext *ctx, ggml::tensor *hidden_states,
             ggml::tensor *selected_experts,
@@ -2470,6 +2501,8 @@ namespace chatllm
         // input & output: [qlen, heads, head_size]
         ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override
         {
+            if (!RoPESelfAttention<BaseAttn>::use_rope) return k;
+
             if (!post_norm)
                 k = const_cast<QKNormedAttention *>(this)->k_layernorm.forward(ctx, k);
             k = RoPESelfAttention<BaseAttn>::apply_pos_embedding_k(ctx, k, hidden_size, qlen, past);    // [qlen, heads, head_size]
@@ -2480,6 +2513,8 @@ namespace chatllm
 
         ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override
         {
+            if (!RoPESelfAttention<BaseAttn>::use_rope) return q;
+
             if (!post_norm)
                 q = const_cast<QKNormedAttention *>(this)->q_layernorm.forward(ctx, q);
             q = RoPESelfAttention<BaseAttn>::apply_pos_embedding_q(ctx, q, hidden_size, qlen, past);    // [qlen, heads, head_size];
