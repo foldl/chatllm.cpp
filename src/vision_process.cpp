@@ -13,7 +13,7 @@ namespace vision
 
         std::string cmd = "magick identify \"" + std::string(fn) + "\"";
 
-        FILE* pp = _popen(cmd.c_str(), "r");
+        FILE* pp = popen(cmd.c_str(), "r");
 
         while (!feof(pp))
         {
@@ -64,7 +64,7 @@ namespace vision
 
         printf("%s\n", oss.str().c_str());
 
-        FILE* pp = _popen(oss.str().c_str(), "rb");
+        FILE* pp = popen(oss.str().c_str(), "rb");
 
         while (!feof(pp))
         {
