@@ -41,6 +41,7 @@ namespace chatllm
         ggml::tensor *new_tensor_1d(ComputeContext *ctx, ggml::type type, int64_t ne0);
         ggml::tensor *new_tensor_2d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1);
         ggml::tensor *new_tensor_3d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2);
+        ggml::tensor *new_tensor_4d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
 
         void set_input(ggml::tensor *a);
         void set_output(ggml::tensor *a);
@@ -124,6 +125,8 @@ namespace chatllm
 
         ggml::tensor *abs(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max);
+
+        ggml::tensor *conv_2d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *b);
 
         ggml::tensor *map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom2(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);

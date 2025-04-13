@@ -195,6 +195,7 @@ class ModelType(Enum):
     LlaMA4                  = ModelTypeTagChatImageIn + 0x0000001
 
     Qwen2_5VL               = ModelTypeTagChatImageVideoIn + 0x0000001
+    KimiVL                  = ModelTypeTagChatImageVideoIn + 0x0000100
 
     MiniCPM_O               = ModelTypeTagChatImageVideoAudioInAudioOut + 0x0000001
 
@@ -439,34 +440,24 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
 
     # Note: incremental loading and converting
 
-    state_dict_cache = {}
     remaining: List = weight_names.copy()
 
     if loader_fun is None:
         loader_fun = load_all_model_files
 
     for state_dict in loader_fun(model_files):
-        this_round = {}
+        this_round = []
         state_dict = state_dict_pp(config, state_dict)
-
-        for x in remaining:
-            if x in state_dict:
-                this_round[x] = state_dict[x]
-                del state_dict[x]
-            elif x in state_dict_cache:
-                this_round[x] = state_dict_cache[x]
-                del state_dict_cache[x]
-            else:
-                break
-
-        remaining = remaining[len(this_round):]
 
         for x in state_dict:
             if x in remaining:
-                state_dict_cache[x] = state_dict[x]
+                this_round.append(x)
+                remaining.remove(x)
+            else:
+                print(f"Warning: tensor {x} is ignored")
 
-        for name in tqdm(this_round.keys(), desc="Dumping ..."):
-            tensor: torch.Tensor = this_round[name]
+        for name in tqdm(this_round, desc="Dumping ..."):
+            tensor: torch.Tensor = state_dict[name]
 
             tensor = tensor.float()
 
@@ -5655,6 +5646,86 @@ class DeepSeekV3Converter(BaseConverter):
 
         return weight_names
 
+class KimiVLConverter(BaseConverter):
+    MODEL_TYPE = ModelType.KimiVL
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        txt_dict = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.startswith('language_model.'):
+                txt_dict[name.replace('language_model.', '')] = tensor
+            elif name.startswith('vision_tower.encoder.'):
+
+                name = name.replace('vision_tower.encoder.', 'visual.')
+                if '.wo.' in name:
+                    r[name.replace('.wo.', '.attn.o_proj.')] = tensor
+                elif name.endswith('.wqkv.bias') or name.endswith('.wqkv.weight'):
+                    #print(f'shape: {name} = {tensor.shape}')
+                    num_heads = config.vision_config['hidden_size']
+                    q, k, v = tensor.split([num_heads, num_heads, num_heads], dim=0)
+                    r[name.replace('.wqkv.', '.attn.q_proj.')] = q
+                    r[name.replace('.wqkv.', '.attn.k_proj.')] = k
+                    r[name.replace('.wqkv.', '.attn.v_proj.')] = v
+                else:
+                    r[name] = tensor
+            elif name.startswith('vision_tower.'):
+                txt_dict[name.replace('vision_tower.', 'visual.')] = tensor
+            else:
+                r[name] = tensor
+
+        r.update(DeepSeekV3Converter.state_dict_pp(KimiVLConverter.txt_config, txt_dict))
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        KimiVLConverter.txt_config = AttributeDict(config.text_config)
+        DeepSeekV3Converter.dump_config(f, KimiVLConverter.txt_config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = DeepSeekV3Converter.get_weight_names(KimiVLConverter.txt_config)
+
+        for i in range(config.vision_config['num_hidden_layers']):
+            weight_names += [
+                f"visual.blocks.{i}.attn.q_proj.bias",
+                f"visual.blocks.{i}.attn.q_proj.weight",
+                f"visual.blocks.{i}.attn.k_proj.bias",
+                f"visual.blocks.{i}.attn.k_proj.weight",
+                f"visual.blocks.{i}.attn.v_proj.bias",
+                f"visual.blocks.{i}.attn.v_proj.weight",
+                f"visual.blocks.{i}.attn.o_proj.bias",
+                f"visual.blocks.{i}.attn.o_proj.weight",
+                f"visual.blocks.{i}.mlp.fc0.bias",
+                f"visual.blocks.{i}.mlp.fc0.weight",
+                f"visual.blocks.{i}.mlp.fc1.bias",
+                f"visual.blocks.{i}.mlp.fc1.weight",
+                f"visual.blocks.{i}.norm0.bias",
+                f"visual.blocks.{i}.norm0.weight",
+                f"visual.blocks.{i}.norm1.bias",
+                f"visual.blocks.{i}.norm1.weight",
+            ]
+
+        weight_names += [
+            "multi_modal_projector.linear_1.bias",
+            "multi_modal_projector.linear_1.weight",
+            "multi_modal_projector.linear_2.bias",
+            "multi_modal_projector.linear_2.weight",
+            "multi_modal_projector.pre_norm.bias",
+            "multi_modal_projector.pre_norm.weight",
+            "visual.final_layernorm.bias",
+            "visual.final_layernorm.weight",
+            "visual.patch_embed.pos_emb.weight",
+            "visual.patch_embed.proj.bias",
+            "visual.patch_embed.proj.weight",
+        ]
+
+        return weight_names
+
 class IndexConverter(BaseConverter):
     MODEL_TYPE = ModelType.Index
 
@@ -5980,7 +6051,7 @@ def load_some_info(path: Path) -> dict:
     r = {}
     if path.is_dir():
         globs = ["config.json", "configuration.json", "special_tokens_map.json",
-                 "tokenizer_config.json", ]
+                 "tokenizer_config.json", "preprocessor_config.json"]
         for glob in globs:
             files = list(path.glob(glob))
             for f in files:
@@ -6270,6 +6341,8 @@ def main():
         QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2_5_VLForConditionalGeneration':
         QWen2_5VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'KimiVLForConditionalGeneration':
+        KimiVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen':
         QWen2TieConverter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen
         QWen2TieConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

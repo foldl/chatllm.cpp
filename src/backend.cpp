@@ -289,7 +289,7 @@ namespace chatllm
             exit(-1);
         }
 
-        for (int i = 0; i < ggml_backend_reg_count(); i++)
+        for (int i = 0; i < (int)ggml_backend_reg_count(); i++)
         {
             auto reg = ggml_backend_reg_get(i);
             if (std::string(ggml_backend_reg_name(reg)) == "RPC")
@@ -481,7 +481,7 @@ namespace chatllm
         : backend(backend), n_layers(n_layers), use_gpu(use_gpu)
     {
         // FIXME: find a better way
-        _is_cpu = ggml_backend_name(backend) == "CPU";
+        _is_cpu = std::string(ggml_backend_name(backend)) == "CPU";
     }
 
     bool Backend::is_cpu(void) const

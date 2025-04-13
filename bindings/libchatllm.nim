@@ -11,11 +11,11 @@ type
         PRINTLN_EMBEDDING = 8,          ##  print a whole line: embedding (example: "0.1,0.3,...")
         PRINTLN_RANKING = 9,            ##  print a whole line: ranking (example: "0.8")
         PRINTLN_TOKEN_IDS = 10,         ##  print a whole line: token ids (example: "1,3,5,8,...")
-        PRINTLN_LOGGING =11,            ## print a whole line: internal logging with the first char indicating level
-                                        ## (space): None; D: Debug; I: Info; W: Warn; E: Error; .: continue
-        PRINTLN_BEAM_SEARCH =12,        ## print a whole line: a result of beam search with a prefix of probability
-                                        ## (example: "0.8,....")
-        PRINT_EVT_ASYNC_COMPLETED = 100 ##  last async operation completed (utf8_str is null)
+        PRINTLN_LOGGING =11,            ##  print a whole line: internal logging with the first char indicating level
+                                        ##  (space): None; D: Debug; I: Info; W: Warn; E: Error; .: continue
+        PRINTLN_BEAM_SEARCH =12,        ##  print a whole line: a result of beam search with a prefix of probability
+                                        ##  (example: "0.8,....")
+        PRINT_EVT_ASYNC_COMPLETED = 100 ##  last async operation completed (utf8_str is "")
 
 type
     chatllm_obj = object

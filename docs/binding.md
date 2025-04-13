@@ -56,9 +56,9 @@ streamlit run chatllm_st.py -- -i -m path/to/model
 
 Note: "STOP" function is not implemented yet.
 
-### OpenAI Compatible API
+### OpenAI/Ollama Compatible API
 
-[Here](../scripts/openai_api.py) is a server providing OpenAI Compatible API. Note that most of
+[Here](../scripts/openai_api.py) is a server providing some OpenAI/Ollama Compatible API. Note that most of
 the parameters are ignored.
 
 `openai_api.py` supports loading several types models for chatting, code completion (FIM), or text embedding etc.
@@ -83,6 +83,17 @@ Some base models that can be used for code completion:
 * DeepSeekCoder: [Coder-Base-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-base)
 * CodeGemma v1.1: [Base-2B](https://huggingface.co/google/codegemma-1.1-2b), [Base-7B](https://huggingface.co/google/codegemma-1.1-7b)
 * StarCoder2: [Base-3B](https://huggingface.co/bigcode/starcoder2-7b), [Base-7B](https://huggingface.co/bigcode/starcoder2-7b), [Base-15B](https://huggingface.co/bigcode/starcoder2-15b) (not recommended)
+
+This module provides sufficient Ollama API so that it can be used to emulate Ollama model provider in Visual Studio Code Copilot.
+For example, starting the server with a model:
+
+```sh
+python openai_api.py ---chat :qwen2.5
+```
+
+Select the model from Ollama provider:
+
+![](vscode_ollama.png)
 
 ## JavaScript/TypeScript
 

@@ -94,17 +94,18 @@ Use `convert.py` to transform models into quantized GGML format. For example, to
 
 ```sh
 # For models such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
+python convert.py -i path/to/model -t q8_0 -o quantized.bin --name ModelName
 
 # For some models such as CodeLlaMA, model type should be provided by `-a`
 # Find `-a ...` option for each model in `docs/models.md`.
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA
+python convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA --name ModelName
 ```
 
+Use `--name` to specify model's name in English. Optionally, use `--native_name` to specify model's name in another language.
 Use `-l` to specify the path of the LoRA model to be merged, such as:
 
 ```sh
-python3 convert.py -i path/to/model -l path/to/lora/model -o quantized.bin
+python convert.py -i path/to/model -l path/to/lora/model -o quantized.bin --name ModelName
 ```
 
 Note: Appropriately, only HF format is supported (with a few exceptions); Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.

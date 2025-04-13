@@ -22,6 +22,8 @@
 #include "layers.h"
 #include "JSON.h"
 
+json::JSON json::JSON::_null = json::JSON();
+
 namespace chatllm
 {
     struct RuntimeConfig
@@ -352,6 +354,8 @@ namespace chatllm
         MODEL_TYPE_LLAMA4           = MODEL_TYPE_TAG_ChatImageIn + 0x0000001,
 
         MODEL_TYPE_QWEN2_5_VL       = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000001,
+
+        MODEL_TYPE_KIMI_VL          = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000100,
     };
 
     ModelPurpose get_model_purpose(ModelType model_type)
@@ -379,6 +383,8 @@ namespace chatllm
         {
         case MODEL_TYPE_LLAMA_MULTI:
             return ChatModelAccessPoint::Text;
+        default:
+            break;
         }
 
         ChatModelAccessPoints tag = model_type >> 24;
@@ -1991,6 +1997,11 @@ namespace chatllm
         #include "../models/bailing.cpp"
     }
 
+    namespace kimi
+    {
+        #include "../models/kimi.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2015,6 +2026,7 @@ namespace chatllm
         // load tokenizer
         Tokenizer *tokenizer = new Tokenizer(config);
         tokenizer->load(loader.get_reader(), config.vocab_size);
+        tokenizer->load_config(loader.meta_json);
         loader.load_all_tensors();
 
         return tokenizer;
@@ -2096,6 +2108,7 @@ namespace chatllm
         if (layers.size() > 0)
             model->set_layer_ids(layers);
         loader.set_allocator_manager(model->get_alloc_manager());
+        model->load_more(loader.meta_json);
         model->load(loader);
 
         return model;
@@ -2166,9 +2179,9 @@ namespace chatllm
                     loader.meta.erase(last_non_null + 1);
                 else;
 
-                auto meta = giri::json::JSON::Load(loader.meta);
-                auto name = meta["model_name"];
-                auto native = meta["model_native_name"];
+                loader.meta_json = json::JSON::Load(loader.meta);
+                auto name = loader.meta_json["model_name"];
+                auto native = loader.meta_json["model_native_name"];
                 if (name.IsString())
                     loader.model_name        = name.ToString();
                 if (native.IsString())
@@ -2373,6 +2386,8 @@ namespace chatllm
         CASE(SOLARPRO,              solar::pro, 1)              \
                                                                 \
         CASE(GIGACHAT,              gigachat, 1)                \
+                                                                \
+        CASE(KIMI_VL,               kimi::vl, 1)                \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

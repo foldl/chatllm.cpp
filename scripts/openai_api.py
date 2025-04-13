@@ -181,6 +181,8 @@ fim_streamer: ChatLLMStreamer = None
 emb_model_obj: ChatLLM = None
 http_server: HTTPServer = None
 
+model_info = {}
+
 def get_streamer(model: str) -> ChatLLMStreamer | None:
     if model.endswith('fim') or model.startswith('fim'):
         return fim_streamer
@@ -196,7 +198,7 @@ class HttpHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(404, 'POST')
 
-    def handl_EMBEDDING(self, obj: dict):
+    def handle_EMBEDDING(self, obj: dict):
         if emb_model_obj is None:
             self.send_response(404, 'NOT SUPPORTED')
             return
@@ -218,30 +220,8 @@ class HttpHandler(BaseHTTPRequestHandler):
 
         self.wfile.write(json.dumps(asdict(rsp)).encode('utf-8'))
 
-    def do_POST(self):
-        print(self.path)
-        args = self.rfile.read(int(self.headers['content-length'])).decode('utf-8')
-        try:
-            obj = json.loads(args)
-            print(obj)
-        except:
-            self.send_error(404, 'BAD REQ')
-            return
-
-        model = obj['model'] if 'model' in obj else 'chat'
-
+    def handle_COMPLETION(self, model: str, obj: dict):
         max_tokens = obj['max_tokens'] if 'max_tokens' in obj else -1
-
-        if self.path.endswith('/completions'):
-            pass
-        elif self.path.endswith('/generate'):
-            model = 'fim'
-        elif self.path.endswith('/embeddings'):
-            self.handl_EMBEDDING(obj)
-            return
-        else:
-            self.send_error(404, 'NOT FOUND')
-            return
 
         self.send_response(200)
         self.send_header('Cache-Control', 'no-cache')
@@ -304,6 +284,66 @@ class HttpHandler(BaseHTTPRequestHandler):
 
         responder.done()
 
+    def handle_SHOW(self, obj: dict):
+        print(obj)
+        rsp = {
+            "model_info": {
+                "llama.context_length": 8192
+            }
+        }
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(rsp, indent=True).encode('utf-8'))
+        self.wfile.flush()
+
+    def do_POST(self):
+        print(self.path)
+        args = self.rfile.read(int(self.headers['content-length'])).decode('utf-8')
+        try:
+            obj = json.loads(args)
+            print(obj)
+        except:
+            self.send_error(404, 'BAD REQ')
+            return
+
+        if self.path.endswith('/completions'):
+            model = obj['model'] if 'model' in obj else 'chat'
+            self.handle_COMPLETION(model, obj)
+            return
+        elif self.path.endswith('/generate'):
+            self.handle_COMPLETION('fim', obj)
+            return
+        elif self.path.endswith('/embeddings'):
+            self.handle_EMBEDDING(obj)
+            return
+        elif self.path.endswith('/show'):
+            self.handle_SHOW(obj)
+            return
+        else:
+            self.send_error(404, 'NOT FOUND')
+            return
+
+    def handle_MODELS(self, obj: dict):
+        global model_info
+        models = [{"id": model_info[k], "object": "model"} for k in model_info.keys()]
+        rsp = { "object": "list", "data": models }
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(rsp, indent=True).encode('utf-8'))
+        self.wfile.flush()
+        return
+
+    def do_GET(self):
+        print(self.path)
+        if self.path.endswith('/models'):
+            self.handle_MODELS({})
+            return
+        else:
+            self.send_error(404, 'NOT FOUND')
+            return
+
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, handler)
 
@@ -333,15 +373,18 @@ if __name__ == '__main__':
             current.append(a)
 
     if len(chat_args) > 1:
+        model_info['chat'] = chat_args[1]
         chat_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), chat_args, False))
 
     if len(fim_args) > 1:
+        model_info['fim'] = chat_args[1]
         fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), fim_args + ['--format', 'completion'], False))
         fim_streamer.auto_restart = True
 
     if len(emb_args) > 1:
+        model_info['emb'] = chat_args[1]
         emb_model_obj = ChatLLM(LibChatLLM(PATH_BINDS), emb_args)
 
     print("LLM Loaded. Starting server...")
-    http_server = HTTPServer(('0.0.0.0', 3000), HttpHandler)
+    http_server = HTTPServer(('0.0.0.0', 11434), HttpHandler)
     http_server.serve_forever()

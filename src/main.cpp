@@ -686,7 +686,7 @@ void log_internal(int level, const char * text)
     static const char tags[] = {' ', 'D', 'I', 'W', 'E', '.'};
     if (level < streamer->log_level) return;
 
-    if ((0 <= level) && (level < sizeof(tags)))
+    if ((0 <= level) && (level < (int)sizeof(tags)))
         oss << tags[level];
     else
         oss << '?';

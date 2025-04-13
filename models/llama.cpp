@@ -946,10 +946,10 @@ namespace v4
         }
     };
 
-    template <class SelfAttention, class MoEMLP> class LlamaMoEBlock : public LMBlock1<RMSNorm, SelfAttention, RMSNorm, MoEMLP>
+    template <class SelfAttention, class MoEMLP> class LlamaMoEBlock_ : public LMBlock1<RMSNorm, SelfAttention, RMSNorm, MoEMLP>
     {
     public:
-        LlamaMoEBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
+        LlamaMoEBlock_(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
                   int mlp_intermediate_size1, int mlp_intermediate_size2,
                   int num_kv_heads,
                   int head_dim, int max_length)
@@ -962,7 +962,7 @@ namespace v4
     {
     public:
         typedef CombinedMLP<LlamaSparseMoE<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, SiLUMLP> LlamaMoEMLP;
-        typedef LlamaMoEBlock<SelfAttention, LlamaMoEMLP> LlamaMoEBlock;
+        typedef LlamaMoEBlock_<SelfAttention, LlamaMoEMLP> LlamaMoEBlock;
         typedef LMBlock1<RMSNorm, SelfAttention, RMSNorm, SiLUMLP> LlamaDenseBlock;
         typedef BaseModelForConditionalGeneration Base;
         typedef HeterogeneousModel<Config, Embedding, RMSNorm> ModelClass;

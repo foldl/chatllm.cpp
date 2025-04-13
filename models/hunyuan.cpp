@@ -43,7 +43,7 @@ namespace dense
 
              terminate_ids.insert(end_of_text_token_id);
 
-            for (int i = 0; i < sizeof(extra_token_ids) / sizeof(extra_token_ids[0]); i++)
+            for (int i = 0; i < (int)(sizeof(extra_token_ids) / sizeof(extra_token_ids[0])); i++)
                 extra_token_ids[i] = SPECIAL_START_ID++;
 
             return size;

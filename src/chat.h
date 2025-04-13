@@ -13,6 +13,7 @@
 #include "tokenizer.h"
 #include "vectorstore.h"
 #include "backend.h"
+#include "JSON.h"
 
 namespace chatllm
 {
@@ -156,6 +157,8 @@ namespace chatllm
         virtual ~BaseTokenizer() = default;
 
         virtual size_t load(tokenizer::DataReader *buffer, int n_vocab) = 0;
+
+        virtual bool load_config(const json::JSON &config) { return true; }
 
         virtual void encode(const std::string &text, std::vector<int> &ids) const;
         std::vector<int> encode(const std::string &text) const;
@@ -615,6 +618,7 @@ namespace chatllm
         GGMMHeader ggml_header;
         FileFormat ff;
         std::string meta;
+        json::JSON  meta_json;
         std::string model_name;
         std::string model_native_name;
     };
@@ -715,6 +719,8 @@ namespace chatllm
         virtual ~AbstractModel()
         {}
 
+        virtual bool load_more(const json::JSON &config) = 0;
+
         virtual void set_layer_ids(const std::vector<int> &ids) = 0;
 
         virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
@@ -791,6 +797,8 @@ namespace chatllm
         {
             delete model;
         }
+
+        bool load_more(const json::JSON &config) override { return model->load_more(config); }
 
         void set_layer_ids(const std::vector<int> &ids) override { return model->set_layer_ids(ids); }
 
@@ -908,6 +916,8 @@ namespace chatllm
 
         virtual ~BaseModel()
         {}
+
+        bool load_more(const json::JSON &config) override { return true; }
 
         std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,

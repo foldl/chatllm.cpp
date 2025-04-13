@@ -87,6 +87,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::new_tensor_4d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
+    {
+        ggml::tensor *tensor = ggml_new_tensor_4d(ctx->get_ctx(), type, ne0, ne1, ne2, ne3);
+        ctx->cb_new_tensor(tensor);
+        return tensor;
+    }
+
     void ggml::set_input(ggml::tensor *a)
     {
         ggml_set_input(a);
@@ -559,6 +566,13 @@ namespace chatllm
     ggml::tensor *ggml::add(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b)
     {
         ggml::tensor *tensor = ggml_add(ctx->get_ctx(), a, b);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::conv_2d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *b)
+    {
+        ggml::tensor *tensor = ggml_conv_2d_sk_p0(ctx->get_ctx(), kernel, b);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }

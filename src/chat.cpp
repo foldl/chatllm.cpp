@@ -487,6 +487,8 @@ namespace chatllm
             break;
         case MsgRole::Auto:
             break;
+        default:
+            break;
         }
     }
 
