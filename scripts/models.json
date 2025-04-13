@@ -2370,5 +2370,37 @@
                 }
             }
         }
+    },
+    "cogito": {
+        "brief": "The Cogito LLMs are instruction tuned generative models (text in/text out).",
+        "default": "3b",
+        "license": "LLAMA 3.2 COMMUNITY LICENSE AGREEMENT",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3419920688,
+                        "url": "chatllm_quantized_cogito/cogito-v1-llama-3b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "deepcoder": {
+        "brief": "DeepCoder is a fully open-Source 14B coder model at O3-mini level, with a 1.5B version also available.",
+        "default": "1.5b",
+        "license": "MIT",
+        "variants": {
+            "1.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1892864432,
+                        "url": "chatllm_quantized_deepcoder/deepcoder-1.5b.bin"
+                    }
+                }
+            }
+        }
     }
 }
