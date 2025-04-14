@@ -6043,7 +6043,7 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
         "if it's in another directory, pass the directory as --vocab-dir")
 
 def load_config(path: Path, config_fn: str) -> Any:
-    with open(path / config_fn, 'r') as fp:
+    with open(path / config_fn, 'r', encoding='utf-8') as fp:
         r = json.load(fp)
     return r
 

@@ -2402,5 +2402,21 @@
                 }
             }
         }
+    },
+    "skywork-or1": {
+        "brief": "Skywork-OR1 (Open Reasoner 1) series of models, including Skywork-OR1-Math-7B, Skywork-OR1-32B-Preview, and Skywork-OR1-7B-Preview",
+        "default": "7b-math",
+        "license": "Unknown",
+        "variants": {
+            "7b-math": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8096854496,
+                        "url": "chatllm_quantized_skywork/skywork-or1-math-7b.bin"
+                    }
+                }
+            }
+        }
     }
 }
