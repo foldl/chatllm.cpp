@@ -28,6 +28,8 @@ class PrintType(IntEnum):
                                     # (space): None; D: Debug; I: Info; W: Warn; E: Error; .: continue
     PRINTLN_BEAM_SEARCH     =12,    # print a whole line: a result of beam search with a prefix of probability
                                     # (example: "0.8,....")
+    PRINTLN_MODEL_INFO      =13,    # when a model is started, print a whole line of basic model information (json format)
+                                    # (example: {"name": "llama", "context_length": 100, "capabilities": [text, ...], ...})
 
     PRINT_EVT_ASYNC_COMPLETED  = 100,   # last async operation completed (utf8_str is null)
 
@@ -197,6 +199,8 @@ class LibChatLLM:
             obj.callback_print_beam_search(txt)
         elif print_type == PrintType.PRINT_EVT_ASYNC_COMPLETED.value:
             obj.callback_async_done()
+        elif print_type == PrintType.PRINTLN_MODEL_INFO.value:
+            obj._model_info = json.loads(txt)
         else:
             raise Exception(f"unhandled print_type({print_type}): {txt}")
 
@@ -311,6 +315,7 @@ class ChatLLM:
         self._result_embedding = None
         self._result_ranking = None
         self._result_text_tokenize = None
+        self._model_info = None
         if param is not None:
             self.append_param(param)
             if auto_start:
@@ -326,6 +331,11 @@ class ChatLLM:
         r = self._lib.start(self._chat, self)
         if r != 0:
             raise Exception(f'ChatLLM: failed to `start()` with error code {r}')
+
+    def get_model_info(self) -> dict:
+        if self._model_info is None:
+            raise Exception('Model info not available')
+        return self._model_info
 
     def chat(self, user_input: str, input_id = None) -> None:
         self.is_generating = True

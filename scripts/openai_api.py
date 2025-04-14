@@ -285,11 +285,29 @@ class HttpHandler(BaseHTTPRequestHandler):
         responder.done()
 
     def handle_SHOW(self, obj: dict):
-        print(obj)
+        model = None
+
+        for _k, v in model_info.items():
+            if v['name'] == obj['model']:
+                model = v
+                break
+        if model is None:
+            self.send_response(404, 'NOT FOUND')
+            return
+
+        capabilities = []
+        mapping = {"Text Embedding": "embedding", "Ranker": "ranking", "Text": "completion", "Image Input": "vision"}
+        for x in model['capabilities']:
+            if x in mapping:
+                capabilities.append(mapping[x])
+
         rsp = {
+            "template": "|placeholder|",
             "model_info": {
-                "llama.context_length": 8192
-            }
+                "general.parameter_count": v['param_num'],
+                "llama.context_length": 8000 #v['context_length'],
+            },
+            "capabilities": capabilities,
         }
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
@@ -298,11 +316,11 @@ class HttpHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
     def do_POST(self):
-        print(self.path)
+        print(f"POST {self.path}")
         args = self.rfile.read(int(self.headers['content-length'])).decode('utf-8')
         try:
             obj = json.loads(args)
-            print(obj)
+            #print(obj)
         except:
             self.send_error(404, 'BAD REQ')
             return
@@ -326,7 +344,7 @@ class HttpHandler(BaseHTTPRequestHandler):
 
     def handle_MODELS(self, obj: dict):
         global model_info
-        models = [{"id": model_info[k], "object": "model"} for k in model_info.keys()]
+        models = [{"id": model_info[k]['name'], "object": "model"} for k in model_info.keys()]
         rsp = { "object": "list", "data": models }
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
@@ -336,7 +354,7 @@ class HttpHandler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self):
-        print(self.path)
+        print(f"GET {self.path}")
         if self.path.endswith('/models'):
             self.handle_MODELS({})
             return
@@ -373,17 +391,22 @@ if __name__ == '__main__':
             current.append(a)
 
     if len(chat_args) > 1:
-        model_info['chat'] = chat_args[1]
-        chat_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), chat_args, False))
+        chat_streamer= ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), chat_args, False))
+        model_info['chat'] = chat_streamer.llm.get_model_info()
 
     if len(fim_args) > 1:
-        model_info['fim'] = chat_args[1]
         fim_streamer = ChatLLMStreamer(ChatLLM(LibChatLLM(PATH_BINDS), fim_args + ['--format', 'completion'], False))
         fim_streamer.auto_restart = True
+        model_info['fim'] = fim_streamer.llm.get_model_info()
 
     if len(emb_args) > 1:
-        model_info['emb'] = chat_args[1]
         emb_model_obj = ChatLLM(LibChatLLM(PATH_BINDS), emb_args)
+        model_info['emb'] = emb_model_obj.get_model_info()
+
+    for k, v in model_info.items():
+        v['name'] = f"{v['name']}-{v['param_num']/1000000000:.1f}B"
+
+    print(model_info)
 
     print("LLM Loaded. Starting server...")
     http_server = HTTPServer(('0.0.0.0', 11434), HttpHandler)

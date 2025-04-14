@@ -14,6 +14,7 @@
 
 #include "vectorstore.h"
 #include "vision_process.h"
+#include "models.h"
 
 #if defined(_WIN32)
 #include <fcntl.h>
@@ -909,24 +910,6 @@ void TextStreamer::end()
     cout << std::endl;
 }
 
-static void start_rpc_server(std::string endpoint)
-{
-    int device = 0;
-
-    auto pos = endpoint.find('@');
-    if (pos != std::string::npos)
-    {
-        device = std::stoi(endpoint.substr(pos + 1));
-        endpoint = endpoint.substr(0, pos);
-    }
-
-    if (!chatllm::ComputeManager::start_rpc_server(device, endpoint.c_str()))
-    {
-        chatllm::ggml::log(GGML_LOG_LEVEL_ERROR, "Failed to start RPC server at %s@%d", endpoint.c_str(), device);
-    }
-    else;
-}
-
 static void prepare_rpc_devices(const Args &args)
 {
     if (!chatllm::ComputeManager::prepare_rpc_devices(args.rpc_endpoints))
@@ -947,6 +930,24 @@ std::string wstr_to_utf8(const wchar_t* wstr)
 #endif
 
 #ifndef CHATLLM_SHARED_LIB
+
+static void start_rpc_server(std::string endpoint)
+{
+    int device = 0;
+
+    auto pos = endpoint.find('@');
+    if (pos != std::string::npos)
+    {
+        device = std::stoi(endpoint.substr(pos + 1));
+        endpoint = endpoint.substr(0, pos);
+    }
+
+    if (!chatllm::ComputeManager::start_rpc_server(device, endpoint.c_str()))
+    {
+        chatllm::ggml::log(GGML_LOG_LEVEL_ERROR, "Failed to start RPC server at %s@%d", endpoint.c_str(), device);
+    }
+    else;
+}
 
 static chatllm::BaseStreamer *log_streamer = nullptr;
 chatllm::BaseStreamer *get_streamer_for_log(void)
@@ -1258,8 +1259,11 @@ public:
 
 static std::vector<std::unique_ptr<Chat>> chat_objects;
 
+#define DEF_CHAT()                         \
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+
 #define DEF_CHAT_STREAMER()                         \
-    Chat *chat = reinterpret_cast<Chat *>(obj);     \
+    DEF_CHAT();                                     \
     FFIStreamer *streamer = dynamic_cast<FFIStreamer *>(chat->streamer.get())
 
 chatllm::BaseStreamer *get_streamer_for_log(void)
@@ -1297,9 +1301,40 @@ int chatllm_destroy(struct chatllm_obj *obj)
 
 void chatllm_append_param(struct chatllm_obj *obj, const char *utf8_str)
 {
-    DEF_CHAT_STREAMER();
+    DEF_CHAT();
 
     chat->append_param(utf8_str);
+}
+
+static void emit_model_info(Chat *chat, const Args &args, chatllm::Pipeline &pipeline)
+{
+    auto o = json::JSON::Make(json::JSON::Class::Object);
+    o["name"]               = pipeline.model->type_name();
+    auto native_name        = pipeline.model->native_name();
+    if (pipeline.model->native_name().size() > 0)
+        o["native_name"]    = pipeline.model->native_name();
+    o["purpose"]            = chatllm::to_string(pipeline.model->get_purpose());
+    o["param_num"]          = pipeline.model->get_param_num(false);
+    o["active_param_num"]   = pipeline.model->get_param_num(true);
+    o["context_length"]     = pipeline.model->get_max_length();
+    if (pipeline.model->get_text_embedding_dim() > 0)
+        o["embedding_dim"]  = pipeline.model->get_text_embedding_dim();
+
+    std::string s = chatllm::format_model_capabilities(pipeline.model->get_type());
+    auto cap = json::JSON::Make(json::JSON::Class::Array);
+    size_t pos = 0;
+    int i = 0;
+    while ((pos = s.find(", ")) != std::string::npos)
+    {
+        auto capability = s.substr(0, pos);
+        cap[i] = capability;
+        i++;
+        s.erase(0, pos + 2);
+    }
+    if (s.size() > 0) cap[i] = s;
+    o["capabilities"] =  cap;
+
+    chat->streamer->putln(o.dump(), chatllm::BaseStreamer::TextType::MODEL_INFO);
 }
 
 static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline)
@@ -1327,6 +1362,8 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline)
     chat->gen_config = gen_config;
 
     show_banner(pipeline, args.interactive && args.show_banner, chat->streamer.get());
+
+    emit_model_info(chat, args, pipeline);
 
     if (args.load_session.size() > 0)
     {

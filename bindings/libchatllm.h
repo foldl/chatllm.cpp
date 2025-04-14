@@ -43,6 +43,8 @@ enum PrintType
                                     // Note: log is passed to the `f_print` callback of the 1st alive chatllm_obj
     PRINTLN_BEAM_SEARCH     =12,    // print a whole line: a result of beam search with a prefix of probability
                                     // (example: "0.8,....")
+    PRINTLN_MODEL_INFO      =13,    // when a model is started, print a whole line of basic model information (json format)
+                                    // (example: {"name": "llama", "context_length": 100, "capabilities": [text, ...], ...})
 
     PRINT_EVT_ASYNC_COMPLETED  = 100,   // last async operation completed (utf8_str is "" to keep callback code simple)
 };

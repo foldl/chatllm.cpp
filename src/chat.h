@@ -386,6 +386,7 @@ namespace chatllm
             TOKEN_IDS       =10,
             LOGGING         =11,
             BEAM_SEARCH     =12,
+            MODEL_INFO      =13,
         };
         BaseStreamer(BaseTokenizer *tokenizer);
         virtual ~BaseStreamer() = default;
@@ -753,9 +754,11 @@ namespace chatllm
         virtual int append_audio_snippet(const int16_t *pcm_samples, int sample_rate, int sample_num, int channel_num = 1) = 0;
         virtual void clear_audio_snippets(void) = 0;
 
-        virtual std::string type_name() const = 0;
-        virtual std::string native_name() const = 0;
-        virtual ModelPurpose get_purpose() const = 0;
+        virtual std::string  type_name()    const = 0;
+        virtual std::string  native_name()  const = 0;
+        virtual ModelPurpose get_purpose()  const = 0;
+        virtual uint32_t     get_type(void) const = 0;
+        virtual void         set_type(uint32_t type) = 0;
         virtual void set_names(const std::string &name, const std::string &native_name) = 0;
 
         virtual void load(ModelLoader &loader) = 0;
@@ -865,9 +868,11 @@ namespace chatllm
             model->clear_audio_snippets();
         }
 
-        std::string type_name() const  override { return model->type_name(); }
-        std::string native_name() const  override { return model->native_name(); }
+        std::string  type_name()   const  override { return model->type_name(); }
+        std::string  native_name() const  override { return model->native_name(); }
         ModelPurpose get_purpose() const  override { return model->get_purpose(); }
+        uint32_t     get_type()    const  override { return model->get_type(); }
+        void         set_type(uint32_t type) override {     model->set_type(type); }
         void set_names(const std::string &name, const std::string &native_name) override { model->set_names(name, native_name); }
 
         void load(ModelLoader &loader) override { return model->load(loader); }
@@ -908,7 +913,7 @@ namespace chatllm
     class BaseModel : public AbstractModel
     {
     public:
-        BaseModel(int type, ModelPurpose purpose) :
+        BaseModel(uint32_t type, ModelPurpose purpose) :
             type_(type), n_past(0),
             n_past_offset(0), tokenizer(nullptr),
             purpose(purpose), aborted(false)
@@ -989,9 +994,11 @@ namespace chatllm
         {
         }
 
-        std::string type_name() const override { return name_; }
-        std::string native_name() const override { return native_name_; }
-        ModelPurpose get_purpose() const override { return purpose; }
+        std::string  type_name()    const override { return name_; }
+        std::string  native_name()  const override { return native_name_; }
+        ModelPurpose get_purpose()  const override { return purpose; }
+        uint32_t     get_type(void) const override { return type_; }
+        void         set_type(uint32_t type) override { type_ = type; }
 
         void set_names(const std::string &name, const std::string &native_name) override
         {
@@ -1038,12 +1045,12 @@ namespace chatllm
     private:
         struct state
         {
-            int type;
+            uint32_t type;
             int n_past;
             int n_past_offset;
         };
     protected:
-        const int type_;
+        uint32_t type_;
         std::string name_;
         std::string native_name_;
         int _seed;

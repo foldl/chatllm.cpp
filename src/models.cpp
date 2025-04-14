@@ -391,7 +391,7 @@ namespace chatllm
         return (tag << 1) | 1;
     }
 
-    std::string format_access_points(ChatModelAccessPoints bitmap)
+    static std::string format_access_points(ChatModelAccessPoints bitmap)
     {
         const static std::vector<std::string> names({
             "Text", "Image Input", "Image Output", "Audio Input", "Audio Output", "Video Input", "Video Output"
@@ -401,7 +401,7 @@ namespace chatllm
         for (size_t i = 0; i < names.size(); i++)
             if (bitmap & (1 << i))
                 aps.push_back(names[i]);
-        return "{" + utils::join(aps, ", ") + "}";
+        return utils::join(aps, ", ");
     }
 
     std::string to_string(ModelPurpose purpose)
@@ -418,6 +418,21 @@ namespace chatllm
             CHATLLM_THROW << "unknown model purpose: " << purpose;
             return "???";
         }
+    }
+
+    std::string format_model_capabilities(ModelType model_type)
+    {
+        if (get_model_purpose(model_type) != ModelPurpose::Chat)
+        {
+            return to_string(get_model_purpose(model_type));
+        }
+        ChatModelAccessPoints bitmap = get_chat_model_access_points(model_type);
+        return format_access_points(bitmap);
+    }
+
+    std::string format_model_capabilities(uint32_t model_type)
+    {
+        return format_model_capabilities((ModelType)model_type);
     }
 
     std::string to_string(ModelType model_type)
@@ -2104,6 +2119,7 @@ namespace chatllm
 
         // load model
         ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);
+        model->set_type(loader.model_type);
         model->set_names(loader.model_name, loader.model_native_name);
         if (layers.size() > 0)
             model->set_layer_ids(layers);
@@ -2217,7 +2233,7 @@ namespace chatllm
 
         oss << "Model type  : " << to_string(purpose);
         if (ModelPurpose::Chat == purpose)
-            oss << " " << format_access_points(get_chat_model_access_points(model_type));
+            oss << " {" << format_access_points(get_chat_model_access_points(model_type)) << "}";
         oss << std::endl;
 
         oss << "File version: " << loader.version << " (" << ModelLoader::ff_to_str(loader.ff) << ")" << std::endl << std::endl
