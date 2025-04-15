@@ -160,7 +160,7 @@ namespace chatllm
         }
 
         printf("\n--------------- %s ----------------------\n", it->second.c_str());
-        bool full = false;
+        bool full = true;
         print_tensor(tensor, 0, full);
 
         return true;
@@ -213,6 +213,7 @@ namespace chatllm
         MODEL_TYPE_CHARACTERGLM = 5,
         MODEL_TYPE_GLM4 = 6,
         MODEL_TYPE_CODEGEEX4 = 7,
+        MODEL_TYPE_GLM4_0414 = 8,
 
         MODEL_TYPE_INTERNLM     = 0x100,
         MODEL_TYPE_INTERNLM2    = 0x101, // extended model, supporting 7B & 20B
@@ -2271,6 +2272,7 @@ namespace chatllm
         CASE(CHARACTERGLM,          characterglm, 1)            \
         CASE(GLM4,                  glm::v4, 1)                 \
         CASE(CODEGEEX4,             codegeex::v4, 1)            \
+        CASE(GLM4_0414,             glm::glm4_0414, 1)          \
                                                                 \
         CASE(INTERNLM,              internlm::v1, 1)            \
         CASE(INTERNLM2,             internlm::v2, 1)            \

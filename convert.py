@@ -56,6 +56,7 @@ class ModelType(Enum):
     CharacterGLM = 5
     CHATGLM4 = 6
     CODEGEEX4 = 7
+    GLM4        = 8
 
     InternLM    = 0x100
     InternLM2   = 0x101
@@ -182,6 +183,8 @@ class ModelType(Enum):
     DeciLM          = 0x2200
 
     SolarPro        = 0x2300
+
+    Apriel          = 0x2400
 
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
@@ -1282,6 +1285,38 @@ class Llama32Converter(BaseConverter):
         if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
             weight_names.remove('lm_head.weight')
         return weight_names
+
+class AprielConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Apriel
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return Llama31Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert not config.mlp_bias, '`mlp_bias` must be False'
+        assert isinstance(config.rope_scaling, dict), 'rope_scaling must be a dict'
+        assert config.rope_scaling['rope_type'] == 'yarn', 'rope_scaling.rope_type must be `yarn`'
+        assert config.rope_scaling['attention_factor'] is None
+
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        config_values = [
+            config.rope_theta,
+            config.rope_scaling['original_max_position_embeddings'],
+            config.rope_scaling['beta_fast'],
+            config.rope_scaling['beta_slow'],
+            config.rope_scaling['factor'],
+        ]
+        f.write(struct.pack("<fifff", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return Llama32Converter.get_weight_names(config)
 
 class Llama4Converter(BaseConverter):
     MODEL_TYPE = ModelType.LlaMA4
@@ -3325,6 +3360,75 @@ class CharacterGLMConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return ChatGLM2Converter.get_weight_names(config)
+
+class GLM4Converter(BaseConverter):
+    MODEL_TYPE = ModelType.GLM4
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.endswith('mlp.gate_up_proj.weight'):
+                r[name.replace('gate_up_proj.weight', 'gate_proj.weight')] = part(tensor, 0, 2).contiguous()
+                r[name.replace('gate_up_proj.weight', 'up_proj.weight')]   = part(tensor, 1, 2).contiguous()
+            else:
+                r[name] = tensor
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.head_dim == config.hidden_size // config.num_attention_heads
+        if isinstance(config.eos_token_id, list):
+            config.eos_token_id = config.eos_token_id[0]
+
+        rope_dim = int(config.partial_rotary_factor * config.head_dim)
+
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            1 if config.attention_bias else 0,
+            rope_dim,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        config_values = [
+            config.rope_theta,
+        ]
+        f.write(struct.pack("<f", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.post_mlp_layernorm.weight",
+                f"model.layers.{i}.post_self_attn_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+            ]
+
+            if config.attention_bias:
+                weight_names += [
+                    f"model.layers.{i}.self_attn.v_proj.bias",
+                    f"model.layers.{i}.self_attn.k_proj.bias",
+                    f"model.layers.{i}.self_attn.q_proj.bias",
+                ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
 
 class Phi2Converter(BaseConverter):
     MODEL_TYPE = ModelType.Phi2
@@ -6170,6 +6274,8 @@ def main():
         ChatGLM4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'characterglm':
         CharacterGLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Glm4ForCausalLM':
+        GLM4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InternLMForCausalLM':
         if not config.bias:
             InternLMConverter.MODEL_TYPE = ModelType.InternLM2
@@ -6451,6 +6557,8 @@ def main():
         AquilaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'BailingMoeForCausalLM':
         BailingMoeConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'AprielForCausalLM':
+        AprielConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'reka-flash-3':
         assert config.rope_scaling is None, 'config.rope_scaling must be null'
         assert not config.tie_word_embeddings, 'config.tie_word_embeddings must be false'

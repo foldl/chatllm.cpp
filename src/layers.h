@@ -816,6 +816,15 @@ namespace chatllm
               mlp(ctx, hidden_size, intermediate_size),
               post_mlp_layernorm(ctx, hidden_size) {}
 
+        LMBlock4(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int max_length, bool qkv_bias, bool o_bias)
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length, qkv_bias, o_bias),
+              pre_attention_layernorm(ctx, hidden_size),
+              post_attention_layernorm(ctx, hidden_size),
+              pre_mlp_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, intermediate_size),
+              post_mlp_layernorm(ctx, hidden_size) {}
+
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override
         {
@@ -1737,6 +1746,12 @@ namespace chatllm
             r += down_proj.get_param_num(effective_only);
             r += up_proj.get_param_num(effective_only);
             return r;
+        }
+
+        void set_prec(ggml::prec prec) override
+        {
+            Block::set_prec(prec);
+            down_proj.set_prec(prec);
         }
 
     public:

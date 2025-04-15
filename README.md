@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-04-15: GLM-4-0414
 * 2025-04-10: LlaMA4 (Language model)
 * 2025-03-27: Ling (Bailing)
 * 2025-03-26: AquilaChat2
