@@ -198,14 +198,16 @@ namespace chatllm
 
     void BaseStreamer::set_interceptor(ChunkInterceptor *interceptor)
     {
-        this->interceptor = interceptor;
-        if (interceptor) interceptor->intercept(this);
-    }
+        ChunkInterceptor *t = this->interceptor;
+        while (t)
+        {
+            if (t == interceptor)
+                return;
+            t = t->get_next();
+        }
 
-    void BaseStreamer::remove_interceptor(void)
-    {
-        if (interceptor) interceptor->intercept(nullptr);
-        interceptor = nullptr;
+        interceptor->intercept(this->interceptor ? this->interceptor : this, this);
+        this->interceptor = interceptor;
     }
 
     void BaseStreamer::call_put_chunk(bool first, const std::string &chunk)
@@ -214,6 +216,112 @@ namespace chatllm
             interceptor->put_chunk(first, chunk);
         else
             put_chunk(first, chunk);
+    }
+
+    void ThoughtChunkInterceptor::init(std::vector<std::pair<std::string, std::string>> tags)
+    {
+        this->tags = tags;
+        active = tags.size() > 0;
+    }
+
+    void ThoughtChunkInterceptor::put_chunk(bool first, const std::string &chunk)
+    {
+        if (!active)
+        {
+            next->put_chunk(first, chunk);
+            return;
+        }
+
+        if (first) reset();
+
+        if (is_thinking)
+        {
+            thought_chunk(false, chunk);
+            return;
+        }
+
+        if (detecting)
+        {
+            raw_acc = raw_acc + chunk;
+            cleaned_acc = utils::trim(cleaned_acc + chunk);
+
+            size_t i = 0;
+            for (; i < tags.size(); i++)
+            {
+                if (cleaned_acc.size() < tags[i].first.size())
+                    break;
+                if (cleaned_acc.substr(0, tags[i].first.size()) == tags[i].first)
+                {
+                    detecting = false;
+                    is_thinking = true;
+                    tag_opening = tags[i].first;
+                    tag_closing = tags[i].second;
+
+                    auto chunk = cleaned_acc.substr(tag_opening.size());
+                    raw_acc = "";
+                    thought_chunk(true, chunk);
+                    return;
+                }
+            }
+
+            if (i >= tags.size())
+            {
+                detecting = false;
+                next->put_chunk(first, raw_acc);
+            }
+            return;
+        }
+
+        next->put_chunk(first, chunk);
+    }
+
+    void ThoughtChunkInterceptor::reset(void)
+    {
+        raw_acc = "";
+        cleaned_acc = "";
+        detecting = true;
+        is_thinking = false;
+        chunk_lengths.clear();
+        first_thought_chunk = true;
+    }
+
+    void ThoughtChunkInterceptor::thought_chunk(bool first, const std::string &chunk)
+    {
+        raw_acc = raw_acc + chunk;
+        chunk_lengths.push_back((int)chunk.size());
+        size_t pos = raw_acc.find(tag_closing);
+        if (pos != std::string::npos)
+        {
+            if (pos > 0)
+            {
+                streamer->put_thought_chunk(first_thought_chunk, raw_acc.substr(0, pos));
+                first_thought_chunk = false;
+            }
+            is_thinking = false;
+            streamer->end_thought();
+            std::string text = raw_acc.substr(pos + tag_closing.size());
+            next->put_chunk(first, text);
+        }
+        else
+        {
+            int sum = 0;
+            int i = (int)chunk_lengths.size() - 1;
+            for (; i >= 0; i--)
+            {
+                sum += chunk_lengths[i];
+                if (sum >= (int)tag_closing.size())
+                    break;
+            }
+
+            while (i > 0)
+            {
+                streamer->put_thought_chunk(first_thought_chunk, raw_acc.substr(0, chunk_lengths[0]));
+                first_thought_chunk = false;
+                raw_acc = raw_acc.substr(chunk_lengths[0]);
+                chunk_lengths.erase(chunk_lengths.begin());
+                i--;
+            }
+        }
     }
 
     BaseTokenizer::BaseTokenizer(const BaseConfig &config,
@@ -1318,7 +1426,7 @@ namespace chatllm
         {
             tokenizer->encode(gen_config.ai_prefix, input_ids);
             if (streamer)
-                streamer->put_chunk(false, gen_config.ai_prefix);
+                streamer->call_put_chunk(false, gen_config.ai_prefix);
         }
     }
 
@@ -1335,7 +1443,7 @@ namespace chatllm
 
         tokenizer->encode_external_text_completion(external, input_ids);
         if (streamer)
-            streamer->put_chunk(false, external);
+            streamer->call_put_chunk(false, external);
 
         history[history.size() - 1].content = history[history.size() - 1].content + external;
 
@@ -1699,7 +1807,7 @@ namespace chatllm
         auto composed = composer.compose_augmented_query(query, augments);
 
         if (!modelobj.loaded)
-            streamer->put_chunk(true, composed);
+            streamer->call_put_chunk(true, composed);
 
         history[index].content = composed;
     }

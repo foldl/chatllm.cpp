@@ -422,7 +422,7 @@ namespace v3_1
                     found_tool_call = true;
                 }
                 else
-                    streamer->put_chunk(first, chunk);
+                    next->put_chunk(first, chunk);
             }
             else
             {

@@ -22,6 +22,8 @@
 #include <windows.h>
 #endif
 
+static chatllm::ThoughtChunkInterceptor thought_interceptor;
+
 struct Args
 {
     std::string model_path = "";
@@ -51,6 +53,7 @@ struct Args
     std::string serve_rpc;
     std::string ggml_dir;
     std::string cache_type = "f16";
+    std::string thought_tags[2] = {"", ""};
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -82,6 +85,7 @@ struct Args
     int log_level = 4;
     bool moe_on_cpu = false;
     int batch_size = 4096;
+    bool detect_thoughts = false;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -98,6 +102,27 @@ static chatllm::Pipeline::ExtendingMethod parse_extending_method(const std::stri
         return chatllm::Pipeline::ExtendingMethod::Restart;
     else
         return chatllm::Pipeline::ExtendingMethod::None;
+}
+
+// sorted by length!
+const std::vector<std::pair<std::string, std::string>> THOUGHT_TAGS = {
+    {"<think>",         "</think>"},
+    {"<thought>",       "</thought>"},
+    {"<reasoning>",     "</reasoning>"}
+};
+
+static std::string show_default_thought_tags(void)
+{
+    std::string tags;
+    for (int i = 0; i < sizeof(THOUGHT_TAGS) / sizeof(THOUGHT_TAGS[0]); i++)
+    {
+        if (i > 0)
+            tags += ", ";
+        tags += THOUGHT_TAGS[i].first;
+        tags += " ";
+        tags += THOUGHT_TAGS[i].second;
+    }
+    return tags;
 }
 
 void usage(const std::string &prog)
@@ -187,6 +212,11 @@ void usage(const std::string &prog)
               << "  --rag_post_extending N  extend selected items with pre & post N chunks with same metadata. (default: 0)\n"
               << "                          this may be useful when context length of embedding/reranker models is limited.\n"
               << "   +rag_dump              (debug) dump retrieved/re-ranking results\n"
+              << "CoT options:\n"
+              << "   +detect_thoughts       turn on detection of thoughts in the output (default: OFF)\n"
+              << "  --thought_tags O C      customize thought tags (Opening & Closing) to override built-in tags\n"
+              << "                          built-in tags: " << show_default_thought_tags() << "\n"
+              << "                          this options enables detection of thoughts implicitly.\n"
               << "Session:\n"
               << "  --save_session N FILE   save session to FILE after N round(s) of chatting (N >= 0) and quit                         [*]\n"
               << "                          when N = 0, system prompt is evaluated.\n"
@@ -292,6 +322,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_flag(rag_dump)
             handle_flag(rerank_rewrite)
             handle_flag(moe_on_cpu)
+            handle_flag(detect_thoughts)
             else if (strcmp(arg, "--format") == 0)
             {
                 c++;
@@ -334,6 +365,16 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                     }
 
                     args.vector_stores.at(args.cur_vs_name).push_back(argv[c]);
+                }
+            }
+            else if (strcmp(arg, "--thought_tags") == 0)
+            {
+                if (c + 2 < argc)
+                {
+                    args.thought_tags[0] = argv[c + 1];
+                    args.thought_tags[1] = argv[c + 2];
+                    c += 2;
+                    args.detect_thoughts = true;
                 }
             }
             handle_param("--model",                 "-m", model_path,           std::string)
@@ -395,6 +436,14 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
 
     if (!has_extending && (args.load_session.size() > 0))
         args.extending = chatllm::Pipeline::ExtendingMethod::None;
+
+    if (args.detect_thoughts)
+    {
+        if ((args.thought_tags[0].size() > 0) && (args.thought_tags[0].size() > 0))
+            thought_interceptor.init({{args.thought_tags[0], args.thought_tags[1]}});
+        else
+            thought_interceptor.init(THOUGHT_TAGS);
+    }
 
     return c;
 }
@@ -504,6 +553,8 @@ public:
         cout(std::cout),
         reference_tag("Reference:"), ref_count(0) {}
     void put_chunk(bool first, const std::string &chunk) override;
+    void put_thought_chunk(bool first, const std::string &chunk) override;
+    void end_thought(void) override;
     void putln(const std::string &line, TextType type = TextType::META) override;
     void end() override;
 
@@ -730,6 +781,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
     }
 
     pipeline.set_additional_args(args.additional);
+    streamer.set_interceptor(&thought_interceptor);
 
     const std::string ai_prompt   = "A.I.";
     const std::string user_prompt = "You ";
@@ -901,6 +953,18 @@ void TextStreamer::putln(const std::string &line, TextType type)
 void TextStreamer::put_chunk(bool first, const std::string &chunk)
 {
     cout << chunk << std::flush;
+}
+
+void TextStreamer::put_thought_chunk(bool first, const std::string &chunk)
+{
+    if (first)
+        cout << "====== Thinking ======" << std::endl;
+    cout << chunk << std::flush;
+}
+
+void TextStreamer::end_thought(void)
+{
+    cout << std::endl << "========================" << std::endl << std::flush;
 }
 
 void TextStreamer::end()
@@ -1233,6 +1297,16 @@ public:
         f_print(user_data, PRINT_CHAT_CHUNK, chunk.c_str());
     }
 
+    void put_thought_chunk(bool is_first, const std::string &chunk) override
+    {
+        f_print(user_data, PRINT_THOUGHT_CHUNK, chunk.c_str());
+    }
+
+    void end_thought() override
+    {
+        f_print(user_data, PRINT_EVT_THOUGHT_COMPLETED, "");
+    }
+
     void putln(const std::string &line, TextType type = TextType::META) override
     {
         f_print(user_data, (int)type, line.c_str());
@@ -1356,6 +1430,7 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline)
     }
 
     pipeline.set_additional_args(args.additional);
+    chat->streamer->set_interceptor(&thought_interceptor);
 
     DEF_GenerationConfig(gen_config, args);
 

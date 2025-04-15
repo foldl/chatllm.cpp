@@ -367,9 +367,23 @@ namespace chatllm
         const bool activated;
     };
 
-    class ChunkInterceptor;
+    class BaseStreamer;
 
-    class BaseStreamer
+    class ChunkInterceptor
+    {
+    public:
+        ChunkInterceptor() : next(nullptr) {}
+        virtual ~ChunkInterceptor() {}
+        virtual void intercept(ChunkInterceptor *next, BaseStreamer *streamer) { this->next = next; this->streamer = streamer; }
+        virtual void put_chunk(bool first, const std::string &chunk) { if (next) next->put_chunk(first, chunk); }
+        virtual void end() { if (next) next->end(); }
+        ChunkInterceptor *get_next() { return next; }
+    protected:
+        ChunkInterceptor *next;
+        BaseStreamer *streamer;
+    };
+
+    class BaseStreamer : public ChunkInterceptor
     {
     public:
         enum TextType
@@ -387,16 +401,21 @@ namespace chatllm
             LOGGING         =11,
             BEAM_SEARCH     =12,
             MODEL_INFO      =13,
+            THOUGHT_CHUNK   =14,
         };
         BaseStreamer(BaseTokenizer *tokenizer);
         virtual ~BaseStreamer() = default;
         virtual void put(const std::vector<int> &output_ids);
         virtual void put_chunk(bool first, const std::string &chunk) = 0;
+        virtual void put_thought_chunk(bool first, const std::string &chunk) = 0;
+        virtual void end_thought(void) = 0;
         virtual void putln(const std::string &line, TextType type = TextType::META) = 0;
         virtual void end();
 
+        // this is also part of the chain
+        // which maintains the first one in the chain, and also be the sink point of the chain
+        // this prepend interceptor to the interceptor chain if not already exists
         virtual void set_interceptor(ChunkInterceptor *interceptor);
-        virtual void remove_interceptor(void);
 
         virtual void set_tokenizer(BaseTokenizer *tokenizer)
         {
@@ -424,6 +443,8 @@ namespace chatllm
         {
             putln(line, TextType::TOOL_CALLING);
         }
+
+        virtual void call_put_chunk(bool first, const std::string &chunk);
     public:
         bool is_prompt;
         BaseTokenizer *tokenizer;
@@ -432,21 +453,31 @@ namespace chatllm
         bool is_first;
         size_t print_len;
         std::vector<int> token_cache;
-        ChunkInterceptor *interceptor;
-
-        virtual void call_put_chunk(bool first, const std::string &chunk);
+        ChunkInterceptor *interceptor; // first interceptor in the chain
     };
 
-    class ChunkInterceptor
+    class ThoughtChunkInterceptor : public ChunkInterceptor
     {
     public:
-        ChunkInterceptor() : streamer(nullptr) {}
-        virtual ~ChunkInterceptor() {}
-        virtual void intercept(BaseStreamer *streamer) { this->streamer = streamer; }
-        virtual void put_chunk(bool first, const std::string &chunk) { if (streamer) streamer->put_chunk(first, chunk); }
-        virtual void end() { }
+        ThoughtChunkInterceptor()
+            : ChunkInterceptor(), active(false), tags(tags), detecting(false), is_thinking(false)
+        {}
+
+        void init(std::vector<std::pair<std::string, std::string>> tags);
+        void put_chunk(bool first, const std::string &chunk) override;
     protected:
-        BaseStreamer *streamer;
+        void reset(void);
+        void thought_chunk(bool first, const std::string &chunk);
+        bool active;
+        std::vector<std::pair<std::string, std::string>> tags;
+        std::vector<int> chunk_lengths;
+        std::string tag_opening;
+        std::string tag_closing;
+        std::string raw_acc;
+        std::string cleaned_acc;
+        bool detecting;
+        bool is_thinking;
+        bool first_thought_chunk;
     };
 
     class MappedFile : public tokenizer::DataReader

@@ -30,8 +30,12 @@ class PrintType(IntEnum):
                                     # (example: "0.8,....")
     PRINTLN_MODEL_INFO      =13,    # when a model is started, print a whole line of basic model information (json format)
                                     # (example: {"name": "llama", "context_length": 100, "capabilities": [text, ...], ...})
+    PRINT_THOUGHT_CHUNK     =14,    # same as PRINT_CHAT_CHUNK, but this from "thoughts".
+                                    # possible leading or trailing tags (such as <think>, </think>) are removed.
+                                    # use `+detect_thoughts` to enable this.
 
-    PRINT_EVT_ASYNC_COMPLETED  = 100,   # last async operation completed (utf8_str is null)
+    PRINT_EVT_ASYNC_COMPLETED       = 100,   # last async operation completed (utf8_str is null)
+    PRINT_EVT_THOUGHT_COMPLETED     = 101,   # thought completed
 
 class LibChatLLM:
 
@@ -173,6 +177,8 @@ class LibChatLLM:
         txt = s.decode()
         if print_type == PrintType.PRINT_CHAT_CHUNK.value:
             obj.callback_print(txt)
+        elif print_type == PrintType.PRINT_THOUGHT_CHUNK.value:
+            obj.callback_print_thought(txt)
         elif print_type == PrintType.PRINTLN_META.value:
             obj.callback_print_meta(txt)
         elif print_type == PrintType.PRINTLN_REF.value:
@@ -199,6 +205,8 @@ class LibChatLLM:
             obj.callback_print_beam_search(txt)
         elif print_type == PrintType.PRINT_EVT_ASYNC_COMPLETED.value:
             obj.callback_async_done()
+        elif print_type == PrintType.PRINT_EVT_THOUGHT_COMPLETED.value:
+            obj.callback_thought_done()
         elif print_type == PrintType.PRINTLN_MODEL_INFO.value:
             obj._model_info = json.loads(txt)
         else:
@@ -296,6 +304,11 @@ class LLMChatChunk:
         self.id = id
         self.chunk = chunk
 
+class LLMChatThoughtChunk:
+    def __init__(self, id: Any, chunk: str) -> None:
+        self.id = id
+        self.chunk = chunk
+
 class LLMChatMeta:
     def __init__(self, id: Any, text: str) -> None:
         self.id = id
@@ -316,6 +329,7 @@ class ChatLLM:
         self._result_ranking = None
         self._result_text_tokenize = None
         self._model_info = None
+        self.is_first_thought_chunk = True
         if param is not None:
             self.append_param(param)
             if auto_start:
@@ -343,6 +357,7 @@ class ChatLLM:
         self.references = []
         self.beam_search_results = []
         self.rewritten_query = ''
+        self.is_first_thought_chunk = True
         r = self._lib.chat(self._chat, user_input)
         self.is_generating = False
         if r != 0:
@@ -354,6 +369,7 @@ class ChatLLM:
         self.references = []
         self.beam_search_results = []
         self.rewritten_query = ''
+        self.is_first_thought_chunk = True
         r = self._lib.async_chat(self._chat, user_input)
         if r != 0:
             raise Exception(f'ChatLLM: failed to `async_chat()` with error code {r}')
@@ -458,6 +474,15 @@ class ChatLLM:
         else:
             self.out_queue.put(LLMChatChunk(self.input_id, s))
 
+    def callback_print_thought(self, s: str) -> None:
+        if self.out_queue is None:
+            if self.is_first_thought_chunk:
+                self.is_first_thought_chunk = False
+                print('====== Thinking ======', flush=True)
+            print(s, end="", flush=True)
+        else:
+            self.out_queue.put(LLMChatThoughtChunk(self.input_id, s))
+
     def callback_print_history_user(self, s: str) -> None:
         pass
 
@@ -483,6 +508,10 @@ class ChatLLM:
             self.out_queue.put(LLMChatDone(self.input_id))
         self.input_id = self.tool_input_id
         self.tool_input_id = None
+
+    def callback_thought_done(self) -> None:
+        if self.out_queue is None:
+            print('\n===================', flush=True)
 
     def callback_async_done(self) -> None:
         self.is_generating = False

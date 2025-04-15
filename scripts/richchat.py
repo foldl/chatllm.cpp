@@ -14,31 +14,18 @@ try:
 except:
     raise Exception('package `rich` is missing. install it: `pip install rich`')
 
-# sorted by length!
-THINK_TAGS = [
-    ('<think>',         '</think>'),
-    ('<thought>',       '</thought>'),
-    ('<reasoning>',     '</reasoning>'),
-]
-
-TAG_THINK_START = ''
-TAG_THINK_END = ''
-
 class RichChatLLM(ChatLLM):
     chunk_acc = ''
     thoughts_acc = ''
-    acc = ''
     meta = []
     is_thinking = False
     think_time = 0
-    detecting = False
+    think_start = 0
 
     def async_chat(self, user_input: str, input_id = None) -> None:
         self.chunk_acc = ''
-        self.is_thinking = True
+        self.is_thinking = False
         self.thoughts_acc = ''
-        self.acc = ''
-        self.detecting = True
         self.think_time = 0
         self.think_start = 0
         super().async_chat(user_input, input_id)
@@ -59,41 +46,18 @@ class RichChatLLM(ChatLLM):
         s = thoughts[-1] if len(thoughts) > 0 else ''
         return s
 
+    def callback_thought_done(self) -> None:
+        self.think_time = time.perf_counter() - self.think_start
+        self.is_thinking = False
+
+    def callback_print_thought(self, s: str) -> None:
+        if self.is_first_thought_chunk:
+            self.is_first_thought_chunk = False
+            self.is_thinking = True
+            self.think_start = time.perf_counter()
+        self.thoughts_acc = self.thoughts_acc + s
+
     def callback_print(self, s: str) -> None:
-        global TAG_THINK_START, TAG_THINK_END
-        if self.detecting:
-            self.acc = (self.acc + s).lstrip(" \n\r")
-            padding = False
-            for tags in THINK_TAGS:
-                if len(self.acc) < len(tags[0]):
-                    padding = True
-                    break
-                if self.acc.startswith(tags[0]):
-                    TAG_THINK_START = tags[0]
-                    TAG_THINK_END = tags[1]
-
-                    self.thoughts_acc = self.acc[len(TAG_THINK_START):]
-                    self.think_start = time.perf_counter()
-                    self.think_time = 0
-                    self.detecting = False
-
-                    break
-
-            if (not padding) and self.detecting:
-                self.is_thinking = False
-                self.detecting = False
-                self.chunk_acc = self.acc
-            return
-
-        if self.is_thinking:
-            self.thoughts_acc = self.thoughts_acc + s
-            pos = self.thoughts_acc.find(TAG_THINK_END)
-            self.think_time = time.perf_counter() - self.think_start
-            if pos > 0:
-                self.is_thinking = False
-                self.chunk_acc = self.thoughts_acc[pos + len(TAG_THINK_END):]
-            return
-
         self.chunk_acc = self.chunk_acc + s
 
     def callback_async_done(self) -> None:
@@ -101,7 +65,6 @@ class RichChatLLM(ChatLLM):
         if self.is_thinking:
             self.is_thinking = False
             self.think_time = time.perf_counter() - self.think_start
-            self.async_ai_continue(TAG_THINK_END)
 
 llm: RichChatLLM = None
 MAX_THOUGHT_TIME = 60 * 3
@@ -112,6 +75,7 @@ def params_preprocess(params: list[str]) -> list[str]:
             global MAX_THOUGHT_TIME
             MAX_THOUGHT_TIME = float(params[i + 1])
             return params[:i] + params[i + 2:]
+    params.append('+detect_thoughts')
     return params
 
 def handler(signal_received, frame):

@@ -311,7 +311,7 @@ namespace v2_1
             Tokenizer *tok = dynamic_cast<Tokenizer *>(streamer->tokenizer);
             if (tok->action_start_token_id < 0)
             {
-                streamer->put_chunk(first, chunk);
+                next->put_chunk(first, chunk);
                 return;
             }
 
@@ -335,7 +335,7 @@ namespace v2_1
             if (found_tool_call)
                 oss << chunk;
             else
-                streamer->put_chunk(first, chunk);
+                next->put_chunk(first, chunk);
         }
 
         void end() override

@@ -432,7 +432,7 @@ public:
         if (find_meta)
             oss << chunk;
         else
-            streamer->put_chunk(_first, chunk);
+            next->put_chunk(_first, chunk);
     }
 
     void end() override
@@ -620,13 +620,13 @@ public:
 
             if (!confirmed && (first.find(' ') != std::string::npos))
             {
-                streamer->put_chunk(true, str);
+                next->put_chunk(true, str);
                 str = "";
                 find_meta = false;
             }
         }
         else
-            streamer->put_chunk(first, chunk);
+            next->put_chunk(first, chunk);
     }
 
     void end() override

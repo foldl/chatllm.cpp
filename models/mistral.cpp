@@ -88,7 +88,7 @@ namespace mistral
             Tokenizer *tok = dynamic_cast<Tokenizer *>(streamer->tokenizer);
             if (tok->start_avail_tools_token_id < 0)
             {
-                streamer->put_chunk(first, chunk);
+                next->put_chunk(first, chunk);
                 return;
             }
 
@@ -101,7 +101,7 @@ namespace mistral
             if (found_tool_call)
                 oss << chunk;
             else
-                streamer->put_chunk(first, chunk);
+                next->put_chunk(first, chunk);
         }
 
         void end() override
