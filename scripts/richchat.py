@@ -24,10 +24,11 @@ class RichChatLLM(ChatLLM):
 
     def async_chat(self, user_input: str, input_id = None) -> None:
         self.chunk_acc = ''
-        self.is_thinking = False
+        self.is_thinking = True
         self.thoughts_acc = ''
         self.think_time = 0
         self.think_start = 0
+        self.is_generating = True
         super().async_chat(user_input, input_id)
 
     def callback_print_meta(self, s: str) -> None:
@@ -51,13 +52,15 @@ class RichChatLLM(ChatLLM):
         self.is_thinking = False
 
     def callback_print_thought(self, s: str) -> None:
-        if self.is_first_thought_chunk:
-            self.is_first_thought_chunk = False
+        if self.thoughts_acc == '':
             self.is_thinking = True
             self.think_start = time.perf_counter()
         self.thoughts_acc = self.thoughts_acc + s
 
     def callback_print(self, s: str) -> None:
+        self.is_thinking = False
+        if self.think_start > 0:
+            self.think_time = time.perf_counter() - self.think_start
         self.chunk_acc = self.chunk_acc + s
 
     def callback_async_done(self) -> None:
