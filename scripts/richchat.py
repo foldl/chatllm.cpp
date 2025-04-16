@@ -71,8 +71,11 @@ class RichChatLLM(ChatLLM):
 
 llm: RichChatLLM = None
 MAX_THOUGHT_TIME = 60 * 3
+multiple_lines_input = False
 
 def params_preprocess(params: list[str]) -> list[str]:
+    global multiple_lines_input
+    multiple_lines_input = '--multi' in params
     for i, s in enumerate(params):
         if (s == '--max-thought-time') and (i + 1 < len(params)):
             global MAX_THOUGHT_TIME
@@ -90,12 +93,23 @@ def handler(signal_received, frame):
         llm.show_meta('Statistics')
         sys.exit(0)
 
+def user_input(prompt: str) -> str:
+    global multiple_lines_input
+    if multiple_lines_input:
+        print(prompt, end='', flush=True)
+        return sys.stdin.read()
+    else:
+        return input(prompt)
+
 def demo_simple(params, lib_path: str, cls = RichChatLLM):
     global llm
+    global multiple_lines_input
     signal.signal(signal.SIGINT, handler)
     llm = cls(LibChatLLM(lib_path), params)
 
     llm.show_meta('Model')
+    if multiple_lines_input:
+        print('Press Ctrl+D / Ctrl+Z (Windows) to finish input')
 
     render_ai = lambda: llm.render_ai()
     render_thoughts = lambda: llm.render_thoughts()
@@ -103,7 +117,7 @@ def demo_simple(params, lib_path: str, cls = RichChatLLM):
     console = Console()
 
     while True:
-        s = input('You  > ')
+        s = user_input('You  > ')
         if s == '': continue
 
         if s.startswith('/start'):

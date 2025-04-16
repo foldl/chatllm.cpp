@@ -11,6 +11,7 @@
 * Baichuan (`BaichuanForCausalLM`, `BaichuanM1ForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat), [Chat-13B](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat)
     * [x] M1: [Instruct-14B](https://huggingface.co/baichuan-inc/Baichuan-M1-14B-Instruct)
+    * [x] Fine-tunings: [Med-R1](https://modelscope.cn/models/wangrongsheng/Med-R1/files) (Tip: `--set chat_template im`)
 
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)

@@ -71,25 +71,20 @@ namespace vl
 
         bool load_config(const json::JSON &config) override
         {
-            auto cfg = config["tokenizer_config.json"];
-            if (!cfg.IsObject()) return false;
-            auto added_tokens_decoder = cfg["added_tokens_decoder"];
-            if (!added_tokens_decoder.IsObject()) return false;
+            #define check_token(tok) {std::string("<|" #tok "|>"), &(tok ## _token_id)}
 
-            for (auto &item : added_tokens_decoder.ObjectRange())
-            {
-                #define check_token(tok) if ("<|" #tok "|>" == item.second["content"].ToString()) tok ## _token_id = std::stol(item.first)
-                check_token(im_end);
-                else check_token(im_user);
-                else check_token(im_assistant);
-                else check_token(im_system);
-                else check_token(im_middle);
-                else check_token(media_start);
-                else check_token(media_content);
-                else check_token(media_end);
-                else check_token(media_pad);
-                else;
-            }
+            load_added_tokens(config, {
+                check_token(im_end),
+                check_token(im_user),
+                check_token(im_assistant),
+                check_token(im_system),
+                check_token(im_middle),
+                check_token(media_start),
+                check_token(media_content),
+                check_token(media_end),
+                check_token(media_pad),
+            });
+            #undef check_token
 
             if (im_end_token_id >= 0)
                 terminate_ids.insert(im_end_token_id);

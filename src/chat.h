@@ -192,6 +192,8 @@ namespace chatllm
 
         virtual void set_skip_sys_prompt(bool skip);
 
+        void set_chat_encoder(BaseHistoryEncoder *encoder);
+
         int bos_token_id;
         int eos_token_id;
         int pad_token_id;
@@ -202,6 +204,8 @@ namespace chatllm
 
         virtual std::string preprocess(const std::string &text) const;
         virtual std::string postprocess(const std::string &text) const;
+
+        int load_added_tokens(const json::JSON &config, std::initializer_list<std::pair<std::string, int *>> added_tokens);
 
     public:
         tokenizer::Processor *tp;

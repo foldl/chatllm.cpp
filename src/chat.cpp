@@ -350,6 +350,13 @@ namespace chatllm
             qa_encoder->set_tokenizer(this);
     }
 
+    void BaseTokenizer::set_chat_encoder(BaseHistoryEncoder *encoder)
+    {
+        chat_encoder = encoder;
+        if (encoder)
+            encoder->set_tokenizer(this);
+    }
+
     bool BaseTokenizer::is_terminate_token_id(int id) const
     {
         if (id == eos_token_id) return true;
@@ -541,6 +548,31 @@ namespace chatllm
             completion_encoder->skip_sys_prompt = skip;
         if (qa_encoder)
             qa_encoder->skip_sys_prompt = skip;
+    }
+
+    int BaseTokenizer::load_added_tokens(const json::JSON &config, std::initializer_list<std::pair<std::string, int *>> added_tokens)
+    {
+        int r = -1;
+        auto cfg = config["tokenizer_config.json"];
+        if (!cfg.IsObject()) return r;
+        auto added_tokens_decoder = cfg["added_tokens_decoder"];
+        if (!added_tokens_decoder.IsObject()) return r;
+
+        r = 0;
+
+        for (auto &item : added_tokens_decoder.ObjectRange())
+        {
+            for( auto tok = added_tokens.begin(), e = added_tokens.end(); tok != e; ++tok)
+            {
+                if (tok->first == item.second["content"].ToString())
+                {
+                    *tok->second = std::stol(item.first);
+                    break;
+                }
+            }
+        }
+
+        return r;
     }
 
     void BaseHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const

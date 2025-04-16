@@ -233,6 +233,7 @@ void usage(const std::string &prog)
               << "  --log_level             log level. (default: 4 - ERROR)\n"
               << "  --serve_rpc [H:]P[@id]  as a RPC server on host:port (optional: host default to 127.0.0.1, id defaults to 0)        [#]\n"
               << "  --ggml_dir DIR          specify directory of GGML\n"
+              << "  --set KEY VALUE         set a pair of additional args.\n"
               << "Additional key-value args:\n"
               << "  --kv                    start of additional args. all following options are interpreted as k-v pairs\n"
               << "  key value               a key-value pair of args\n"
@@ -375,6 +376,14 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                     args.thought_tags[1] = argv[c + 2];
                     c += 2;
                     args.detect_thoughts = true;
+                }
+            }
+            else if (strcmp(arg, "--set") == 0)
+            {
+                if (c + 2 < argc)
+                {
+                    args.additional[argv[c + 1]] = argv[c + 2];
+                    c += 2;
                 }
             }
             handle_param("--model",                 "-m", model_path,           std::string)

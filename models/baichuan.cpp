@@ -139,7 +139,8 @@ namespace m1
     {
     public:
         Tokenizer(const Config &config)
-            : llama::v2::Tokenizer(config, &_chat_encoder)
+            : llama::v2::Tokenizer(config, &_chat_encoder),
+              im_end_token_id(-1)
         {
             sys_prompt = "You are a helpful assistant.";
         }
@@ -147,6 +148,12 @@ namespace m1
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override
         {
             size_t r = llama::v2::Tokenizer::load(buffer, n_vocab);
+
+            int id = tp->PieceToId("<reserved_147>");
+            if (id >= 0) tp->OverrideTokenDecoding(id, "<think>");
+            id = tp->PieceToId("<reserved_148>");
+            if (id >= 0) tp->OverrideTokenDecoding(id, "</think>");
+
             b_sys_token_id      = 71;
             b_usys_token_id     = 72;
             c_q_token_id        = 73;
@@ -163,6 +170,25 @@ namespace m1
             llama::v2::Tokenizer::encode(text, ids);
         }
 
+        bool load_config(const json::JSON &config) override
+        {
+            load_added_tokens(config, {
+                {"<B_SYS>",          &b_sys_token_id},
+                {"<B_USYS>",         &b_usys_token_id},
+                {"<C_Q>",            &c_q_token_id},
+                {"<C_A>",            &c_a_token_id},
+                {"<B_FUNC>",         &b_func_token_id},
+                {"<B_CODE>",         &b_code_token_id},
+                {"<|im_start|>",     &im_start_token_id},
+                {"<|im_end|>",       &im_end_token_id},
+            });
+
+            if (im_end_token_id >= 0)
+                terminate_ids.insert(im_end_token_id);
+
+            return true;
+        }
+
     public:
         int b_sys_token_id;
         int b_usys_token_id;
@@ -170,6 +196,8 @@ namespace m1
         int c_a_token_id;
         int b_func_token_id;
         int b_code_token_id;
+        int im_start_token_id;
+        int im_end_token_id;
     };
 
     void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
@@ -201,6 +229,54 @@ namespace m1
 
         ids.push_back(tok->c_a_token_id);
     }
+
+    static class ImChatHistoryEncoder : public BaseHistoryEncoder
+    {
+    public:
+        void append_sys_prompt(std::vector<int> &ids) const override
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+            if (tok->get_system_prompt().size() > 0)
+            {
+                ids.push_back(tok->im_start_token_id);
+                tok->encode("system\n", ids);
+                tok->encode(tok->get_system_prompt(), ids);
+                ids.push_back(tok->im_end_token_id);
+                tok->encode("\n", ids);
+            }
+        }
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+            append_ai_opening(round_idx, ids);
+            tok->encode(ai, ids);
+            ids.push_back(tok->im_end_token_id);
+            tok->encode("\n", ids);
+        }
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+            append_user_opening(round_idx, ids);
+            tok->encode(user, ids);
+            ids.push_back(tok->im_end_token_id);
+            tok->encode("\n", ids);
+        }
+
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+            ids.push_back(tok->im_start_token_id);
+            tok->encode("assistant\n", ids);
+        }
+
+        void append_user_opening(int round_idx, std::vector<int> &ids) const override
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+            ids.push_back(tok->im_start_token_id);
+            tok->encode("user\n", ids);
+        }
+    } _im_chat_encoder;
 
     template <int sliding_window_len> class BaiChuanSWASelfAttention : public RoPESelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>
     {
@@ -314,6 +390,18 @@ namespace m1
 
             CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights: " << w_ctx_.get_used_mem() / ggml_tensor_overhead() << " != " << w_ctx_.get_mem_size() / ggml_tensor_overhead();
+        }
+
+        void set_additional_args(const std::map<std::string, std::string> &args) override
+        {
+            auto it = args.find("chat_template");
+            if (it != args.end())
+            {
+                if (it->second == "im")
+                {
+                    tokenizer->set_chat_encoder(&_im_chat_encoder);
+                }
+            }
         }
 
         void load(ModelLoader &loader) override
