@@ -188,6 +188,7 @@ namespace chatllm
             auto it = interceptor;
             interceptor = nullptr;
             it->end();
+            interceptor = it;
         }
 
         is_first = true;
@@ -1458,7 +1459,7 @@ namespace chatllm
         {
             tokenizer->encode(gen_config.ai_prefix, input_ids);
             if (streamer)
-                streamer->call_put_chunk(false, gen_config.ai_prefix);
+                streamer->call_put_chunk(true, gen_config.ai_prefix);
         }
     }
 
