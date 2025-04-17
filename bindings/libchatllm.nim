@@ -17,8 +17,12 @@ type
                                         ##  (example: "0.8,....")
         RINTLN_MODEL_INFO =13,          ##  when a model is started, print a whole line of basic model information (json format)
                                         ##  (example: {"name": "llama", "context_length": 100, "capabilities": [text, ...], ...})
+        PRINT_THOUGHT_CHUNK     =14,    ## same as PRINT_CHAT_CHUNK, but this from "thoughts".
+                                        ## possible leading or trailing tags (such as <think>, </think>) are removed.
+                                        ## use `+detect_thoughts` to enable this.
 
-        PRINT_EVT_ASYNC_COMPLETED = 100 ##  last async operation completed (utf8_str is "")
+        PRINT_EVT_ASYNC_COMPLETED       = 100   ##  last async operation completed (utf8_str is "")
+        PRINT_EVT_THOUGHT_COMPLETED     = 101,  ## thought completed
 
 type
     chatllm_obj = object
