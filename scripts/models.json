@@ -514,6 +514,15 @@
                         "url": "chatllm_quantized_glm/glm-4-z1-0414-9b.bin"
                     }
                 }
+            },
+            "z1-32b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 18330610368,
+                        "url": "chatllm_quantized_glm/glm-4-z1-0414-32b-q4_0.bin"
+                    }
+                }
             }
         }
     },
@@ -1859,6 +1868,15 @@
                         "url": "chatllm_quantized_baichuan/baichuan-m1-14b.bin"
                     }
                 }
+            },
+            "med-r1": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 15378391696,
+                        "url": "chatllm_quantized_baichuan/baichuan-m1-med-r1-14b.bin"
+                    }
+                }
             }
         }
     },
@@ -2432,6 +2450,15 @@
                     "q8": {
                         "size": 8096854496,
                         "url": "chatllm_quantized_skywork/skywork-or1-math-7b.bin"
+                    }
+                }
+            },
+            "32b-preview": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 18437838048,
+                        "url": "chatllm_quantized_skywork/skywork-or1-32b-preview-q4_0.bin"
                     }
                 }
             }
