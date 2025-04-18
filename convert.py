@@ -1307,12 +1307,13 @@ class AprielConverter(BaseConverter):
         f.write(struct.pack("i" * len(config_values), *config_values))
         config_values = [
             config.rope_theta,
+            config.head_dim,
             config.rope_scaling['original_max_position_embeddings'],
             config.rope_scaling['beta_fast'],
             config.rope_scaling['beta_slow'],
             config.rope_scaling['factor'],
         ]
-        f.write(struct.pack("<fifff", *config_values))
+        f.write(struct.pack("<fiifff", *config_values))
 
     @staticmethod
     def get_weight_names(config):

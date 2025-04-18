@@ -2463,5 +2463,21 @@
                 }
             }
         }
+    },
+    "apriel": {
+        "brief": "Apriel is a family of models built for versatility, offering high throughput and efficiency across a wide range of tasks.",
+        "default": "5b",
+        "license": "MIT",
+        "variants": {
+            "5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 5140774832,
+                        "url": "chatllm_quantized_apriel/apriel-5b.bin"
+                    }
+                }
+            }
+        }
     }
 }

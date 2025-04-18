@@ -343,6 +343,8 @@ namespace chatllm
 
         MODEL_TYPE_SOLARPRO         = 0x2300,
 
+        MODEL_TYPE_APRIEL           = 0x2400,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -2018,6 +2020,11 @@ namespace chatllm
         #include "../models/kimi.cpp"
     }
 
+    namespace apriel
+    {
+        #include "../models/apriel.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2406,6 +2413,8 @@ namespace chatllm
         CASE(GIGACHAT,              gigachat, 1)                \
                                                                 \
         CASE(KIMI_VL,               kimi::vl, 1)                \
+                                                                \
+        CASE(APRIEL,                apriel, 1)                  \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

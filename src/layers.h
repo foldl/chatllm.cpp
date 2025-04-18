@@ -1565,7 +1565,6 @@ namespace chatllm
               beta_fast(0.0f),
               beta_slow(0.0f),
               rope_dim(head_dim),
-              n_ctx(0),
               n_original_ctx(0),
               mrope_sections(nullptr),
               use_rope(true),
@@ -1586,7 +1585,6 @@ namespace chatllm
               beta_fast(0.0f),
               beta_slow(0.0f),
               rope_dim(rope_dim),
-              n_ctx(0),
               n_original_ctx(0),
               mrope_sections(nullptr),
               use_rope(true),
@@ -1957,6 +1955,10 @@ namespace chatllm
 
         LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
             : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        {}
+
+        LlamaBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
         {}
     };
 
