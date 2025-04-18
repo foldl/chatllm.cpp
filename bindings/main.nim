@@ -1,4 +1,4 @@
-import strutils, std/strformat, std/httpclient, os, json, asyncdispatch
+import strutils, std/[strformat, httpclient], os, json, asyncdispatch
 import libchatllm
 import packages/docutils/highlite, terminal
 
@@ -71,6 +71,22 @@ type
     highlighter = object
         line_acc: string
         lang: SourceLanguage
+        thought_acc: string
+
+proc receive_thought_chunk(ht: var highlighter, chunk: string) =
+    if ht.thought_acc == "":
+        stdout.setForegroundColor(fgMagenta)
+
+    ht.thought_acc &= chunk
+    stdout.write(chunk)
+
+proc thought_end(ht: var highlighter) =
+     stdout.setForegroundColor(fgDefault)
+
+proc reset(ht: var highlighter) =
+    ht.line_acc = ""
+    ht.thought_acc = ""
+    ht.lang = langNone
 
 proc receive_chunk(ht: var highlighter, chunk: string) =
     ht.line_acc &= chunk
@@ -127,22 +143,39 @@ proc receive_chunk(ht: var highlighter, chunk: string) =
         lang_chunk(ht)
 
 proc chatllm_print(user_data: pointer, print_type: cint, utf8_str: cstring) {.cdecl.} =
+    var ht = cast[ptr highlighter](user_data)
+    var s: string = $utf8_str
     case cast[PrintType](print_type)
     of PRINT_CHAT_CHUNK:
-        var ht = cast[ptr highlighter](user_data)
-        var s: string = $utf8_str
         var n = 0
         for l in s.splitLines():
             if n > 0: receive_chunk(ht[], "")
             n += 1
             if l != "":
                 receive_chunk(ht[], l)
+    of PRINT_THOUGHT_CHUNK:
+        receive_thought_chunk(ht[], s)
+    of PRINT_EVT_THOUGHT_COMPLETED:
+        thought_end(ht[])
+    of RINTLN_MODEL_INFO:
+        discard
     else:
-        if utf8_str != nil: echo utf8_str
+        echo s
     stdout.flushFile()
 
 proc chatllm_end(user_data: pointer) {.cdecl.} =
     echo ""
+
+proc user_input(multi_input: bool): string =
+    if multi_input:
+        var r: seq[string] = @[]
+        while true:
+            var line = readLine(stdin)
+            if line == "\\.": break
+            r.add line
+        return r.join("\n")
+    else:
+        return readLine(stdin)
 
 const candidates = ["-m", "--model", "--embedding_model", "--reranker_model"]
 let storage_dir = joinPath([parentDir(paramStr(0)), "../quantized"])
@@ -154,6 +187,7 @@ let chat = chatllm_create()
 var prompt: string = "hello"
 var interactive: bool = false
 var reversed_role = false
+var use_multiple_lines = false
 
 for i in 1 .. paramCount():
     if paramStr(i) in ["-i", "--interactive"]:
@@ -161,6 +195,9 @@ for i in 1 .. paramCount():
 
     if paramStr(i) in ["--reversed_role"]:
         reversed_role = true
+
+    if paramStr(i) in ["--multi"]:
+        use_multiple_lines = true
 
     if (i > 1) and (paramStr(i - 1) in ["-p", "--prompt"]):
         prompt = paramStr(i)
@@ -181,6 +218,8 @@ if interactive:
     let user_tag = "You  > "
     let   ai_tag = "A.I. > "
 
+    enableTrueColors()
+
     if reversed_role:
         stdout.write(ai_tag)
         stdout.writeLine(prompt)
@@ -188,10 +227,11 @@ if interactive:
 
     while true:
         stdout.write(user_tag)
-        let input = stdin.readLine()
+        let input = user_input(use_multiple_lines)
         if input.isEmptyOrWhitespace(): continue
 
         stdout.write(ai_tag)
+        ht.reset()
         let r = chatllm_user_input(chat, input.cstring)
         if r != 0:
             echo ">>> chatllm_user_input error: ", r
