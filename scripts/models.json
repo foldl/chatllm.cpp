@@ -506,6 +506,15 @@
                     }
                 }
             },
+            "32b-0414": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 18330610096,
+                        "url": "chatllm_quantized_glm/glm-4-0414-32b-q4_0.bin"
+                    }
+                }
+            },
             "z1-9b": {
                 "default": "q8",
                 "quantized": {
@@ -2388,6 +2397,15 @@
                         "url": "chatllm_quantized_bailing/bailing-lite.bin"
                     }
                 }
+            },
+            "lite-0415": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 17856646160,
+                        "url": "chatllm_quantized_bailing/bailing-lite-0415.bin"
+                    }
+                }
             }
         }
     },
@@ -2434,6 +2452,15 @@
                     "q8": {
                         "size": 1892864432,
                         "url": "chatllm_quantized_deepcoder/deepcoder-1.5b.bin"
+                    }
+                }
+            },
+            "14b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 15699928144,
+                        "url": "chatllm_quantized_deepcoder/deepcoder-14b-preview.bin"
                     }
                 }
             }
