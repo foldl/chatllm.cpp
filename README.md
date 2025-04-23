@@ -13,32 +13,17 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-02-17: [ggml updated](https://github.com/ggml-org/llama.cpp/tree/658987cfc9d752dca7758987390d5fb1a7a0a54a) again
 * 2025-04-18: Apriel
 * 2025-04-15: GLM-4-0414
 * 2025-04-10: LlaMA4 (Language model)
 * 2025-03-27: Ling (Bailing)
 * 2025-03-26: AquilaChat2
 * 2025-03-25: DeepSeek v1 & GigaChat
-* 2025-03-24: Solar-Pro & [GGMM](./docs/ggmm.md) file format
-* 2025-03-23: Llama-3.3-Nemotron-Super-49B-v1
-* 2025-03-16: DeepHermes-Mistral
-* 2025-03-13: Gemma-3 (Language model)
-* 2025-03-12: Reka-Flash-3
-* 2025-03-10: Instella
-* 2025-03-05: Baichuan-M1
-* 2025-03-03: HunYuan Dense
-* 2025-02-27: Granite-3.2, Phi-4 Mini
-* 2025-02-24: Moonlight
+* 2025-03-24: [GGMM](./docs/ggmm.md) file format
 * 2025-02-21: [Distributed inference](./docs/rpc.md)
-* 2025-02-19: MoE CPU offloading, tool calling with Watt-tool
 * 2025-02-17: [ggml updated](https://github.com/ggml-org/llama.cpp/tree/0f2bbe656473177538956d22b6842bcaa0449fab) again
 * 2025-02-10: [GPU acceleration](./docs/gpu.md) 🔥
-* 2025-01-25: MiniCPM Embedding & ReRanker
-* 2025-01-21: DeepSeek-R1-Distill-Llama & Qwen
-* 2025-01-15: InternLM3
-* 2025-01-13: OLMo-2
-* 2025-01-11: Phi-4
-* 2025-01-06: (Naive) Beam search
 * 2024-12-09: [Reversed role](./docs/fun.md#reversed-role)
 * 2024-11-21: [Continued generation](./docs/fun.md#continued-generation)
 * 2024-11-01: [generation steering](./docs/fun.md#generation-steering)
