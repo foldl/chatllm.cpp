@@ -217,8 +217,9 @@ protected:
 class BPEProcessor3: public BPEProcessor2
 {
 public:
-    BPEProcessor3() : BPEProcessor2() {}
+    BPEProcessor3(std::vector<std::string> regex_exprs);
 
+    const std::string IdToPiece(int id) const override;
 protected:
     int DoEncode2(const std::string &input,
             std::vector<int> *ids) const override;

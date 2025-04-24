@@ -27,7 +27,11 @@ public:
 
     size_t load(tokenizer::DataReader *buffer, int n_vocab) override
     {
-        tp = new tokenizer::BPEProcessor3();
+        tp = new tokenizer::BPEProcessor3(
+            {
+                "[0-9]",
+            }
+        );
         size_t size = tp->Load(buffer, n_vocab);
         return size;
     }

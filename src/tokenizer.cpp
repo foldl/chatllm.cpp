@@ -505,7 +505,7 @@ struct llm_bigram_bpe {
 struct llm_bpe_tokenizer {
     llm_bpe_tokenizer(const _vocab & vocab): vocab(vocab) {}
 
-    void tokenize(const std::string & text, std::vector<_vocab::id> & output, const std::vector<std::string> &word_collection) {
+    void tokenize(std::vector<_vocab::id> & output, const std::vector<std::string> &word_collection) {
         int final_prev_index = -1;
 
         symbols_final.clear();
@@ -649,9 +649,14 @@ int BPEProcessor2::DoEncode2(const std::string &input,
     std::vector<std::string> bpe_encoded_words = unicode_regex_split(input, regex_exprs);
 
     llm_bpe_tokenizer tokenizer(vocab_);
-    tokenizer.tokenize(input, *ids, bpe_encoded_words);
+    tokenizer.tokenize(*ids, bpe_encoded_words);
 
     return 0;
+}
+
+BPEProcessor3::BPEProcessor3(std::vector<std::string> regex_exprs)
+    : BPEProcessor2(regex_exprs)
+{
 }
 
 int BPEProcessor3::DoEncode2(const std::string &input,
@@ -659,9 +664,34 @@ int BPEProcessor3::DoEncode2(const std::string &input,
 {
     if (input.size() < 1) return 0;
 
+    // TODO: split by regexpr
+
     llama_sp_tokenizer tokenizer(vocab_);
     tokenizer.tokenize(input, *ids);
     return 0;
+}
+
+const std::string BPEProcessor3::IdToPiece(int id) const
+{
+    if (token_override.contains(id))
+        return token_override.find(id)->second;
+
+    if (vocab_.is_normal_token(id))
+    {
+        std::string result = vocab_.id_to_token[id].tok;
+        return result;
+    }
+    else if (vocab_.is_control_token(id))
+    {
+        return "";
+    }
+    else
+    {
+        if (ret_special_token)
+            return vocab_.id_to_token[id].tok;
+        else
+            return "";
+    }
 }
 
 static std::string search_first_special_token(std::string &input, const _vocab &vocab, int &sp_tok_id)
