@@ -564,7 +564,7 @@ static rpc_tensor serialize_tensor(const ggml_tensor * tensor) {
     return result;
 }
 
-static void ggml_backend_rpc_buffer_init_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor) {
+static enum ggml_status ggml_backend_rpc_buffer_init_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor) {
     ggml_backend_rpc_buffer_context * ctx = (ggml_backend_rpc_buffer_context *)buffer->context;
 
     // CUDA backend on the server pads everything to 512 due to CUDA limitations.
@@ -576,7 +576,10 @@ static void ggml_backend_rpc_buffer_init_tensor(ggml_backend_buffer_t buffer, gg
         request.tensor = serialize_tensor(tensor);
 
         bool status = send_rpc_cmd(ctx->sock, RPC_CMD_INIT_TENSOR, &request, sizeof(request), nullptr, 0);
-        GGML_ASSERT(status);
+        return status ? GGML_STATUS_SUCCESS : GGML_STATUS_ALLOC_FAILED;
+    }
+    else {
+        return GGML_STATUS_FAILED;
     }
 }
 
