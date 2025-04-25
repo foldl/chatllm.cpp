@@ -20,7 +20,7 @@
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
 
 * ChatGLM (`ChatGLMModel`, `Glm4ForCausalLM`):
-    * [x] ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)
+    * [x] ~~ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)~~
     * [x] ChatGLM2 family: [ChatGLM2 6B](https://huggingface.co/THUDM/chatglm2-6b), [CodeGeeX2 6B](https://huggingface.co/THUDM/codegeex2-6b), [ChatGLM3 6B](https://huggingface.co/THUDM/chatglm3-6b)
 
         Tip on CodeGeeX2: Code completion only, no context. Use system prompt to specify language, e.g. `-s "# language: python"`.

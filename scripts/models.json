@@ -2506,5 +2506,21 @@
                 }
             }
         }
+    },
+    "xverse": {
+        "brief": "XVERSE is a multilingual large language model, independently developed by Shenzhen Yuanxiang Technology.",
+        "default": "7b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "7b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 4107979184,
+                        "url": "chatllm_quantized_xverse/xverse-7b-q4_0.bin"
+                    }
+                }
+            }
+        }
     }
 }

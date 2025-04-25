@@ -8,8 +8,9 @@
 #include "ggml-rpc.h"
 
 #ifndef GGML_USE_CPU
-//#error "GGML_BACKEND_DL is WIP"
+#ifndef GGML_BACKEND_DL
 #define GGML_BACKEND_DL
+#endif
 #endif
 
 extern void log_internal(int level, const char * text);
