@@ -54,6 +54,7 @@ struct Args
     std::string ggml_dir;
     std::string cache_type = "f16";
     std::string thought_tags[2] = {"", ""};
+    std::string multimedia_file_tags[2] = {"", ""};
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -217,6 +218,9 @@ void usage(const std::string &prog)
               << "  --thought_tags O C      customize thought tags (Opening & Closing) to override built-in tags\n"
               << "                          built-in tags: " << show_default_thought_tags() << "\n"
               << "                          this options enables detection of thoughts implicitly.\n"
+              << "Multi-model options:\n"
+              << "  --multimedia_file_tags OPENING CLOSEING \n"
+              << "                          multimedia file tags. Default: Not set. Example {{ }}: {{image:/path/to/image.png}}\n"
               << "Session:\n"
               << "  --save_session N FILE   save session to FILE after N round(s) of chatting (N >= 0) and quit                         [*]\n"
               << "                          when N = 0, system prompt is evaluated.\n"
@@ -376,6 +380,15 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                     args.thought_tags[1] = argv[c + 2];
                     c += 2;
                     args.detect_thoughts = true;
+                }
+            }
+            else if (strcmp(arg, "--multimedia_file_tags") == 0)
+            {
+                if (c + 2 < argc)
+                {
+                    args.multimedia_file_tags[0] = argv[c + 1];
+                    args.multimedia_file_tags[1] = argv[c + 2];
+                    c += 2;
                 }
             }
             else if (strcmp(arg, "--set") == 0)

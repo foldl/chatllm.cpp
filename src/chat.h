@@ -55,11 +55,104 @@ namespace chatllm
         LAST,
     };
 
+
+    class ContentPiece
+    {
+    public:
+        enum Type
+        {
+            TEXT = 0,
+            IMAGE,
+            AUDIO,
+            VIDEO,
+        };
+        ContentPiece(const std::string &s, Type type = TEXT)
+          : content(s), type(type)
+        {
+        }
+        ContentPiece(const ContentPiece &c)
+          : content(c.content), type(c.type)
+        {
+        }
+
+        ContentPiece &operator =(const ContentPiece &c)
+        {
+            content = c.content;
+            type = c.type;
+            return *this;
+        }
+
+    public:
+        std::string content;
+        Type type;
+    };
+
+    class Content
+    {
+    public:
+        Content(const std::string &s)
+        {
+            pieces.emplace_back(ContentPiece(s));
+        }
+        Content(const Content &c)
+        {
+            for (const auto &p : c.pieces)
+            {
+                pieces.push_back(p);
+            }
+        }
+
+        void push_back(const ContentPiece &piece)
+        {
+            pieces.push_back(piece);
+        }
+
+        void push_back(const Content &content)
+        {
+            for (const auto &piece : content.pieces)
+                pieces.push_back(piece);
+        }
+
+        void push_back(const std::string &s, ContentPiece::Type type = ContentPiece::Type::TEXT)
+        {
+            pieces.emplace_back(ContentPiece(s, type));
+        }
+
+        explicit operator std::string() const {
+            return to_string();
+        }
+
+        std::string to_string(void) const
+        {
+            std::string result;
+            for (const auto &piece : pieces)
+            {
+                CHATLLM_CHECK(piece.type == ContentPiece::Type::TEXT) << "Unsupported content type";
+                result += piece.content;
+            }
+            return result;
+        }
+    public:
+        std::vector<ContentPiece> pieces;
+    };
+
+    inline std::ostream& operator<<(std::ostream& os, const Content& content) {
+        for (const auto& piece : content.pieces) {
+            os << piece.content;
+        }
+        return os;
+    }
+
     class Message
     {
     public:
         Message(const std::string &s, MsgRole role, int round)
           : content(s), role(role), round(round)
+        {
+        }
+
+        Message(const Content &content, MsgRole role, int round)
+          : content(content), role(role), round(round)
         {
         }
 
@@ -70,8 +163,11 @@ namespace chatllm
 
         Message &operator =(const chatllm::Message &m);
 
+        bool save(FILE *f) const;
+        static Message load(FILE *f);
+
     public:
-        std::string content;
+        Content content;
         const MsgRole role;
         const int round;
     };
@@ -1191,7 +1287,7 @@ namespace chatllm
         virtual int save_session(const Messages &history, const std::string &file_name);
         virtual int load_session(Messages &history, const std::string &file_name, BaseStreamer *streamer, int *n_past = nullptr);
     protected:
-        const char head_magic[18] = "CHATLLM-SESSION\x00\x01";
+        const char head_magic[18] = "CHATLLM-SESSION\x00\x02";
 
         struct file_header
         {

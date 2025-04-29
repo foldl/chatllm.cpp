@@ -54,6 +54,53 @@ namespace chatllm
         return *this;
     }
 
+    bool Message::save(FILE *f) const
+    {
+        if (f == nullptr)
+            return false;
+        uint64_t len = content.pieces.size();
+        int role = this->role;
+        if (fwrite(&round, sizeof(len), 1, f) != 1) return false;
+        if (fwrite(&role, sizeof(role), 1, f) != 1) return false;
+        if (fwrite(&len, sizeof(len), 1, f) != 1) return false;
+
+        for (auto &p : content.pieces)
+        {
+            int type = p.type;
+            if (fwrite(&type, sizeof(type), 1, f) != 1) return false;
+            size_t len = p.content.size();
+            if (fwrite(&len, sizeof(len), 1, f) != 1) return false;
+            if (fwrite(p.content.data(), 1, len, f) != len) return false;
+        }
+        return true;
+    }
+
+    Message Message::load(FILE *f)
+    {
+        if (f == nullptr)
+            return Message("", MsgRole::User, 0);
+        uint64_t len = 0;
+        int role = 0;
+        int round = 0;
+        if (fread(&round, sizeof(round), 1, f) != 1) return Message("", MsgRole::User, 0);
+        if (fread(&role, sizeof(role), 1, f) != 1) return Message("", MsgRole::User, 0);
+        if (fread(&len, sizeof(len), 1, f) != 1) return Message("", MsgRole::User, 0);
+
+        Message msg("", (MsgRole)role, round);
+        msg.content.pieces.clear();
+        for (uint64_t i = 0; i < len; i++)
+        {
+            int type = 0;
+            if (fread(&type, sizeof(type), 1, f) != 1) return msg;
+            size_t len = 0;
+            if (fread(&len, sizeof(len), 1, f) != 1) return msg;
+            std::string s(len, '\0');
+            if (fread(s.data(), 1, len, f) != len) return msg;
+            msg.content.push_back(s, (ContentPiece::Type)type);
+        }
+        return msg;
+    }
+
     Messages::Messages()
         : cursor(0), sep(""), auto_aggregate(true), round(-1)
     {
@@ -68,11 +115,7 @@ namespace chatllm
 
     void Messages::push_back(const Message &m)
     {
-        push_back(m.content, m.role);
-    }
-
-    void Messages::push_back(const std::string &content, MsgRole role)
-    {
+        MsgRole role = m.role;
         if (MsgRole::Auto == role)
         {
             if (history.size() > 0)
@@ -102,7 +145,8 @@ namespace chatllm
             auto &last = history[history.size() - 1];
             if (role == last.role)
             {
-                last.content = last.content + sep + content;
+                last.content.push_back(sep);
+                last.content.push_back(m.content);
                 return;
             }
         }
@@ -114,7 +158,12 @@ namespace chatllm
                 round++;
         }
 
-        history.emplace_back(content, role, round);
+        history.emplace_back(m.content, role, round);
+    }
+
+    void Messages::push_back(const std::string &content, MsgRole role)
+    {
+        push_back(Message(content, role, round));
     }
 
     void Messages::move_cursor_to_end(void) const
@@ -420,12 +469,12 @@ namespace chatllm
     int BaseTokenizer::get_history_start(const Messages &history, int max_length) const
     {
         int start = (int)history.size() - 1;
-        size_t total_id_num = encode(history[start].content).size();
+        size_t total_id_num = encode(history[start].content.to_string()).size();
         start--;
         while (start >= 1)
         {
-            total_id_num += encode(history[start].content).size();
-            total_id_num += encode(history[start - 1].content).size();
+            total_id_num += encode(history[start].content.to_string()).size();
+            total_id_num += encode(history[start - 1].content.to_string()).size();
             if ((int)total_id_num >= max_length)
                 break;
             start -= 2;
@@ -530,7 +579,7 @@ namespace chatllm
             else;
         }
 
-        std::vector<int> r = encode(history[(int)history.size() - 1].content);
+        std::vector<int> r = encode(history[(int)history.size() - 1].content.to_string());
         if (auto_add_bos && (bos_token_id >= 0))
         {
             if ((r.size() > 0) && (r[0] != bos_token_id))
@@ -618,13 +667,13 @@ namespace chatllm
         switch (msg.role)
         {
         case MsgRole::User:
-            append_user(round_idx, msg.content, ids);
+            append_user(round_idx, msg.content.to_string(), ids);
             break;
         case MsgRole::Assistant:
-            append_ai(round_idx, msg.content, ids);
+            append_ai(round_idx, msg.content.to_string(), ids);
             break;
         case MsgRole::Tool:
-            append_tool(round_idx, msg.content, ids);
+            append_tool(round_idx, msg.content.to_string(), ids);
             break;
         case MsgRole::Auto:
             break;
@@ -1478,7 +1527,7 @@ namespace chatllm
         if (streamer)
             streamer->call_put_chunk(false, external);
 
-        history[history.size() - 1].content = history[history.size() - 1].content + external;
+        history[history.size() - 1].content.push_back(external);
 
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, gen_max_tokens, streamer);
         if (!completed)
@@ -1579,11 +1628,7 @@ namespace chatllm
 
         for (auto &s : history.history)
         {
-            int role = s.role;
-            fwrite(&role, sizeof(role), 1, f);
-            size_t len = s.content.size();
-            fwrite(&len, sizeof(len), 1, f);
-            fwrite(s.content.data(), 1, len, f);
+            s.save(f);
         }
 
         model->save_session(f);
@@ -1608,25 +1653,14 @@ namespace chatllm
         {
             for (size_t i = 0; i < header.history_len; i++)
             {
-                std::string s;
-                size_t len;
-                int role;
-                if (fread(&role, sizeof(role), 1, f) != 1)
-                    return -9;
-
-                if (fread(&len, sizeof(len), 1, f) != 1)
-                    return -2;
-
-                s.resize(len);
-                if (fread(s.data(), 1, len, f) != len)
-                    return -3;
-                history.push_back(s, MsgRole(role));
+                history.push_back(Message::load(f));
+                auto &last = history.back();
                 if (streamer)
                 {
-                    if (MsgRole(role) == MsgRole::Assistant)
-                        streamer->put_history_ai(s);
+                    if (MsgRole(last.role) == MsgRole::Assistant)
+                        streamer->put_history_ai(last.content.to_string());
                     else
-                        streamer->put_history_user(s);
+                        streamer->put_history_user(last.content.to_string());
                 }
             }
 
