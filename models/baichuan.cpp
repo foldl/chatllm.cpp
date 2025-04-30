@@ -322,6 +322,13 @@ namespace m1
             conv_v.set_id(id);
         }
 
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            BaseAttn::load(path, loader);
+            conv_k.load(path + "conv_k", loader);
+            conv_v.load(path + "conv_v", loader);
+        }
+
     public:
         FIR2 conv_k;
         FIR2 conv_v;
@@ -402,44 +409,6 @@ namespace m1
                     tokenizer->set_chat_encoder(&_im_chat_encoder);
                 }
             }
-        }
-
-        void load(ModelLoader &loader) override
-        {
-            auto transformer = get_typed_transformer<ModelClass>();
-
-            #define LOAD_TENSORS()  \
-                loader.read_tensor(layer_prefix + "input_layernorm.weight", layer->input_layernorm.weight); \
-                loader.read_tensor(layer_prefix + "mlp.down_proj.weight",   layer->mlp.down_proj.weight);   \
-                loader.read_tensor(layer_prefix + "mlp.gate_proj.weight",   layer->mlp.gate_proj.weight);   \
-                loader.read_tensor(layer_prefix + "mlp.up_proj.weight",     layer->mlp.up_proj.weight);     \
-                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", layer->post_attention_layernorm.weight); \
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", layer->attention.k_proj.weight);         \
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", layer->attention.o_proj.weight);         \
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", layer->attention.q_proj.weight);         \
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", layer->attention.v_proj.weight);         \
-                loader.read_tensor(layer_prefix + "self_attn.conv_k", layer->attention.conv_k.weight);                \
-                loader.read_tensor(layer_prefix + "self_attn.conv_v", layer->attention.conv_v.weight);
-
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
-                if (is_swa_layer(i))
-                {
-                    auto layer = dynamic_cast<BaiChuanSWABlock8k *>(transformer->get_layer(i));
-                    LOAD_TENSORS();
-                }
-                else
-                {
-                    auto layer = dynamic_cast<BaiChuanFullBlock *>(transformer->get_layer(i));
-                    LOAD_TENSORS();
-                }
-            }
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
-            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
-
-            #undef LOAD_TENSORS
         }
 
     private:
