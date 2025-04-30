@@ -4427,7 +4427,6 @@ class QWen3Converter(BaseConverter):
             1 if config.norm_topk_prob else 0,
             1 if config.tie_word_embeddings else 0,
         ]
-        print(config_values)
         f.write(struct.pack("<iiffiiiiiii", *config_values))
         f.write(struct.pack("<" + "i" * len(QWen3Converter.layer_is_sparse), *QWen3Converter.layer_is_sparse))
 

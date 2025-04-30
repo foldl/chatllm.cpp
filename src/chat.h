@@ -115,6 +115,15 @@ namespace chatllm
 
         void push_back(const std::string &s, ContentPiece::Type type = ContentPiece::Type::TEXT)
         {
+            if (pieces.size() > 0)
+            {
+                auto &last = pieces.back();
+                if ((last.type == type) && (type == ContentPiece::Type::TEXT))
+                {
+                    last.content += s;
+                    return;
+                }
+            }
             pieces.emplace_back(ContentPiece(s, type));
         }
 

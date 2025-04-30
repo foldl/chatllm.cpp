@@ -1594,11 +1594,11 @@ static void chatllm_continue_chat(Chat *chat)
 
     int last_id = (int)chat->history.size() - 1;
 
-    chat->history[last_id].content = chat->history[last_id].content + external_ai;
+    chat->history[last_id].content.push_back(external_ai);
 
     std::string output = chat->pipeline->chat(chat->history, chat->gen_config, streamer);
 
-    chat->history[last_id].content = chat->history[last_id].content + output;
+    chat->history[last_id].content.push_back(output);
 }
 
 int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
@@ -1658,7 +1658,7 @@ int chatllm_ai_continue(struct chatllm_obj *obj, const char *utf8_str)
 
     std::string more = chat->pipeline->chat_continue(chat->history, utf8_str, chat->gen_config, streamer);
 
-    chat->history[chat->history.size() - 1].content = chat->history[chat->history.size() - 1].content + more;
+    chat->history[chat->history.size() - 1].content.push_back(more);
 
     return r;
 }
