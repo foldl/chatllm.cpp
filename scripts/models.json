@@ -2522,5 +2522,73 @@
                 }
             }
         }
+    },
+    "qwen3": {
+        "brief": "Qwen3 is the latest generation of large language models in Qwen series, offering a comprehensive suite of dense and mixture-of-experts (MoE) models.",
+        "default": "1.7b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "1.7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1832758656,
+                        "url": "chatllm_quantized_qwen3/qwen3-1.7b.bin"
+                    }
+                }
+            },
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4278737888,
+                        "url": "chatllm_quantized_qwen3/qwen3-4b.bin"
+                    }
+                }
+            },
+            "8b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 5124539408,
+                        "url": "chatllm_quantized_qwen3/qwen3-8b-q4_1.bin"
+                    }
+                }
+            },
+            "30b-moe": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 19089033136,
+                        "url": "chatllm_quantized_qwen3/qwen3-30b-a3b-q4_1.bin"
+                    }
+                }
+            },
+            "32b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 18435330320,
+                        "url": "chatllm_quantized_qwen3/qwen3-32b-q4_0.bin"
+                    }
+                }
+            }
+        }
+    },
+    "mimo": {
+        "brief": "MiMo-7B, a series of models trained from scratch and born for reasoning tasks.",
+        "default": "7b-rl",
+        "license": "MIT",
+        "variants": {
+            "7b-rl": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8104850016,
+                        "url": "chatllm_quantized_mimo/mimo-7b-rl.bin"
+                    }
+                }
+            }
+        }
     }
 }
