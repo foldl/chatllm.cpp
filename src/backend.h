@@ -45,6 +45,15 @@ namespace chatllm
         void log(enum ggml_log_level level, const char * format, ...);
     }
 
+    class TensorLoader
+    {
+    public:
+        virtual void read_tensor(const std::string &name, ggml::tensor *tensor) = 0;
+        virtual void read_tensor(const std::string &name,
+                        const std::string &layer_prefix, int num, const std::string &suffix,
+                        ggml::tensor *tensor) = 0;
+    };
+
     // Is `ggml_backend_buffer_type_t` a good name?
     typedef ggml_backend_buffer_type_t  ggml_backend_allocator;
 

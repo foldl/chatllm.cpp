@@ -198,6 +198,8 @@ namespace chatllm
         virtual size_t read_cache_data(void *buffer, size_t buffer_size) const { return 0; }
         virtual size_t write_cache_data(const void *buffer, size_t buffer_size) { return 0; }
 
+        virtual void load(const std::string &path, TensorLoader *loader) { }
+
     protected:
         ggml::prec prec;
         int id;
@@ -256,6 +258,8 @@ namespace chatllm
             return ggml::nelements(weight);
         }
 
+        void load(const std::string &path, TensorLoader *loader) override;
+
     public:
         ggml::tensor *weight;
     };
@@ -291,6 +295,8 @@ namespace chatllm
             if (bias) r += ggml::nelements(bias);
             return r;
         }
+
+        void load(const std::string &path, TensorLoader *loader) override;
 
     public:
         ggml::tensor *weight; // [out_features, in_features]
@@ -343,6 +349,8 @@ namespace chatllm
             return r;
         }
 
+        void load(const std::string &path, TensorLoader *loader) override;
+
     public:
         ggml::tensor *weight; // [normalized_shape]
         ggml::tensor *bias;   // [normalized_shape]
@@ -374,6 +382,8 @@ namespace chatllm
             if (weight) r += ggml::nelements(weight);
             return r;
         }
+
+        void load(const std::string &path, TensorLoader *loader) override;
     public:
         ggml::tensor *weight;
         ggml::tensor *x0;
@@ -411,6 +421,8 @@ namespace chatllm
             return r;
         }
 
+        void load(const std::string &path, TensorLoader *loader) override;
+
     public:
         ggml::tensor *word_weight;
         ggml::tensor *position_weight;
@@ -434,6 +446,8 @@ namespace chatllm
         {
             return ggml::nelements(weight);
         }
+
+        void load(const std::string &path, TensorLoader *loader) override;
 
     public:
         ggml::tensor *weight;
@@ -486,6 +500,8 @@ namespace chatllm
             r += fc1.get_param_num(effective_only);
             return r;
         }
+
+        void load(const std::string &path, TensorLoader *loader) override;
 
     public:
         Linear fc0;
@@ -609,6 +625,12 @@ namespace chatllm
             return attention.write_cache_data(buffer, buffer_size);
         }
 
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            Block::load(path, loader);
+            attention.load(path + "self_attn.", loader);
+        }
+
     public:
         AttentionBlock attention;
     };
@@ -642,6 +664,16 @@ namespace chatllm
               input_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}
+
+        LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
+                  int mlp_intermediate_size,
+                  int num_kv_heads,
+                  int head_dim, int max_length)
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size,
+                  num_kv_heads, head_dim, max_length),
+              input_layernorm(ctx, hidden_size),
+              post_attention_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, mlp_intermediate_size) {}
 
         LMBlock1(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
                   int mlp_intermediate_size1, int mlp_intermediate_size2,
@@ -728,6 +760,14 @@ namespace chatllm
             mlp.set_id(id);
         }
 
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            Base::load(path, loader);
+            input_layernorm.load(path + "input_layernorm.", loader);
+            post_attention_layernorm.load(path + "post_attention_layernorm.", loader);
+            mlp.load(path + "mlp.", loader);
+        }
+
     public:
         InputNormBlock input_layernorm;
         PostNormBlock post_attention_layernorm;
@@ -771,6 +811,13 @@ namespace chatllm
             Block::set_id(id);
             post_attention_layernorm.set_id(id);
             mlp.set_id(id);
+        }
+
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            Block::load(path, loader);
+            post_attention_layernorm.load(path + "post_attention_layernorm.", loader);
+            mlp.load(path + "mlp.", loader);
         }
 
     public:
@@ -868,6 +915,16 @@ namespace chatllm
             pre_mlp_layernorm.set_id(id);
             mlp.set_id(id);
             post_mlp_layernorm.set_id(id);
+        }
+
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            Base::load(path, loader);
+            pre_attention_layernorm.load(path + "pre_attention_layernorm.", loader);
+            post_attention_layernorm.load(path + "post_attention_layernorm.", loader);
+            pre_mlp_layernorm.load(path + "pre_mlp_layernorm.", loader);
+            mlp.load(path + "mlp.", loader);
+            post_mlp_layernorm.load(path + "post_mlp_layernorm.", loader);
         }
 
     public:
@@ -1081,6 +1138,8 @@ namespace chatllm
             return r;
         }
 
+        void load(const std::string &path, TensorLoader *loader) override;
+
     public:
         Linear query_key_value;
         Linear dense;
@@ -1145,6 +1204,8 @@ namespace chatllm
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
 
+        void load(const std::string &path, TensorLoader *loader) override;
+
     public:
         Linear q_proj, k_proj, v_proj;
         Linear o_proj;
@@ -1169,6 +1230,8 @@ namespace chatllm
 
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override;
+
+        void load(const std::string &path, TensorLoader *loader) override;
 
     public:
         RMSNorm q_norm;
@@ -1752,6 +1815,8 @@ namespace chatllm
             down_proj.set_prec(prec);
         }
 
+        void load(const std::string &path, TensorLoader *loader) override;
+
     public:
         Linear gate_proj;
         Linear down_proj;
@@ -1801,6 +1866,12 @@ namespace chatllm
             return r;
         }
 
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            Block::load(path, loader);
+            gate.load(path + "gate.", loader);
+        }
+
     public:
         Linear gate;
     };
@@ -1840,6 +1911,13 @@ namespace chatllm
             Block::set_id(id);
             mlp1.set_id(id);
             mlp2.set_id(id);
+        }
+
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            Block::load(path, loader);
+            mlp1.load(path + "mlp2.", loader);
+            mlp2.load(path + "mlp2.", loader);
         }
 
     public:
@@ -1900,6 +1978,8 @@ namespace chatllm
 
             return r;
         }
+
+        void load(const std::string &path, TensorLoader *loader) override;
 
     public:
         const int num_local_experts;
@@ -2007,6 +2087,8 @@ namespace chatllm
             return r;
         }
 
+        void load(const std::string &path, TensorLoader *loader) override;
+
     public:
         Linear dense;
         ActFunc act;
@@ -2033,6 +2115,8 @@ namespace chatllm
             r += out_proj.get_param_num(effective_only);
             return r;
         }
+
+        void load(const std::string &path, TensorLoader *loader) override;
 
     public:
         Linear dense;
@@ -2252,6 +2336,13 @@ namespace chatllm
             Base::set_id(id);
             input_layernorm.set_id(id);
             mlp.set_id(id);
+        }
+
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            Base::load(path, loader);
+            input_layernorm.load(path + "input_layernorm.", loader);
+            mlp.load(path + "mlp.", loader);
         }
 
     public:
@@ -2515,6 +2606,13 @@ namespace chatllm
             r += k_layernorm.get_param_num(effective_only);
             r += q_layernorm.get_param_num(effective_only);
             return r;
+        }
+
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            RoPESelfAttention<BaseAttn>::load(path, loader);
+            k_layernorm.load(path + "k_norm.", loader);
+            q_layernorm.load(path + "q_norm.", loader);
         }
 
     protected:

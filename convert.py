@@ -122,6 +122,7 @@ class ModelType(Enum):
     QwQ      = 0x752
     ReaderLM2= 0x753
     DeepSeek_R1_Distill_QWen = 0x754
+    QWen3    = 0x755
 
     BlueLM  = 0x800
 
@@ -4365,6 +4366,118 @@ class QWen2MoEConverter(BaseConverter):
 
         return weight_names
 
+class QWen3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.QWen3
+
+    layer_is_sparse = []
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MAX_LAYERS = 128
+        assert config.use_sliding_window == False, "use_sliding_window must be False"
+        assert not config.attention_bias
+        assert (config.output_router_logits is None) or (not config.output_router_logits)
+
+        rope_scaling = config.rope_scaling
+        if rope_scaling is None:
+            rope_scaling = {
+                "type": "yarn",
+                "factor": -1,
+                "original_max_position_embeddings": -1
+            }
+        else:
+            assert rope_scaling['type'] == 'yarn', 'rope_scaling must be yarn'
+            config.max_position_embeddings = int(rope_scaling['original_max_position_embeddings'] * rope_scaling['factor'])
+
+        if config.moe_intermediate_size is None:
+            config.moe_intermediate_size = -1
+        if config.num_experts is None:
+            config.num_experts = -1
+        if config.num_experts_per_tok is None:
+            config.num_experts_per_tok = -1
+        if config.norm_topk_prob is None:
+            config.norm_topk_prob = False
+
+        decoder_sparse_step = config.decoder_sparse_step if config.decoder_sparse_step is not None else 1
+        mlp_only_layers = config.mlp_only_layers if config.mlp_only_layers is not None else list(range(config.num_hidden_layers))
+
+        def is_sparse(layer_idx, config):
+            nonlocal decoder_sparse_step, mlp_only_layers
+            if layer_idx >= config.num_hidden_layers: return 0
+
+            f = (layer_idx not in mlp_only_layers) and (
+                    config.num_experts > 0 and (layer_idx + 1) % decoder_sparse_step == 0
+                )
+            return 1 if f else 0
+
+        QWen3Converter.layer_is_sparse = [is_sparse(i, config) for i in range(MAX_LAYERS)]
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+            config.rope_theta,
+            rope_scaling['factor'],
+            rope_scaling['original_max_position_embeddings'],
+            decoder_sparse_step,
+            config.moe_intermediate_size,
+            config.num_experts_per_tok,
+            config.num_experts,
+            1 if config.norm_topk_prob else 0,
+            1 if config.tie_word_embeddings else 0,
+        ]
+        print(config_values)
+        f.write(struct.pack("<iiffiiiiiii", *config_values))
+        f.write(struct.pack("<" + "i" * len(QWen3Converter.layer_is_sparse), *QWen3Converter.layer_is_sparse))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+            ]
+
+            if QWen3Converter.layer_is_sparse[i]:
+                for j in range(config.num_experts):
+                    weight_names += [
+                        f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                    ]
+                weight_names += [
+                    f"model.layers.{i}.mlp.gate.weight",
+                ]
+            else:
+                weight_names += [
+                    f"model.layers.{i}.mlp.down_proj.weight",
+                    f"model.layers.{i}.mlp.gate_proj.weight",
+                    f"model.layers.{i}.mlp.up_proj.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.k_norm.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.q_norm.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight"
+        ]
+
+        if not config.tie_word_embeddings:
+            weight_names += [
+                "lm_head.weight"
+            ]
+
+        return weight_names
+
 def permute2(weights: torch.Tensor, n_head: int, partial_rotary_factor: float) -> torch.Tensor:
     hidden_size = weights.shape[0]
     head_dim = hidden_size // n_head
@@ -6560,6 +6673,8 @@ def main():
         BailingMoeConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'AprielForCausalLM':
         AprielConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch in ['Qwen3MoeForCausalLM', 'Qwen3ForCausalLM']:
+        QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'reka-flash-3':
         assert config.rope_scaling is None, 'config.rope_scaling must be null'
         assert not config.tie_word_embeddings, 'config.tie_word_embeddings must be false'

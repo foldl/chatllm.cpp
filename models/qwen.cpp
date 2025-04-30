@@ -767,3 +767,155 @@ namespace v2_5_vl
         std::vector<rgb_image> images;
     };
 }
+
+namespace v3
+{
+    const int MAX_LAYERS = 128;
+
+    struct Config : BaseConfig
+    {
+        int num_key_value_heads;
+        int head_dim;
+        float rope_theta;
+        float yarn_scaling_factor;
+        int yarn_scaling_original_max_position_embeddings;
+        int decoder_sparse_step;
+        int moe_intermediate_size;
+        int num_experts_per_tok;
+        int num_experts;
+        int norm_topk_prob;
+        int tie_word_embeddings;
+        int layer_is_sparse[MAX_LAYERS];
+    };
+
+    typedef v2::Tokenizer Tokenizer;
+
+    class QWen3SelfAttention : public QKNormedAttention<RMSNorm, BaseAttention>
+    {
+    public:
+        QWen3SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
+            : QKNormedAttention<RMSNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false)
+        {
+
+        }
+    };
+
+    class QWen3Block : public LMBlock1<RMSNorm, QWen3SelfAttention, RMSNorm, SiLUMLP>
+    {
+    public:
+        QWen3Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
+        {}
+    };
+
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class QWen3MoEBlock : public LMBlock1<RMSNorm, QWen3SelfAttention, RMSNorm, v2_moe::QWenSparseMoE<NUM_EXPERTS, EXPERTS_PER_TOK>>
+    {
+    public:
+        typedef v2_moe::QWenSparseMoE<NUM_EXPERTS, EXPERTS_PER_TOK> QWenMoEMLP;
+    public:
+        QWen3MoEBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size,
+                  int mlp_intermediate_size,
+                  int num_kv_heads,
+                  int head_dim, int max_length)
+            : LMBlock1<RMSNorm, QWen3SelfAttention, RMSNorm, QWenMoEMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, mlp_intermediate_size,
+              num_kv_heads, head_dim, max_length)
+        {}
+    };
+
+    typedef QWen3MoEBlock<128, 8> QWen3MoEBlock128_8;
+
+    class ConditionalGeneration : public BaseModelForConditionalGeneration
+    {
+    public:
+        typedef BaseModelForConditionalGeneration Base;
+        typedef HeterogeneousModel<Config, Embedding, RMSNorm> ModelClass;
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : BaseModelForConditionalGeneration(MODEL_TYPE_QWEN3, config, runtime_config, 4096 * 4),
+              config(config)
+        {
+            const size_t tensor_ovhd = ggml_tensor_overhead();
+            const int sparse_layers = get_sparse_layer_num();
+            const size_t num_tensors = 3 + (config.tie_word_embeddings ? -1 : 0)
+                                         + (config.num_hidden_layers - sparse_layers) * 14
+                                         + sparse_layers * (14 + 1);
+            const size_t ctx_size = num_tensors * tensor_ovhd;
+            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+            w_ctx_.dtype = config.dtype;
+
+            if (config.tie_word_embeddings)
+            {
+                transformer = new ModelClass(&w_ctx_, config, nullptr,
+                    [&](InitContext *ctx, int layer_index) {
+                        return create_layer(ctx, layer_index);
+                    });
+            }
+            else
+            {
+                transformer = new ModelClass(&w_ctx_, config, false,
+                    [&](InitContext *ctx, int layer_index) {
+                        return create_layer(ctx, layer_index);
+                    });
+            }
+
+            CHATLLM_CHECK(config.yarn_scaling_factor <= 0) << "TODO: YaRN";
+
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                if (config.layer_is_sparse[i])
+                {
+                    auto layer = (QWen3MoEBlock128_8 *)Base::get_typed_transformer<ModelClass>()->get_layer(i);
+                    layer->attention.freq_base = config.rope_theta;
+                    layer->mlp.norm_topk_prob = config.norm_topk_prob != 0;
+                }
+                else
+                {
+                    auto layer = (QWen3Block *)Base::get_typed_transformer<ModelClass>()->get_layer(i);
+                    layer->attention.freq_base = config.rope_theta;
+                }
+            }
+
+            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
+                << "corrupted model weights: " << w_ctx_.get_used_mem() / ggml_tensor_overhead() << " != " << w_ctx_.get_mem_size() / ggml_tensor_overhead();
+        }
+
+    private:
+        int get_sparse_layer_num()
+        {
+            int num = 0;
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                if (config.layer_is_sparse[i])
+                    num++;
+            }
+            return num;
+        }
+
+        Block *create_layer(InitContext *ctx, int layer_index)
+        {
+            if (config.layer_is_sparse[layer_index])
+            {
+                if ((config.num_experts_per_tok == 8) && (config.num_experts == 128))
+                {
+                    return new QWen3MoEBlock128_8(ctx, config.hidden_size, config.num_attention_heads,
+                        config.intermediate_size, config.moe_intermediate_size,
+                        config.num_key_value_heads, config.head_dim, config.max_length);
+                }
+                else
+                {
+                    CHATLLM_CHECK(false) << "unsupported MoE param";
+                    return nullptr;
+                }
+            }
+            else
+            {
+                return new QWen3Block(ctx, config.hidden_size, config.num_attention_heads,
+                    config.intermediate_size,
+                    config.num_key_value_heads, config.head_dim, config.max_length);
+            }
+        }
+
+    public:
+        Config config;
+    };
+}

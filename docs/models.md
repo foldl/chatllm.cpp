@@ -212,6 +212,14 @@
     * [x] DeepSeek-R1-Distill-QWen: [1.5B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B), [7B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B), [14B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B), [32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B), [DeepScaleR-1.5B-Preview](https://huggingface.co/agentica-org/DeepScaleR-1.5B-Preview) (`-a DeepSeek-R1-Distill-QWen`)
     * [x] Skywork-OR1: [Math-7B](https://huggingface.co/Skywork/Skywork-OR1-Math-7B/tree/33731701b9dc7d5510effd440d5b1518be393f14), [7B-Preview](https://huggingface.co/Skywork/Skywork-OR1-7B-Preview/tree/23ba8a3362d4c679fccbb506a51365ce191398c2), [32B-Preview](https://huggingface.co/Skywork/Skywork-OR1-32B-Preview/tree/ba6cba290ca145dc6a13bd806f0a141e4b63bd4a)
     * [x] OlympicCoder: [7B](https://huggingface.co/open-r1/OlympicCoder-7B/tree/097f57223ba8fee3130ce7f739dabae3dd0ad0b9), [32B](https://huggingface.co/open-r1/OlympicCoder-32B/tree/34113aee9d255591a1fa75b60d1e3422e82c3b1f)
+    * [x] v3: [235B-A22B](https://huggingface.co/Qwen/Qwen3-235B-A22B/tree/04127485f4b84439c34689fdee54a616531bf00d) (💣 not tested),
+        [30B-A3B](https://huggingface.co/Qwen/Qwen3-30B-A3B/tree/4c446470ba0aec43e22ac1128f9ffd915f338ba3),
+        [32B](https://huggingface.co/Qwen/Qwen3-32B/tree/30b8421510892303dc5ddd6cd0ac90ca2053478d),
+        [14B](https://huggingface.co/Qwen/Qwen3-14B/tree/231c69a380487f6c0e52d02dcf0d5456d1918201),
+        [8B](https://huggingface.co/Qwen/Qwen3-8B/tree/2069b3fae1114555f3c020c81410e51fa0f656f2),
+        [4B](https://huggingface.co/Qwen/Qwen3-4B/tree/82d62bb073771e7a1ea59435f548908540217d1f),
+        [1.7B](https://huggingface.co/Qwen/Qwen3-1.7B/tree/d3e258980a49b060055ea9038dad99d75923f7c4),
+        [0.6B](https://huggingface.co/Qwen/Qwen3-0.6B/tree/6130ef31402718485ca4d80a6234f70d9a4cf362)
 
 * Solor (`SolarForCausalLM`)
     * [x] [Pro](https://huggingface.co/upstage/solar-pro-preview-instruct/tree/dd4bcf7006df9b1ce3f87711e702e4063832aae3)

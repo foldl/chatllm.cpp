@@ -662,6 +662,12 @@ namespace chatllm
         return forward(ctx, input);
     }
 
+    void Embedding::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        loader->read_tensor(path + "weight", weight);
+    }
+
     ggml::tensor *RobertaEmbedding::forward(ComputeContext *ctx, ggml::tensor *input, int n_past)
     {
         int qlen = (int)input->ne[0];
@@ -677,6 +683,13 @@ namespace chatllm
         return output;
     }
 
+    void RobertaEmbedding::load(const std::string &path, TensorLoader *loader)
+    {;
+        Block::load(path, loader);
+        loader->read_tensor(path + "word_weight", word_weight);
+        loader->read_tensor(path + "position_weight", position_weight);
+    }
+
     ggml::tensor *Linear::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         // input: [seqlen, in_features]
@@ -687,6 +700,13 @@ namespace chatllm
             output = ggml::add_inplace(ctx, output, bias);
         }
         return output;
+    }
+
+    void Linear::load(const std::string &path, TensorLoader *loader)
+    {
+        loader->read_tensor(path + "weight", weight);
+        if (bias)
+            loader->read_tensor(path + "bias", bias);
     }
 
     ggml::tensor *MultiLinear::forward(ComputeContext *ctx, ggml::tensor *input, ggml::tensor *selected)
@@ -704,11 +724,24 @@ namespace chatllm
         return output;
     }
 
+    void LayerNorm::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        loader->read_tensor(path + "weight", weight);
+        if (bias) loader->read_tensor(path + "bias", bias);
+    }
+
     ggml::tensor *RMSNorm::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         ggml::tensor *output = inplace ? ggml::rms_norm_inplace(ctx, input, eps) : ggml::rms_norm(ctx, input, eps);
         output = inplace ? ggml::mul_inplace(ctx, output, weight) : ggml::mul(ctx, output, weight);
         return output;
+    }
+
+    void RMSNorm::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        loader->read_tensor(path + "weight", weight);
     }
 
     ggml::tensor *L2Norm::forward(ComputeContext *ctx, ggml::tensor *input)
@@ -755,6 +788,12 @@ namespace chatllm
         return r;
     }
 
+    void FIR2::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        loader->read_tensor(path, weight);
+    }
+
     ggml::tensor *RobertaPooler::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
     {
         int hidden_size = (int)hidden_states->ne[0];
@@ -765,6 +804,12 @@ namespace chatllm
         ggml::tensor *output = dense.forward(ctx, first_token_tensor);
         output = ggml::inplace_act(ctx, act, output);
         return output;
+    }
+
+    void RobertaPooler::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        dense.load(path + "dense.", loader);
     }
 
     ggml::tensor *RobertaClassificationHead::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
@@ -779,6 +824,13 @@ namespace chatllm
         output = out_proj.forward(ctx, output);
         output = ggml::sigmoid(ctx, output);
         return output;
+    }
+
+    void RobertaClassificationHead::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        dense.load(path + "dense.", loader);
+        out_proj.load(path + "out_proj.", loader);
     }
 
     ggml::tensor *BCEFinalNorm::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
@@ -885,6 +937,13 @@ namespace chatllm
         return attn_output;
     }
 
+    void BaseConsolidatedQKVAttention::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        query_key_value.load(path + "query_key_value.", loader);
+        dense.load(path + "dense.", loader);
+    }
+
     ggml::tensor *GLM2MLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
     {
         ggml::tensor *output = dense_h_to_4h.forward(ctx, hidden_states);
@@ -914,6 +973,13 @@ namespace chatllm
         fc1.set_prec(prec);
     }
 
+    void TheMLP::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        fc0.load(path + "fc0.", loader);
+        fc1.load(path + "fc1.", loader);
+    }
+
     ggml::tensor *BaseMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
     {
         ggml::tensor *act = ggml::inplace_act(ctx, this->act, gate_proj.forward(ctx, hidden_states));
@@ -922,6 +988,14 @@ namespace chatllm
         ggml::tensor *output = ggml::mul_inplace(ctx, act, proj);
         output = down_proj.forward(ctx, output);
         return output;
+    }
+
+    void BaseMLP::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        up_proj.load(path + "up_proj.", loader);
+        down_proj.load(path + "down_proj.", loader);
+        gate_proj.load(path + "gate_proj.", loader);
     }
 
     ggml::tensor *CoreAttention::attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
@@ -1199,6 +1273,15 @@ namespace chatllm
         return attn_output;
     }
 
+    void BaseAttention::load(const std::string &path, TensorLoader *loader)
+    {
+        KVCacheAttention::load(path, loader);
+        q_proj.load(path + "q_proj.", loader);
+        k_proj.load(path + "k_proj.", loader);
+        v_proj.load(path + "v_proj.", loader);
+        o_proj.load(path + "o_proj.", loader);
+    }
+
     ggml::tensor *BaseNormedAttention::forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past)
     {
         const int hidden_size = o_proj.in_features();
@@ -1218,6 +1301,13 @@ namespace chatllm
 
         ggml::tensor *attn_output = o_proj.forward(ctx, scores);
         return attn_output;
+    }
+
+    void BaseNormedAttention::load(const std::string &path, TensorLoader *loader)
+    {
+        BaseAttention::load(path, loader);
+        q_norm.load(path + "q_norm.", loader);
+        k_norm.load(path + "k_norm.", loader);
     }
 
     void BaseCachelessAttention::save_to_cache(ComputeContext *ctx, const int n_past, const int qlen, ggml::tensor *k, ggml::tensor *v)
@@ -1536,5 +1626,15 @@ namespace chatllm
         }
 
         return moe_out;
+    }
+
+    void BaseSparseMLP::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        gate.load(path + "gate.", loader);
+
+        loader->read_tensor(path + "experts_down.weight", path + "experts.", num_local_experts, ".down_proj.weight", experts_down.weight);
+        loader->read_tensor(path + "experts_gate.weight", path + "experts.", num_local_experts, ".gate_proj.weight", experts_gate.weight);
+        loader->read_tensor(path + "experts_up.weight",   path + "experts.", num_local_experts, ".up_proj.weight",   experts_up.weight);
     }
 }

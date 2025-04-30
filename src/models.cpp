@@ -279,8 +279,8 @@ namespace chatllm
         MODEL_TYPE_MARCO_O1 = 0x751,
         MODEL_TYPE_QWQ      = 0x752,
         MODEL_TYPE_READERLM2= 0x753,
-
         MODEL_TYPE_DEEPSEEK_R1_DISTILL_QWEN = 0x754,
+        MODEL_TYPE_QWEN3    = 0x755,
 
         MODEL_TYPE_BLUELM   = 0x800,
 
@@ -647,7 +647,6 @@ namespace chatllm
         case MODEL_TYPE_BAILINGMOE:
             return "Bailing";
         default:
-            ggml::log(GGML_LOG_LEVEL_WARN, "unknown model type: %d", model_type);
             return "???";
         }
     }
@@ -959,6 +958,8 @@ namespace chatllm
 
         virtual int save_session(ModelSessionMemory &session) const = 0;
         virtual int load_session(ModelSessionMemory &session) = 0;
+
+        virtual void load(const std::string &path, TensorLoader *loader, const std::vector<int> &layer_ids) = 0;
     };
 
     static bool parse_gpu_cfg(BackendContext::gpu_cfg &cfg, const std::string &s)
@@ -1281,6 +1282,11 @@ namespace chatllm
             return &backend_context.layer_allocators;
         }
 
+        void load(ModelLoader &loader) override
+        {
+            transformer->load("model.", &loader, layer_ids);
+        }
+
     protected:
         virtual void do_build_graph(ForwardContext &ctc, const std::vector<int> &input_ids,
                                        const GenerationConfig &gen_config,
@@ -1600,6 +1606,20 @@ namespace chatllm
             }
 
             return 0;
+        }
+
+        void load(const std::string &path, TensorLoader *loader, const std::vector<int> &layer_ids) override
+        {
+            word_embeddings.load(path + "embed_tokens.", loader);
+            final_layernorm.load(path + "norm.", loader);
+            if (lm_head)
+                lm_head->load("lm_head.", loader);
+
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                std::string layer_prefix = path + "layers." + std::to_string(layer_ids[i]) + '.';
+                layers[i]->load(layer_prefix, loader);
+            }
         }
 
     private:
@@ -2347,6 +2367,7 @@ namespace chatllm
         CASE(DEEPSEEK_R1_DISTILL_QWEN, qwen::ds_r1_distill, 1)  \
         CASE(AQUILA2,               aquila::v2, 1)              \
         CASE(QWEN2_5_VL,            qwen::v2_5_vl, 1)           \
+        CASE(QWEN3,                 qwen::v3, 1)                \
                                                                 \
         CASE(TIGERBOT,              tigerbot, 1)                \
                                                                 \

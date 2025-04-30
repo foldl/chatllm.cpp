@@ -642,7 +642,7 @@ namespace chatllm
         ggml::type original_type;
     };
 
-    class ModelLoader
+    class ModelLoader : public TensorLoader
     {
     public:
         ModelLoader(const std::string &path)
@@ -678,10 +678,10 @@ namespace chatllm
             this->alloc_manager = alloc_manager;
         }
 
-        void read_tensor(const std::string &name, ggml::tensor *tensor);
+        void read_tensor(const std::string &name, ggml::tensor *tensor) override;
         void read_tensor(const std::string &name,
                         const std::string &layer_prefix, int num, const std::string &suffix,
-                        ggml::tensor *tensor);
+                        ggml::tensor *tensor) override;
 
         void load_all_tensors(void);
 

@@ -514,6 +514,9 @@ namespace chatllm
 
         history.move_cursor_to_end();
 
+        // DEBUG
+        //return {6023, 25};
+
         return input_ids;
     }
 
