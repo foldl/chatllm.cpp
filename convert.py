@@ -6547,7 +6547,10 @@ def main():
         if config.intermediate_size is None:
             config.intermediate_size = config.ffn_hidden_size
         QWenConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
-    elif (arch == 'Qwen2ForCausalLM') or (arch == 'marco-o1') or (arch == 'qwq') or (arch == 'readerlm-v2'):
+    elif (arch == 'Qwen2ForCausalLM') or (arch == 'marco-o1') or (arch == 'qwq') or (arch == 'readerlm-v2') or (arch == 'MiMoForCausalLM'):
+        if arch == 'MiMoForCausalLM':
+            print("WARNING: MTP is not supported")
+
         if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
             QWen2Converter.MODEL_TYPE = ModelType.QWen2Tie
         if arch == 'marco-o1':

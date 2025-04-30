@@ -220,6 +220,7 @@
         [4B](https://huggingface.co/Qwen/Qwen3-4B/tree/82d62bb073771e7a1ea59435f548908540217d1f),
         [1.7B](https://huggingface.co/Qwen/Qwen3-1.7B/tree/d3e258980a49b060055ea9038dad99d75923f7c4),
         [0.6B](https://huggingface.co/Qwen/Qwen3-0.6B/tree/6130ef31402718485ca4d80a6234f70d9a4cf362)
+    * [x] MiMo: [7B-RL](https://huggingface.co/XiaomiMiMo/MiMo-7B-RL/tree/8c8a4968100fd7a4f0319c54438184bbeb767c82)
 
 * Solor (`SolarForCausalLM`)
     * [x] [Pro](https://huggingface.co/upstage/solar-pro-preview-instruct/tree/dd4bcf7006df9b1ce3f87711e702e4063832aae3)
