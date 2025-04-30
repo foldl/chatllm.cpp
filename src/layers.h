@@ -1916,7 +1916,7 @@ namespace chatllm
         void load(const std::string &path, TensorLoader *loader) override
         {
             Block::load(path, loader);
-            mlp1.load(path + "mlp2.", loader);
+            mlp1.load(path + "mlp1.", loader);
             mlp2.load(path + "mlp2.", loader);
         }
 
@@ -2205,6 +2205,8 @@ namespace chatllm
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *attention_output) override;
 
+        void load(const std::string &path, TensorLoader *loader) override;
+
     public:
         Linear dense;
         LayerNorm norm;
@@ -2226,6 +2228,8 @@ namespace chatllm
 
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
+
+        void load(const std::string &path, TensorLoader *loader) override;
 
     public:
         Linear intermediate;
@@ -2268,6 +2272,8 @@ namespace chatllm
             r += output_layernorm.get_param_num(effective_only);
             return r;
         }
+
+        void load(const std::string &path, TensorLoader *loader) override;
 
     public:
         RobertaSelfAttention attention;

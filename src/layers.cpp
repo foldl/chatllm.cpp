@@ -684,10 +684,11 @@ namespace chatllm
     }
 
     void RobertaEmbedding::load(const std::string &path, TensorLoader *loader)
-    {;
+    {
         Block::load(path, loader);
-        loader->read_tensor(path + "word_weight", word_weight);
-        loader->read_tensor(path + "position_weight", position_weight);
+        loader->read_tensor(path + "word_embeddings.weight", word_weight);
+        loader->read_tensor(path + "position_embeddings.weight", position_weight);
+        ln.load(path + "ln.", loader);
     }
 
     ggml::tensor *Linear::forward(ComputeContext *ctx, ggml::tensor *input)
@@ -1477,6 +1478,15 @@ namespace chatllm
         return r;
     }
 
+    void RobertaBlock::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        attention.load(path + "attention.self.", loader);
+        post_attention_layernorm.load(path + "post_attention_layernorm.", loader);
+        mlp.load(path + "mlp.", loader);
+        output_layernorm.load(path + "output_layernorm.", loader);
+    }
+
     ggml::tensor *RobertaOutput::forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *attention_output)
     {
         ggml::tensor *r = dense.forward(ctx, hidden_states);
@@ -1485,12 +1495,26 @@ namespace chatllm
         return r;
     }
 
+    void RobertaOutput::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        dense.load(path + "dense.", loader);
+        norm.load(path + "ln.", loader);
+    }
+
     ggml::tensor *RobertaMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
     {
         ggml::tensor *temp = intermediate.forward(ctx, hidden_states);
         temp = ggml::inplace_act(ctx, act, temp);
         temp = output.forward(ctx, temp, hidden_states);
         return temp;
+    }
+
+    void RobertaMLP::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        intermediate.load(path + "intermediate.dense.", loader);
+        output.load(path + "output.", loader);
     }
 
     ggml::tensor *FuyuEmbedding::forward(ComputeContext *ctx, ggml::tensor *patches, int patches_per_row, ggml::tensor *text_input)
@@ -1636,5 +1660,10 @@ namespace chatllm
         loader->read_tensor(path + "experts_down.weight", path + "experts.", num_local_experts, ".down_proj.weight", experts_down.weight);
         loader->read_tensor(path + "experts_gate.weight", path + "experts.", num_local_experts, ".gate_proj.weight", experts_gate.weight);
         loader->read_tensor(path + "experts_up.weight",   path + "experts.", num_local_experts, ".up_proj.weight",   experts_up.weight);
+
+        if (gate_score_correction_bias)
+        {
+            loader->read_tensor(path + "gate_score_correction_bias", gate_score_correction_bias);
+        }
     }
 }

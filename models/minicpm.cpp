@@ -487,38 +487,6 @@ namespace v3
             CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size()) << "corrupted model weights";
         }
 
-        void load(ModelLoader &loader) override
-        {
-            auto transformer = get_typed_transformer<ModelClass>();
-
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
-
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
-                auto *attention = &transformer->layers[i].attention;
-
-                loader.read_tensor(layer_prefix + "input_layernorm.weight",          transformer->layers[i].input_layernorm.weight);
-                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
-
-                loader.read_tensor(layer_prefix + "mlp.down_proj.weight", transformer->layers[i].mlp.down_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer->layers[i].mlp.gate_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.up_proj.weight",   transformer->layers[i].mlp.up_proj.weight);
-
-                loader.read_tensor(layer_prefix + "self_attn.d_q_proj.weight",          attention->q_proj.d_q_proj->weight);
-                loader.read_tensor(layer_prefix + "self_attn.q_norm.weight",            attention->q_proj.norm->weight);
-                loader.read_tensor(layer_prefix + "self_attn.u_q_proj.weight",          attention->q_proj.u_q_proj->weight);
-
-                loader.read_tensor(layer_prefix + "self_attn.d_kv_proj.weight",         attention->d_kv_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.k_pe_proj.weight",         attention->k_pe_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.kv_norm.weight",           attention->kv_norm.weight);
-                loader.read_tensor(layer_prefix + "self_attn.u_k_nope_proj.weight",     attention->u_k_nope_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.u_v_proj.weight",          attention->u_v_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight",            attention->o_proj.weight);
-            }
-        }
-
     public:
         Config config;
     };
@@ -664,34 +632,6 @@ namespace emb_light
             }
         }
 
-        void load(ModelLoader &loader) override
-        {
-            auto transformer = Base::get_typed_transformer<ModelClass>();
-
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
-                loader.read_tensor(layer_prefix + "input_layernorm.weight", transformer->layers[i].input_layernorm.weight);
-                loader.read_tensor(layer_prefix + "mlp.down_proj.weight",   transformer->layers[i].mlp.down_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.gate_proj.weight",   transformer->layers[i].mlp.gate_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.up_proj.weight",     transformer->layers[i].mlp.up_proj.weight);
-                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
-
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
-            }
-
-            load_final_block(loader);
-
-            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
-                << "corrupted model weights";
-        }
-
-    protected:
-        virtual void load_final_block(ModelLoader &loader) {}
     public:
         Config config;
     };
@@ -706,13 +646,6 @@ namespace emb_light
                 auto transformer = get_typed_transformer<ModelClass>();
                 transformer->final_layernorm.set_max_length(&w_ctx_, config.max_length);
             }
-        }
-    protected:
-        void load_final_block(ModelLoader &loader) override
-        {
-            auto transformer = get_typed_transformer<ModelClass>();
-
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
         }
     };
 }
@@ -795,6 +728,13 @@ namespace ranker_light
             r += score.get_param_num(effective_only);
             return r;
         }
+
+        void load(const std::string &path, TensorLoader *loader)
+        {
+            Block::load(path, loader);
+            layernorm.load("model.norm.", loader);
+            score.load("score.", loader);
+        }
     public:
         RMSNorm layernorm;
         Linear score;
@@ -806,14 +746,6 @@ namespace ranker_light
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_MiniCPM_ReRanker_Light)
             : emb_light::_ConditionalGeneration<MiniCPMClassificationHead, 2>(config, runtime_config, type)
         {
-        }
-    protected:
-        void load_final_block(ModelLoader &loader) override
-        {
-            auto transformer = get_typed_transformer<ModelClass>();
-
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.layernorm.weight);
-            loader.read_tensor("score.weight", transformer->final_layernorm.score.weight);
         }
     };
 }

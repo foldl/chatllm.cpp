@@ -699,6 +699,19 @@ namespace chatllm
             return _file.get();
         }
 
+        void add_tensor_name_translation(const std::string &from_name, const std::string &to_name)
+        {
+            name_translation[from_name] = to_name;
+        }
+
+        void add_tensor_name_translations(std::initializer_list<std::pair<std::string, std::string>> translations)
+        {
+            for (const auto &pair : translations)
+            {
+                name_translation[pair.first] = pair.second;
+            }
+        }
+
     protected:
         void read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator);
         void read_tensor(const std::string &name,
@@ -708,6 +721,20 @@ namespace chatllm
         void read_tensor(const std::string &name,
                          const std::vector<std::string> &concat_list, ggml::tensor *tensor, LayerBufAllocator *allocator);
 
+        std::string translate_tensor_name(const std::string &name)
+        {
+            std::string translated_name = name;
+            for (const auto &pair : name_translation)
+            {
+                auto search = translated_name.find(pair.first);
+                if (search != std::string::npos)
+                {
+                    translated_name.replace(search, pair.first.length(), pair.second);
+                }
+            }
+
+            return translated_name;
+        }
     private:
         ModelLoader(tokenizer::DataReader *mapped_file)
             : _file(std::unique_ptr<tokenizer::DataReader>(mapped_file)),
@@ -728,6 +755,7 @@ namespace chatllm
         std::map<std::string, TensorInfo> tensor_dict;
     protected:
         LayerAllocatorManager *alloc_manager = nullptr;
+        std::unordered_map<std::string, std::string> name_translation;
 
     public:
         enum FileFormat

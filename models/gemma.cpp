@@ -401,25 +401,6 @@ template <class Layer> static void setup_layer(Block *block, const Config &confi
         attention.freq_scale = 1 / rope_scaling_factor;
 }
 
-template <class Layer> static void load_layer(ModelLoader &loader, const std::string &layer_prefix, Block *block)
-{
-    auto layer = dynamic_cast<Layer *>(block);
-    loader.read_tensor(layer_prefix + "input_layernorm.weight",             layer->pre_attention_layernorm.weight);
-    loader.read_tensor(layer_prefix + "mlp.down_proj.weight",               layer->mlp.down_proj.weight);
-    loader.read_tensor(layer_prefix + "mlp.gate_proj.weight",               layer->mlp.gate_proj.weight);
-    loader.read_tensor(layer_prefix + "mlp.up_proj.weight",                 layer->mlp.up_proj.weight);
-    loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",    layer->post_attention_layernorm.weight);
-    loader.read_tensor(layer_prefix + "pre_feedforward_layernorm.weight",   layer->pre_mlp_layernorm.weight);
-    loader.read_tensor(layer_prefix + "post_feedforward_layernorm.weight",  layer->post_mlp_layernorm.weight);
-
-    loader.read_tensor(layer_prefix + "self_attn.k_norm.weight", layer->attention.k_layernorm.weight);
-    loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", layer->attention.k_proj.weight);
-    loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", layer->attention.o_proj.weight);
-    loader.read_tensor(layer_prefix + "self_attn.q_norm.weight", layer->attention.q_layernorm.weight);
-    loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", layer->attention.q_proj.weight);
-    loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", layer->attention.v_proj.weight);
-}
-
 class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
 public:
@@ -488,33 +469,13 @@ public:
 
     void load(ModelLoader &loader) override
     {
-        auto transformer = get_typed_transformer<ModelClass>();
+        loader.add_tensor_name_translations({
+            {".pre_attention_layernorm.",   ".input_layernorm."},
+            {".pre_mlp_layernorm.",         ".pre_feedforward_layernorm."},
+            {".post_mlp_layernorm.",        ".post_feedforward_layernorm."},
+        });
 
-        loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
-        for (int i = 0; i < config.num_hidden_layers; i++)
-        {
-            std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
-            if (is_sliding(i))
-            {
-                switch (sliding_window)
-                {
-                case 512:
-                    load_layer<Gemma3SWABlock512>(loader, layer_prefix, transformer->get_layer(i));
-                    break;
-                default:
-                    load_layer<Gemma3SWABlock1024>(loader, layer_prefix, transformer->get_layer(i));
-                    break;
-                }
-            }
-            else
-            {
-                load_layer<Gemma3FullBlock>(loader, layer_prefix, transformer->get_layer(i));
-            }
-        }
-        loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
-
-        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
-            << "corrupted model weights";
+        BaseModelForConditionalGeneration::load(loader);
     }
 
 public:

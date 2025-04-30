@@ -1106,8 +1106,9 @@ namespace chatllm
 
     void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator)
     {
-        auto search = tensor_dict.find(name);
-        CHATLLM_CHECK(search != tensor_dict.end()) << "tensor not exist: " << name;
+        auto translated = translate_tensor_name(name);
+        auto search = tensor_dict.find(translate_tensor_name(translated));
+        CHATLLM_CHECK(search != tensor_dict.end()) << "tensor not exist: " << translated;
 
         ggml::set_name(tensor, name.c_str());
         TensorInfo &t = search->second;
@@ -1167,13 +1168,14 @@ namespace chatllm
         size_t write_offset = 0;
         for (size_t i = 0; i < concat_list.size(); i++)
         {
-            auto search = tensor_dict.find(concat_list[i]);
-            CHATLLM_CHECK(search != tensor_dict.end()) << "tensor " << concat_list[i] << " not exists.";
+            auto translated = translate_tensor_name(concat_list[i]);
+            auto search = tensor_dict.find(translated);
+            CHATLLM_CHECK(search != tensor_dict.end()) << "tensor " << translated << " not exists.";
 
             for (int j = 0; j < GGML_MAX_DIMS; j++)
             {
                 if (search->second.tensor.ne[j] == 1) break;
-                CHATLLM_CHECK(tensor->ne[j] == search->second.tensor.ne[j]) << concat_list[i] << ": shape mismatch dim[" << j << "]: " << tensor->ne[j] << " != " << search->second.tensor.ne[j];
+                CHATLLM_CHECK(tensor->ne[j] == search->second.tensor.ne[j]) << translated << ": shape mismatch dim[" << j << "]: " << tensor->ne[j] << " != " << search->second.tensor.ne[j];
             }
 
             size_t size = search->second.get_nbytes();
