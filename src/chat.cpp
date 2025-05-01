@@ -1107,7 +1107,7 @@ namespace chatllm
     void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator)
     {
         auto translated = translate_tensor_name(name);
-        auto search = tensor_dict.find(translate_tensor_name(translated));
+        auto search = tensor_dict.find(translated);
         CHATLLM_CHECK(search != tensor_dict.end()) << "tensor not exist: " << translated;
 
         ggml::set_name(tensor, name.c_str());
@@ -1135,6 +1135,21 @@ namespace chatllm
         CHATLLM_CHECK(t.load(_file.get(), allocator, tensor->type)) << "failed to load tensor: " << name;
 
         t.assign_to(tensor);
+    }
+
+    std::string ModelLoader::translate_tensor_name(const std::string &name)
+    {
+        std::string translated_name = name;
+        for (const auto &pair : name_translation)
+        {
+            auto search = translated_name.find(pair.first);
+            if (search != std::string::npos)
+            {
+                translated_name.replace(search, pair.first.length(), pair.second);
+            }
+        }
+
+        return translated_name;
     }
 
     void ModelLoader::read_tensor(const std::string &name,

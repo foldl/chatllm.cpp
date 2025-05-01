@@ -792,37 +792,14 @@ namespace glm4_0414
 
         void load(ModelLoader &loader) override
         {
-            auto transformer = get_typed_transformer<ModelClass>();
+            // pay attention to the order
+            loader.add_tensor_name_translations({
+                {".pre_attention_layernorm.",           ".input_layernorm."},
+                {".post_attention_layernorm.",          ".post_self_attn_layernorm."},
+                {".pre_mlp_layernorm.",                 ".post_attention_layernorm."},
+            });
 
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
-
-                loader.read_tensor(layer_prefix + "input_layernorm.weight",          transformer->layers[i].pre_attention_layernorm.weight);
-                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].pre_mlp_layernorm.weight);
-                loader.read_tensor(layer_prefix + "post_self_attn_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
-                loader.read_tensor(layer_prefix + "post_mlp_layernorm.weight",       transformer->layers[i].post_mlp_layernorm.weight);
-
-                loader.read_tensor(layer_prefix + "mlp.down_proj.weight", transformer->layers[i].mlp.down_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer->layers[i].mlp.gate_proj.weight);
-                loader.read_tensor(layer_prefix + "mlp.up_proj.weight",   transformer->layers[i].mlp.up_proj.weight);
-
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
-
-                if (config.use_attention_bias)
-                {
-                    loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   transformer->layers[i].attention.k_proj.bias);
-                    loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   transformer->layers[i].attention.q_proj.bias);
-                    loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer->layers[i].attention.v_proj.bias);
-                }
-
-            }
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
-            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
+            BaseModelForConditionalGeneration::load(loader);
         }
 
     protected:
