@@ -2257,6 +2257,7 @@ namespace chatllm
         oss << "Model name  : " << loader.model_name;
         if (loader.model_native_name.size() > 0)
             oss << " (" << loader.model_native_name << ")";
+        oss << " (" << std::hex << std::setw(8) << std::setfill('0') << model_type << ")";
         oss << std::endl;
 
         oss << "Model type  : " << to_string(purpose);

@@ -195,9 +195,21 @@ namespace v3
         {}
 
         Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
-            : BaseTokenizer::BaseTokenizer(config, encoder)
+            : BaseTokenizer::BaseTokenizer(config, encoder), is_seed_coder(false)
         {
             sys_prompt = "";
+        }
+
+        bool load_config(const json::JSON &config) override
+        {
+            auto name = config["model_name"];
+            if (name.IsString())
+            {
+                is_seed_coder = name.ToString() == "Seed-Coder";
+                if (is_seed_coder)
+                    sys_prompt = "You are an AI programming assistant, utilizing the Seed-Coder model, developed by ByteDance Seed, and you only answer questions related to computer science. For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.\n\n";
+            }
+            return BaseTokenizer::load_config(config);
         }
 
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override
@@ -230,17 +242,27 @@ namespace v3
 
         void encode_header(const std::string &text, std::vector<int> &ids) const
         {
-            ids.push_back(start_header_id);
-            encode(text, ids);
-            ids.push_back(end_header_id);
-            ids.push_back(nl_token_id);
-            ids.push_back(nl_token_id);
+            // compatible with Seed-Coder
+            if (start_header_id >= 0)
+            {
+                ids.push_back(start_header_id);
+                encode(text, ids);
+                ids.push_back(end_header_id);
+                ids.push_back(nl_token_id);
+                ids.push_back(nl_token_id);
+            }
+            else
+            {
+                ids.push_back(bos_token_id);
+                encode(text, ids);
+                ids.push_back(nl_token_id);
+            }
         }
 
         void encode_content(const std::string &text, std::vector<int> &ids) const
         {
             encode(text, ids);
-            ids.push_back(eot_id);
+            ids.push_back(eot_id >= 0 ? eot_id : eos_token_id);
         }
 
     public:
@@ -248,6 +270,9 @@ namespace v3
         int end_header_id;
         int eot_id;
         int nl_token_id;
+
+    private:
+        bool is_seed_coder;
     };
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const

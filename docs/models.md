@@ -128,6 +128,8 @@
     * [x] Reke-Flash: [Flash-3](https://huggingface.co/RekaAI/reka-flash-3/tree/69cea64942e4db4809b757ae2b0d312b4b610263) (`-a Reka-Flash-3`)
     * [x] Nemotron: [Llama-3.1-Nemotron-Nano-8B](https://huggingface.co/nvidia/Llama-3.1-Nemotron-Nano-8B-v1/tree/42f62a403ee352e019834442673256e3fe3de275)
     * [x] LlaMA-4: [Scout-Instruct](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct/tree/7dab2f5f854fe665b6b2f1eccbd3c48e5f627ad8), [Maverick-Instruct](https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E-Instruct/tree/f0ee6477b90b7a6aaefd2cfdf1b4a05d36184137)
+    * [x] Seed-Coder: [Instruct-8B](https://huggingface.co/ByteDance-Seed/Seed-Coder-8B-Instruct/tree/7b934eb8f2ce8f40191fa26d12236eb8bc3a77aa),
+    [Reasoning-8B](https://huggingface.co/ByteDance-Seed/Seed-Coder-8B-Reasoning/tree/47f18f877ea7d6aa5c0d87a474f30d420b22bd98) (`--name Seed-Coder`)
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
 
@@ -256,7 +258,7 @@ Please use `--format completion` for these models.
 
 * LlaMA-like (`LlamaForCausalLM`):
     * [x] DeepSeek: [Coder-Base-1.3B](https://huggingface.co/deepseek-ai/deepseek-coder-1.3b-base) (`-a DeepSeekCoder`), [Coder-Base-6.7B](https://huggingface.co/deepseek-ai/deepseek-coder-6.7b-base) (`-a DeepSeekCoder`)
-
+    * [x] Seed-Coder: [Base-8B](https://huggingface.co/ByteDance-Seed/Seed-Coder-8B-Base/tree/44d3e28414b052f1fc8f9b58740edd2d8f2c2c31) (`--name Seed-Coder`)
 
 * Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
     * [x] Mistral: [Base-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1), [Base-7B-v0.3](https://huggingface.co/mistralai/Mistral-7B-v0.3)

@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-05-11: Seed-Coder
 * 2025-04-30: QWen3, MiMo
 * 2025-02-17: [ggml updated](https://github.com/ggml-org/llama.cpp/tree/658987cfc9d752dca7758987390d5fb1a7a0a54a) again
 * 2025-04-18: Apriel

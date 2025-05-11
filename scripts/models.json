@@ -2590,5 +2590,39 @@
                 }
             }
         }
+    },
+    "seed-coder": {
+        "brief": "Seed-Coder, a powerful, transparent, and parameter-efficient family of open-source code models at the 8B scale, featuring base, instruct, and reasoning variants.",
+        "default": "8b-it",
+        "license": "MIT",
+        "variants": {
+            "8b-it": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8771479824,
+                        "url": "chatllm_quantized_seed-coder/seed-coder-8b-it.bin"
+                    }
+                }
+            },
+            "8b-base": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8771479696,
+                        "url": "chatllm_quantized_seed-coder/seed-coder-8b-base.bin"
+                    }
+                }
+            },
+            "8b-reasoning": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8771479856,
+                        "url": "chatllm_quantized_seed-coder/seed-coder-8b-reasoning.bin"
+                    }
+                }
+            }
+        }
     }
 }
