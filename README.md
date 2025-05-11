@@ -141,6 +141,8 @@ Run `./build/bin/main -h` to explore more options!
 
 * Thank those who have released their the model sources and checkpoints.
 
+* `chat_ui.html` adapted from [Ollama-Chat](https://github.com/Oft3r/Ollama-Chat).
+
 ## Note
 
 This project is my hobby project to learn DL & GGML, and under active development. PRs of features won't

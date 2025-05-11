@@ -195,6 +195,13 @@ def handler(signal_received, frame):
 
 class HttpHandler(BaseHTTPRequestHandler):
 
+    def end_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS, DELETE, PUT");
+        self.send_header("Access-Control-Max-Age", "0");
+        self.send_header("Access-Control-Allow-Headers", "Content-Type,Access-Token,Authorization,ybg");
+        return super().end_headers()
+
     def do_GET(self):
         self.send_response(404, 'POST')
 
@@ -325,7 +332,7 @@ class HttpHandler(BaseHTTPRequestHandler):
             self.send_error(404, 'BAD REQ')
             return
 
-        if self.path.endswith('/completions'):
+        if self.path.endswith('/completions') or self.path.endswith('/chat'):
             model = obj['model'] if 'model' in obj else 'chat'
             self.handle_COMPLETION(model, obj)
             return
@@ -353,14 +360,56 @@ class HttpHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
         return
 
+    def handle_TAGS(self, obj: dict):
+        global model_info
+        models = [{"name": model_info[k]['name']} for k in model_info.keys()]
+        rsp = { "models": models }
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(rsp, indent=True).encode('utf-8'))
+        self.wfile.flush()
+
+    def handle_UI(self, obj: dict):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        fn = 'chat_ui.html'
+        if not os.path.isfile('chat_ui.html'):
+            fn = 'scripts/' + fn
+        with open(fn, 'r', encoding='utf-8') as f:
+            self.wfile.write(f.read().encode())
+        self.wfile.flush()
+
     def do_GET(self):
         print(f"GET {self.path}")
         if self.path.endswith('/models'):
             self.handle_MODELS({})
             return
+        elif self.path.endswith('/tags'):
+            self.handle_TAGS({})
+            return
+        elif self.path.endswith('/ui'):
+            self.handle_UI({})
+            return
         else:
             self.send_error(404, 'NOT FOUND')
             return
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/plain')
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+        methods = ['GET']
+        if self.path.endswith('/completions') or \
+           self.path.endswith('/chat') or \
+           self.path.endswith('/generate') or \
+           self.path.endswith('/embeddings') or \
+           self.path.endswith('/show'):
+            methods = ['POST']
+
+        self.wfile.write(('List of available methods:\n' + ''.join([x + ' /\n' for x in methods])).encode())
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, handler)

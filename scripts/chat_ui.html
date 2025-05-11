@@ -1,0 +1,1859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat UI - Claude Style</title>
+
+    <!-- Favicon (generated favicon URL with coral color) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✻</text></svg>" type="image/svg+xml">
+
+    <!-- Prism.js CSS (Dark theme) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            height: 100vh;
+            margin: 0;
+            background-color: #1C1C1C; /* Dark background matching Claude */
+            color: #FFFFFF; /* Light text for dark theme */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 95vh;
+            width: 100%;
+            max-width: 800px;
+            border: 1px solid #333333; /* Darker border */
+            border-radius: 8px; /* Slightly rounded corners */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25); /* Stronger shadow */
+            background-color: #1C1C1C; /* Dark background like Claude */
+            overflow: hidden;
+            transition: height 0.5s ease, max-height 0.5s ease;
+        }
+
+        /* Minimized container state */
+        .chat-container.minimized {
+            height: auto;
+            max-height: 180px; /* Just enough for the input area and header */
+        }
+
+        .header-section { /* Common class for top sections */
+            padding: 16px;
+            background-color: #1C1C1C; /* Dark header matching Claude */
+            border-bottom: 1px solid #333333;
+            position: relative;
+        }
+
+            .header-section label:not(.collapsible-header-label) { /* Exclude collapsible header acting as label */
+                font-weight: 600;
+                margin-bottom: 8px;
+                display: block;
+                font-size: 14px;
+                color: #FFFFFF; /* Light text */
+            }
+
+            .header-section select,
+            .header-section textarea {
+                width: 100%;
+                padding: 8px 12px;
+                font-size: 14px;
+                line-height: 20px;
+                color: #FFFFFF; /* Light text */
+                background-color: #2D2D2D; /* Darker input areas */
+                border: 1px solid #444444; /* Subtle border */
+                border-radius: 8px;
+                box-shadow: none;
+                vertical-align: middle;
+                box-sizing: border-box; /* Ensure padding doesn't increase width */
+            }
+
+                .header-section select:focus,
+                .header-section textarea:focus {
+                    border-color: #F97B65; /* Coral accent color */
+                    outline: none;
+                    box-shadow: 0 0 0 2px rgba(249, 123, 101, 0.4);
+                }
+
+        .model-selector { /* Uses .header-section styles */
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+            .model-selector label {
+                margin-bottom: 0; /* Override for inline display */
+                flex-shrink: 0;
+            }
+
+            .model-selector select {
+                flex-grow: 1;
+                background-color: #2D2D2D;
+                color: #FFFFFF;
+                appearance: none;
+                padding-right: 24px;
+                background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+                background-repeat: no-repeat;
+                background-position: right 8px center;
+                background-size: 16px;
+            }
+
+        /* New system prompt styles */
+        .header-tool-icon { /* Renamed from .system-prompt-icon and generalized */
+            position: absolute;
+            top: 15px;
+            /* right: 15px; Removed from here */
+            width: 40px;
+            height: 40px;
+            background-color: transparent;
+            color: #F97B65;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 100;
+            transition: all 0.2s ease;
+        }
+
+        #system-prompt-button { /* Specific positioning for system prompt button */
+            right: 15px;
+        }
+
+        #history-button { /* Specific positioning for new history button */
+            left: 15px;
+        }
+
+        .chat-container.minimized .header-tool-icon { /* Adjusted for minimized state */
+            top: 10px;
+            /* right: 10px; Removed from here */
+            width: 30px;
+            height: 30px;
+        }
+
+        .chat-container.minimized #system-prompt-button { /* Specific minimized position */
+            right: 10px;
+        }
+
+        .chat-container.minimized #history-button { /* Specific minimized position */
+            left: 10px;
+        }
+
+        .header-tool-icon:hover { /* Renamed from .system-prompt-icon:hover */
+            background-color: rgba(255, 255, 255, 0.05);
+            transform: scale(1.05);
+        }
+
+        .system-prompt-panel {
+            position: fixed;
+            top: 0;
+            right: -350px;
+            width: 320px;
+            height: 100%;
+            background-color: #2D2D2D;
+            border-left: 1px solid #444444;
+            padding: 20px;
+            box-sizing: border-box;
+            transition: right 0.3s ease;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -5px 0 15px rgba(0,0,0,0.3);
+        }
+
+        .system-prompt-panel.open {
+            right: 0;
+        }
+
+        .system-prompt-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #444444;
+            padding-bottom: 10px;
+        }
+
+        .system-prompt-header span {
+            font-size: 18px;
+            font-weight: 500;
+            color: #F97B65;
+        }
+
+        .system-prompt-header button {
+            background: transparent;
+            border: none;
+            color: #BBBBBB;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .system-prompt-header button:hover {
+            color: #FFFFFF;
+        }
+
+        .system-prompt-panel textarea {
+            flex-grow: 1;
+            resize: none;
+            background-color: #1C1C1C;
+            color: #FFFFFF;
+            border: 1px solid #444444;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: inherit;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
+        .system-prompt-panel textarea:focus {
+            border-color: #F97B65;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(249, 123, 101, 0.4);
+        }
+
+        .system-prompt-actions {
+            text-align: right;
+        }
+
+        .system-prompt-actions button {
+            padding: 8px 16px;
+            background-color: #F97B65;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .system-prompt-actions button:hover {
+            background-color: #FF8B75;
+        }
+
+        /* Chat History Panel Styles */
+        .history-panel {
+            position: fixed;
+            top: 0;
+            left: -350px; /* Start off-screen to the left */
+            width: 320px;
+            height: 100%;
+            background-color: #2D2D2D;
+            border-right: 1px solid #444444; /* Border on the right */
+            padding: 20px;
+            box-sizing: border-box;
+            transition: left 0.3s ease; /* Transition for left property */
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 5px 0 15px rgba(0,0,0,0.3); /* Shadow on the right */
+        }
+
+        .history-panel.open {
+            left: 0; /* Slide in from the left */
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #444444;
+            padding-bottom: 10px;
+        }
+
+        .history-header span {
+            font-size: 18px;
+            font-weight: 500;
+            color: #F97B65;
+        }
+
+        .history-header button { /* Close button */
+            background: transparent;
+            border: none;
+            color: #BBBBBB;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .history-header button:hover {
+            color: #FFFFFF;
+        }
+
+        .history-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #444444 #1C1C1C;
+        }
+
+        .history-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .history-content::-webkit-scrollbar-track {
+            background: #1C1C1C;
+        }
+
+        .history-content::-webkit-scrollbar-thumb {
+            background-color: #444444;
+            border-radius: 10px;
+            border: 2px solid #1C1C1C;
+        }
+
+        .history-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background-color: #1C1C1C;
+            border: 1px solid #444444;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .history-item:hover {
+            background-color: #383838;
+            border-color: #F97B65;
+        }
+
+        .history-item-date {
+            font-size: 12px;
+            color: #888888;
+            margin-bottom: 4px;
+        }
+
+        .history-actions {
+            text-align: right;
+            margin-top: 15px;
+        }
+
+        .history-actions button {
+            padding: 8px 16px;
+            background-color: #F97B65;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .history-actions button:hover {
+            background-color: #FF8B75;
+        }
+
+        .collapsible-header {
+            cursor: pointer;
+            padding: 8px 0;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #FFFFFF; /* Light text */
+        }
+
+            .collapsible-header:hover {
+                color: #F97B65; /* Coral accent color */
+            }
+
+        .toggle-icon {
+            font-family: monospace;
+            font-weight: bold;
+            margin-left: 5px;
+            display: inline-block;
+            width: 20px;
+            text-align: center;
+            color: #F97B65; /* Coral accent color */
+        }
+
+        .chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background-color: #1C1C1C; /* Dark background */
+            background-image: linear-gradient(to bottom, #1A1A1A, #212121); /* Subtle gradient */
+            scrollbar-width: thin;
+            scrollbar-color: #444444 #1C1C1C;
+            transition: max-height 0.5s ease, opacity 0.5s ease, padding 0.4s ease;
+        }
+
+        /* Minimized state - initially only showing the input area */
+        .chat-messages.minimized {
+            max-height: 0;
+            min-height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            opacity: 0;
+            overflow: hidden;
+        }
+
+        /* Custom scrollbar for WebKit browsers */
+        .chat-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #1C1C1C;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background-color: #444444;
+            border-radius: 10px;
+            border: 2px solid #1C1C1C;
+        }
+
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: 8px;
+            max-width: 85%;
+            word-wrap: break-word;
+            line-height: 1.5;
+            border: none; /* Remove default border */
+        }
+
+            .message-bubble        .message-sender {
+                font-size: 13px;
+                font-weight: 600;
+                margin-bottom: 4px;
+                color: #F97B65; /* Coral color like Claude's accent */
+            }
+
+            .message-bubble .message-timestamp {
+                font-size: 12px;
+                color: #888888;
+                text-align: right;
+                margin-top: 8px;
+            }
+
+        .user-message {
+            background-color: #2D2D2D; /* Dark gray background for user messages */
+            color: #FFFFFF;
+            align-self: flex-end;
+            border-radius: 12px 12px 2px 12px; /* Rounded corners with flattened bottom-right */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .ai-message {
+            background-color: #383838; /* Lighter gray for AI messages */
+            color: #FFFFFF;
+            align-self: flex-start;
+            border-left: 3px solid #F97B65; /* Coral accent color like Claude's */
+            border-radius: 2px 12px 12px 12px; /* Rounded corners with flattened top-left */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+            .ai-message .typing-indicator {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 8px 0;
+            }
+
+            .ai-message .typing-indicator span {
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                background-color: #F97B65;
+                border-radius: 50%;
+                opacity: 0.6;
+                animation: typing-animation 1.4s infinite ease-in-out both;
+            }
+
+            .ai-message .typing-indicator span:nth-child(1) {
+                animation-delay: 0s;
+            }
+
+            .ai-message .typing-indicator span:nth-child(2) {
+                animation-delay: 0.2s;
+            }
+
+            .ai-message .typing-indicator span:nth-child(3) {
+                animation-delay: 0.4s;
+            }
+
+            @keyframes typing-animation {
+                0%, 80%, 100% {
+                    transform: scale(0.6);
+                    opacity: 0.4;
+                }
+                40% {
+                    transform: scale(1);
+                    opacity: 1;
+                }
+            }
+
+        /* Collapsible Think Section Styles */
+        .collapsible-think-section {
+            margin: 10px 0;
+            border: 1px dashed #F97B65; /* Coral accent color */
+            border-radius: 8px;
+            background-color: #2D2D2D;
+        }
+
+            .collapsible-think-section .think-header {
+                cursor: pointer;
+                background-color: #3D3D3D;
+                color: #F97B65; /* Coral accent color */
+                padding: 8px 12px;
+                font-size: 0.9em;
+                font-weight: 500;
+                border-bottom: 1px dashed #F97B65;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+                .collapsible-think-section .think-header:hover {
+                    background-color: #4A4A4A;
+                }
+
+            .collapsible-think-section .think-content {
+                padding: 12px;
+                background-color: #252525;
+                border-top: none;
+                font-size: 0.95em;
+                color: #DDDDDD;
+            }
+
+                .collapsible-think-section .think-content pre {
+                    font-size: 80%;
+                    background-color: #1A1A1A;
+                }
+
+
+        .chat-input-area {
+            display: flex;
+            padding: 16px;
+            border-top: 1px solid #333333;
+            background-color: #1C1C1C;
+            gap: 10px;
+            align-items: center;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .chat-container.minimized .chat-input-area {
+            padding: 12px;
+            border-top: none;
+        }
+
+        .input-buttons-left {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: center;
+        }
+        .icon-button {
+            background-color: #2D2D2D;
+            border: 1px solid #444444;
+            cursor: pointer;
+            padding: 0;
+            color: #888888;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .icon-button:hover {
+            background-color: #3D3D3D;
+            color: #F97B65;
+            border-color: #F97B65;
+        }
+
+        .input-container {
+            position: relative;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            background-color: #2D2D2D;
+            border-radius: 24px;
+            border: 1px solid #444444;
+            transition: all 0.2s ease;
+            padding: 10px 16px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        .input-container:focus-within {
+            border-color: #F97B65;
+            box-shadow: 0 0 0 2px rgba(249, 123, 101, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+        }
+
+        #model-dropdown-button {
+            display: flex;
+            align-items: center;
+            background-color: rgba(255,255,255,0.05);
+            padding: 5px 10px;
+            margin-right: 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            color: #DDDDDD;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            white-space: nowrap;
+            min-width: 80px;
+        }
+
+        #model-dropdown-button:hover {
+            background-color: rgba(249, 123, 101, 0.1);
+            color: #FFFFFF;
+        }
+
+        .dropdown-arrow {
+            display: inline-block;
+            margin-left: 6px;
+            font-size: 12px;
+            line-height: 1;
+            color: #F97B65;
+            font-weight: bold;
+        }
+
+        #model-dropdown-content {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            margin-bottom: 5px;
+            background-color: #2D2D2D;
+            min-width: 180px;
+            max-height: 200px;
+            overflow-y: auto;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.4);
+            border-radius: 8px;
+            z-index: 100;
+            scrollbar-width: thin;
+            scrollbar-color: #444444 #1C1C1C;
+            border: 1px solid #444444;
+        }
+
+        #model-dropdown-content div {
+            padding: 8px 12px;
+            text-align: left;
+            color: #FFFFFF;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            font-size: 13px;
+        }
+
+        #model-dropdown-content div:hover {
+            background-color: #3D3D3D;
+        }
+
+        #model-dropdown-content div.selected {
+            background-color: rgba(249, 123, 101, 0.2);
+            color: #F97B65;
+        }
+
+        /* Claude-style header */
+        .claude-header {
+            position: relative;
+            text-align: center;
+            padding: 30px 0 15px;
+            transition: all 0.5s ease;
+        }
+
+        .coral-icon {
+            color: #F97B65;
+            font-size: 28px;
+            margin-right: 12px;
+            transition: all 0.5s ease;
+        }
+
+        .welcome-text {
+            font-size: 24px;
+            color: #DDDDDD;
+            font-weight: 400;
+            transition: all 0.5s ease;
+        }
+
+        /* Adjust header size when chat is active */
+        .chat-active .claude-header {
+            padding: 20px 0 15px;
+        }
+
+        .chat-active .coral-icon {
+            font-size: 20px;
+        }
+
+        .chat-active .welcome-text {
+            font-size: 20px;
+        }
+
+        /* Header in minimized container state */
+        .chat-container.minimized .claude-header {
+            padding: 20px 0 5px;
+        }
+
+            .chat-input-area textarea {
+                flex-grow: 1;
+                resize: none;
+                padding: 8px 4px;
+                border: none;
+                font-family: inherit;
+                font-size: 14px;
+                line-height: 20px;
+                background-color: transparent;
+                color: #FFFFFF;
+                box-shadow: none;
+                min-height: 24px;
+                max-height: 150px;
+            }
+
+                .chat-input-area textarea:focus {
+                    outline: none;
+                }
+
+
+            .chat-input-area button {
+                border-radius: 8px;
+                padding: 8px 16px;
+                color: white;
+                border: none;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 600;
+                transition: all 0.2s ease-in-out;
+                height: 40px;
+                line-height: 20px;
+            }            #send-button {
+                background-color: #F97B65; /* Coral color like Claude's send button */
+                border-radius: 50%; /* Make it circular */
+                width: 40px;
+                height: 40px;
+                padding: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.2s ease;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                border: none;
+                cursor: pointer;
+                margin-left: 4px;
+            }
+
+                #send-button:hover {
+                    background-color: #FF8B75; /* Slightly brighter version */
+                    transform: scale(1.05);
+                }
+
+                #send-button:disabled {
+                    background-color: #A25246;
+                    color: rgba(255,255,255,0.6);
+                    cursor: not-allowed;
+                    transform: none;
+                    box-shadow: none;
+                }
+
+
+        /* Markdown specific styles (Dark/Anthropic-like) */
+        .message-content pre {
+            background-color: #1A1A1A; /* Darker than background */
+            color: #EAEAEA;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 85%;
+            line-height: 1.45;
+            border: 1px solid #444444;
+        }
+
+        .message-content code:not(pre code) {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 0.2em 0.4em;
+            margin: 0;
+            font-size: 85%;
+            border-radius: 6px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            color: #F97B65; /* Coral accent color for inline code */
+        }
+
+        .message-content table {
+            border-collapse: collapse;
+            margin: 1em 0;
+            display: block;
+            width: max-content;
+            max-width: 100%;
+            overflow: auto;
+        }
+
+        .message-content th, .message-content td {
+            border: 1px solid #444444;
+            padding: 6px 13px;
+            text-align: left;
+        }
+
+        .message-content th {
+            background-color: #2D2D2D;
+            font-weight: 600;
+        }
+
+        .message-content blockquote {
+            border-left: .25em solid #F97B65; /* Coral accent color */
+            padding: 0 1em;
+            color: #AAAAAA;
+            margin-left: 0;
+            margin-right: 0;
+        }
+
+        .message-content hr {
+            height: .25em;
+            padding: 0;
+            margin: 24px 0;
+            background-color: #444444;
+            border: 0;
+        }
+
+        .message-content ul, .message-content ol {
+            padding-left: 2em;
+        }
+
+        .message-content h1, .message-content h2, .message-content h3, .message-content h4, .message-content h5, .message-content h6 {
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+            line-height: 1.25;
+        }
+
+        .message-content h1 {
+            font-size: 2em;
+            padding-bottom: .3em;
+            border-bottom: 1px solid #d8dee4;
+        }
+
+        .message-content h2 {
+            font-size: 1.5em;
+            padding-bottom: .3em;
+            border-bottom: 1px solid #d8dee4;
+        }
+
+        .message-content h3 {
+            font-size: 1.25em;
+        }
+
+        .message-content h4 {
+            font-size: 1em;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chat-container">
+        <!-- Hidden model selector (moved but kept for JavaScript functionality) -->
+        <div class="header-section model-selector" style="display: none;">
+            <select id="model-select">
+                <option value="">Loading models...</option>
+            </select>
+        </div>
+
+        <!-- History button as tool icon in top left -->
+        <div id="history-button" class="header-tool-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+        </div>
+
+        <!-- System Prompt button as tool icon in top right -->
+        <div id="system-prompt-button" class="header-tool-icon"> <!-- Class changed here -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+            </svg>
+        </div>
+
+        <!-- System Prompt slide-out panel -->
+        <div id="system-prompt-panel" class="system-prompt-panel">
+            <div class="system-prompt-header">
+                <span>System Prompt</span>
+                <button id="system-prompt-close">×</button>
+            </div>
+            <textarea id="system-prompt-input" placeholder="e.g., You are a helpful assistant that speaks like a pirate." rows="5"></textarea>
+            <div class="system-prompt-actions">
+                <button id="system-prompt-save">Save</button>
+            </div>
+        </div>
+
+        <!-- Chat History slide-out panel -->
+        <div id="history-panel" class="history-panel">
+            <div class="history-header">
+                <span>Chat History</span>
+                <button id="history-close-button">×</button>
+            </div>
+            <div class="history-content" id="history-content-area">
+                <!-- History items will be populated here by JavaScript -->
+                <p style="color: #888;">No history yet. Chats are saved when you start a new chat.</p>
+            </div>
+            <div class="history-actions">
+                <button id="clear-history-button">Clear All History</button>
+            </div>
+        </div>
+
+        <!-- Header with Claude-style interface -->
+        <div class="claude-header">
+            <span class="coral-icon">✻</span>
+            <span class="welcome-text">How's it going?</span>
+        </div>
+
+        <div class="chat-messages" id="chat-messages-area">
+            <!-- Messages will be appended here -->
+        </div>
+
+        <div class="chat-input-area">
+            <div class="input-buttons-left">
+                <!-- Upload button with hidden file input -->
+                <input type="file" id="file-input" style="display: none;" accept=".txt,.md,.csv,.json,.html,.js,.css,.py,.ts,.jsx,.tsx,.log">
+                <button id="upload-button" class="icon-button" title="Upload a document">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: scale(1.2);">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                </button>
+
+                <!-- New Chat (Reset) button with broom icon -->
+                <button id="reset-chat-button" class="icon-button" title="New chat">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: scale(1.2);">
+                        <!-- Broom icon -->
+                        <path d="M3.5 19.5L7 16"></path>
+                        <path d="M14 8.5c1-1 2.5-1.5 4-1"></path>
+                        <path d="M20.5 13c.5-1.5.5-3 0-4.5"></path>
+                        <path d="M20 6.5c-1-.5-2.5-.5-4 0"></path>
+                        <path d="M15.5 20.5c-1.5-1-3-2-4.5-4.5"></path>
+                        <path d="M4 19l3.5-3.5"></path>
+                        <path d="M13 8l7-4"></path>
+                        <path d="M16 19c0-4 1.5-8 4-11"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="input-container">
+                <!-- Claude-style model selector dropdown inside input area -->
+                <div id="model-dropdown-button">
+                    <span id="model-display-name">Ollama</span>
+                    <span class="dropdown-arrow">▾</span>
+                </div>
+
+                <textarea id="user-input" placeholder="How can I help you today?" rows="1"></textarea>
+
+                <button id="send-button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+
+                <!-- Dropdown content positioned relative to the input area -->
+                <div id="model-dropdown-content">
+                    <!-- Models will be populated here by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Marked.js for Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Prism.js Core & Autoloader for syntax highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <!-- MathJax Configuration & Script -->
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']], processEscapes: true },
+            svg: { fontCache: 'global' },
+            startup: { ready: () => { console.log('MathJax is ready.'); MathJax.startup.defaultReady(); } }
+        };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <script>
+        const OLLAMA_API_URL = "http://localhost:11434";
+
+        const modelSelect = document.getElementById('model-select');
+        const systemPromptInput = document.getElementById('system-prompt-input');
+        // const systemPromptToggle = document.getElementById('system-prompt-toggle'); // Not used directly
+        // const systemPromptContent = document.getElementById('system-prompt-content'); // Not used directly
+        const chatMessagesArea = document.getElementById('chat-messages-area');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const resetChatButton = document.getElementById('reset-chat-button');
+        const uploadButton = document.getElementById('upload-button');
+        const fileInput = document.getElementById('file-input');
+
+        // System Prompt Panel Elements
+        const systemPromptButton = document.getElementById('system-prompt-button');
+        const systemPromptPanel = document.getElementById('system-prompt-panel');
+        const systemPromptClose = document.getElementById('system-prompt-close');
+        const systemPromptSave = document.getElementById('system-prompt-save');
+
+        // History Panel Elements
+        const historyButton = document.getElementById('history-button');
+        const historyPanel = document.getElementById('history-panel');
+        const historyCloseButton = document.getElementById('history-close-button');
+        const historyContentArea = document.getElementById('history-content-area');
+        const clearHistoryButton = document.getElementById('clear-history-button');
+
+        const CHAT_HISTORY_KEY = 'ollamaChatHistory';
+
+
+        let conversationHistory = [];
+        let isAwaitingResponse = false;
+        let currentAiMessageElement = null;
+        let currentAiMessageContentDiv = null;
+        let uploadedFileContext = []; // Array to store uploaded file contexts
+
+        const THINK_TAG_PLACEHOLDER_PREFIX = "%%THINK_BLOCK_ID_";
+        const THINK_TAG_PLACEHOLDER_SUFFIX = "%%";
+
+        marked.setOptions({
+            highlight: function (code, lang) {
+                if (Prism.languages[lang]) {
+                    return Prism.highlight(code, Prism.languages[lang], lang);
+                } else if (lang) {
+                    Prism.plugins.autoloader.loadLanguages(lang, () => { });
+                    return code;
+                }
+                // Fallback for no language or unknown language
+                return Prism.highlight(code, Prism.languages.markup, 'markup');
+            },
+            gfm: true, breaks: true, pedantic: false, smartLists: true, smartypants: false, headerIds: false, mangle: false
+        });
+
+        async function fetchModels() {
+            try {
+                const response = await fetch(`${OLLAMA_API_URL}/api/tags`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                populateModelSelector(data.models || []);
+            } catch (error) {
+                console.error("Error fetching models:", error);
+                modelSelect.innerHTML = '<option value="">Error loading models</option>';
+            }
+        }
+
+        function populateModelSelector(models) {
+            // Update the hidden select element for backward compatibility
+            modelSelect.innerHTML = '';
+            if (models.length === 0) {
+                modelSelect.innerHTML = '<option value="">No models found</option>';
+                return;
+            }
+
+            // Populate both the hidden select and the new dropdown
+            const dropdownContent = document.getElementById('model-dropdown-content');
+            dropdownContent.innerHTML = '';
+
+            models.forEach(model => {
+                // For the hidden select element
+                const option = document.createElement('option');
+                option.value = model.name;
+                option.textContent = model.name;
+                modelSelect.appendChild(option);
+
+                // For the visible dropdown
+                const dropdownItem = document.createElement('div');
+                dropdownItem.textContent = model.name;
+                dropdownItem.dataset.modelName = model.name;
+                dropdownItem.addEventListener('click', function() {
+                    // Update the hidden select
+                    modelSelect.value = model.name;
+
+                    // Create and dispatch a change event on the hidden select
+                    const event = new Event('change');
+                    modelSelect.dispatchEvent(event);
+
+                    // Update the displayed model name
+                    document.getElementById('model-display-name').textContent = model.name;
+
+                    // Hide the dropdown
+                    dropdownContent.style.display = 'none';
+
+                    // Mark this as selected
+                    dropdownContent.querySelectorAll('div').forEach(item => {
+                        item.classList.remove('selected');
+                    });
+                    dropdownItem.classList.add('selected');
+                });
+
+                if (models.length > 0 && model.name === models[0].name) {
+                    dropdownItem.classList.add('selected');
+                    document.getElementById('model-display-name').textContent = model.name;
+                }
+
+                dropdownContent.appendChild(dropdownItem);
+            });
+
+            // Set the first model as default
+            if (models.length > 0) {
+                modelSelect.value = models[0].name;
+                document.getElementById('model-display-name').textContent = models[0].name;
+            }
+        }
+
+        function displayMessage(sender, textContent, isStreaming = false) {
+            const messageBubble = document.createElement('div');
+            messageBubble.classList.add('message-bubble', sender.toLowerCase() + '-message');
+
+            const senderDiv = document.createElement('div');
+            senderDiv.classList.add('message-sender');
+            senderDiv.textContent = sender === 'User' ? 'You' : (modelSelect.value.split(':')[0] || 'AI');
+            messageBubble.appendChild(senderDiv);
+
+            const contentDiv = document.createElement('div');
+            contentDiv.classList.add('message-content');
+
+            if (isStreaming && sender === 'AI') {
+                contentDiv.innerHTML = "<div class='typing-indicator'><span></span><span></span><span></span></div>";
+                currentAiMessageElement = messageBubble;
+                currentAiMessageContentDiv = contentDiv;
+            } else {
+                // For non-streaming: User messages and potentially non-streaming AI
+                contentDiv.innerHTML = marked.parse(textContent); // 1. Parse Markdown
+
+                // 2. Apply Prism syntax highlighting to code blocks within this specific contentDiv
+                Prism.highlightAllUnder(contentDiv);
+
+                // 3. Apply MathJax to render math expressions within this specific contentDiv
+                if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+                    MathJax.typesetPromise([contentDiv])
+                        .catch(err => console.warn(`MathJax processing error for ${sender} message:`, err));
+                }
+
+                // Add Claude-like thumbs up button to completed AI messages
+                if (sender === 'AI' && !isStreaming) {
+                    setTimeout(() => {
+                        const feedbackContainer = document.createElement('div');
+                        feedbackContainer.style.textAlign = 'right';
+                        feedbackContainer.style.marginTop = '8px';
+
+                        const thumbsUpButton = document.createElement('button');
+                        thumbsUpButton.innerHTML = '👍';
+                        thumbsUpButton.title = 'This was helpful';
+                        thumbsUpButton.style.background = 'transparent';
+                        thumbsUpButton.style.border = 'none';
+                        thumbsUpButton.style.color = '#888888';
+                        thumbsUpButton.style.fontSize = '16px';
+                        thumbsUpButton.style.cursor = 'pointer';
+                        thumbsUpButton.style.padding = '5px 10px';
+                        thumbsUpButton.style.marginLeft = '5px';
+                        thumbsUpButton.style.borderRadius = '4px';
+
+                        thumbsUpButton.onmouseover = function() {
+                            this.style.backgroundColor = 'rgba(255,255,255,0.05)';
+                        };
+
+                        thumbsUpButton.onmouseout = function() {
+                            this.style.backgroundColor = 'transparent';
+                        };
+
+                        thumbsUpButton.onclick = function() {
+                            this.innerHTML = '👍 Thanks for your feedback!';
+                            this.style.color = '#F97B65';
+                            this.style.pointerEvents = 'none';
+                        };
+
+                        feedbackContainer.appendChild(thumbsUpButton);
+                        contentDiv.appendChild(feedbackContainer);
+                    }, 500); // Small delay for better UX
+                }
+            }
+            messageBubble.appendChild(contentDiv);
+
+            const timestampDiv = document.createElement('div');
+            timestampDiv.classList.add('message-timestamp');
+            timestampDiv.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            messageBubble.appendChild(timestampDiv);
+
+            chatMessagesArea.appendChild(messageBubble);
+            scrollToBottom();
+            return { messageBubble, contentDiv };
+        }
+
+        function processThinkTagsInMarkdown(markdown) {
+            const thinkBlocks = [];
+            let blockIdCounter = 0;
+            const processedMarkdown = markdown.replace(/<think>([\s\S]*?)<\/think>/g, (match, thinkContent) => {
+                const currentId = blockIdCounter++;
+                thinkBlocks.push({
+                    id: `think-${Date.now()}-${currentId}`,
+                    rawContent: thinkContent
+                });
+                return `${THINK_TAG_PLACEHOLDER_PREFIX}${thinkBlocks[thinkBlocks.length - 1].id}${THINK_TAG_PLACEHOLDER_SUFFIX}`;
+            });
+            return { processedMarkdown, thinkBlocks };
+        }
+
+        function renderThinkBlocksHTML(contentDiv, thinkBlocks) {
+            if (!thinkBlocks || thinkBlocks.length === 0) return;
+            let html = contentDiv.innerHTML;
+            thinkBlocks.forEach(block => {
+                const placeholder = `${THINK_TAG_PLACEHOLDER_PREFIX}${block.id}${THINK_TAG_PLACEHOLDER_SUFFIX}`;
+                const thinkSectionHtml = `
+                        <div class="collapsible-think-section">
+                            <div class="think-header" data-think-block-id="${block.id}">
+                                <span>AI Thoughts</span> <span class="toggle-icon">[+]</span>
+                            </div>
+                            <div class="think-content" id="think-content-${block.id}" style="display:none;">
+                                ${marked.parse(block.rawContent)}
+                            </div>
+                        </div>
+                    `;
+                const placeholderRegExp = new RegExp(RegExp.escape(placeholder), 'g');
+                html = html.replace(placeholderRegExp, thinkSectionHtml);
+            });
+            contentDiv.innerHTML = html;
+        }
+
+        if (!RegExp.escape) {
+            RegExp.escape = function (s) { return s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); };
+        }
+
+        function addThinkBlockListeners(parentElement) {
+            parentElement.querySelectorAll('.think-header').forEach(header => {
+                if (header.dataset.listenerAttached === 'true') return;
+
+                header.addEventListener('click', () => {
+                    const blockId = header.dataset.thinkBlockId;
+                    const thinkContentElement = parentElement.querySelector(`#think-content-${blockId}`);
+                    const toggleIcon = header.querySelector('.toggle-icon');
+                    if (thinkContentElement) {
+                        const isHidden = thinkContentElement.style.display === 'none';
+                        thinkContentElement.style.display = isHidden ? 'block' : 'none';
+                        toggleIcon.textContent = isHidden ? '[-]' : '[+]';
+                        if (isHidden) {
+                            Prism.highlightAllUnder(thinkContentElement);
+                            if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+                                MathJax.typesetPromise([thinkContentElement]).catch(err => console.warn("MathJax (think):", err));
+                            }
+                        }
+                    }
+                });
+                header.dataset.listenerAttached = 'true';
+            });
+        }
+
+        function updateStreamingMessage(chunk) {
+            if (currentAiMessageContentDiv) {
+                if (currentAiMessageContentDiv.innerHTML === "<em>Typing...</em>") {
+                    currentAiMessageContentDiv.innerHTML = '';
+                }
+                const currentRawMarkdown = (currentAiMessageContentDiv.dataset.rawMarkdown || "") + chunk;
+                currentAiMessageContentDiv.dataset.rawMarkdown = currentRawMarkdown;
+
+                const { processedMarkdown, thinkBlocks } = processThinkTagsInMarkdown(currentRawMarkdown);
+                // marked.parse() will call Prism highlight via the options
+                currentAiMessageContentDiv.innerHTML = marked.parse(processedMarkdown);
+                renderThinkBlocksHTML(currentAiMessageContentDiv, thinkBlocks);
+                addThinkBlockListeners(currentAiMessageContentDiv);
+                scrollToBottom();
+            }
+        }
+
+        function finalizeAiMessage() {
+            if (currentAiMessageContentDiv && currentAiMessageContentDiv.dataset.rawMarkdown) {
+                const finalRawMarkdown = currentAiMessageContentDiv.dataset.rawMarkdown;
+                const { processedMarkdown, thinkBlocks } = processThinkTagsInMarkdown(finalRawMarkdown);
+
+                // marked.parse() will call Prism highlight via the options
+                currentAiMessageContentDiv.innerHTML = marked.parse(processedMarkdown);
+                renderThinkBlocksHTML(currentAiMessageContentDiv, thinkBlocks);
+                addThinkBlockListeners(currentAiMessageContentDiv);
+
+                // Ensure everything is highlighted and typeset
+                Prism.highlightAllUnder(currentAiMessageContentDiv); // Final pass for Prism
+                if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+                    MathJax.typesetPromise([currentAiMessageContentDiv]).catch(err => console.warn("MathJax (final):", err));
+                }
+            }
+            currentAiMessageElement = null;
+            currentAiMessageContentDiv = null;
+            scrollToBottom();
+        }
+
+
+        async function sendMessage() {
+            const messageText = userInput.value.trim();
+            const selectedModel = modelSelect.value;
+            const systemPrompt = systemPromptInput.value.trim();
+
+            if (!messageText || !selectedModel || isAwaitingResponse) return;
+
+            // Ensure the chat area is expanded when sending first message
+            expandChatInterface();
+
+            isAwaitingResponse = true;
+            sendButton.disabled = true;
+            userInput.disabled = true;
+
+            displayMessage("User", messageText); // User message is parsed, Prism'd, and MathJax'd here
+            userInput.value = '';
+
+            const aiMessageElements = displayMessage("AI", "<em>Typing...</em>", true);
+            currentAiMessageContentDiv = aiMessageElements.contentDiv;
+            currentAiMessageContentDiv.dataset.rawMarkdown = "";
+
+            const messagesForApi = [];
+            if (systemPrompt) {
+                messagesForApi.push({ role: "system", content: systemPrompt });
+            }
+
+            // Include uploaded file context if available
+            if (uploadedFileContext.length > 0) {
+                // Create a context message that summarizes all uploaded files
+                const fileContextSummary = uploadedFileContext.map(file =>
+                    `Document "${file.name}":\n${file.content}`
+                ).join('\n\n---\n\n');
+
+                // Only add this if it's not already in the conversation history
+                const hasFileContextInHistory = conversationHistory.some(msg =>
+                    msg.role === "system" && msg.content.includes("The user has uploaded a document")
+                );
+
+                if (!hasFileContextInHistory) {
+                    messagesForApi.push({
+                        role: "system",
+                        content: `The user has provided the following documents for context. Please consider these when answering questions:\n\n${fileContextSummary}`
+                    });
+                }
+            }
+
+            messagesForApi.push(...conversationHistory);
+            messagesForApi.push({ role: "user", content: messageText });
+
+            try {
+                const response = await fetch(`${OLLAMA_API_URL}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: selectedModel, messages: messagesForApi, stream: true }),
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.text();
+                    throw new Error(`API error: ${response.status} ${response.statusText}. ${errorBody}`);
+                }
+                conversationHistory.push({ role: "user", content: messageText });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let aiResponseContent = "";
+
+                if (currentAiMessageContentDiv.innerHTML === "<em>Typing...</em>") {
+                    currentAiMessageContentDiv.innerHTML = '';
+                }
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n').filter(line => line.trim() !== '');
+                    for (const line of lines) {
+                        try {
+                            let json = line.startsWith('data: ') ? line.substring(6) : line;
+                            const parsedLine = JSON.parse(json);
+                            if (parsedLine.message && parsedLine.message.content) {
+                                const contentPiece = parsedLine.message.content;
+                                aiResponseContent += contentPiece;
+                                updateStreamingMessage(contentPiece);
+                            } else if (parsedLine.choices && (parsedLine.choices.length > 0)) {
+                                for (const choice of parsedLine.choices) {
+                                    const contentPiece = choice.delta.content;
+                                    aiResponseContent += contentPiece;
+                                    updateStreamingMessage(contentPiece);
+                                }
+                            }
+                        } catch (e) { console.warn("Failed to parse JSON line:", line, e); }
+                    }
+                }
+                conversationHistory.push({ role: "assistant", content: aiResponseContent });
+            } catch (error) {
+                console.error("Error sending message:", error);
+                const errorMessage = `**Error:** ${error.message || "An unknown error occurred."}`;
+                if (currentAiMessageContentDiv) {
+                    currentAiMessageContentDiv.innerHTML = marked.parse(errorMessage); // Parse error message too
+                    Prism.highlightAllUnder(currentAiMessageContentDiv); // Highlight if error has code
+                    currentAiMessageContentDiv.dataset.rawMarkdown = errorMessage;
+                } else {
+                    displayMessage("AI", errorMessage);
+                }
+            } finally {
+                finalizeAiMessage();
+                isAwaitingResponse = false;
+                sendButton.disabled = false;
+                userInput.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        function resetChat() {
+            // Future: Call saveChatToHistory() here if conversationHistory is not empty
+            console.log("Attempting to save chat before reset...");
+            saveChatToHistory(); // Save current chat before clearing
+
+            chatMessagesArea.innerHTML = '';
+            conversationHistory = [];
+            uploadedFileContext = []; // Reset uploaded file context
+            if (currentAiMessageContentDiv) {
+                currentAiMessageContentDiv.innerHTML = '';
+                currentAiMessageContentDiv.dataset.rawMarkdown = '';
+            }
+            finalizeAiMessage();
+            isAwaitingResponse = false;
+            sendButton.disabled = false;
+            userInput.disabled = false;
+            userInput.focus();
+
+            // Return to clean minimized interface
+            initCleanInterface();
+
+            // Smooth transition back to minimized state
+            setTimeout(() => {
+                scrollToBottom();
+            }, 300);
+
+            console.log("Chat reset.");
+            renderHistoryPanel(); // Update history panel display
+        }
+
+        // Function to handle file uploads and process them
+        function handleFileUpload(file) {
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const fileName = file.name;
+                const fileContent = e.target.result;
+                const fileExt = fileName.split('.').pop().toLowerCase();
+
+                // Limit file content size if needed
+                const maxContentSize = 50000; // Around 50KB - adjust based on reasonable limits
+                const truncatedContent = fileContent.length > maxContentSize
+                    ? fileContent.substring(0, maxContentSize) + '\n...(content truncated due to size)'
+                    : fileContent;
+
+                // Create a file context object
+                const fileContext = {
+                    name: fileName,
+                    content: truncatedContent,
+                    type: fileExt
+                };
+
+                // Add to uploaded file context array
+                uploadedFileContext.push(fileContext);
+
+                // Show a notification to the user
+                showNotification(`File "${fileName}" uploaded and added to context`, 'success');
+
+                // Add a system message to the conversation history to inform the LLM about the document
+                const systemMsg = {
+                    role: "system",
+                    content: `The user has uploaded a document named "${fileName}" with the following content:\n\n${truncatedContent}\n\nPlease consider the document's content when responding to future messages.`
+                };
+                conversationHistory.push(systemMsg);
+
+                // Optionally, add a message to the chat UI to let the user know the file was uploaded
+                displayMessage("System", `📄 File "${fileName}" has been uploaded and its content is available for the AI to use.`);
+
+                // Expand the chat interface if it's minimized
+                expandChatInterface();
+            };
+
+            reader.onerror = function() {
+                showNotification('Error reading the file', 'error');
+            };
+
+            // Read the file as text
+            reader.readAsText(file);
+        }
+
+        // Function to show notifications to the user
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.textContent = message;
+            notification.style.position = 'fixed';
+            notification.style.bottom = '20px';
+            notification.style.right = '20px';
+            notification.style.padding = '10px 16px';
+            notification.style.borderRadius = '4px';
+            notification.style.color = 'white';
+            notification.style.opacity = '0';
+            notification.style.transition = 'opacity 0.3s ease';
+            notification.style.zIndex = '1000';
+
+            // Set color based on notification type
+            if (type === 'success') {
+                notification.style.backgroundColor = '#4CAF50'; // Green
+            } else if (type === 'error') {
+                notification.style.backgroundColor = '#F44336'; // Red
+            } else {
+                notification.style.backgroundColor = '#F97B65'; // Default coral color
+            }
+
+            document.body.appendChild(notification);
+
+            // Fade in
+            setTimeout(() => {
+                notification.style.opacity = '1';
+            }, 10);
+
+            // Fade out and remove
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => document.body.removeChild(notification), 300);
+            }, 3000);
+        }
+
+        function scrollToBottom() {
+            chatMessagesArea.scrollTop = chatMessagesArea.scrollHeight;
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        resetChatButton.addEventListener('click', resetChat);
+        userInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Handle file upload button click
+        uploadButton.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Handle file selection
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                // Check file size
+                const maxSizeInMB = 2;
+                const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
+
+                if (file.size > maxSizeInBytes) {
+                    showNotification(`File is too large. Maximum size is ${maxSizeInMB}MB`, 'error');
+                    fileInput.value = ''; // Reset the file input
+                    return;
+                }
+
+                // Process the file
+                handleFileUpload(file);
+
+                // Reset the file input for future uploads
+                fileInput.value = '';
+            }
+        });
+
+        // Handle the new system prompt panel
+        // const systemPromptButton = document.getElementById('system-prompt-button'); // Already declared
+        // const systemPromptPanel = document.getElementById('system-prompt-panel'); // Already declared
+        // const systemPromptClose = document.getElementById('system-prompt-close'); // Already declared
+        // const systemPromptSave = document.getElementById('system-prompt-save'); // Already declared
+
+        // Ensure the event listeners are properly set up
+        if (systemPromptButton) {
+            systemPromptButton.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent the click from bubbling up
+                systemPromptPanel.classList.add('open');
+                setTimeout(() => {
+                    systemPromptInput.focus();
+                }, 300);
+            });
+        }
+
+        if (systemPromptClose) {
+            systemPromptClose.addEventListener('click', () => {
+                systemPromptPanel.classList.remove('open');
+            });
+        }
+
+        if (systemPromptSave) {
+            systemPromptSave.addEventListener('click', () => {
+                // You could add any validation or feedback here
+                systemPromptPanel.classList.remove('open');
+                console.log('System prompt saved:', systemPromptInput.value);
+                // Optional: Show a brief confirmation
+                const savedIndicator = document.createElement('div');
+                savedIndicator.textContent = 'System prompt saved';
+                savedIndicator.style.position = 'fixed';
+                savedIndicator.style.bottom = '20px';
+                savedIndicator.style.right = '20px';
+                savedIndicator.style.padding = '10px 16px';
+                savedIndicator.style.backgroundColor = '#F97B65';
+                savedIndicator.style.color = 'white';
+                savedIndicator.style.borderRadius = '4px';
+                savedIndicator.style.opacity = '0';
+                savedIndicator.style.transition = 'opacity 0.3s ease';
+                document.body.appendChild(savedIndicator);
+
+                setTimeout(() => {
+                    savedIndicator.style.opacity = '1';
+                }, 10);
+
+                setTimeout(() => {
+                    savedIndicator.style.opacity = '0';
+                    setTimeout(() => document.body.removeChild(savedIndicator), 300);
+                }, 2000);
+            });
+        }
+
+        // Close panel when clicking outside
+        document.addEventListener('click', (event) => {
+            if (systemPromptPanel &&
+                systemPromptPanel.classList.contains('open') &&
+                !systemPromptPanel.contains(event.target) &&
+                event.target !== systemPromptButton &&
+                !systemPromptButton.contains(event.target)) {
+                systemPromptPanel.classList.remove('open');
+            }
+
+            if (historyPanel &&
+                historyPanel.classList.contains('open') &&
+                !historyPanel.contains(event.target) &&
+                event.target !== historyButton &&
+                !historyButton.contains(event.target)) {
+                historyPanel.classList.remove('open');
+            }
+        });
+
+        // Allow closing the system prompt panel with Escape key
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                if (systemPromptPanel && systemPromptPanel.classList.contains('open')) {
+                    systemPromptPanel.classList.remove('open');
+                }
+                if (historyPanel && historyPanel.classList.contains('open')) {
+                    historyPanel.classList.remove('open');
+                }
+            }
+        });
+
+        // Initialize the chat interface in a clean state
+        function initCleanInterface() {
+            // Hide the chat messages area initially
+            const chatMessagesArea = document.getElementById('chat-messages-area');
+            const chatContainer = document.querySelector('.chat-container');
+
+            if (chatMessagesArea) {
+                chatMessagesArea.classList.add('minimized');
+            }
+
+            // Minimize the container
+            if (chatContainer) {
+                chatContainer.classList.add('minimized');
+                chatContainer.classList.remove('chat-active');
+            }
+        }
+
+        // Function to expand the chat interface after first message
+        function expandChatInterface() {
+            const chatContainer = document.querySelector('.chat-container');
+            const chatMessagesArea = document.getElementById('chat-messages-area');
+
+            if (chatContainer && chatContainer.classList.contains('minimized')) {
+                chatContainer.classList.remove('minimized');
+            }
+
+            if (chatMessagesArea && chatMessagesArea.classList.contains('minimized')) {
+                chatMessagesArea.classList.remove('minimized');
+
+                // Add chat-active class to adjust header size
+                if (chatContainer) {
+                    chatContainer.classList.add('chat-active');
+                }
+
+                // Give time for the animation to complete
+                setTimeout(() => {
+                    scrollToBottom();
+                }, 500);
+            }
+        }
+
+        // --- Chat History Functions ---
+
+        function saveChatToHistory() {
+            if (conversationHistory.length === 0) {
+                console.log("No conversation to save.");
+                return;
+            }
+
+            const currentSystemPrompt = systemPromptInput.value.trim();
+            const chatEntry = {
+                timestamp: new Date().toISOString(),
+                systemPrompt: currentSystemPrompt, // Corrected typo here
+                conversation: [...conversationHistory], // Store a copy
+                // Optionally, store a title or first few words of user's message
+                title: conversationHistory.find(msg => msg.role === 'user')?.content.substring(0, 50) || "Chat"
+            };
+
+            let savedHistories = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY)) || [];
+            savedHistories.unshift(chatEntry); // Add new chat to the beginning
+
+            // Optional: Limit the number of saved chats
+            const maxHistoryItems = 20;
+            if (savedHistories.length > maxHistoryItems) {
+                savedHistories = savedHistories.slice(0, maxHistoryItems);
+            }
+
+            localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(savedHistories));
+            console.log("Chat saved to history:", chatEntry);
+        }
+
+        function loadHistoryFromStorage() {
+            return JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY)) || [];
+        }
+
+        function renderHistoryPanel() {
+            const histories = loadHistoryFromStorage();
+            historyContentArea.innerHTML = ''; // Clear previous items
+
+            if (histories.length === 0) {
+                historyContentArea.innerHTML = '<p style="color: #888;">No history yet. Chats are saved when you start a new chat.</p>';
+                return;
+            }
+
+            histories.forEach((entry, index) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.classList.add('history-item');
+                itemDiv.dataset.historyIndex = index;
+
+                const dateDiv = document.createElement('div');
+                dateDiv.classList.add('history-item-date');
+                dateDiv.textContent = new Date(entry.timestamp).toLocaleString();
+
+                const titleDiv = document.createElement('div');
+                titleDiv.textContent = entry.title + (entry.conversation.length > 1 ? "..." : "");
+
+                itemDiv.appendChild(dateDiv);
+                itemDiv.appendChild(titleDiv);
+
+                itemDiv.addEventListener('click', () => {
+                    loadChatFromHistory(entry);
+                    historyPanel.classList.remove('open');
+                });
+                historyContentArea.appendChild(itemDiv);
+            });
+        }
+
+        function loadChatFromHistory(historyEntry) {
+            console.log("Loading chat from history:", historyEntry);
+
+            // Reset current chat state without saving it again
+            chatMessagesArea.innerHTML = '';
+            // conversationHistory = []; // This will be overwritten
+            uploadedFileContext = [];
+            if (currentAiMessageContentDiv) {
+                currentAiMessageContentDiv.innerHTML = '';
+                currentAiMessageContentDiv.dataset.rawMarkdown = '';
+            }
+            finalizeAiMessage();
+            isAwaitingResponse = false;
+            sendButton.disabled = false;
+            userInput.disabled = false;
+
+            // Load data from history entry
+            systemPromptInput.value = historyEntry.systemPrompt || "";
+            conversationHistory = [...historyEntry.conversation]; // Restore conversation
+
+            // Re-render messages
+            conversationHistory.forEach(message => {
+                displayMessage(message.role === 'user' ? 'User' : 'AI', message.content);
+            });
+
+            expandChatInterface(); // Ensure chat is visible
+            userInput.focus();
+            scrollToBottom();
+
+            // Update model display if needed (though model isn't saved per chat yet)
+            // This might be complex if the model used for that chat is different
+            // For now, we assume the current model select is fine.
+        }
+
+        function clearAllChatHistory() {
+            if (confirm("Are you sure you want to clear all chat history? This cannot be undone.")) {
+                localStorage.removeItem(CHAT_HISTORY_KEY);
+                renderHistoryPanel(); // Re-render to show it's empty
+                console.log("All chat history cleared.");
+                showNotification("All chat history cleared.", "info");
+            }
+        }
+
+        // --- End Chat History Functions ---
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchModels();
+            userInput.focus();
+            Prism.plugins.autoloader.languages_path = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/';
+
+            // Initialize the clean interface
+            initCleanInterface();
+
+            // Setup dropdown toggle functionality
+            const dropdownButton = document.getElementById('model-dropdown-button');
+            const dropdownContent = document.getElementById('model-dropdown-content');
+
+            dropdownButton.addEventListener('click', function() {
+                if (dropdownContent.style.display === 'block') {
+                    dropdownContent.style.display = 'none';
+                } else {
+                    dropdownContent.style.display = 'block';
+                }
+            });
+
+            // Close dropdown when clicking elsewhere
+            document.addEventListener('click', function(event) {
+                if (!dropdownButton.contains(event.target) && !dropdownContent.contains(event.target)) {
+                    dropdownContent.style.display = 'none';
+                }
+            });
+
+            // Update model display when a model is selected
+            modelSelect.addEventListener('change', function() {
+                const modelDisplayName = document.getElementById('model-display-name');
+                if (modelDisplayName) {
+                    modelDisplayName.textContent = modelSelect.value.split(':')[0] || 'Ollama';
+                }
+            });
+
+            // History Panel Listeners
+            if (historyButton) {
+                historyButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    historyPanel.classList.add('open');
+                    renderHistoryPanel(); // Populate with latest history when opened
+                });
+            }
+
+            if (historyCloseButton) {
+                historyCloseButton.addEventListener('click', () => {
+                    historyPanel.classList.remove('open');
+                });
+            }
+
+            if (clearHistoryButton) {
+                clearHistoryButton.addEventListener('click', clearAllChatHistory);
+            }
+
+            // Initial render of history panel (it will be hidden but data loaded if any)
+            renderHistoryPanel();
+        });
+    </script>
+</body>
+</html>
