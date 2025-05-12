@@ -533,6 +533,7 @@ class ChatLLMStreamer:
         self.thread.start()
         self.llm.start()
         self.acc = ''
+        self.thought_acc = ''
         self.auto_restart = False
 
     def thread_fun(self) -> None:
@@ -550,17 +551,22 @@ class ChatLLMStreamer:
                 r = r + t
         return r
 
-    def chat(self, user_input: str) -> Iterable[str]:
+    def chat(self, user_input: str) -> Iterable[str | tuple[str, str]]:
         id = self.input_counter
         self.input_counter = self.input_counter + 1
         self.input_queue.put(LLMChatInput(user_input, id))
         self.acc = ''
+        self.thought_acc = ''
         while True:
             output = self.output_queue.get()
             if isinstance(output, LLMChatChunk):
                 if output.id == id:
                     self.acc = self.acc + output.chunk
                     yield output.chunk
+            elif isinstance(output, LLMChatThoughtChunk):
+                if output.id == id:
+                    self.thought_acc = self.thought_acc + output.chunk
+                    yield ('thought', output.chunk)
             elif isinstance(output, LLMChatDone):
                 if output.id == id:
                     break
