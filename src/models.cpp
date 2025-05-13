@@ -246,6 +246,7 @@ namespace chatllm
         MODEL_TYPE_DEEPSEEK_V1_MoE   = 0x324,
         MODEL_TYPE_GIGACHAT          = 0x325,
         MODEL_TYPE_BAILINGMOE        = 0x326,
+        MODEL_TYPE_XVERSEMOE         = 0x327,
 
         MODEL_TYPE_YI       = 0x400,
         MODEL_TYPE_MAP_NEO  = 0x401,
@@ -2330,6 +2331,7 @@ namespace chatllm
         CASE(DEEPSEEK_V3_LIGHT,     deepseek::v3_light, 1)      \
         CASE(DEEPSEEK_V1_MoE,       deepseek::v1_moe, 1)        \
         CASE(BAILINGMOE,            bailing::moe, 1)            \
+        CASE(XVERSEMOE,             xverse::moe, 1)             \
                                                                 \
         CASE(BAICHUANLLAMA,         baichuan::_7b, 1)           \
         CASE(BAICHUAN,              baichuan::larger, 1)        \

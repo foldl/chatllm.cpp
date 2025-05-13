@@ -2520,6 +2520,15 @@
                         "url": "chatllm_quantized_xverse/xverse-7b-q4_0.bin"
                     }
                 }
+            },
+            "26b-moe": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 16113281488,
+                        "url": "chatllm_quantized_xverse/xverse-26b-moe-q4_1.bin"
+                    }
+                }
             }
         }
     },
@@ -2528,6 +2537,15 @@
         "default": "1.7b",
         "license": "Apache License 2.0",
         "variants": {
+            "0.6b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 637779424,
+                        "url": "chatllm_quantized_qwen3/qwen3-0.6b.bin"
+                    }
+                }
+            },
             "1.7b": {
                 "default": "q8",
                 "quantized": {
@@ -2552,6 +2570,15 @@
                     "q4_1": {
                         "size": 5124539408,
                         "url": "chatllm_quantized_qwen3/qwen3-8b-q4_1.bin"
+                    }
+                }
+            },
+            "14b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 15696867088,
+                        "url": "chatllm_quantized_qwen3/qwen3-14b.bin"
                     }
                 }
             },

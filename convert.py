@@ -89,6 +89,7 @@ class ModelType(Enum):
     DeepSeekV1          = 0x324
     GigaChat            = 0x325
     BailingMoE          = 0x326
+    XVERSEMoE           = 0x327
 
     Yi = 0x400
     MAP_Neo = 0x401
@@ -5569,6 +5570,39 @@ class DeepSeekV1Converter(BaseConverter):
 
         return weight_names
 
+class XverseMoEConverter(BaseConverter):
+    MODEL_TYPE = ModelType.XVERSEMoE
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            if name.endswith('mlp.router.weight'):
+                r[name.replace('.router.', '.gate.')] = tensor
+            else:
+                r[name] = DeepSeekV1Converter.pp(config, name, tensor)
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        config.attention_bias = False
+        config.scoring_func = 'softmax'
+        config.num_key_value_heads = config.num_attention_heads
+        config.first_k_dense_replace = 0
+        config.moe_intermediate_size = config.intermediate_size
+        config.moe_layer_freq = 1
+        config.n_routed_experts = config.num_experts
+        config.n_shared_experts = config.num_shared_experts
+        config.norm_topk_prob = True
+        config.num_experts_per_tok = config.moe_top_k
+
+        DeepSeekV1Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        return DeepSeekV1Converter.get_weight_names(config)
+
 class BailingMoeConverter(BaseConverter):
     MODEL_TYPE = ModelType.BailingMoE
 
@@ -6438,8 +6472,11 @@ def main():
     elif arch == 'smollm':
         SmolLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'XverseForCausalLM':
-        LlamaConverter.MODEL_TYPE = ModelType.XVERSE
-        LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        if config.num_experts is None:
+            LlamaConverter.MODEL_TYPE = ModelType.XVERSE
+            LlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        else:
+            XverseMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'codellama':
         CodeLlamaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek':

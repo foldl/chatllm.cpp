@@ -101,3 +101,60 @@ void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids)
     tok->encode(text, ids, false, false);
 }
 }
+
+namespace moe
+{
+    typedef deepseek::v1_moe::Config Config;
+
+    class ChatHistoryEncoder : public BaseHistoryEncoder
+    {
+    public:
+        void append_sys_prompt(std::vector<int> &ids) const override
+        {
+            auto *tok = dynamic_cast<dense::Tokenizer *>(tokenizer);
+            if (tok->get_system_prompt().size() < 1) return;
+
+            std::ostringstream oss_prompt;
+            oss_prompt << "system: " << tok->get_system_prompt() << "\n";
+            auto text = oss_prompt.str();
+            tok->encode(text, ids);
+        }
+
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override
+        {
+            auto *tok = dynamic_cast<dense::Tokenizer *>(tokenizer);
+            append_ai_opening(round_idx, ids);
+            tok->encode(ai, ids);
+            ids.push_back(tok->eos_token_id);
+        }
+
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
+        {
+            auto *tok = dynamic_cast<dense::Tokenizer *>(tokenizer);
+
+            std::ostringstream oss_prompt;
+            oss_prompt << "user: " << user << "\n";
+            auto text = oss_prompt.str();
+            tok->encode(text, ids);
+        }
+
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override
+        {
+            auto *tok = dynamic_cast<dense::Tokenizer *>(tokenizer);
+            tok->encode("assistant: ", ids);
+        }
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public dense::Tokenizer
+    {
+    public:
+        Tokenizer(const Config &config)
+            : dense::Tokenizer(config, &_chat_encoder)
+        {}
+    }
+    typedef  Tokenizer;
+
+    typedef deepseek::v1_moe::ConditionalGeneration ConditionalGeneration;
+}
