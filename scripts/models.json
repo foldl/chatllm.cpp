@@ -2055,6 +2055,15 @@
                         "url": "chatllm_quantized_olmo-2/olmo-2-32b-q4_0.bin"
                     }
                 }
+            },
+            "1b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1580567120,
+                        "url": "chatllm_quantized_olmo-2/olmo-2-0415-1b.bin"
+                    }
+                }
             }
         }
     },
@@ -2647,6 +2656,31 @@
                     "q8": {
                         "size": 8771479856,
                         "url": "chatllm_quantized_seed-coder/seed-coder-8b-reasoning.bin"
+                    }
+                }
+            }
+        }
+    },
+    "orpheus-tts": {
+        "brief": "Orpheus TTS is a state-of-the-art, Llama-based Speech-LLM designed for high-quality, empathetic text-to-speech generation.",
+        "default": "7b-rl",
+        "license": "Apache License 2.0",
+        "variants": {
+            "3b-en": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3544609280,
+                        "url": "chatllm_quantized_orpheus-tts/orpheus-tts-en-3b.bin"
+                    }
+                }
+            },
+            "3b-zh": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3544609312,
+                        "url": "chatllm_quantized_orpheus-tts/orpheus-tts-zh-3b.bin"
                     }
                 }
             }

@@ -931,7 +931,7 @@ namespace chatllm
     {
         CHATLLM_CHECK(data) << "backend buffer still not allocated!";
         CHATLLM_CHECK(target_type == ggml::type_of(tensor)) << "tensor type mismatch!";
-        CHATLLM_CHECK(data->get_size() >= write_offset + data_size) << "read_tensor_data(): write data exceeds tensor data size";
+        CHATLLM_CHECK(data->get_size() >= write_offset + data_size) << "read_tensor_data(" << ggml::get_name(&tensor) << "): write data exceeds tensor data size";
 
         reader->seek(aligned_data_start(read_offset), SEEK_SET);
 
@@ -945,7 +945,7 @@ namespace chatllm
                 return read_tensor_data_f16_f32(reader, read_offset, write_offset, data_size);
             else
             {
-                CHATLLM_THROW << "type conversion not supported: " << original_type << ", " << target_type;
+                CHATLLM_THROW << ggml::get_name(&tensor) << ": type conversion not supported: " << original_type << ", " << target_type;
                 return 0;
             }
         }
@@ -1255,14 +1255,6 @@ namespace chatllm
 
         tokenizer = std::move(result.tokenizer);
         model = std::move(result.model);
-    }
-
-    void ModelObject::text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result)
-    {
-        if (!loaded) return;
-        std::vector<int> input_ids;
-        tokenizer->encode(input, input_ids);
-        model->text_embedding(gen_config, input_ids, result);
     }
 
     AbstractModel *ModelObject::fork_model(const extra_args &args)
@@ -1608,7 +1600,19 @@ namespace chatllm
 
     void Pipeline::text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result)
     {
-        modelobj.text_embedding(input, gen_config, result);
+        if (!modelobj.loaded) return;
+        std::vector<int> input_ids;
+        tokenizer->encode(input, input_ids);
+        model->text_embedding(gen_config, input_ids, result);
+    }
+
+    bool Pipeline::speech_synthesis(const std::string &input, const GenerationConfig &gen_config, std::vector<int16_t> &audio, int &sample_rate, int &channels)
+    {
+        if (!modelobj.loaded) return false;
+        std::vector<int> input_ids;
+        tokenizer->encode(input, input_ids);
+        model->speech_synthesis(gen_config, input_ids, audio, sample_rate, channels);
+        return true;
     }
 
     int Pipeline::get_text_embedding_dim(void)
@@ -1837,7 +1841,7 @@ namespace chatllm
             }
         }
 
-        embedding.text_embedding(rewritten_query, gen_config, query_emb);
+        text_embedding(rewritten_query, gen_config, query_emb);
 
         vs.get()->Query(query_emb, selected, retrieve_top_n);
 

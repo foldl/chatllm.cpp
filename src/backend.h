@@ -24,6 +24,7 @@ namespace chatllm
         size_t nbytes(const ggml::tensor *tensor);
 
         int n_dims(const ggml::tensor * tensor);
+        int get_dim(const ggml::tensor * tensor, int dim);
 
         type type_of(const ggml::tensor *tensor);
         type type_of(const ggml::tensor &tensor);
@@ -398,7 +399,7 @@ namespace chatllm
 
         virtual bool is_using_gpu(void) const { return backend_context->is_using_gpu(); }
 
-        BackendContext *get_backend_context(void) { return backend_context; }
+        BackendContext *get_backend_context(void) const { return backend_context; }
 
     public:
         UserOptions user_options;

@@ -37,6 +37,12 @@ namespace chatllm
         return a.type;
     }
 
+    ggml::type ggml::type_fallback(ggml::type type, int64_t last_dim)
+    {
+        auto block_size = ggml_blck_size(type);
+        return (last_dim % block_size) != 0 ? ggml::type::GGML_TYPE_F16 : type;
+    }
+
     ggml::type ggml::parse(const std::string &type)
     {
         if (type == "f32")
@@ -120,6 +126,21 @@ namespace chatllm
         ggml_backend_tensor_memset(a, value, offset, size);
     }
 
+    float ggml::at(ggml::tensor *a, int64_t i, int64_t j, int64_t k, int64_t l)
+    {
+        auto p = (char *)a->data + l*a->nb[3] + k*a->nb[2] + j*a->nb[1] + i*a->nb[0];
+        switch (ggml::type_of(a))
+        {
+        case ggml::type::GGML_TYPE_F16:
+            return ggml_fp16_to_fp32(*(ggml_fp16_t *)p);
+        case ggml::type::GGML_TYPE_F32:
+            return *(float *)p;
+        default:
+            CHATLLM_CHECK(false) << "unsupported type";
+            return 0.0f;
+        }
+    }
+
     ggml::tensor *ggml::init_tensor(ggml::tensor *tensor,
         ggml::type    type,
         int           n_dims,
@@ -176,6 +197,11 @@ namespace chatllm
     int ggml::n_dims(const ggml::tensor * tensor)
     {
         return ggml_n_dims(tensor);
+    }
+
+    int ggml::get_dim(const ggml::tensor * tensor, int dim)
+    {
+        return (int)tensor->ne[dim];
     }
 
     ggml::tensor *ggml::inplace_act(ComputeContext *ctx, ActFunc act, ggml::tensor *input)
@@ -246,7 +272,7 @@ namespace chatllm
         return tensor;
     }
 
-    ggml::tensor *ggml::scale(ComputeContext *ctx, ggml::tensor *a, float  s)
+    ggml::tensor *ggml::scale(ComputeContext *ctx, ggml::tensor *a, float s)
     {
         ggml::tensor *tensor = ggml_scale(ctx->get_ctx(), a, s);
         ctx->cb_op_tensor(tensor);
@@ -298,6 +324,13 @@ namespace chatllm
     ggml::tensor *ggml::add_inplace(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b)
     {
         ggml::tensor *tensor = ggml_add_inplace(ctx->get_ctx(), a, b);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::sub_inplace(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b)
+    {
+        ggml::tensor *tensor = ggml_sub_inplace(ctx->get_ctx(), a, b);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -358,9 +391,38 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::repeat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b)
+    {
+        ggml::tensor *tensor = ggml_repeat(ctx->get_ctx(), a, b);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::repeat_interleave(ComputeContext *ctx, ggml::tensor *a, int repeat, int dim)
+    {
+        CHATLLM_CHECK(dim == 0) << "only works for dim=0 now";
+        CHATLLM_CHECK(a->ne[3] == 1) << "too many dimensions";
+
+        ggml::tensor *b = ggml::new_tensor_4d(ctx, ggml::type_of(a), repeat * a->ne[0], a->ne[1], a->ne[2], a->ne[3]);
+        ggml::tensor *r = ggml::repeat(ctx, a, b);
+        r = reshape_4d(ctx, r, a->ne[0], repeat,  a->ne[1], a->ne[2]);
+        r = permute(ctx, r, 1, 0, 2, 3);
+        r = cont(ctx, r);
+        r = reshape_3d(ctx, r, a->ne[0] * repeat, a->ne[1], a->ne[2]);
+
+        return r;
+    }
+
     ggml::tensor *ggml::permute(ComputeContext *ctx, ggml::tensor *a, int axis0, int axis1, int axis2, int axis3)
     {
         ggml::tensor *tensor = ggml_permute(ctx->get_ctx(), a, axis0, axis1, axis2, axis3);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::flip(ComputeContext *ctx, ggml::tensor *a, int dim)
+    {
+        ggml::tensor *tensor = ggml::map_custom1(ctx, a, ggml_compute_forward_flip, GGML_N_TASKS_MAX, (void *)(intptr_t)dim);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -507,6 +569,54 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::sin(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_sin(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::cos(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_cos(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::square(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_sqr(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::sqrt(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_sqrt(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::log(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_log(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::tanh(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_tanh(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::randn_inplace(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml::map_custom1_inplace(ctx, a, ggml_compute_forward_randn, GGML_N_TASKS_MAX, NULL);
+        return tensor;
+    }
+
     ggml::tensor *ggml::sum_rows(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_sum_rows(ctx->get_ctx(), a);
@@ -563,6 +673,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::concat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int dim)
+    {
+        ggml::tensor *tensor = ggml_concat(ctx->get_ctx(), a, b, dim);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::add(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b)
     {
         ggml::tensor *tensor = ggml_add(ctx->get_ctx(), a, b);
@@ -570,9 +687,37 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::sub(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b)
+    {
+        ggml::tensor *tensor = ggml_sub(ctx->get_ctx(), a, b);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::conv_2d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *b)
     {
         ggml::tensor *tensor = ggml_conv_2d_sk_p0(ctx->get_ctx(), kernel, b);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::conv_1d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation)
+    {
+        ggml::tensor *tensor = ggml_conv_1d(ctx->get_ctx(), kernel, data, stride, padding, dilation);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::conv_1d_depthwise(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation)
+    {
+        ggml::tensor *tensor = ggml_conv_1d_dw(ctx->get_ctx(), kernel, data, stride, padding, dilation);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::conv_transposed_1d( ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation)
+    {
+        ggml::tensor *tensor = ggml_conv_transpose_1d(ctx->get_ctx(), kernel, data, stride, padding, dilation);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -619,6 +764,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::custom(ComputeContext *ctx, ggml_custom_op_t fun, int n_tasks, void *userdata, std::vector<ggml::tensor *>inputs, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
+    {
+        ggml::tensor *tensor = ggml_custom_4d(ctx->get_ctx(), type, ne0, ne1, ne2, ne3, inputs.data(), (int)inputs.size(), fun, n_tasks, userdata);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     struct ggml_cgraph *ggml::new_graph_custom(ComputeContext *ctx, size_t size, bool grads)
     {
         return ggml_new_graph_custom(ctx->get_ctx(), size, grads);
@@ -647,6 +799,196 @@ namespace chatllm
     int64_t ggml::nelements(const ggml::tensor *tensor)
     {
         return ggml_nelements(tensor);
+    }
+
+    ggml::tensor *Sequential::forward(ComputeContext *ctx, ggml::tensor *input)
+    {
+        ggml::tensor *output = input;
+        for (auto &block : blocks)
+        {
+            output = block->forward(ctx, output);
+        }
+        return output;
+    }
+
+    ggml::tensor *Sequential::forward(ComputeContext *ctx, ggml::tensor *input, int n_past)
+    {
+        ggml::tensor *output = input;
+        for (auto &block : blocks)
+        {
+            output = block->forward(ctx, output, n_past);
+        }
+        return output;
+    }
+
+    void Sequential::add_block(Block *block)
+    {
+        blocks.emplace_back(block);
+    }
+
+    void Sequential::add_block(std::unique_ptr<Block> block)
+    {
+        blocks.push_back(std::move(block));
+    }
+
+    int64_t Sequential::get_param_num(bool effective_only) const
+    {
+        int64_t total = 0;
+        for (auto &block : blocks)
+            total += block->get_param_num(effective_only);
+        return total;
+    }
+
+    void Sequential::load(const std::string &path, TensorLoader *loader)
+    {
+        this->path = path;
+        for (size_t i = 0; i < blocks.size(); i++)
+        {
+            std::string block_path = path + std::to_string(i) + ".";
+            auto block = blocks[i].get();
+            block->load(block_path, loader);
+        }
+    }
+
+    Conv1D::Conv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
+        int dilation, int groups, bool bias)
+      : Conv1D(ctx, in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias ? out_channels : 0)
+    {}
+
+    Conv1D::Conv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
+        int dilation, int groups, int bias_dim)
+     : weight(ggml::new_tensor_3d(ctx, ggml::type_fallback(ctx->dtype, kernel_size), kernel_size, in_channels / groups, out_channels)),
+       bias(bias_dim > 0 ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, bias_dim) : nullptr),
+       in_channels(in_channels),
+       out_channels(out_channels),
+       kernel_size(kernel_size),
+       stride(stride),
+       padding(padding),
+       dilation(dilation),
+       groups(groups)
+    {
+    }
+
+    ggml::tensor *Conv1D::forward(ComputeContext *ctx, ggml::tensor *input)
+    {
+        ggml::tensor *output = nullptr;
+        if (groups == 1)
+        {
+            output = ggml::conv_1d(ctx, weight, input, stride, padding, dilation);
+        }
+        else if (groups == in_channels)
+        {
+            CHATLLM_CHECK((out_channels % in_channels) == 0) << "not implemented groups: " << groups;
+            output = ggml::conv_1d_depthwise(ctx, weight, input, stride, padding, dilation);
+        }
+        else
+        {
+            CHATLLM_CHECK(false) << "not implemented groups: " << groups;
+        }
+
+        if (bias)
+        {
+            auto bias_view = ggml::view_2d(ctx, bias, 1, bias->ne[0], ggml::element_size(bias), 0);
+            output = ggml::add(ctx, output, bias_view);
+        }
+        return output;
+    }
+
+    int64_t Conv1D::get_param_num(bool effective_only) const
+    {
+        int64_t total = ggml::nelements(weight);
+        if (bias)
+            total += ggml::nelements(bias);
+        return total;
+    }
+
+    void Conv1D::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        loader->read_tensor(path + "weight", weight);
+        if (bias)
+            loader->read_tensor(path + "bias", bias);
+    }
+
+    ConvTransposed1D::ConvTransposed1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
+        int output_padding, int dilation, int groups, bool bias)
+        : Conv1D(ctx, out_channels, in_channels, kernel_size, stride, padding, dilation, groups, bias ? out_channels : 0),
+          output_padding(output_padding)
+    {}
+
+    ggml::tensor *ConvTransposed1D::forward(ComputeContext *ctx, ggml::tensor *input)
+    {
+        // TODO: Optimization needed.
+        // `ggml::conv_transposed_1d` is not fully functional. So we do it manually for some configurations.
+        ggml::tensor *output = nullptr;
+        if ((padding == 0) && (output_padding == 0) && (dilation == 1) && (groups == 1))
+        {
+            output = ggml::conv_transposed_1d(ctx, weight, input, stride, 0, 0);
+        }
+        else if (groups == 1)
+        {
+            int p = (kernel_size - 1) * (dilation + 1) / 2 - padding;
+            CHATLLM_CHECK(output_padding == 0);
+
+            ggml::tensor *fract_input = input;
+            if (stride > 1)
+            {
+                CHATLLM_CHECK(ggml::get_dim(input, 3) == 1);
+                auto view = ggml::reshape_4d(ctx, input, 1, ggml::get_dim(input, 0), ggml::get_dim(input, 1), ggml::get_dim(input, 2));
+                auto zeros = ggml::new_tensor_4d(ctx, ggml::type_of(view), stride - 1, ggml::get_dim(input, 0), ggml::get_dim(input, 1), ggml::get_dim(input, 2));
+                zeros = ggml::scale_inplace(ctx, zeros, 0.0);
+				fract_input = ggml::concat(ctx, view, zeros, 0); // [stride, w[0], w[1], w[2]]
+
+				fract_input = ggml::view_3d(ctx, fract_input, stride * (ggml::get_dim(input, 0) - 1) + 1, ggml::get_dim(input, 1), ggml::get_dim(input, 2),
+                    ggml::element_size(input) * stride * ggml::get_dim(input, 0),
+                    ggml::element_size(input) * stride * ggml::get_dim(input, 0) * ggml::get_dim(input, 1),
+                    0);
+                fract_input = ggml::cont(ctx, fract_input);
+            }
+
+            auto view = ggml::permute(ctx, weight, 0, 2, 1, 3);
+            view =  ggml::flip(ctx, view, 0);
+
+            output = ggml::conv_1d(ctx, view, fract_input, 1, p, 1);
+        }
+        else
+        {
+            CHATLLM_CHECK(false) << "not implemented groups: " << groups;
+        }
+
+		if (bias)
+		{
+			auto bias_view = ggml::view_2d(ctx, bias, 1, bias->ne[0], ggml::element_size(bias), 0);
+			output = ggml::add(ctx, output, bias_view);
+		}
+        return output;
+    }
+
+    ggml::tensor *Unary::forward(ComputeContext *ctx, ggml::tensor *input)
+    {
+        switch (op)
+        {
+        case Op::Sin:
+            return ggml::sin(ctx, input);
+        case Op::Cos:
+            return ggml::cos(ctx, input);
+        case Op::Square:
+            return ggml::square(ctx, input);
+        case Op::Sqrt:
+            return ggml::sqrt(ctx, input);
+        case Op::Log:
+            return ggml::log(ctx, input);
+        case Op::Tanh:
+            return ggml::tanh(ctx, input);
+        default:
+            CHATLLM_CHECK(false) << "not implemented unary op: " << op;
+            return nullptr;
+        }
+    }
+
+    ggml::tensor *Unary::forward(ComputeContext *ctx, ggml::tensor *input, int n_past)
+    {
+        return forward(ctx, input);
     }
 
     ggml::tensor *Embedding::forward(ComputeContext *ctx, ggml::tensor *input)

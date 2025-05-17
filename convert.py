@@ -19,6 +19,7 @@ import math
 
 import torch
 from torch import nn
+from torch import _weight_norm
 
 from sentencepiece import SentencePieceProcessor  # type: ignore
 
@@ -194,6 +195,7 @@ class ModelType(Enum):
     BGE_ReRankerM3          = 0x10000103
     MiniCPM_Embedding_Light = 0x10000104
     MiniCPM_ReRanker_Light  = 0x10000105
+    OrpheusTTS              = 0x10000106
 
     LlaMAMulti    = 0x20000001
 
@@ -228,7 +230,7 @@ def pad_to_len(l: list, to_len: int, v = 0) -> list:
 
 def quantize_q8_0(tensor: torch.Tensor) -> torch.CharTensor:
     # equivalent to ggml_quantize_q8_0 in ggml.c
-    assert tensor.shape[1] % GGML_QK8_0 == 0
+    assert tensor.shape[tensor.ndim - 1] % GGML_QK8_0 == 0
     tensor = tensor.view(-1, GGML_QK8_0)
     scale = tensor.abs().max(dim=-1, keepdim=True).values / ((1 << 7) - 1)
     tensor = (tensor / scale).round().clamp(min=-128, max=127).char()
@@ -239,7 +241,7 @@ def quantize_q8_0(tensor: torch.Tensor) -> torch.CharTensor:
 
 def quantize_q4_0(tensor: torch.Tensor) -> torch.CharTensor:
     # equivalent to ggml_quantize_q4_0 in ggml.c
-    assert tensor.shape[1] % GGML_QK4_0 == 0
+    assert tensor.shape[tensor.ndim - 1] % GGML_QK4_0 == 0
     tensor = tensor.view(-1, GGML_QK4_0)
     abs_max_indices = tensor.abs().max(dim=-1, keepdim=True).indices
     max_values = torch.take_along_dim(tensor, abs_max_indices, dim=-1)
@@ -253,7 +255,7 @@ def quantize_q4_0(tensor: torch.Tensor) -> torch.CharTensor:
 
 def quantize_q4_1(tensor: torch.Tensor) -> torch.CharTensor:
     # equivalent to ggml_quantize_q4_1 in ggml.c
-    assert tensor.shape[1] % GGML_QK4_1 == 0
+    assert tensor.shape[tensor.ndim - 1] % GGML_QK4_1 == 0
     tensor = tensor.view(-1, GGML_QK4_1)
     abs_max_indices = tensor.max(dim=-1, keepdim=True).indices
     max_values = torch.take_along_dim(tensor, abs_max_indices, dim=-1)
@@ -279,18 +281,21 @@ def dump_tensor(f, name: str, tensor: torch.Tensor, ggml_type: GGMLType):
     f.write(struct.pack("i" * (2 + tensor.ndim), tensor.ndim, *tensor.shape, ggml_type.value))
 
     # tensor data
-    if ggml_type == GGMLType.F32:
-        tensor = tensor.float()
-    elif ggml_type == GGMLType.F16:
-        tensor = tensor.half()
-    elif ggml_type == GGMLType.Q8_0:
-        tensor = quantize_q8_0(tensor)
-    elif ggml_type == GGMLType.Q4_0:
-        tensor = quantize_q4_0(tensor)
-    elif ggml_type == GGMLType.Q4_1:
-        tensor = quantize_q4_1(tensor)
-    else:
-        raise NotImplementedError(f"Cannot dump tensor of dtype {tensor.dtype}")
+    try:
+        if ggml_type == GGMLType.F32:
+            tensor = tensor.float()
+        elif ggml_type == GGMLType.F16:
+            tensor = tensor.half()
+        elif ggml_type == GGMLType.Q8_0:
+            tensor = quantize_q8_0(tensor)
+        elif ggml_type == GGMLType.Q4_0:
+            tensor = quantize_q4_0(tensor)
+        elif ggml_type == GGMLType.Q4_1:
+            tensor = quantize_q4_1(tensor)
+        else:
+            raise NotImplementedError(f"Cannot dump tensor of dtype {tensor.dtype}")
+    except Exception as e:
+        raise Exception(f"Error dumping tensor {name} of shape {tensor.shape}: {e}")
 
     # align address
     aligned_pos = (f.tell() + (GGML_MEM_ALIGN - 1)) // GGML_MEM_ALIGN * GGML_MEM_ALIGN
@@ -6162,6 +6167,130 @@ class AquilaConverter(BaseConverter):
     def get_weight_names(config):
         return Llama32Converter.get_weight_names(config)
 
+class OrpheusTTSConverter(BaseConverter):
+    MODEL_TYPE = ModelType.OrpheusTTS
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.startswith('decoder') or name.startswith('encoder'):
+                if name.endswith('.weight_g'): continue
+
+                new_name = 'snac.' + name
+                if name.endswith('.alpha'):
+                    shape = tensor.shape
+                    assert (len(shape) == 3) and (shape[0] == 1) and (shape[2] == 1)
+                    new_dict[new_name] = tensor.reshape(shape[1])
+                elif name.endswith('.bias'):
+                    new_dict[new_name] = tensor
+                elif name.endswith('.weight_v'):
+                    g = state_dict[name.replace('.weight_v', '.weight_g')]
+                    new_name = new_name.replace('.weight_v', '.weight')
+                    g = _weight_norm(tensor, g)
+                    g = g.transpose(1, 2) # g: [out_dim, in_dim / groups, kernel_size]
+                    new_dict[new_name] = g
+                else:
+                    raise Exception(f"unknown name: {name}")
+
+            elif name.startswith('quantizer'):
+                if name.endswith('.weight_g'): continue
+                new_name = name.replace('quantizer.quantizers.', 'snac.quantizer.strides.')
+                if name.endswith('.weight_v'):
+                    g = state_dict[name.replace('.weight_v', '.weight_g')]
+                    new_name = new_name.replace('.weight_v', '.weight')
+                    g = _weight_norm(tensor, g)
+                    g = g.transpose(1, 2) # g: [out_dim, in_dim / groups, kernel_size]
+                    new_dict[new_name] = g
+                else:
+                    new_dict[new_name] = tensor
+            else:
+                new_dict[name] = Llama32Converter.pp(config, name, tensor)
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.snac_model['sampling_rate'] == 24000, "sampling_rate must be 24000"
+        assert config.snac_model['depthwise']
+        assert config.snac_model['noise']
+        assert config.snac_model['attn_window_size'] is None
+
+        print(f"WARNING: encoder not supported")
+
+        Llama32Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weights = Llama32Converter.get_weight_names(config)
+
+        snac_config = config.snac_model
+
+        def get_conv1d(prefix: str, bias: bool = True):
+            weights = [
+                f"{prefix}.bias",
+                f"{prefix}.weight",
+            ]
+            if not bias: weights.pop(0)
+            return weights
+
+        def get_snac(prefix: str):
+            return [
+                f"{prefix}.alpha",
+            ]
+
+        def get_residual(prefix: str):
+            weights = get_snac(prefix   + '.block.layers.0') + \
+                      get_conv1d(prefix + '.block.layers.1') + \
+                      get_snac(prefix   + '.block.layers.2') + \
+                      get_conv1d(prefix + '.block.layers.3')
+            return weights
+
+        def get_block(prefix: str):
+            weights = get_snac(prefix   + '.block.layers.0') + \
+                      get_conv1d(prefix + '.block.layers.1') + \
+                      get_conv1d(prefix + '.block.layers.2.linear', False)
+            for i in range(3):
+                weights.extend(get_residual(f"{prefix}.block.layers.{i + 3}"))
+            return weights
+
+        def get_vq(prefix: str):
+            weights = get_conv1d(prefix + '.in_proj') + \
+                      get_conv1d(prefix + '.out_proj')
+            weights += [f"{prefix}.codebook.weight"]
+
+            return weights
+
+        snac_weights = []
+        layer_id = 1
+        if config.snac_model['depthwise']:
+            snac_weights += get_conv1d('snac.decoder.model.layers.0')
+            snac_weights += get_conv1d('snac.decoder.model.layers.1')
+            layer_id = 2
+        else:
+            snac_weights += get_conv1d('snac.decoder.model.layers.0')
+
+        for i, _ in enumerate(snac_config['decoder_rates']):
+            snac_weights += get_block(f"snac.decoder.model.layers.{layer_id}")
+            layer_id += 1
+
+        snac_weights += get_snac(f'snac.decoder.model.layers.{layer_id}')
+        layer_id += 1
+        snac_weights += get_conv1d(f'snac.decoder.model.layers.{layer_id}')
+        layer_id += 1
+
+        for i, _stride in enumerate(snac_config['vq_strides']):
+            snac_weights += get_vq(f'snac.quantizer.strides.{i}')
+
+        return weights + snac_weights
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -6298,16 +6427,14 @@ def load_config(path: Path, config_fn: str) -> Any:
         r = json.load(fp)
     return r
 
-def load_some_info(path: Path) -> dict:
-    r = {}
+def load_some_info(r: dict, path: Path, prefix: str = '') -> None:
     if path.is_dir():
         globs = ["config.json", "configuration.json", "special_tokens_map.json",
                  "tokenizer_config.json", "preprocessor_config.json"]
         for glob in globs:
             files = list(path.glob(glob))
             for f in files:
-                r[os.path.basename(f.name)] = load_config(path, f.name)
-    return r
+                r[prefix + os.path.basename(f.name)] = load_config(path, f.name)
 
 def load_some_model(path: Path) -> List[Path]:
     '''Load a model of any supported format.'''
@@ -6338,6 +6465,7 @@ def main():
     parser.add_argument("--vocab_dir", type=str, default='')
     parser.add_argument("--experts", type=str, default='')
     parser.add_argument("--native_name", type=str, default='', help='model native name')
+    parser.add_argument("--snac_model", type=str, default='', help='snac model path (required by Orpheus-TTS, etc)')
     args = parser.parse_args()
 
     arch = args.arch.lower()
@@ -6385,7 +6513,14 @@ def main():
     model_files = load_some_model(Path(args.model_name_or_path))
 
     global g_model_meta
-    g_model_meta = load_some_info(Path(args.model_name_or_path))
+    load_some_info(g_model_meta, Path(args.model_name_or_path))
+
+    if arch == 'orpheus-tts':
+        if args.snac_model == '':
+            raise Exception('snac_model (`--snac_model`) is required for Orpheus-TTS')
+        load_some_info(g_model_meta, Path(args.snac_model), 'snac_')
+        model_files += load_some_model(Path(args.snac_model))
+        config.snac_model = g_model_meta['snac_config.json']
 
     if args.arch != '':
         g_model_meta['model_name'] = args.arch
@@ -6722,6 +6857,8 @@ def main():
     elif arch == 'deephermes-3-mistral':
         Mistral2Converter.MODEL_TYPE = ModelType.DeepHermes3Mistral
         Mistral2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'orpheus-tts':
+        OrpheusTTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

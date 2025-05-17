@@ -38,6 +38,8 @@ namespace chatllm
     {
         typedef ggml_prec prec;
 
+        ggml::type type_fallback(ggml::type type, int64_t last_dim);
+
         ggml::tensor *new_tensor_1d(ComputeContext *ctx, ggml::type type, int64_t ne0);
         ggml::tensor *new_tensor_2d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1);
         ggml::tensor *new_tensor_3d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2);
@@ -47,6 +49,7 @@ namespace chatllm
         void set_output(ggml::tensor *a);
 
         void fill(ggml::tensor *a, uint8_t value, size_t offset = 0, size_t size = 0);
+        float  at(ggml::tensor *a, int64_t i, int64_t j, int64_t k, int64_t l);
 
         ggml::type    type_of(const ggml::tensor *a);
 
@@ -57,12 +60,16 @@ namespace chatllm
         ggml::tensor *cont(ComputeContext *ctx, ggml::tensor *a);
 
         ggml::tensor *transpose(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *concat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int dim);
 
         // operators
-        ggml::tensor *get_rows(ComputeContext *ctx, ggml::tensor *a, ggml::tensor  *b);
+        ggml::tensor *get_rows(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
 
         ggml::tensor *add(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b);
         ggml::tensor *add_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor * b);
+
+        ggml::tensor *sub(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b);
+        ggml::tensor *sub_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor * b);
 
         ggml::tensor *mul_mat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor  *b);
         ggml::tensor *mul_mat_id(ComputeContext *ctx, ggml::tensor *as, ggml::tensor *b, ggml::tensor  *ids);
@@ -74,6 +81,14 @@ namespace chatllm
 
         ggml::tensor *sum_rows(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *mean(ComputeContext *ctx, ggml::tensor *a);
+
+        ggml::tensor *sin(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *cos(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *square(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *sqrt(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *log(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *tanh(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *randn_inplace(ComputeContext *ctx, ggml::tensor *a); // standard normal distribution
 
         ggml::tensor *top_k(ComputeContext *ctx, ggml::tensor *a, int k);
 
@@ -87,7 +102,12 @@ namespace chatllm
         ggml::tensor *reshape_3d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2);
         ggml::tensor *reshape_4d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
 
+        ggml::tensor *repeat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
+
+        ggml::tensor *repeat_interleave(ComputeContext *ctx, ggml::tensor *a, int repeat, int dim = 0);
+
         ggml::tensor *permute(ComputeContext *ctx, ggml::tensor *a, int axis0, int axis1, int axis2, int axis3);
+        ggml::tensor *flip(ComputeContext *ctx, ggml::tensor *a, int dim = 0);
 
         ggml::tensor *norm(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
@@ -127,6 +147,9 @@ namespace chatllm
         ggml::tensor *clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max);
 
         ggml::tensor *conv_2d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *b);
+        ggml::tensor *conv_1d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation);
+        ggml::tensor *conv_1d_depthwise(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation);
+        ggml::tensor *conv_transposed_1d( ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation);
 
         ggml::tensor *map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom2(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);
@@ -135,6 +158,8 @@ namespace chatllm
         ggml::tensor *map_custom1_inplace(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom2_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom3_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c, const ggml_custom3_op_t fun, int n_tasks, void *userdata);
+
+        ggml::tensor *custom(ComputeContext *ctx, ggml_custom_op_t fun, int n_tasks, void *userdata, std::vector<ggml::tensor *>inputs, ggml::type type, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);
 
         void mul_mat_set_prec(ggml::tensor *a, ggml::prec prec);
         bool is_contiguous(const ggml::tensor *a);
@@ -225,6 +250,90 @@ namespace chatllm
         }
     };
 
+    class Sequential : public Block
+    {
+    public:
+        Sequential() {}
+        Sequential(InitContext *ctx) {}
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int n_past) override;
+
+        void add_block(Block * block);
+        void add_block(std::unique_ptr<Block> block);
+
+        int64_t get_param_num(bool effective_only) const override;
+
+        void load(const std::string &path, TensorLoader *loader) override;
+
+    public:
+        std::vector<std::unique_ptr<Block>> blocks;
+        std::string path;
+    };
+
+    class Conv1D: public Block
+    {
+    public:
+        Conv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride = 1, int padding = 0,
+               int dilation = 1, int groups = 1, bool bias = true);
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+
+        int64_t get_param_num(bool effective_only) const override;
+
+        void load(const std::string &path, TensorLoader *loader) override;
+    protected:
+        Conv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
+               int dilation, int groups, int bias_dim);
+    public:
+        ggml::tensor *weight;
+        ggml::tensor *bias;
+    protected:
+        const int in_channels;
+        const int out_channels;
+        const int kernel_size;
+        const int stride;
+        const int padding;
+        const int dilation;
+        const int groups;
+    };
+
+    // Just like Torch:
+    // when a Conv1d and a ConvTranspose1d are initialized with same parameters,
+    // they are inverses of each other in regard to the input and output shapes.
+    // So, here `in_channels` --> Conv1D --> `out_channels`
+    class ConvTransposed1D : public Conv1D
+    {
+    public:
+        ConvTransposed1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride = 1, int padding = 0,
+               int output_padding = 0, int dilation = 1, int groups = 1, bool bias = true);
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+    protected:
+        const int output_padding;
+    };
+
+    class Unary : public Block
+    {
+    public:
+        enum Op
+        {
+            Sin,
+            Cos,
+            Tanh,
+            Square,
+            Sqrt,
+            Log,
+        };
+        Unary(InitContext *ctx, Op op): op(op) {}
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int n_past) override;
+    public:
+        const Op op;
+    };
+
     class ShiftPending
     {
     public:
@@ -241,7 +350,7 @@ namespace chatllm
     public:
         Embedding() : weight(nullptr) {}
         Embedding(InitContext *ctx, int num_embeddings, int embedding_dim)
-            : weight(ggml::new_tensor_2d(ctx, ctx->dtype, embedding_dim, num_embeddings))
+            : weight(ggml::new_tensor_2d(ctx, ggml::type_fallback(ctx->dtype, embedding_dim), embedding_dim, num_embeddings))
         {
             ggml::set_input(weight);
         }

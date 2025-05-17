@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iomanip>
 #include <functional>
+#include <random>
 #include "layers.h"
 
 #undef MIN
@@ -524,6 +525,148 @@ static void ggml_compute_forward_chatglm1_rope(ggml::tensor * dst , const ggml::
         break;
     case GGML_TYPE_F32:
         ggml_compute_forward_chatglm1_rope_f32(dst, a, b, ith, nth, userdata);
+        break;
+    default:
+        GGML_ASSERT(false);
+        break;
+    }
+}
+
+static void ggml_compute_forward_randn_f32(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, void * userdata)
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<float> distribution(0.0f, 1.0f);
+
+    const ggml::tensor *src0 = a;
+
+    GGML_TENSOR_UNARY_OP_LOCALS
+
+    const int nr = (int)ggml::nrows(dst);
+
+    // rows per thread
+    const int dr = (nr + nth - 1)/nth;
+
+    // row range for this thread
+    const int ir0 = dr*ith;
+    const int ir1 = MIN(ir0 + dr, nr);
+
+    // row index used to determine which thread to use
+    int ir = 0;
+
+    for (int64_t i3 = 0; i3 < ne3; i3++) {
+        for (int64_t i2 = 0; i2 < ne2; i2++) {
+            for (int64_t i1 = 0; i1 < ne1; i1++) {
+                if (ir++ < ir0) continue;
+                if (ir   > ir1) break;
+                for (int64_t i0 = 0; i0 < ne0; i0++) {
+                    float * dst_data  = (float *)((char *)  dst->data +  i3*nb3 + i2*nb2  + i1*nb1  + i0*nb0);
+
+                    dst_data[0] = distribution(gen);
+                }
+            }
+        }
+    }
+}
+
+static void ggml_compute_forward_randn_f16(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, void * userdata)
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<float> distribution(0.0f, 1.0f);
+
+    const ggml::tensor *src0 = a;
+
+    GGML_TENSOR_UNARY_OP_LOCALS
+
+    const int nr = (int)ggml::nrows(dst);
+
+    // rows per thread
+    const int dr = (nr + nth - 1)/nth;
+
+    // row range for this thread
+    const int ir0 = dr*ith;
+    const int ir1 = MIN(ir0 + dr, nr);
+
+    // row index used to determine which thread to use
+    int ir = 0;
+
+    for (int64_t i3 = 0; i3 < ne3; i3++) {
+        for (int64_t i2 = 0; i2 < ne2; i2++) {
+            for (int64_t i1 = 0; i1 < ne1; i1++) {
+                if (ir++ < ir0) continue;
+                if (ir   > ir1) break;
+                for (int64_t i0 = 0; i0 < ne0; i0++) {
+                    ggml_fp16_t * dst_data  = (ggml_fp16_t *)((char *)  dst->data +  i3*nb3 + i2*nb2  + i1*nb1  + i0*nb0);
+
+                    dst_data[0] = ggml_fp32_to_fp16(distribution(gen));
+                }
+            }
+        }
+    }
+}
+
+static void ggml_compute_forward_randn(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, void * userdata)
+{
+    switch (a->type)
+    {
+    case GGML_TYPE_F16:
+        ggml_compute_forward_randn_f16(dst, a, ith, nth, userdata);
+        break;
+    case GGML_TYPE_F32:
+        ggml_compute_forward_randn_f32(dst, a, ith, nth, userdata);
+        break;
+    default:
+        GGML_ASSERT(false);
+        break;
+    }
+}
+
+template <class T> static void ggml_compute_forward_flip_T_0(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth)
+{
+    const ggml::tensor *src0 = a;
+
+    GGML_TENSOR_UNARY_OP_LOCALS
+
+    const int nr = (int)ggml::nrows(dst);
+
+    // rows per thread
+    const int dr = (nr + nth - 1)/nth;
+
+    // row range for this thread
+    const int ir0 = dr*ith;
+    const int ir1 = MIN(ir0 + dr, nr);
+
+    // row index used to determine which thread to use
+    int ir = 0;
+
+    for (int64_t i3 = 0; i3 < ne3; i3++) {
+        for (int64_t i2 = 0; i2 < ne2; i2++) {
+            for (int64_t i1 = 0; i1 < ne1; i1++) {
+                if (ir++ < ir0) continue;
+                if (ir   > ir1) break;
+                for (int64_t i0 = 0; i0 < ne0; i0++) {
+                    T * dst_data  = (T *)((char *)  dst->data +  i3*nb3  + i2*nb2   + i1*nb1   + i0*nb0);
+                    T * src_data  = (T *)((char *) src0->data +  i3*nb03 + i2*nb02  + i1*nb01  + (ne0 - 1 - i0)*nb00);
+
+                    dst_data[0] = src_data[0];
+                }
+            }
+        }
+    }
+}
+
+static void ggml_compute_forward_flip(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, void * userdata)
+{
+    const int dim = (int)(intptr_t)userdata;
+    CHATLLM_CHECK(dim == 0) << "flip: only dim = 0 is supported";
+    switch (a->type)
+    {
+    case GGML_TYPE_F16:
+        ggml_compute_forward_flip_T_0<ggml_fp16_t>(dst, a, ith, nth);
+        break;
+    case GGML_TYPE_F32:
+        ggml_compute_forward_flip_T_0<float>(dst, a, ith, nth);
         break;
     default:
         GGML_ASSERT(false);

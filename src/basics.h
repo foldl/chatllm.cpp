@@ -12,7 +12,7 @@ namespace chatllm
     {
     public:
         LogMessageFatal(const char *file, int line) { oss_ << file << ':' << line << ' '; }
-        ~LogMessageFatal() noexcept(false) { throw std::runtime_error(oss_.str()); }
+        ~LogMessageFatal() noexcept(false) { abort(); }
         std::ostringstream &stream() { return oss_; }
 
     private:
