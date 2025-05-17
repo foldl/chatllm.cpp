@@ -21,11 +21,6 @@
 #include <fcntl.h>
 #include <io.h>
 #include <windows.h>
-#ifdef _MSC_VER
-#include <mmsystem.h>
-static int play(const int16_t *samples, int sample_number, const int SAMPLE_RATE, const int channels);
-#pragma comment(lib, "winmm")
-#endif
 #endif
 
 static chatllm::ThoughtChunkInterceptor thought_interceptor;
@@ -61,6 +56,7 @@ struct Args
     std::string cache_type = "f16";
     std::string thought_tags[2] = {"", ""};
     std::string multimedia_file_tags[2] = {"", ""};
+    std::string tts_export;
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -121,7 +117,7 @@ const std::vector<std::pair<std::string, std::string>> THOUGHT_TAGS = {
 static std::string show_default_thought_tags(void)
 {
     std::string tags;
-    for (int i = 0; i < sizeof(THOUGHT_TAGS) / sizeof(THOUGHT_TAGS[0]); i++)
+    for (int i = 0; i < (int)(sizeof(THOUGHT_TAGS) / sizeof(THOUGHT_TAGS[0])); i++)
     {
         if (i > 0)
             tags += ", ";
@@ -227,6 +223,7 @@ void usage(const std::string &prog)
               << "Multi-model options:\n"
               << "  --multimedia_file_tags OPENING CLOSEING \n"
               << "                          multimedia file tags. Default: Not set. Example {{ }}: {{image:/path/to/image.png}}\n"
+              << "  --tts_export FILE       save generated PCM samples into a file. (default: not save)                                 [*]\n"
               << "Session:\n"
               << "  --save_session N FILE   save session to FILE after N round(s) of chatting (N >= 0) and quit                         [*]\n"
               << "                          when N = 0, system prompt is evaluated.\n"
@@ -448,6 +445,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--ggml_dir",                    ggml_dir,             std::string)
             handle_para0("--cache_type",                  cache_type,           std::string)
             handle_para0("--batch_size",                  batch_size,           std::stoi)
+            handle_para0("--tts_export",                  tts_export,           std::string)
             else
                 break;
 
@@ -702,21 +700,18 @@ static std::string get_temp_file_name() {
     return temp_file.string();
 }
 
-static void play_audio(const std::vector<int16_t> &data, const int sample_rate, const int channels, TextStreamer &streamer)
+static void play_audio(const std::vector<int16_t> &data, const int sample_rate, const int channels, TextStreamer &streamer, std::string export_fn)
 {
-#ifdef _MSC_VER
-    play(data.data(), (int)data.size(), sample_rate, channels);
-    streamer.cout << "played" << std::endl;
-#else
-    auto fn = get_temp_file_name();
+    auto fn = export_fn.size() > 0 ? export_fn : get_temp_file_name();
     std::ofstream file(fn, std::ios::binary);
     file.write((const char *)data.data(), data.size() * sizeof(data[0]));
     file.close();
 
-    auto cmd = "ffplay -autoexit -f s16le -ch_layout mono -sample_rate 24000 \"" + fn + "\"";
-    system(cmd.c_str());
-    std::remove(fn.c_str());
-#endif
+    char cmd[2048];
+    sprintf(cmd, "ffplay -autoexit -f s16le -ch_layout %s -sample_rate %d \"%s\"", channels == 1 ? "mono" : "stereo", sample_rate, fn.c_str());
+    (void)system(cmd);
+    if (export_fn.size() < 1)
+        std::remove(fn.c_str());
 }
 
 static void run_tts(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
@@ -728,7 +723,7 @@ static void run_tts(Args &args, chatllm::Pipeline &pipeline, TextStreamer &strea
     if (!args.interactive)
     {
         pipeline.speech_synthesis(args.prompt, gen_config, result, sample_rate, channels);
-        play_audio(result, sample_rate, channels, streamer);
+        play_audio(result, sample_rate, channels, streamer, args.tts_export);
         return;
     }
 
@@ -747,7 +742,7 @@ static void run_tts(Args &args, chatllm::Pipeline &pipeline, TextStreamer &strea
         pipeline.speech_synthesis(input, gen_config, result, sample_rate, channels);
         streamer.cout << "      > ";
 
-        play_audio(result, sample_rate, channels, streamer);
+        play_audio(result, sample_rate, channels, streamer, args.tts_export);
 
     }
     streamer.cout << "Bye\n";
@@ -1931,72 +1926,4 @@ int  chatllm_load_session(struct chatllm_obj *obj, const char *utf8_str)
     return r;
 }
 
-#endif
-
-#ifdef _MSC_VER
-
-// Callback function for waveOutProc
-void CALLBACK waveOutProc(HWAVEOUT hwo, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
-    if (uMsg == WOM_DONE) {
-        // The buffer has finished playing
-        waveOutUnprepareHeader(hwo, (LPWAVEHDR)dwParam1, sizeof(WAVEHDR));
-    }
-}
-
-static int play(const int16_t *samples, int sample_number, const int SAMPLE_RATE, const int channels)
-{
-    // Global variables
-    HWAVEOUT hWaveOut;
-    WAVEHDR waveHeader;
-    WAVEFORMATEX waveFormat;
-
-    // Initialize the WAVEFORMATEX structure
-    waveFormat.wFormatTag = WAVE_FORMAT_PCM;
-    waveFormat.nChannels = channels;
-    waveFormat.nSamplesPerSec = SAMPLE_RATE;
-    waveFormat.wBitsPerSample = 16; // 16-bit
-    waveFormat.nBlockAlign = (waveFormat.nChannels * waveFormat.wBitsPerSample) / 8;
-    waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
-    waveFormat.cbSize = 0;
-
-    // Open the default wave device
-    MMRESULT result = waveOutOpen(&hWaveOut, WAVE_MAPPER, &waveFormat, (DWORD_PTR)waveOutProc, 0, CALLBACK_FUNCTION);
-    if (result != MMSYSERR_NOERROR) {
-        printf("Failed to open wave out device.\n");
-        return 1;
-    }
-
-    // Prepare the WAVEHDR structure
-    waveHeader.lpData = (LPSTR)samples;
-    waveHeader.dwBufferLength = sample_number * sizeof(samples[0]);
-    waveHeader.dwFlags = 0;
-    waveHeader.dwLoops = 0;
-
-    result = waveOutPrepareHeader(hWaveOut, &waveHeader, sizeof(WAVEHDR));
-    if (result != MMSYSERR_NOERROR) {
-        printf("Failed to prepare wave header.\n");
-        waveOutClose(hWaveOut);
-        return 1;
-    }
-
-    // Write the PCM data to the wave output device
-    result = waveOutWrite(hWaveOut, &waveHeader, sizeof(WAVEHDR));
-    if (result != MMSYSERR_NOERROR) {
-        printf("Failed to write wave data.\n");
-        waveOutUnprepareHeader(hWaveOut, &waveHeader, sizeof(WAVEHDR));
-        waveOutClose(hWaveOut);
-        return 1;
-    }
-
-    // Wait for the audio to finish playing
-    while (!(waveHeader.dwFlags & WHDR_DONE)) {
-        Sleep(10);
-    }
-
-    // Clean up
-    waveOutUnprepareHeader(hWaveOut, &waveHeader, sizeof(WAVEHDR));
-    waveOutClose(hWaveOut);
-
-    return 0;
-}
 #endif

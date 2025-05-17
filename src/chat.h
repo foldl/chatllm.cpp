@@ -572,7 +572,7 @@ namespace chatllm
     {
     public:
         ThoughtChunkInterceptor()
-            : ChunkInterceptor(), active(false), tags(tags), detecting(false), is_thinking(false)
+            : ChunkInterceptor(), active(false), detecting(false), is_thinking(false)
         {}
 
         void init(std::vector<std::pair<std::string, std::string>> tags);
