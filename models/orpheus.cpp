@@ -471,7 +471,7 @@ namespace tts
             // https://github.com/canopyai/Orpheus-TTS/blob/835ac7cd1870fa1fa5e342e14260c2d68cabb2e7/orpheus_tts_pypi/orpheus_tts/engine_class.py#L89
             ids.push_back(128259);
             ids.push_back(bos_token_id);
-            auto prompt = (!voice.empty() ? "{" + voice + "}: " : "") + text;
+            auto prompt = (!voice.empty() ? voice + ": " : "") + text;
             BaseTokenizer::encode(prompt, ids);
             ids.push_back(128009);
             ids.push_back(128260);
