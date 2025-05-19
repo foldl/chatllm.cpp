@@ -12,7 +12,7 @@ namespace chatllm
     {
     public:
         LogMessageFatal(const char *file, int line) { oss_ << file << ':' << line << ' '; }
-        ~LogMessageFatal() noexcept(false) { abort(); }
+        ~LogMessageFatal() noexcept(false) { throw std::runtime_error(oss_.str()); }
         std::ostringstream &stream() { return oss_; }
 
     private:
@@ -58,4 +58,9 @@ namespace utils
     std::string trim(const std::string& str);
 
     std::string join(const std::vector<std::string>& vec, const std::string& sep);
+
+    std::string replace_all(const std::string& str, const std::string& from, const std::string& to);
+
+    bool starts_with(const std::string& value, const std::string& starting);
+    bool ends_with(const std::string& value, const std::string& ending);
 }

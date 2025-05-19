@@ -353,6 +353,7 @@ namespace chatllm
         MODEL_TYPE_MiniCPM_Embedding_Light  = 0x10000104,
         MODEL_TYPE_MiniCPM_ReRanker_Light   = 0x10000105,
         MODEL_TYPE_ORPHEUS_TTS              = 0x10000106,
+        MODEL_TYPE_OUTE_TTS                 = 0x10000107,
 
         MODEL_TYPE_LLAMA_MULTI      = 0x20000001,
 
@@ -376,6 +377,7 @@ namespace chatllm
         case MODEL_TYPE_MiniCPM_ReRanker_Light:
             return ModelPurpose::Ranker;
         case MODEL_TYPE_ORPHEUS_TTS:
+        case MODEL_TYPE_OUTE_TTS:
             return ModelPurpose::TTS;
         default:
             return ModelPurpose::Chat;
@@ -2058,6 +2060,11 @@ namespace chatllm
         #include "../models/orpheus.cpp"
     }
 
+    namespace oute
+    {
+        #include "../models/oute.cpp"
+    }
+
     template <class Config>
     void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
     {
@@ -2270,7 +2277,7 @@ namespace chatllm
         oss << "Model name  : " << loader.model_name;
         if (loader.model_native_name.size() > 0)
             oss << " (" << loader.model_native_name << ")";
-        oss << " (" << std::hex << std::setw(8) << std::setfill('0') << model_type << ")";
+        oss << " (" << std::hex << std::setw(8) << std::setfill('0') << model_type << ")" << std::dec;
         oss << std::endl;
 
         oss << "Model type  : " << to_string(purpose);
@@ -2458,7 +2465,8 @@ namespace chatllm
         CASE(BGE_ReRanker_M3,       bge::ranker, 1)             \
         CASE(MiniCPM_Embedding_Light,   minicpm::emb_light, 1)  \
         CASE(MiniCPM_ReRanker_Light,    minicpm::ranker_light, 1)\
-        CASE(ORPHEUS_TTS,               orpheus::tts, 1)
+        CASE(ORPHEUS_TTS,               orpheus::tts, 1)        \
+        CASE(OUTE_TTS,                  oute::tts, 1)
 
     AbstractModel *ModelFactory::load_model_again(ModelLoader &loader, const ModelObject::extra_args &args)
     {

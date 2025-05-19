@@ -196,6 +196,7 @@ class ModelType(Enum):
     MiniCPM_Embedding_Light = 0x10000104
     MiniCPM_ReRanker_Light  = 0x10000105
     OrpheusTTS              = 0x10000106
+    OuteTTS                 = 0x10000107
 
     LlaMAMulti    = 0x20000001
 
@@ -231,7 +232,7 @@ def pad_to_len(l: list, to_len: int, v = 0) -> list:
 def quantize_q8_0(tensor: torch.Tensor) -> torch.CharTensor:
     # equivalent to ggml_quantize_q8_0 in ggml.c
     assert tensor.shape[tensor.ndim - 1] % GGML_QK8_0 == 0
-    tensor = tensor.view(-1, GGML_QK8_0)
+    tensor = tensor.contiguous().view(-1, GGML_QK8_0)
     scale = tensor.abs().max(dim=-1, keepdim=True).values / ((1 << 7) - 1)
     tensor = (tensor / scale).round().clamp(min=-128, max=127).char()
     # add scale into each block
@@ -308,7 +309,10 @@ def load_model_file(path: Path) -> Dict:
     first8 = fp.read(8)
     fp.seek(0)
     if first8[:2] == b'PK':
-        return torch.load(fp, map_location=torch.device('cpu')).items()
+        content = torch.load(fp, map_location=torch.device('cpu'))
+        if sorted(list(content.keys())) == ['metadata', 'state_dict']:
+            content = content['state_dict']
+        return content.items()
     elif struct.unpack('<Q', first8)[0] < 16 * 1024 * 1024:
         from safetensors import safe_open
         tensors = []
@@ -6171,10 +6175,6 @@ class OrpheusTTSConverter(BaseConverter):
     MODEL_TYPE = ModelType.OrpheusTTS
 
     @classmethod
-    def pp(cls, config, name: str, tensor):
-        return
-
-    @classmethod
     def state_dict_pp(cls, config, state_dict):
         new_dict = {}
 
@@ -6230,68 +6230,156 @@ class OrpheusTTSConverter(BaseConverter):
         Llama32Converter.dump_config(f, config, ggml_type)
 
     @staticmethod
+    def get_conv1d(prefix: str, bias: bool = True):
+        weights = [
+            f"{prefix}.bias",
+            f"{prefix}.weight",
+        ]
+        if not bias: weights.pop(0)
+        return weights
+
+    @staticmethod
+    def get_snake(prefix: str):
+        return [
+            f"{prefix}.alpha",
+        ]
+
+    @staticmethod
+    def get_residual(prefix: str):
+        weights = OrpheusTTSConverter.get_snake(prefix   + '.block.layers.0') + \
+                  OrpheusTTSConverter.get_conv1d(prefix + '.block.layers.1') + \
+                  OrpheusTTSConverter.get_snake(prefix   + '.block.layers.2') + \
+                  OrpheusTTSConverter.get_conv1d(prefix + '.block.layers.3')
+        return weights
+
+    @staticmethod
+    def get_block(prefix: str):
+        weights = OrpheusTTSConverter.get_snake(prefix   + '.block.layers.0') + \
+                  OrpheusTTSConverter.get_conv1d(prefix + '.block.layers.1') + \
+                  OrpheusTTSConverter.get_conv1d(prefix + '.block.layers.2.linear', False)
+        for i in range(3):
+            weights.extend(OrpheusTTSConverter.get_residual(f"{prefix}.block.layers.{i + 3}"))
+        return weights
+
+    @staticmethod
+    def get_vq(prefix: str):
+        weights = OrpheusTTSConverter.get_conv1d(prefix + '.in_proj') + \
+                  OrpheusTTSConverter.get_conv1d(prefix + '.out_proj')
+        weights += [f"{prefix}.codebook.weight"]
+
+        return weights
+
+    @staticmethod
     def get_weight_names(config):
         weights = Llama32Converter.get_weight_names(config)
 
         snac_config = config.snac_model
 
-        def get_conv1d(prefix: str, bias: bool = True):
-            weights = [
-                f"{prefix}.bias",
-                f"{prefix}.weight",
-            ]
-            if not bias: weights.pop(0)
-            return weights
-
-        def get_snac(prefix: str):
-            return [
-                f"{prefix}.alpha",
-            ]
-
-        def get_residual(prefix: str):
-            weights = get_snac(prefix   + '.block.layers.0') + \
-                      get_conv1d(prefix + '.block.layers.1') + \
-                      get_snac(prefix   + '.block.layers.2') + \
-                      get_conv1d(prefix + '.block.layers.3')
-            return weights
-
-        def get_block(prefix: str):
-            weights = get_snac(prefix   + '.block.layers.0') + \
-                      get_conv1d(prefix + '.block.layers.1') + \
-                      get_conv1d(prefix + '.block.layers.2.linear', False)
-            for i in range(3):
-                weights.extend(get_residual(f"{prefix}.block.layers.{i + 3}"))
-            return weights
-
-        def get_vq(prefix: str):
-            weights = get_conv1d(prefix + '.in_proj') + \
-                      get_conv1d(prefix + '.out_proj')
-            weights += [f"{prefix}.codebook.weight"]
-
-            return weights
-
         snac_weights = []
         layer_id = 1
         if config.snac_model['depthwise']:
-            snac_weights += get_conv1d('snac.decoder.model.layers.0')
-            snac_weights += get_conv1d('snac.decoder.model.layers.1')
+            snac_weights += OrpheusTTSConverter.get_conv1d('snac.decoder.model.layers.0')
+            snac_weights += OrpheusTTSConverter.get_conv1d('snac.decoder.model.layers.1')
             layer_id = 2
         else:
-            snac_weights += get_conv1d('snac.decoder.model.layers.0')
+            snac_weights += OrpheusTTSConverter.get_conv1d('snac.decoder.model.layers.0')
 
         for i, _ in enumerate(snac_config['decoder_rates']):
-            snac_weights += get_block(f"snac.decoder.model.layers.{layer_id}")
+            snac_weights += OrpheusTTSConverter.get_block(f"snac.decoder.model.layers.{layer_id}")
             layer_id += 1
 
-        snac_weights += get_snac(f'snac.decoder.model.layers.{layer_id}')
+        snac_weights += OrpheusTTSConverter.get_snake(f'snac.decoder.model.layers.{layer_id}')
         layer_id += 1
-        snac_weights += get_conv1d(f'snac.decoder.model.layers.{layer_id}')
+        snac_weights += OrpheusTTSConverter.get_conv1d(f'snac.decoder.model.layers.{layer_id}')
         layer_id += 1
 
         for i, _stride in enumerate(snac_config['vq_strides']):
-            snac_weights += get_vq(f'snac.quantizer.strides.{i}')
+            snac_weights += OrpheusTTSConverter.get_vq(f'snac.quantizer.strides.{i}')
 
         return weights + snac_weights
+
+class OuteTTSConverter(BaseConverter):
+    MODEL_TYPE = ModelType.OuteTTS
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.startswith('decoder') or name.startswith('encoder'):
+                if name.endswith('.weight_g'): continue
+
+                new_name = 'dac.' + name.replace('.model.', '.model.layers.')
+                new_name = new_name.replace('.block.', '.block.layers.')
+                if name.endswith('.alpha'):
+                    shape = tensor.shape
+                    assert (len(shape) == 3) and (shape[0] == 1) and (shape[2] == 1)
+                    new_dict[new_name] = tensor.reshape(shape[1])
+                elif name.endswith('.bias'):
+                    new_dict[new_name] = tensor
+                elif name.endswith('.weight_v'):
+                    g = state_dict[name.replace('.weight_v', '.weight_g')]
+                    new_name = new_name.replace('.weight_v', '.weight')
+                    g = _weight_norm(tensor, g)
+                    new_dict[new_name] = g
+                else:
+                    raise Exception(f"unknown name: {name}")
+
+            elif name.startswith('quantizer'):
+                if name.endswith('.weight_g'): continue
+                new_name = name.replace('quantizer.quantizers.', 'dac.quantizer.strides.')
+                if name.endswith('.weight_v'):
+                    g = state_dict[name.replace('.weight_v', '.weight_g')]
+                    new_name = new_name.replace('.weight_v', '.weight')
+                    g = _weight_norm(tensor, g)
+                    new_dict[new_name] = g
+                else:
+                    new_dict[new_name] = tensor
+            else:
+                new_dict[name] = Llama32Converter.pp(config, name, tensor)
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.dac_model['sampling_rate'] == 24000, "sampling_rate must be 24000"
+
+        print(f"WARNING: encoder not supported")
+
+        Llama32Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weights = Llama32Converter.get_weight_names(config)
+
+        dac_config = config.dac_model
+
+        def get_block(prefix: str):
+            weights = OrpheusTTSConverter.get_snake(prefix  + '.block.layers.0') + \
+                      OrpheusTTSConverter.get_conv1d(prefix + '.block.layers.1')
+            for i in range(3):
+                weights.extend(OrpheusTTSConverter.get_residual(f"{prefix}.block.layers.{i + 2}"))
+            return weights
+
+        dac_weights = []
+        layer_id = 1
+        dac_weights += OrpheusTTSConverter.get_conv1d('dac.decoder.model.layers.0')
+
+        for i, _ in enumerate(dac_config['upsampling_ratios']):
+            dac_weights += get_block(f"dac.decoder.model.layers.{layer_id}")
+            layer_id += 1
+
+        dac_weights += OrpheusTTSConverter.get_snake(f'dac.decoder.model.layers.{layer_id}')
+        layer_id += 1
+        dac_weights += OrpheusTTSConverter.get_conv1d(f'dac.decoder.model.layers.{layer_id}')
+        layer_id += 1
+
+        for i in range(dac_config['n_codebooks']):
+            dac_weights += OrpheusTTSConverter.get_vq(f'dac.quantizer.strides.{i}')
+
+        return weights + dac_weights
 
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
@@ -6438,7 +6526,7 @@ def load_some_info(r: dict, path: Path, prefix: str = '') -> None:
             for f in files:
                 r[prefix + os.path.basename(f.name)] = load_config(path, f.name)
 
-def load_some_model(path: Path) -> List[Path]:
+def load_some_model(path: Path, fallback_files: list[Path] = []) -> List[Path]:
     '''Load a model of any supported format.'''
     # Be extra-friendly and accept either a file or a directory:
     if path.is_dir():
@@ -6450,6 +6538,7 @@ def load_some_model(path: Path) -> List[Path]:
             if len(files) > 0:
                 files.sort()
                 return files
+        if len(fallback_files) > 0: return fallback_files
         raise Exception('can not find model files, or unsupported format.')
     else:
         return [path]
@@ -6468,6 +6557,7 @@ def main():
     parser.add_argument("--experts", type=str, default='')
     parser.add_argument("--native_name", type=str, default='', help='model native name')
     parser.add_argument("--snac_model", type=str, default='', help='snac model path (required by Orpheus-TTS, etc)')
+    parser.add_argument("--dac_model", type=str, default='', help='dac model path (required by Oute-TTS, etc)')
     args = parser.parse_args()
 
     arch = args.arch.lower()
@@ -6523,6 +6613,13 @@ def main():
         load_some_info(g_model_meta, Path(args.snac_model), 'snac_')
         model_files += load_some_model(Path(args.snac_model))
         config.snac_model = g_model_meta['snac_config.json']
+    elif arch == 'outetts':
+        if args.dac_model == '':
+            raise Exception('dac_model (`--dac_model`) is required for Oute-TTS')
+        load_some_info(g_model_meta, Path(args.dac_model), 'dac_')
+        model_files += [Path(args.dac_model) / "weights_24khz_1.5kbps_v1.0.pth"]
+        g_model_meta['dac_config.json']['n_codebooks'] = 2
+        config.dac_model = g_model_meta['dac_config.json']
 
     if args.arch != '':
         g_model_meta['model_name'] = args.arch
@@ -6861,6 +6958,8 @@ def main():
         Mistral2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'orpheus-tts':
         OrpheusTTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'outetts':
+        OuteTTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

@@ -277,6 +277,12 @@ Please use `--format completion` for these models.
         [SNAC-24kHz](https://huggingface.co/hubertsiuzdak/snac_24khz/tree/d73ad176a12188fcf4f360ba3bf2c2fbbe8f58ec) is used as codec.
         Use these additional command line options when converting: `--name Orpheus-TTS -a Orpheus-TTS --snac_model /path/to/snac_24kHz`
 
+* OuteTTS:
+    * [x] 1.0: [1B](https://huggingface.co/OuteAI/Llama-OuteTTS-1.0-1B/commit/911e296ce01148a01f3af9329163b0d298ac33a1)
+
+        [DAC.speech.v1.0 1.5kbps](https://huggingface.co/ibm-research/DAC.speech.v1.0/commits/main) is used as codec.
+        Use these additional command line options when converting: `--name OuteTTS -a OuteTTS --dac_model /path/to/dac`
+
 ## RAG Models
 
 * Text Embedding (`XLMRobertaModel`)

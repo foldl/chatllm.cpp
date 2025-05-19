@@ -2663,7 +2663,7 @@
     },
     "orpheus-tts": {
         "brief": "Orpheus TTS is a state-of-the-art, Llama-based Speech-LLM designed for high-quality, empathetic text-to-speech generation.",
-        "default": "7b-rl",
+        "default": "3b-en",
         "license": "Apache License 2.0",
         "variants": {
             "3b-en": {
@@ -2681,6 +2681,22 @@
                     "q8": {
                         "size": 3544609312,
                         "url": "chatllm_quantized_orpheus-tts/orpheus-tts-zh-3b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "oute-tts": {
+        "brief": "OuteTTS - Unified Text-To-Speech models treating audio as language.",
+        "default": "1b",
+        "license": "Creative Commons Attribution Non Commercial Share Alike 4.0",
+        "variants": {
+            "1b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1438416240,
+                        "url": "chatllm_quantized_oute-tts/oute-tts-1b.bin"
                     }
                 }
             }

@@ -403,6 +403,8 @@ namespace chatllm
         CHATLLM_CHECK(dim == 0) << "only works for dim=0 now";
         CHATLLM_CHECK(a->ne[3] == 1) << "too many dimensions";
 
+        if (repeat <= 1) return a;
+
         ggml::tensor *b = ggml::new_tensor_4d(ctx, ggml::type_of(a), repeat * a->ne[0], a->ne[1], a->ne[2], a->ne[3]);
         ggml::tensor *r = ggml::repeat(ctx, a, b);
         r = reshape_4d(ctx, r, a->ne[0], repeat,  a->ne[1], a->ne[2]);
@@ -928,7 +930,7 @@ namespace chatllm
         else if (groups == 1)
         {
             int p = (kernel_size - 1) * (dilation + 1) / 2 - padding;
-            CHATLLM_CHECK(output_padding == 0);
+            CHATLLM_CHECK(output_padding == 0) << "unsupported: output_padding = " << output_padding;
 
             ggml::tensor *fract_input = input;
             if (stride > 1)

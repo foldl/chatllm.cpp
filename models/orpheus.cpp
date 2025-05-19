@@ -141,7 +141,7 @@ namespace snac
     class DecoderBlock : public Sequential
     {
     public:
-        DecoderBlock(InitContext *ctx, int input_dim = 16, int output_dim = 8, int stride = 1, bool noise = false, int groups = 1)
+        DecoderBlock(InitContext *ctx, int input_dim, int output_dim, int stride, bool noise, int groups, int output_padding)
             : Sequential(ctx)
         {
             add_block(new Snake1D(ctx, input_dim));
@@ -150,7 +150,7 @@ namespace snac
             add_block(new ConvTransposed1D(ctx, input_dim, output_dim, 2 * stride,
                                            stride,
                                            (stride + 1) / 2,
-                                           stride % 2));
+                                           output_padding));
             if (noise)
             {
                 add_block(new Noise(ctx, output_dim));
@@ -159,6 +159,11 @@ namespace snac
             add_block(new ResidualUnit(ctx, output_dim, 1, groups));
             add_block(new ResidualUnit(ctx, output_dim, 3, groups));
             add_block(new ResidualUnit(ctx, output_dim, 9, groups));
+        }
+
+        DecoderBlock(InitContext *ctx, int input_dim = 16, int output_dim = 8, int stride = 1, bool noise = false, int groups = 1, bool auto_output_padding = true)
+            : DecoderBlock(ctx, input_dim, output_dim, stride, noise, groups, auto_output_padding ? stride % 2 : 0)
+        {
         }
 
         void load(const std::string &path, TensorLoader *loader) override
@@ -173,7 +178,8 @@ namespace snac
         Decoder(InitContext *ctx, int input_channel, int channels,
                 int rates_count, const int *rates,
                 bool noise = false, bool depthwise = false,
-                int attn_window_size = 32, int d_out =1)
+                int attn_window_size = 32, bool auto_output_padding = true,
+                int d_out = 1)
             : Sequential(ctx)
         {
             if (depthwise)
@@ -196,7 +202,7 @@ namespace snac
                 const int input_dim = channels / (1 << i);
                 output_dim = channels / (1 << (i + 1));
                 const int groups = depthwise ? output_dim : 1;
-                add_block(new DecoderBlock(ctx, input_dim, output_dim, rates[i], noise, groups));
+                add_block(new DecoderBlock(ctx, input_dim, output_dim, rates[i], noise, groups, auto_output_padding));
             }
 
             add_block(new Snake1D(ctx, output_dim));
@@ -265,7 +271,7 @@ namespace snac
         {
             for (int i = 0; i < n_codebooks; i++)
             {
-                add_block(new VectorQuantize(ctx, input_dim, codebook_size, codebook_dim, vq_strides[i]));
+                add_block(new VectorQuantize(ctx, input_dim, codebook_size, codebook_dim, vq_strides ? vq_strides[i] : 1));
             }
         }
 
@@ -282,8 +288,7 @@ namespace snac
                 if (output)
                 {
                     output = ggml::repeat_interleave(ctx, output, ggml::get_dim(z_q_i, 0) / ggml::get_dim(output, 0));
-
-                    output = ggml::add(ctx, z_q_i, output); // CHECK: auto repeated?
+                    output = ggml::add(ctx, z_q_i, output);
                 }
                 else
                     output = z_q_i;

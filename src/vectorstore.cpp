@@ -394,4 +394,29 @@ namespace utils
         }
         return result;
     }
+
+    std::string replace_all(const std::string& str0, const std::string& from, const std::string& to)
+    {
+        if (from.empty()) return str0;
+
+        std::string str(str0);
+        size_t start_pos = 0;
+        while((start_pos = str.find(from, start_pos)) != std::string::npos) {
+            str.replace(start_pos, from.length(), to);
+            start_pos += to.length();
+        }
+        return str;
+    }
+
+    bool starts_with(const std::string& value, const std::string& starting)
+    {
+        if (starting.size() > value.size()) return false;
+        return value.substr(0, starting.size()) == starting;
+    }
+
+    bool ends_with(const std::string& value, const std::string& ending)
+    {
+        if (ending.size() > value.size()) return false;
+        return value.substr(value.size() - ending.size()) == ending;
+    }
 }
