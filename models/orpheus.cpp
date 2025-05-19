@@ -529,6 +529,10 @@ namespace tts
 
             std::vector<float> pcm_samples;
             reset_decoder();
+
+            // SNAC is always on CPU due to custom ops are used.
+            CPUMover mover(&snac_ctx, true);
+
             for (auto id : tokens)
             {
                 if (id < tok->custom_token_start || id > tok->custom_token_end) continue;
@@ -592,6 +596,7 @@ namespace tts
             snac_ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             snac_ctx.dtype = llama::v3_2::ConditionalGeneration::config.dtype;
 
+            CPUMover mover(&snac_ctx, true);
             codec.reset(new snac::Codec(&snac_ctx, codec_config));
 
             return true;
