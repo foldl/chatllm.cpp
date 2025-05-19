@@ -6181,7 +6181,9 @@ class OrpheusTTSConverter(BaseConverter):
         for name in state_dict:
             tensor: torch.Tensor = state_dict[name]
 
-            if name.startswith('decoder') or name.startswith('encoder'):
+            if name.startswith('encoder'): continue
+
+            if name.startswith('decoder'):
                 if name.endswith('.weight_g'): continue
 
                 new_name = 'snac.' + name
