@@ -858,6 +858,9 @@ namespace chatllm
 #if defined(_MSC_VER)
 #define ftello64    _ftelli64
 #define fseeko64    _fseeki64
+#elif defined(__APPLE__)
+#define ftello64    ftello
+#define fseeko64    fseeko
 #endif
 
     int64_t SimpleFile::tell()
