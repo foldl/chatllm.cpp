@@ -278,7 +278,7 @@ Please use `--format completion` for these models.
         Use these additional command line options when converting: `--name Orpheus-TTS -a Orpheus-TTS --snac_model /path/to/snac_24kHz`
 
 * OuteTTS:
-    * [x] 1.0: [1B](https://huggingface.co/OuteAI/Llama-OuteTTS-1.0-1B/commit/911e296ce01148a01f3af9329163b0d298ac33a1)
+    * [x] 1.0: [1B](https://huggingface.co/OuteAI/Llama-OuteTTS-1.0-1B/commit/911e296ce01148a01f3af9329163b0d298ac33a1), [0.6B](https://huggingface.co/OuteAI/OuteTTS-1.0-0.6B/tree/e7bcd87b0ca47fd8c46317c8f745a5e4e19c7b5c)
 
         [DAC.speech.v1.0 1.5kbps](https://huggingface.co/ibm-research/DAC.speech.v1.0/commits/main) is used as codec.
         Use these additional command line options when converting: `--name OuteTTS -a OuteTTS --dac_model /path/to/dac`

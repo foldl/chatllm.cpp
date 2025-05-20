@@ -2699,6 +2699,15 @@
                         "url": "chatllm_quantized_oute-tts/oute-tts-1b.bin"
                     }
                 }
+            },
+            "0.6b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 750058976,
+                        "url": "chatllm_quantized_oute-tts/oute-tts-0.6b.bin"
+                    }
+                }
             }
         }
     }

@@ -709,9 +709,11 @@ static void play_audio(const std::vector<int16_t> &data, const int sample_rate, 
 
     char cmd[2048];
     sprintf(cmd, "ffplay -autoexit -f s16le -ch_layout %s -sample_rate %d \"%s\"", channels == 1 ? "mono" : "stereo", sample_rate, fn.c_str());
-    (void)system(cmd);
+    int r = system(cmd);
     if (export_fn.size() < 1)
         std::remove(fn.c_str());
+    if (r != 0)
+        streamer.cout << "FAILED to play audio. Please check ffplay is installed." << std::endl;
 }
 
 static void run_tts(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)

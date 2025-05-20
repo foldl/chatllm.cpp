@@ -797,8 +797,8 @@ namespace v3
         typedef BaseModelForConditionalGeneration Base;
         typedef HeterogeneousModel<Config, Embedding, RMSNorm> ModelClass;
     public:
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-            : BaseModelForConditionalGeneration(MODEL_TYPE_QWEN3, config, runtime_config, 4096 * 4),
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_QWEN3)
+            : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
               config(config)
         {
             const size_t tensor_ovhd = ggml_tensor_overhead();

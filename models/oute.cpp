@@ -135,9 +135,91 @@ namespace dac
         std::vector<std::vector<int>> codes;
         const size_t GRAPH_SIZE;
     };
+
+    class CodecGeneration
+    {
+    public:
+        CodecGeneration(BackendContext *backend_context, const RuntimeConfig &runtime_config)
+            : backend_context(backend_context),
+              dac_ctx(backend_context)
+        {
+        }
+
+        void load(ModelLoader &loader)
+        {
+            if (codec.get())
+            {
+                codec->load("dac.", loader);
+            }
+        }
+
+        void set_additional_args(const std::map<std::string, std::string> &args)
+        {
+            //
+        }
+
+        bool load_more(ggml::type dtype, const json::JSON &config)
+        {
+            const auto cfg = config["dac_config.json"];
+            if (!cfg.IsObject()) return false;
+
+            this->config.sampling_rate          = (int)cfg["sampling_rate"].ToInt();
+            this->config.encoder_dim            = (int)cfg["encoder_hidden_size"].ToInt();
+            this->config.decoder_dim            = (int)cfg["decoder_hidden_size"].ToInt();
+            this->config.codebook_size          = (int)cfg["codebook_size"].ToInt();
+            this->config.codebook_dim           = (int)cfg["codebook_dim"].ToInt();
+			this->config.n_codebooks			= (int)cfg["n_codebooks"].ToInt();
+
+            CHATLLM_CHECK(cfg["downsampling_ratios"].IsArray()) << "downsampling_ratios is not an array";
+            CHATLLM_CHECK(cfg["upsampling_ratios"].IsArray()) << "upsampling_ratios is not an array";
+
+            CHATLLM_CHECK(cfg["downsampling_ratios"].length() == dac::MAX_RATES) << "downsampling_ratios invalid length";
+            CHATLLM_CHECK(cfg["upsampling_ratios"].length() == dac::MAX_RATES) << "upsampling_ratios invalid length";
+
+            for (int i = 0; i < dac::MAX_RATES; i++)
+            {
+                this->config.encoder_rates[i] = (int)cfg["downsampling_ratios"][i].ToInt();
+                this->config.decoder_rates[i] = (int)cfg["upsampling_ratios"][i].ToInt();
+            }
+
+            const size_t tensor_ovhd = ggml_tensor_overhead();
+            const size_t num_tensors = dac::Codec::number_of_static_tensors(this->config) + 20;
+            const size_t ctx_size = num_tensors * tensor_ovhd;
+            dac_ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+            dac_ctx.dtype = dtype;
+
+            codec.reset(new dac::Codec(&dac_ctx, this->config));
+
+            return true;
+        }
+
+        void generate(const GenerationConfig &gen_config,
+            const std::vector<int> &codebook1, const std::vector<int> &codebook2,
+            std::vector<float> &pcm_samples)
+        {
+            if (codec.get())
+            {
+                std::vector<int> frames;
+                const size_t count = codebook1.size() <= codebook2.size() ? codebook1.size() : codebook2.size();
+                for (size_t i = 0; i < count; i++)
+                {
+                    frames.push_back(codebook1[i]);
+                    frames.push_back(codebook2[i]);
+                }
+
+                codec->decode_frame(gen_config, *backend_context, frames, pcm_samples);
+            }
+        }
+    public:
+        dac::Config config;
+    protected:
+        BackendContext *backend_context;
+        InitContext dac_ctx;
+        std::unique_ptr<dac::Codec> codec;
+    };
 }
 
-namespace tts
+namespace tts_llama
 {
     typedef llama::v3_2::Config Config;
 
@@ -162,7 +244,6 @@ namespace tts
 
         void encode(const std::string &text, std::vector<int> &ids) const override;
     public:
-        std::string voice;
         int c1_0_token_id;
         int c2_0_token_id;
         int audio_end_token_id;
@@ -506,97 +587,29 @@ namespace tts
     {
     public:
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-            : llama::v3_2::ConditionalGeneration(config, runtime_config, MODEL_TYPE_OUTE_TTS),
-              dac_ctx(w_ctx_.get_backend_context())
+            : llama::v3_2::ConditionalGeneration(config, runtime_config, MODEL_TYPE_OUTE_TTS_LLAMA),
+              codec(w_ctx_.get_backend_context(), runtime_config)
         {
         }
 
         void load(ModelLoader &loader) override
         {
             llama::v3_2::ConditionalGeneration::load(loader);
-            if (codec.get())
-            {
-                codec->load("dac.", loader);
-            }
-        }
-
-        void speech_synthesis(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
-            std::vector<int16_t> &audio, int &sample_rate, int &channels) override
-        {
-            channels = 1;
-            sample_rate = codec_config.sampling_rate;
-
-            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-
-            bool completed = false;
-            auto tokens = generate(input_ids, gen_config, false, completed, nullptr, 0, nullptr);
-            ggml::log(GGML_LOG_LEVEL_INFO, "%zd vocoder tokens generated.", tokens.size());
-
-            std::vector<float> pcm_samples;
-            reset_decoder();
-            decoder_push_llm_tok_ids(gen_config, tokens, pcm_samples);
-
-            for (size_t i = 0; i < pcm_samples.size(); i++)
-                audio.push_back((int16_t)pcm_samples[i]);
-        }
-
-        void set_additional_args(const std::map<std::string, std::string> &args) override
-        {
-            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-            auto it = args.find("voice");
-            if (it != args.end())
-            {
-                tok->voice = it->second;
-            }
+            codec.load(loader);
         }
 
         bool load_more(const json::JSON &config) override
         {
-            const auto cfg = config["dac_config.json"];
-            if (!cfg.IsObject()) return false;
-
-            codec_config.sampling_rate          = (int)cfg["sampling_rate"].ToInt();
-            codec_config.encoder_dim            = (int)cfg["encoder_hidden_size"].ToInt();
-            codec_config.decoder_dim            = (int)cfg["decoder_hidden_size"].ToInt();
-            codec_config.codebook_size          = (int)cfg["codebook_size"].ToInt();
-            codec_config.codebook_dim           = (int)cfg["codebook_dim"].ToInt();
-			codec_config.n_codebooks			= (int)cfg["n_codebooks"].ToInt();
-
-            CHATLLM_CHECK(cfg["downsampling_ratios"].IsArray()) << "downsampling_ratios is not an array";
-            CHATLLM_CHECK(cfg["upsampling_ratios"].IsArray()) << "upsampling_ratios is not an array";
-
-            CHATLLM_CHECK(cfg["downsampling_ratios"].length() == dac::MAX_RATES) << "downsampling_ratios invalid length";
-            CHATLLM_CHECK(cfg["upsampling_ratios"].length() == dac::MAX_RATES) << "upsampling_ratios invalid length";
-
-            for (int i = 0; i < dac::MAX_RATES; i++)
-            {
-                codec_config.encoder_rates[i] = (int)cfg["downsampling_ratios"][i].ToInt();
-                codec_config.decoder_rates[i] = (int)cfg["upsampling_ratios"][i].ToInt();
-            }
-
-            const size_t tensor_ovhd = ggml_tensor_overhead();
-            const size_t num_tensors = dac::Codec::number_of_static_tensors(codec_config) + 20;
-            const size_t ctx_size = num_tensors * tensor_ovhd;
-            dac_ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
-            dac_ctx.dtype = llama::v3_2::ConditionalGeneration::config.dtype;
-
-            codec.reset(new dac::Codec(&dac_ctx, codec_config));
-
-            return true;
-        }
-    protected:
-        void reset_decoder(void)
-        {
-            vocoder_ids.clear();
+            llama::v3_2::ConditionalGeneration::load_more(config);
+            return codec.load_more(llama::v3_2::ConditionalGeneration::config.dtype, config);
         }
 
-        void decoder_push_llm_tok_ids(const GenerationConfig &gen_config, const std::vector<int> &ids, std::vector<float> &pcm_samples)
+        static void generate_audio(const GenerationConfig &gen_config, dac::CodecGeneration &codec,
+            const int C1_FIRST, const int C1_LAST,
+            const int C2_FIRST, const int C2_LAST,
+            const std::vector<int> &ids, std::vector<int16_t> &audio)
         {
-            Tokenizer *tok = (Tokenizer *)tokenizer;
-            const int C1_FIRST = tok->c1_0_token_id;
-            const int C1_LAST  = C1_FIRST + 1023;
-            const int C2_FIRST = tok->c2_0_token_id;
-            const int C2_LAST  = C2_FIRST + 1023;
+            std::vector<float> pcm_samples;
 
             std::vector<int> codebook1;
             std::vector<int> codebook2;
@@ -608,21 +621,122 @@ namespace tts
                     codebook2.push_back(x - C2_FIRST);
             }
 
-            std::vector<int> frames;
-            const size_t count = codebook1.size() <= codebook2.size() ? codebook1.size() : codebook2.size();
-            for (size_t i = 0; i < count; i++)
-            {
-                frames.push_back(codebook1[i]);
-                frames.push_back(codebook2[i]);
-            }
+            codec.generate(gen_config, codebook1, codebook2, pcm_samples);
 
-            codec->decode_frame(gen_config, backend_context, frames, pcm_samples);
+            for (size_t i = 0; i < pcm_samples.size(); i++)
+                audio.push_back((int16_t)pcm_samples[i]);
         }
 
-    protected:
-        InitContext dac_ctx;
-        dac::Config codec_config;
-        std::unique_ptr<dac::Codec> codec;
-        std::vector<int> vocoder_ids;
+        void speech_synthesis(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+            std::vector<int16_t> &audio, int &sample_rate, int &channels) override
+        {
+            channels = 1;
+            sample_rate = codec.config.sampling_rate;
+
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+            bool completed = false;
+            auto tokens = generate(input_ids, gen_config, false, completed, nullptr, 0, nullptr);
+            ggml::log(GGML_LOG_LEVEL_INFO, "%zd vocoder tokens generated.", tokens.size());
+
+            generate_audio(gen_config, codec,
+                tok->c1_0_token_id, tok->c1_0_token_id + codec.config.codebook_size - 1,
+                tok->c2_0_token_id, tok->c2_0_token_id + codec.config.codebook_size - 1,
+                tokens, audio);
+        }
+
+        void set_additional_args(const std::map<std::string, std::string> &args) override
+        {
+            codec.set_additional_args(args);
+        }
+
+    public:
+        dac::CodecGeneration codec;
+    };
+}
+
+namespace tts_qwen3
+{
+    typedef qwen::v3::Config Config;
+
+    class Tokenizer : public qwen::v3::Tokenizer
+    {
+    public:
+        Tokenizer(const Config &config)
+            : qwen::v3::Tokenizer(config)
+        {}
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            auto r = qwen::v3::Tokenizer::load(buffer, n_vocab);
+
+            c1_0_token_id       = tp->PieceToId("<|c1_0|>");
+            c2_0_token_id       = tp->PieceToId("<|c2_0|>");
+            audio_end_token_id  = tp->PieceToId("<|audio_end|>");
+            terminate_ids.insert(audio_end_token_id);
+
+            return r;
+        }
+
+        void encode(const std::string &text, std::vector<int> &ids) const override;
+    public:
+        std::string voice;
+        int c1_0_token_id;
+        int c2_0_token_id;
+        int audio_end_token_id;
+    };
+
+    void Tokenizer::encode(const std::string &text, std::vector<int> &ids) const
+    {
+        auto prompt = tts_llama::get_completion_prompt(text, json::JSON::_null);
+        BaseTokenizer::encode(prompt, ids);
+    }
+
+    class ConditionalGeneration : public qwen::v3::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : qwen::v3::ConditionalGeneration(config, runtime_config, MODEL_TYPE_OUTE_TTS_QWEN3),
+              codec(w_ctx_.get_backend_context(), runtime_config)
+        {
+        }
+
+        void load(ModelLoader &loader) override
+        {
+            qwen::v3::ConditionalGeneration::load(loader);
+            codec.load(loader);
+        }
+
+        bool load_more(const json::JSON &config) override
+        {
+            qwen::v3::ConditionalGeneration::load_more(config);
+            return codec.load_more(qwen::v3::ConditionalGeneration::config.dtype, config);
+        }
+
+        void speech_synthesis(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+            std::vector<int16_t> &audio, int &sample_rate, int &channels) override
+        {
+            channels = 1;
+            sample_rate = codec.config.sampling_rate;
+
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+            bool completed = false;
+            auto tokens = generate(input_ids, gen_config, false, completed, nullptr, 0, nullptr);
+            ggml::log(GGML_LOG_LEVEL_INFO, "%zd vocoder tokens generated.", tokens.size());
+
+            tts_llama::ConditionalGeneration::generate_audio(gen_config, codec,
+                tok->c1_0_token_id, tok->c1_0_token_id + codec.config.codebook_size - 1,
+                tok->c2_0_token_id, tok->c2_0_token_id + codec.config.codebook_size - 1,
+                tokens, audio);
+        }
+
+        void set_additional_args(const std::map<std::string, std::string> &args) override
+        {
+            codec.set_additional_args(args);
+        }
+
+    public:
+        dac::CodecGeneration codec;
     };
 }

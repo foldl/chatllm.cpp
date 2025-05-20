@@ -196,7 +196,8 @@ class ModelType(Enum):
     MiniCPM_Embedding_Light = 0x10000104
     MiniCPM_ReRanker_Light  = 0x10000105
     OrpheusTTS              = 0x10000106
-    OuteTTS                 = 0x10000107
+    OuteTTSLlaMA            = 0x10000107
+    OuteTTSQwen3            = 0x10000108
 
     LlaMAMulti    = 0x20000001
 
@@ -6299,7 +6300,8 @@ class OrpheusTTSConverter(BaseConverter):
         return weights + snac_weights
 
 class OuteTTSConverter(BaseConverter):
-    MODEL_TYPE = ModelType.OuteTTS
+    MODEL_TYPE = ModelType.OuteTTSLlaMA
+    IsQwen3 = False # a shortcut
 
     @classmethod
     def state_dict_pp(cls, config, state_dict):
@@ -6338,7 +6340,10 @@ class OuteTTSConverter(BaseConverter):
                 else:
                     new_dict[new_name] = tensor
             else:
-                new_dict[name] = Llama32Converter.pp(config, name, tensor)
+                if not OuteTTSConverter.IsQwen3:
+                    new_dict[name] = Llama32Converter.pp(config, name, tensor)
+                else:
+                    new_dict[name] = tensor
 
         return new_dict
 
@@ -6348,11 +6353,17 @@ class OuteTTSConverter(BaseConverter):
 
         print(f"WARNING: encoder not supported")
 
-        Llama32Converter.dump_config(f, config, ggml_type)
+        if OuteTTSConverter.IsQwen3:
+            QWen3Converter.dump_config(f, config, ggml_type)
+        else:
+            Llama32Converter.dump_config(f, config, ggml_type)
 
     @staticmethod
     def get_weight_names(config):
-        weights = Llama32Converter.get_weight_names(config)
+        if OuteTTSConverter.IsQwen3:
+            weights = QWen3Converter.get_weight_names(config)
+        else:
+            weights = Llama32Converter.get_weight_names(config)
 
         dac_config = config.dac_model
 
@@ -6959,6 +6970,9 @@ def main():
     elif arch == 'orpheus-tts':
         OrpheusTTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'outetts':
+        if config.architectures[0] == 'Qwen3ForCausalLM':
+            OuteTTSConverter.MODEL_TYPE = ModelType.OuteTTSQwen3
+            OuteTTSConverter.IsQwen3 = True
         OuteTTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
