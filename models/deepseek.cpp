@@ -807,6 +807,7 @@ namespace v2_light
                 {".mlp2.",              ".shared_experts."},
                 {".mlp1.gate.",         ".gate."},
                 {".mlp1.experts.",      ".experts."},
+                {".mlp1.gate_score_correction_bias",     ".gate.e_score_correction_bias"}
             });
 
             BaseModelForConditionalGeneration::load(loader);
