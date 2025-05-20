@@ -274,7 +274,7 @@ Please use `--format completion` for these models.
 * Orpheus TTS
     * [x] 3B: [EN](https://huggingface.co/canopylabs/orpheus-3b-0.1-ft/tree/4206a56e5a68cf6cf96900a8a78acd3370c02eb6), [ZH](https://huggingface.co/canopylabs/3b-zh-ft-research_release/commit/29d016d6d0e5a2688267d3b3e432b7e23f043876), etc
 
-        [SNAC-24kHz](https://huggingface.co/hubertsiuzdak/snac_24khz/tree/d73ad176a12188fcf4f360ba3bf2c2fbbe8f58ec) is used as codec.
+        [SNAC-24kHz](https://huggingface.co/mlx-community/snac_24khz/tree/556af1cd3b1c5f2d294f6aa9bb886245d7b716ac) is used as codec.
         Use these additional command line options when converting: `--name Orpheus-TTS -a Orpheus-TTS --snac_model /path/to/snac_24kHz`
 
 * OuteTTS:
