@@ -89,6 +89,7 @@ namespace chatllm
         ggml::tensor *log(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *tanh(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *randn_inplace(ComputeContext *ctx, ggml::tensor *a); // standard normal distribution
+        ggml::tensor *randn(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);
 
         ggml::tensor *top_k(ComputeContext *ctx, ggml::tensor *a, int k);
 
@@ -155,6 +156,7 @@ namespace chatllm
         ggml::tensor *map_custom2(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom3(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c, const ggml_custom3_op_t fun, int n_tasks, void *userdata);
 
+        // Note: these `inplace` might not work when GPU is used
         ggml::tensor *map_custom1_inplace(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom2_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom3_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c, const ggml_custom3_op_t fun, int n_tasks, void *userdata);

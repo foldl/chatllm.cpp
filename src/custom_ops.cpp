@@ -532,15 +532,21 @@ static void ggml_compute_forward_chatglm1_rope(ggml::tensor * dst , const ggml::
     }
 }
 
-static void ggml_compute_forward_randn_f32(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, void * userdata)
+static void ggml_compute_forward_randn_f32(ggml::tensor * dst, int ith, int nth, void * userdata)
 {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::normal_distribution<float> distribution(0.0f, 1.0f);
 
-    const ggml::tensor *src0 = a;
+    const int64_t ne0 = dst->ne[0];
+    const int64_t ne1 = dst->ne[1];
+    const int64_t ne2 = dst->ne[2];
+    const int64_t ne3 = dst->ne[3];
 
-    GGML_TENSOR_UNARY_OP_LOCALS
+    const int64_t nb0 = dst->nb[0];
+    const int64_t nb1 = dst->nb[1];
+    const int64_t nb2 = dst->nb[2];
+    const int64_t nb3 = dst->nb[3];
 
     const int nr = (int)ggml::nrows(dst);
 
@@ -569,15 +575,21 @@ static void ggml_compute_forward_randn_f32(ggml::tensor * dst , const ggml::tens
     }
 }
 
-static void ggml_compute_forward_randn_f16(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, void * userdata)
+static void ggml_compute_forward_randn_f16(ggml::tensor * dst, int ith, int nth, void * userdata)
 {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::normal_distribution<float> distribution(0.0f, 1.0f);
 
-    const ggml::tensor *src0 = a;
+    const int64_t ne0 = dst->ne[0];
+    const int64_t ne1 = dst->ne[1];
+    const int64_t ne2 = dst->ne[2];
+    const int64_t ne3 = dst->ne[3];
 
-    GGML_TENSOR_UNARY_OP_LOCALS
+    const int64_t nb0 = dst->nb[0];
+    const int64_t nb1 = dst->nb[1];
+    const int64_t nb2 = dst->nb[2];
+    const int64_t nb3 = dst->nb[3];
 
     const int nr = (int)ggml::nrows(dst);
 
@@ -608,13 +620,29 @@ static void ggml_compute_forward_randn_f16(ggml::tensor * dst , const ggml::tens
 
 static void ggml_compute_forward_randn(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, void * userdata)
 {
-    switch (a->type)
+    switch (dst->type)
     {
     case GGML_TYPE_F16:
-        ggml_compute_forward_randn_f16(dst, a, ith, nth, userdata);
+        ggml_compute_forward_randn_f16(dst, ith, nth, userdata);
         break;
     case GGML_TYPE_F32:
-        ggml_compute_forward_randn_f32(dst, a, ith, nth, userdata);
+        ggml_compute_forward_randn_f32(dst, ith, nth, userdata);
+        break;
+    default:
+        GGML_ASSERT(false);
+        break;
+    }
+}
+
+static void ggml_custom_compute_forward_randn(struct ggml_tensor * dst , int ith, int nth, void * userdata)
+{
+    switch (dst->type)
+    {
+    case GGML_TYPE_F16:
+        ggml_compute_forward_randn_f16(dst, ith, nth, userdata);
+        break;
+    case GGML_TYPE_F32:
+        ggml_compute_forward_randn_f32(dst, ith, nth, userdata);
         break;
     default:
         GGML_ASSERT(false);

@@ -619,6 +619,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::randn(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
+    {
+        std::vector<ggml::tensor *> empty;
+        ggml::tensor *tensor = ggml::custom(ctx, ggml_custom_compute_forward_randn, GGML_N_TASKS_MAX, NULL, empty, type, ne0, ne1, ne2, ne3);
+        return tensor;
+    }
+
     ggml::tensor *ggml::sum_rows(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_sum_rows(ctx->get_ctx(), a);
