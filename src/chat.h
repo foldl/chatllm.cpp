@@ -63,12 +63,12 @@ namespace chatllm
     public:
         enum Type
         {
-            TEXT = 0,
-            IMAGE,
-            AUDIO,
-            VIDEO,
+            Text = 0,
+            Image,
+            Audio,
+            Video,
         };
-        ContentPiece(const std::string &s, Type type = TEXT)
+        ContentPiece(const std::string &s, Type type = Text)
           : content(s), type(type)
         {
         }
@@ -89,62 +89,34 @@ namespace chatllm
         Type type;
     };
 
+    class Messages;
+
     class Content
     {
     public:
-        Content(const std::string &s)
-        {
-            pieces.emplace_back(ContentPiece(s));
-        }
-        Content(const Content &c)
-        {
-            for (const auto &p : c.pieces)
-            {
-                pieces.push_back(p);
-            }
-        }
+        Content(Messages *owner, const std::string &s);
 
-        void push_back(const ContentPiece &piece)
-        {
-            pieces.push_back(piece);
-        }
+        Content(Messages *owner, const Content &c);
 
-        void push_back(const Content &content)
-        {
-            for (const auto &piece : content.pieces)
-                pieces.push_back(piece);
-        }
-
-        void push_back(const std::string &s, ContentPiece::Type type = ContentPiece::Type::TEXT)
-        {
-            if (pieces.size() > 0)
-            {
-                auto &last = pieces.back();
-                if ((last.type == type) && (type == ContentPiece::Type::TEXT))
-                {
-                    last.content += s;
-                    return;
-                }
-            }
-            pieces.emplace_back(ContentPiece(s, type));
-        }
+        void push_back(const ContentPiece &piece);
+        void push_back(const Content &content);
+        void push_back(const std::string &s);
+        void push_back(const std::string &s, ContentPiece::Type type);
 
         explicit operator std::string() const {
             return to_string();
         }
 
-        std::string to_string(void) const
-        {
-            std::string result;
-            for (const auto &piece : pieces)
-            {
-                CHATLLM_CHECK(piece.type == ContentPiece::Type::TEXT) << "Unsupported content type";
-                result += piece.content;
-            }
-            return result;
-        }
+        Content &operator =(const Content & right);
+        Content &operator =(const std::string & right);
+
+        std::string to_string(void) const;
+        bool is_simple_text(void) const;
+
     public:
         std::vector<ContentPiece> pieces;
+    protected:
+        Messages * const owner;
     };
 
     inline std::ostream& operator<<(std::ostream& os, const Content& content) {
@@ -157,25 +129,25 @@ namespace chatllm
     class Message
     {
     public:
-        Message(const std::string &s, MsgRole role, int round)
-          : content(s), role(role), round(round)
+        Message(Messages *owner, const std::string &s, MsgRole role, int round)
+          : content(owner, s), role(role), round(round)
         {
         }
 
-        Message(const Content &content, MsgRole role, int round)
-          : content(content), role(role), round(round)
+        Message(Messages *owner, const Content &content, MsgRole role, int round)
+          : content(owner, content), role(role), round(round)
         {
         }
 
-        Message(const Message &m)
-          : content(m.content), role(m.role), round(m.round)
+        Message(Messages *owner, const Message &m)
+          : content(owner, m.content), role(m.role), round(m.round)
         {
         }
 
         Message &operator =(const chatllm::Message &m);
 
         bool save(FILE *f) const;
-        static Message load(FILE *f);
+        static Message load(Messages *owner, FILE *f);
 
     public:
         Content content;
@@ -186,7 +158,7 @@ namespace chatllm
     class Messages
     {
     public:
-        Messages();
+        Messages(const std::string &opening, const std::string &closing);
 
         void push_back(const std::string &content, MsgRole role);
         void push_back(const Message &m);
@@ -220,6 +192,15 @@ namespace chatllm
         void move_cursor_to_end(void) const;
         void move_cursor_to_end(void);
 
+        const std::string & get_opening(void) const
+        {
+            return mm_opening;
+        }
+        const std::string & get_closing(void) const
+        {
+            return mm_closing;
+        }
+
     public:
         std::vector<Message> history;
         int cursor;
@@ -227,6 +208,8 @@ namespace chatllm
         std::string sep;
         bool auto_aggregate;
         int round;
+        const std::string mm_opening;
+        const std::string mm_closing;
     };
 
     std::string to_string(ggml::tensor *tensor, bool with_data = true);
@@ -255,6 +238,15 @@ namespace chatllm
 
     class BaseTokenizer
     {
+    public:
+        struct ImageAsPatches
+        {
+            int grid_width;
+            int grid_height;
+            int patch_size;
+            int token_number;
+            std::vector<float> data;
+        };
     public:
         BaseTokenizer(const BaseConfig &config,
                         BaseHistoryEncoder *chat_encoder,
@@ -336,6 +328,7 @@ namespace chatllm
 
         virtual void append_sys_prompt(std::vector<int> &ids) const;
         virtual void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const;
+        virtual void append_user(int round_idx, const Content &user, std::vector<int> &ids) const;
         virtual void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const = 0;
         virtual void append_tool(int round_idx, const std::string &tool, std::vector<int> &ids) const;
 

@@ -21,6 +21,7 @@
 
 #include "layers.h"
 #include "JSON.h"
+#include "vision_process.h"
 
 json::JSON json::JSON::_null = json::JSON();
 

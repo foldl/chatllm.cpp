@@ -246,8 +246,9 @@ void usage(const std::string &prog)
               << "                          built-in tags: " << show_default_thought_tags() << "\n"
               << "                          this options enables detection of thoughts implicitly.\n"
               << "Multi-model options:\n"
-              << "  --multimedia_file_tags OPENING CLOSEING \n"
-              << "                          multimedia file tags. Default: Not set. Example {{ }}: {{image:/path/to/image.png}}\n"
+              << "  --multimedia_file_tags OPENING CLOSING\n"
+              << "                          multimedia file tags. Default: Not set. Example {{ }}: {{TAG:/path/to/image.png}}\n"
+              << "                          where TAG ::= image | video | audio\n"
               << "  --tts_export FILE       save generated PCM samples into a file. (default: not save)                                 [*]\n"
               << "Session:\n"
               << "  --save_session N FILE   save session to FILE after N round(s) of chatting (N >= 0) and quit                         [*]\n"
@@ -643,7 +644,7 @@ static void show_stat(chatllm::Pipeline &pipeline, chatllm::BaseStreamer &stream
 
 static void run_file(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
-    chatllm::Messages history;
+    chatllm::Messages history(args.multimedia_file_tags[0], args.multimedia_file_tags[1]);
     std::string input;
     std::ifstream f(args.test_fn);
 
@@ -910,7 +911,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
     };
 
     DEF_GenerationConfig(gen_config, args);
-    chatllm::Messages history;
+    chatllm::Messages history(args.multimedia_file_tags[0], args.multimedia_file_tags[1]);
 
     show_banner(pipeline, args.interactive && args.show_banner, &streamer);
 

@@ -48,6 +48,157 @@ namespace chatllm
         return str;
     }
 
+    Content::Content(Messages *owner, const std::string &content) : owner(owner)
+    {
+        push_back(content);
+    }
+
+    Content::Content(Messages *owner, const Content &c) : owner(owner)
+    {
+        for (const auto &p : c.pieces)
+        {
+            pieces.push_back(p);
+        }
+    }
+
+    void Content::push_back(const std::string &content)
+    {
+        if (owner->get_opening().empty() || owner->get_closing().empty())
+        {
+            push_back(content, ContentPiece::Type::Text);
+            return;
+        }
+
+        push_back("", ContentPiece::Type::Text);
+
+        size_t start = 0;
+        while (start < content.size())
+        {
+            size_t pos = content.find(owner->get_opening(), start);
+            if (pos == std::string::npos)
+            {
+                push_back(content.substr(start), ContentPiece::Type::Text);
+                break;
+            }
+
+            size_t end = content.find(owner->get_closing(), pos + owner->get_opening().size());
+            if (end == std::string::npos)
+            {
+                push_back(content.substr(start), ContentPiece::Type::Text);
+                break;
+            }
+
+            if (pos > start)
+            {
+                push_back(content.substr(start, pos - start), ContentPiece::Type::Text);
+            }
+
+            std::string inner = content.substr(pos + owner->get_opening().size(), end - (pos + owner->get_opening().size()));
+            start = end + owner->get_closing().size();
+
+            pos = inner.find(':');
+            if (pos != std::string::npos)
+            {
+                auto tag  = inner.substr(0, pos);
+                auto path = inner.substr(pos + 1);
+                if (tag == "image")
+                {
+                    push_back(path, ContentPiece::Type::Image);
+                }
+                else if (tag == "video")
+                {
+                    push_back(path, ContentPiece::Type::Video);
+                }
+                else if (tag == "audio")
+                {
+                    push_back(path, ContentPiece::Type::Audio);
+                }
+                else
+                {
+                    CHATLLM_CHECK(false) << "Unknown multi-media tag: " << tag;
+                }
+            }
+        }
+    }
+
+    void Content::push_back(const ContentPiece &piece)
+    {
+        pieces.push_back(piece);
+    }
+
+    void Content::push_back(const Content &content)
+    {
+        for (const auto &piece : content.pieces)
+            pieces.push_back(piece);
+    }
+
+    void Content::push_back(const std::string &s, ContentPiece::Type type)
+    {
+        if (pieces.size() > 0)
+        {
+            auto &last = pieces.back();
+            if ((last.type == type) && (type == ContentPiece::Type::Text))
+            {
+                last.content += s;
+                return;
+            }
+        }
+        pieces.emplace_back(ContentPiece(s, type));
+    }
+
+    Content & Content::operator =(const Content & right)
+    {
+        pieces.clear();
+        for (const auto &piece : right.pieces)
+        {
+            pieces.push_back(piece);
+        }
+        return *this;
+    }
+
+    Content & Content::operator =(const std::string & right)
+    {
+        pieces.clear();
+        push_back(right);
+        return *this;
+    }
+
+    std::string Content::to_string(void) const
+    {
+        std::string result;
+        for (const auto &piece : pieces)
+        {
+            switch (piece.type)
+            {
+            case ContentPiece::Type::Text:
+                result += piece.content;
+                break;
+            case ContentPiece::Type::Image:
+                result += owner->get_opening() + "image:" + piece.content + owner->get_closing();
+                break;
+            case ContentPiece::Type::Audio:
+                result += owner->get_opening() + "audio:" + piece.content + owner->get_closing();
+                break;
+            case ContentPiece::Type::Video:
+                result += owner->get_opening() + "video:" + piece.content + owner->get_closing();
+                break;
+            default:
+                CHATLLM_CHECK(false) << "Unsupported content type: " << (int)piece.type;
+                break;
+            }
+        }
+        return result;
+    }
+
+    bool Content::is_simple_text(void) const
+    {
+        if (pieces.size() > 1)
+            return false;
+        if (pieces.size() == 0)
+            return true;
+        return pieces[0].type == ContentPiece::Type::Text;
+    }
+
     Message & Message::operator =(const chatllm::Message &m)
     {
         this->content = m.content;
@@ -75,18 +226,18 @@ namespace chatllm
         return true;
     }
 
-    Message Message::load(FILE *f)
+    Message Message::load(Messages *owner, FILE *f)
     {
         if (f == nullptr)
-            return Message("", MsgRole::User, 0);
+            return Message(owner, "", MsgRole::User, 0);
         uint64_t len = 0;
         int role = 0;
         int round = 0;
-        if (fread(&round, sizeof(round), 1, f) != 1) return Message("", MsgRole::User, 0);
-        if (fread(&role, sizeof(role), 1, f) != 1) return Message("", MsgRole::User, 0);
-        if (fread(&len, sizeof(len), 1, f) != 1) return Message("", MsgRole::User, 0);
+        if (fread(&round, sizeof(round), 1, f) != 1) return Message(owner, "", MsgRole::User, 0);
+        if (fread(&role, sizeof(role), 1, f) != 1) return Message(owner, "", MsgRole::User, 0);
+        if (fread(&len, sizeof(len), 1, f) != 1) return Message(owner, "", MsgRole::User, 0);
 
-        Message msg("", (MsgRole)role, round);
+        Message msg(owner, "", (MsgRole)role, round);
         msg.content.pieces.clear();
         for (uint64_t i = 0; i < len; i++)
         {
@@ -101,8 +252,8 @@ namespace chatllm
         return msg;
     }
 
-    Messages::Messages()
-        : cursor(0), sep(""), auto_aggregate(true), round(-1)
+    Messages::Messages(const std::string &opening, const std::string &closing)
+        : cursor(0), sep(""), auto_aggregate(true), round(-1), mm_opening(opening), mm_closing(closing)
     {
     }
 
@@ -158,12 +309,12 @@ namespace chatllm
                 round++;
         }
 
-        history.emplace_back(m.content, role, round);
+        history.emplace_back(this, m.content, role, round);
     }
 
     void Messages::push_back(const std::string &content, MsgRole role)
     {
-        push_back(Message(content, role, round));
+        push_back(Message(this, content, role, round));
     }
 
     void Messages::move_cursor_to_end(void) const
@@ -570,7 +721,7 @@ namespace chatllm
                 return encode_history(qa_encoder, history, max_length, incremental, ai_opening, reversed_role);
             else if (chat_encoder)
             {
-                Messages copied;
+                Messages copied(history.get_opening(), history.get_closing());
                 copied.push_back(history[history.size() - 1]);
                 return encode_history(chat_encoder, copied, max_length, incremental, ai_opening, reversed_role);
             }
@@ -652,6 +803,11 @@ namespace chatllm
         CHATLLM_THROW << "BaseHistoryEncoder::append_user_opening no override.";
     }
 
+    void BaseHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
+    {
+        CHATLLM_THROW << "BaseHistoryEncoder::append_user(<Content>) no override.";
+    }
+
     void BaseHistoryEncoder::append_tool(int round_idx, const std::string &tool, std::vector<int> &ids) const
     {
         append_user(round_idx, tool, ids);
@@ -670,7 +826,10 @@ namespace chatllm
         switch (msg.role)
         {
         case MsgRole::User:
-            append_user(round_idx, msg.content.to_string(), ids);
+            if (msg.content.is_simple_text())
+                append_user(round_idx, msg.content.to_string(), ids);
+            else
+                append_user(round_idx, msg.content, ids);
             break;
         case MsgRole::Assistant:
             append_ai(round_idx, msg.content.to_string(), ids);
@@ -1707,7 +1866,7 @@ namespace chatllm
         {
             for (size_t i = 0; i < header.history_len; i++)
             {
-                history.push_back(Message::load(f));
+                history.push_back(Message::load(&history, f));
                 auto &last = history.back();
                 if (streamer)
                 {
@@ -1826,7 +1985,7 @@ namespace chatllm
             rewrite_model->set_tokenizer(tokenizer);
         }
 
-        Messages history;
+        Messages history("", "");
         history.push_back(prompt, MsgRole::User);
         bool completed = false;
 
