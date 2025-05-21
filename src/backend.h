@@ -22,13 +22,20 @@ namespace chatllm
 
         size_t element_size(const ggml::tensor *tensor);
         size_t nbytes(const ggml::tensor *tensor);
+        int64_t nrows(const ggml::tensor *tensor);
+        int64_t nelements(const ggml::tensor *tensor);
 
         int n_dims(const ggml::tensor * tensor);
         int get_dim(const ggml::tensor * tensor, int dim);
 
+        void from_float(ggml::type type, const float *src, void  *dst, int64_t ne0, int64_t n_rows);
+        void to_float  (ggml::type type, const void  *src, float *dst, int64_t ne0, int64_t n_rows);
+
         type type_of(const ggml::tensor *tensor);
-        type type_of(const ggml::tensor &tensor);
-        type parse(const std::string &type);
+        type type_of(const ggml::tensor &a);
+        std::string type_to_str(type t);
+        bool str_to_type(const std::string &str, type *t);
+        int  str_to_type(const std::string &str, int fallback = -1);
 
         // why param type is `ggml::tensor`, but not `op`? `tensor` is an operation (a map) mathematically.
         bool is_view_op(ggml::tensor *a);

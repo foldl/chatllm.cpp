@@ -37,23 +37,45 @@ namespace chatllm
         return a.type;
     }
 
+    std::string ggml::type_to_str(type t)
+    {
+        auto traits = ggml_get_type_traits(t);
+        return traits->type_name;
+    }
+
+    bool ggml::str_to_type(const std::string &str, type *t)
+    {
+        if (stricmp(str.c_str(), "q8") == 0)
+        {
+            *t = ggml::type::GGML_TYPE_Q8_0;
+            return true;
+        }
+
+        for (int i = 0; i < GGML_TYPE_COUNT; ++i)
+        {
+            auto traits = ggml_get_type_traits((type)i);
+            if (stricmp(str.c_str(), traits->type_name) == 0)
+            {
+                *t = (type)i;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    int ggml::str_to_type(const std::string &str, int fallback)
+    {
+        ggml::type t = ggml::type::GGML_TYPE_F32;
+        if (ggml::str_to_type(str, &t))
+            return t;
+
+        return fallback;
+    }
+
     ggml::type ggml::type_fallback(ggml::type type, int64_t last_dim)
     {
         auto block_size = ggml_blck_size(type);
         return (last_dim % block_size) != 0 ? ggml::type::GGML_TYPE_F16 : type;
-    }
-
-    ggml::type ggml::parse(const std::string &type)
-    {
-        if (type == "f32")
-            return type::GGML_TYPE_F32;
-        if ((type == "q8") || (type == "q8_0"))
-            return type::GGML_TYPE_Q8_0;
-        if (type == "q4_0")
-            return type::GGML_TYPE_Q4_0;
-        if (type == "q4_1")
-            return type::GGML_TYPE_Q4_1;
-        return type::GGML_TYPE_F16;
     }
 
     bool ggml::is_view_op(ggml::tensor *a)
@@ -180,7 +202,7 @@ namespace chatllm
         tensor->nb[0] = ggml_type_size(type);
         tensor->nb[1] = tensor->nb[0]*(tensor->ne[0]/ggml_blck_size(type));
         for (int i = 2; i < GGML_MAX_DIMS; i++) {
-            tensor->nb[i] = tensor->nb[i - 1]*tensor->ne[i - 1];
+            tensor->nb[i] = tensor->nb[i - 1] * tensor->ne[i - 1];
         }
     }
 
@@ -202,6 +224,28 @@ namespace chatllm
     int ggml::get_dim(const ggml::tensor * tensor, int dim)
     {
         return (int)tensor->ne[dim];
+    }
+
+    void ggml::from_float(ggml::type type, const float *src, void  *dst, int64_t ne0, int64_t n_rows)
+    {
+        auto f = ggml_get_type_traits(type)->from_float_ref;
+        auto s = ggml_row_size(type, ne0);
+        utils::parallel_for(0, n_rows, [=](int64_t nth) {
+            auto p = (              src) + nth * ne0;
+            auto q = ((const char *)dst) + nth * s;
+            f(p, (void *)q , ne0);
+        });
+    }
+
+    void ggml::to_float  (ggml::type type, const void  *src, float *dst, const int64_t ne0, const int64_t n_rows)
+    {
+        auto f = ggml_get_type_traits(type)->to_float;
+        auto s = ggml_row_size(type, ne0);
+        utils::parallel_for(0, n_rows, [=](int64_t nth) {
+            auto p = ((const char *)src) + nth * s;
+            auto q = (              dst) + nth * ne0;
+            f((const void *)p, q , ne0);
+        });
     }
 
     ggml::tensor *ggml::inplace_act(ComputeContext *ctx, ActFunc act, ggml::tensor *input)

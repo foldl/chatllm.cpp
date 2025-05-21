@@ -2079,6 +2079,8 @@ namespace chatllm
         config = loader.read_basic<Config>();
         if (args.max_length > 0)
             config.max_length = args.max_length;
+        if (args.re_quantize >= 0)
+            config.dtype = (ggml::type)args.re_quantize;
 
         loader.offset_tokenizer = loader.tell();
     }
@@ -2165,7 +2167,7 @@ namespace chatllm
             config.num_hidden_layers = (int)layers.size();
         }
 
-        RuntimeConfig rt_config(args.gpu_layers, args.moe_on_cpu, args.n_threads, args.batch_size, ggml::parse(args.cache_type));
+        RuntimeConfig rt_config(args.gpu_layers, args.moe_on_cpu, args.n_threads, args.batch_size, (ggml::type)args.cache_type);
 
         // load model
         ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);
@@ -2287,7 +2289,10 @@ namespace chatllm
             oss << " {" << format_access_points(get_chat_model_access_points(model_type)) << "}";
         oss << std::endl;
 
-        oss << "File version: " << loader.version << " (" << ModelLoader::ff_to_str(loader.ff) << ")" << std::endl << std::endl
+        oss << "File version: " << loader.version << " (" << ModelLoader::ff_to_str(loader.ff) << ")" << std::endl
+            << "Quantization: " << ggml::type_to_str(config.dtype) << std::endl;
+
+        oss << std::endl
             << "vocab_size          : " << config.vocab_size << std::endl
             << "hidden_size         : " << config.hidden_size << std::endl
             << "num_attention_heads : " << config.num_attention_heads << std::endl

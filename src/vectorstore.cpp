@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <math.h>
 #include <string.h>
+#include <thread>
 
 #include "basics.h"
 
@@ -418,5 +419,46 @@ namespace utils
     {
         if (ending.size() > value.size()) return false;
         return value.substr(value.size() - ending.size()) == ending;
+    }
+
+    void parallel_for(int64_t start, int64_t end, std::function<void(int64_t)> func, int num_threads)
+    {
+        // Determine number of threads to use
+        if (num_threads == 0) {
+            num_threads = std::thread::hardware_concurrency();
+            if (num_threads == 0) {
+                num_threads = 4; // fallback if hardware_concurrency() fails
+            }
+        }
+
+        // Calculate chunk size for each thread
+        const int64_t range = end - start;
+        if (range <= 0) return;
+        const int64_t chunk_size = (range + num_threads - 1) / num_threads; // round up
+
+        // Vector to store thread objects
+        std::vector<std::thread> threads;
+        threads.reserve(num_threads);
+
+        for (int i = 0; i < num_threads; ++i) {
+            const int64_t thread_start = start + i * chunk_size;
+            const int64_t thread_end = std::min(thread_start + chunk_size, end);
+
+            // Only create thread if there's work to do
+            if (thread_start < thread_end) {
+                threads.emplace_back([=]() {
+                    for (int64_t j = thread_start; j < thread_end; ++j) {
+                        func(j);
+                    }
+                });
+            }
+        }
+
+        // Wait for all threads to complete
+        for (auto& thread : threads) {
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
     }
 }

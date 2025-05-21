@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-05-21: Re-quantization when loading (e.g. `--re-quantize q4_k`)
 * 2025-05-19: OuteTTS
 * 2025-05-17: Orpheus-TTS
 * 2025-05-11: Seed-Coder

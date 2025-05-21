@@ -1247,10 +1247,14 @@ namespace chatllm
             bool moe_on_cpu;
             int n_threads;
             int batch_size;
-            std::string cache_type;
-            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers, bool moe_on_cpu, int n_threads, int batch_size, const std::string &cache_type)
+            int cache_type;
+            int re_quantize;
+            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers, bool moe_on_cpu, int n_threads, int batch_size, const std::string &cache_type,
+                const std::string &re_quantize = "")
                 : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads),
-                  batch_size(batch_size), cache_type(cache_type)
+                  batch_size(batch_size),
+                  cache_type(ggml::str_to_type(cache_type, ggml::type::GGML_TYPE_F16)),
+                  re_quantize(ggml::str_to_type(re_quantize))
             {}
             extra_args() : extra_args(-1, "", "", false, 1, 0, "") {}
         };

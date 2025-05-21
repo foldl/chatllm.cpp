@@ -57,6 +57,7 @@ struct Args
     std::string thought_tags[2] = {"", ""};
     std::string multimedia_file_tags[2] = {"", ""};
     std::string tts_export;
+    std::string re_quantize;
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -128,6 +129,28 @@ static std::string show_default_thought_tags(void)
     return tags;
 }
 
+static bool is_same_command_option(const char *a, const char *b)
+{
+    while (*a && *b)
+    {
+        char ca = *a;
+        char cb = *b;
+        if (ca == '-') ca = '_';
+        if (cb == '-') cb = '_';
+        if (ca != cb)
+            return false;
+        a++;
+        b++;
+    }
+
+    return *a == *b;
+}
+
+static bool is_same_command_option(const std::string &a, const std::string &b)
+{
+    return is_same_command_option(a.c_str(), b.c_str());
+}
+
 void usage(const std::string &prog)
 {
     std::cout << "Usage: " << prog << " [options]\n"
@@ -170,6 +193,8 @@ void usage(const std::string &prog)
               << "  --cache_type T          cache type, T ::= f32 | f16 (default: f16)\n"
               << "  --batch_size N          batch size (default: 4096)\n"
               << "                          note: trade-off between prompt throughput and memory usage.\n"
+              << "  --re_quantize Q         re-quantize model weights during loading (Q ::= q8_0 | q4_0 | q4_1 | q4_k | ...) (default: no re-quantization)\n"
+              << "                          note: it does not make sense to re-quantize to a larger size.\n"
               << "Sampling options:\n"
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
               << "                          where, tfs = Tail Free Sampling\n"
@@ -270,7 +295,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
     const size_t argc = argv.size();
 
     #define handle_para0(fmt1, field, f)        \
-        else if ((strcmp(arg, fmt1) == 0))      \
+        else if ((is_same_command_option(arg, fmt1)))      \
         {                                                                   \
             c++;                                                            \
             if (c < argc)                                                   \
@@ -278,7 +303,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         }
 
     #define handle_param(fmt1, fmt2, field, f)    \
-        else if ((strcmp(arg, fmt1) == 0) || (strcmp(arg, fmt2) == 0))      \
+        else if ((is_same_command_option(arg, fmt1)) || (is_same_command_option(arg, fmt2)))      \
         {                                                                   \
             c++;                                                            \
             if (c < argc)                                                   \
@@ -286,7 +311,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         }
 
     #define append_param(fmt1, field, f)        \
-        else if ((strcmp(arg, fmt1) == 0))      \
+        else if ((is_same_command_option(arg, fmt1)))      \
         {                                                                   \
             c++;                                                            \
             if (c < argc)                                                   \
@@ -294,7 +319,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         }
 
     #define handle_flag(field)    \
-        else if (((strcmp(arg, "+" #field) == 0)) || ((strcmp(arg, "--" #field) == 0))) \
+        else if ((is_same_command_option(arg, "+" #field)) || (is_same_command_option(arg, "--" #field))) \
         {                                                                   \
             args.field = true;                                              \
         }
@@ -306,7 +331,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
         while (c < argc)
         {
             const char *arg = argv[c].c_str();
-            if ((strcmp(arg, "--help") == 0) || (strcmp(arg, "-h") == 0) || (strcmp(arg, "-?") == 0))
+            if ((is_same_command_option(arg, "--help")) || (is_same_command_option(arg, "-h")) || (is_same_command_option(arg, "-?")))
             {
                 args.show_help = true;
             }
@@ -314,11 +339,11 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             {
                 args.interactive = true;
             }
-            else if (strcmp(arg, "--multi") == 0)
+            else if (is_same_command_option(arg, "--multi"))
             {
                 args.multi_line = true;
             }
-            else if (strcmp(arg, "--hide_banner") == 0)
+            else if (is_same_command_option(arg, "--hide_banner"))
             {
                 args.show_banner = false;
             }
@@ -331,7 +356,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_flag(rerank_rewrite)
             handle_flag(moe_on_cpu)
             handle_flag(detect_thoughts)
-            else if (strcmp(arg, "--format") == 0)
+            else if (is_same_command_option(arg, "--format"))
             {
                 c++;
                 if (c < argc)
@@ -344,7 +369,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                         args.format = chatllm::ChatFormat::CHAT;
                 }
             }
-            else if (strcmp(arg, "--save_session") == 0)
+            else if (is_same_command_option(arg, "--save_session"))
             {
                 c++;
                 if (c + 1 < argc)
@@ -354,7 +379,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                     c++;
                 }
             }
-            else if (strcmp(arg, "--kv") == 0)
+            else if (is_same_command_option(arg, "--kv"))
             {
                 while (c + 2 < argc)
                 {
@@ -362,7 +387,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                     c += 2;
                 }
             }
-            else if (strcmp(arg, "--vector_store") == 0)
+            else if (is_same_command_option(arg, "--vector_store"))
             {
                 c++;
                 if (c < argc)
@@ -375,7 +400,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                     args.vector_stores.at(args.cur_vs_name).push_back(argv[c]);
                 }
             }
-            else if (strcmp(arg, "--thought_tags") == 0)
+            else if (is_same_command_option(arg, "--thought_tags"))
             {
                 if (c + 2 < argc)
                 {
@@ -385,7 +410,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                     args.detect_thoughts = true;
                 }
             }
-            else if (strcmp(arg, "--multimedia_file_tags") == 0)
+            else if (is_same_command_option(arg, "--multimedia_file_tags"))
             {
                 if (c + 2 < argc)
                 {
@@ -394,7 +419,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                     c += 2;
                 }
             }
-            else if (strcmp(arg, "--set") == 0)
+            else if (is_same_command_option(arg, "--set"))
             {
                 if (c + 2 < argc)
                 {
@@ -446,6 +471,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--cache_type",                  cache_type,           std::string)
             handle_para0("--batch_size",                  batch_size,           std::stoi)
             handle_para0("--tts_export",                  tts_export,           std::string)
+            handle_para0("--re_quantize",                 re_quantize,          std::string)
             else
                 break;
 
@@ -807,7 +833,7 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
                                          gen_config.emb_rank_query_sep = args.emb_rank_query_sep;
 
 #define DEF_ExtraArgs(pipe_args, args)  \
-    chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers, args.moe_on_cpu, args.num_threads, args.batch_size, args.cache_type)
+    chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers, args.moe_on_cpu, args.num_threads, args.batch_size, args.cache_type, args.re_quantize);
 
 chatllm::BaseStreamer *get_streamer_for_log(void);
 

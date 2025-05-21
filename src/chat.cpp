@@ -948,8 +948,35 @@ namespace chatllm
                 return read_tensor_data_f16_f32(reader, read_offset, write_offset, data_size);
             else
             {
-                CHATLLM_THROW << ggml::get_name(&tensor) << ": type conversion not supported: " << original_type << ", " << target_type;
-                return 0;
+                std::vector<uint8_t> buf;
+                std::vector<uint8_t> buf_q;
+
+                ggml::tensor t;
+                ggml::init_tensor(&t, ggml::type::GGML_TYPE_F32, 4, tensor.ne);
+                buf.resize(ggml::nbytes(&t));
+
+                if (ggml::type::GGML_TYPE_F32 == original_type)
+                {
+                    reader->read_buffer(buf.data(), buf.size());
+                }
+                else
+                {
+                    ggml::init_tensor(&t, original_type, 4, tensor.ne);
+                    buf_q.resize(ggml::nbytes(&t));
+                    reader->read_buffer(buf_q.data(), buf_q.size());
+
+                    ggml::to_float(original_type, buf_q.data(), (float *)buf.data(), ggml::get_dim(&t, 0), ggml::nrows(&t));
+                }
+
+                ggml::init_tensor(&t, target_type, 4, tensor.ne);
+                buf_q.resize(ggml::nbytes(&t));
+                ggml::from_float(target_type, (const float *)buf.data(), (void *)buf_q.data(), ggml::get_dim(&t, 0), ggml::nrows(&t));
+
+                CHATLLM_CHECK(buf_q.size() == data_size) << "size mismatch? " << buf_q.size() << " : " << data_size;
+
+                alloc->get_backend()->write_tensor_data(&tensor, buf_q.data(), write_offset, buf_q.size());
+
+                return buf_q.size();
             }
         }
 
