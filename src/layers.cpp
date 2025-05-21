@@ -122,6 +122,22 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::new_zeros(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
+    {
+        // TODO: optimize (waiting for a proper operator)
+        if (ctx->is_using_gpu())
+        {
+            ggml::tensor *r = ggml::new_tensor_4d(ctx, type, ne0, ne1, ne2, ne3);
+                          r = ggml::scale_inplace(ctx, r, 0.0f);
+            return r;
+        }
+        else
+        {
+            std::vector<ggml::tensor *> empty;
+            return ggml::custom(ctx, ggml_custom_compute_forward_zeroes, 1, nullptr, empty, type, ne0, ne1, ne2, ne3);
+        }
+    }
+
     void ggml::set_input(ggml::tensor *a)
     {
         ggml_set_input(a);

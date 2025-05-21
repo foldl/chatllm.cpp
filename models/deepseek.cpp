@@ -250,11 +250,6 @@ namespace v1_moe
 
 namespace v2_light
 {
-    extern "C" void _compute_forward_zero(ggml::tensor * dst , const ggml::tensor * a, int ith, int nth, void * userdata)
-    {
-        memset(dst->data, 0, ggml::nbytes(dst));
-    }
-
     class QProj : public Block
     {
     public:
@@ -436,14 +431,8 @@ namespace v2_light
             k_pe = ggml::reshape_3d(ctx, k_pe, rope_dim, 1, qlen);
             k_pe = apply_pos_embedding_k(ctx, k_pe, rope_dim * 1, qlen, pos);
 
-            ggml::tensor * key_layer = ggml::new_tensor_3d(ctx, k_pe->type,
+            ggml::tensor * key_layer = ggml::new_zeros(ctx, k_pe->type,
                 qk_nope_head_dim + rope_dim, num_kv_heads, qlen);
-
-            // TODO: optimize (waiting for a proper operator)
-            if (ctx->is_using_gpu())
-                key_layer = ggml::scale_inplace(ctx, key_layer, 0.0f);
-            else
-                key_layer = ggml::map_custom1_inplace(ctx, key_layer, _compute_forward_zero, 1, nullptr);
 
             ggml::tensor * k_nope_dst = ggml::view_3d(ctx, key_layer,
                          qk_nope_head_dim, num_kv_heads, qlen,
@@ -598,14 +587,8 @@ namespace v2_light
 
             ggml::tensor *k_nope = u_k_nope_proj.forward(ctx, kv_lora_all);
 
-            ggml::tensor *key_layer = ggml::new_tensor_3d(ctx, k_nope->type,
+            ggml::tensor *key_layer = ggml::new_zeros(ctx, k_nope->type,
                 qk_nope_head_dim + rope_dim, num_kv_heads, qlen); // [qlen, heads, head_size]
-
-            // TODO: optimize (waiting for a proper operator)
-            if (ctx->is_using_gpu())
-                key_layer = ggml::scale_inplace(ctx, key_layer, 0.0f);
-            else
-                key_layer = ggml::map_custom1_inplace(ctx, key_layer, _compute_forward_zero, 1, nullptr);
 
             ggml::tensor * k_nope_dst = ggml::view_3d(ctx, key_layer,
                          qk_nope_head_dim, num_kv_heads, qlen,

@@ -701,3 +701,8 @@ static void ggml_compute_forward_flip(ggml::tensor * dst , const ggml::tensor * 
         break;
     }
 }
+
+static void ggml_custom_compute_forward_zeroes(struct ggml_tensor * dst , int ith, int nth, void * userdata)
+{
+    memset(dst->data, 0, ggml::nbytes(dst));
+}
