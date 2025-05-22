@@ -45,7 +45,7 @@ namespace chatllm
 
     bool ggml::str_to_type(const std::string &str, type *t)
     {
-        if (stricmp(str.c_str(), "q8") == 0)
+        if (strcasecmp(str.c_str(), "q8") == 0)
         {
             *t = ggml::type::GGML_TYPE_Q8_0;
             return true;
@@ -54,7 +54,7 @@ namespace chatllm
         for (int i = 0; i < GGML_TYPE_COUNT; ++i)
         {
             auto traits = ggml_get_type_traits((type)i);
-            if (stricmp(str.c_str(), traits->type_name) == 0)
+            if (strcasecmp(str.c_str(), traits->type_name) == 0)
             {
                 *t = (type)i;
                 return true;

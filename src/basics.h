@@ -6,6 +6,10 @@
 #include <algorithm>
 #include <sstream>
 
+#if defined(_WIN32)
+#define strcasecmp stricmp
+#endif
+
 namespace chatllm
 {
     class LogMessageFatal

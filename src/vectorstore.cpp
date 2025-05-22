@@ -357,10 +357,6 @@ bool CVectorStore::GetRecord(int64_t index, std::string &content, std::string &m
     return true;
 }
 
-#if defined(_WIN32)
-#define strcasecmp stricmp
-#endif
-
 DistanceStrategy ParseDistanceStrategy(const char *s)
 {
     #define match_item(item) else if (strcasecmp(s, #item) == 0) return DistanceStrategy::item
