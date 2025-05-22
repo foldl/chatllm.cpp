@@ -26,6 +26,7 @@ from sentencepiece import SentencePieceProcessor  # type: ignore
 GGML_QK8_0 = 32
 GGML_QK4_0 = 32
 GGML_QK4_1 = 32
+GGML_QK_K  = 256
 
 GGML_MEM_ALIGN = 16
 
@@ -35,6 +36,7 @@ class GGMLType(Enum):
     Q4_0 = 2
     Q4_1 = 3
     Q8_0 = 8
+    Q4_K = 12
 
 class ChatModelAP(IntEnum):
     Text            = 0x01
@@ -271,6 +273,108 @@ def quantize_q4_1(tensor: torch.Tensor) -> torch.CharTensor:
     tensor = torch.cat((scale.half().view(torch.int8), min_values.half().view(torch.int8), tensor), dim=-1)
     return tensor
 
+def qkx2_quants(x: torch.Tensor, nmax, rmin, rdelta, nstep: int, use_mad: bool):
+    assert x.dim() == 1
+    N = x.shape[0]
+    av_x = torch.norm(x) / math.sqrt(N)
+    weights = av_x + torch.abs(x)
+    min_x = torch.min(x)
+    max_x = torch.max(x)
+    sum_w = torch.sum(weights)
+    sum_x = torch.sum(weights * x)
+    if min_x > 0: min_x = torch.tensor(0)
+    if min_x == max_x:
+        L = torch.zeros(N)
+        return 0.0, -min_x, L
+
+    iscale = nmax / (max_x - min_x)
+    scale = 1 / iscale
+    best_mad = 0
+    L = (iscale * (x - min_x)).round().clamp(min=0, max=nmax)
+    diff = scale * L + min_x - x
+    diff = torch.abs(diff) if use_mad else torch.square(diff)
+    best_mad = torch.sum(weights * diff)
+
+    if nstep < 1:
+        return scale, -min_x, L
+
+    for istep in range(nstep):
+        iscale = (rmin + rdelta * istep + nmax)/(max_x - min_x)
+        l = (iscale * (x - min_x)).round().clamp(min=0, max=nmax)
+        sum_l  = torch.sum(weights * l)
+        sum_l2 = torch.sum(weights * l * l)
+        sum_xl = torch.sum(weights * l * x)
+
+        D = sum_w * sum_l2 - sum_l * sum_l
+        if D > 0:
+            this_scale = (sum_w * sum_xl - sum_x * sum_l)/D
+            this_min   = (sum_l2 * sum_x - sum_l * sum_xl)/D
+            if this_min > 0:
+                this_min = 0
+                this_scale = sum_xl / sum_l2
+
+            diff = this_scale * l + this_min - x
+            diff = torch.abs(diff) if use_mad else torch.square(diff)
+            mad = torch.sum(weights * diff)
+            if mad < best_mad:
+                L = l
+                scale = this_scale
+                min_x = this_min
+
+    return scale, -min_x, L
+
+def quantize_q4_k_block(tensor: torch.Tensor) -> torch.CharTensor:
+    assert tensor.shape == (GGML_QK_K, )
+    tensor = tensor.view(-1, 32)
+
+    subblocks = [qkx2_quants(tensor[i], 15, -1.0, 0.1, 20, False) for i in range(tensor.shape[0])]
+    scale = torch.stack([x[0] for x in subblocks])
+    min_x = torch.stack([x[1] for x in subblocks])
+
+    max_scale = torch.max(scale)
+    max_min   = torch.max(min_x)
+
+    inv_scale = 63.0 / max_scale if max_scale > 0 else 0.0
+    inv_min   = 64.0 / max_min   if max_min   > 0 else 0.0
+
+    ls = (inv_scale * scale).round().clamp(max=63)
+    lm = (inv_min   * min_x).round().clamp(max=63)
+
+    scales = [0] * 12
+    for j in range(GGML_QK_K // 32):
+        ls_j = int(ls[j].item())
+        lm_j = int(lm[j].item())
+        if j < 4:
+            scales[j]   = ls_j
+            scales[j+4] = lm_j
+        else:
+            scales[j+4]  = (ls_j & 0xF) | ((lm_j & 0xF) << 4)
+            scales[j-4] |= ((ls_j >> 4) << 6)
+            scales[j-0] |= ((lm_j >> 4) << 6)
+
+    scales = torch.tensor(scales, dtype=torch.uint8)
+
+    d    = (max_scale / 63.0).half()
+    dmin = (max_min   / 63.0).half()
+
+    recovered_scale = (ls * d   ).view(-1, 1)
+    recovered_min   = (lm * dmin).view(-1, 1)
+
+    L = ((1 / recovered_scale) * (tensor + recovered_min)).round().clamp(min=0, max=15).to(torch.uint8)
+    L = L.view(-1, 2, 32)
+    L = L[:, 0, :] | (L[:, 1, :] << 4)
+
+    r = torch.cat((d.view(1).view(torch.int8), dmin.view(1).view(torch.int8), scales.view(torch.uint8), L.flatten().view(torch.uint8)), dim=-1)
+
+    return r
+
+def quantize_q4_k(tensor: torch.Tensor) -> torch.CharTensor:
+    # equivalent to dequantize_row_q4_K in ggml-quants.c
+    assert tensor.shape[tensor.ndim - 1] % GGML_QK_K == 0
+    tensor = tensor.view(-1, GGML_QK_K)
+    blocks = [quantize_q4_k_block(tensor[i]) for i in range(tensor.shape[0])]
+    tensor = torch.cat(blocks, dim=-1)
+    return tensor
 
 def dump_tensor(f, name: str, tensor: torch.Tensor, ggml_type: GGMLType):
     assert tensor.dtype == torch.float32
@@ -294,6 +398,8 @@ def dump_tensor(f, name: str, tensor: torch.Tensor, ggml_type: GGMLType):
             tensor = quantize_q4_0(tensor)
         elif ggml_type == GGMLType.Q4_1:
             tensor = quantize_q4_1(tensor)
+        elif ggml_type == GGMLType.Q4_K:
+            tensor = quantize_q4_k(tensor)
         else:
             raise NotImplementedError(f"Cannot dump tensor of dtype {tensor.dtype}")
     except Exception as e:
@@ -6562,7 +6668,7 @@ def main():
     parser.add_argument("-a", "--arch", type=str, default='')
     parser.add_argument("-l", "--lora_model_name_or_path", type=str, default=None)
     parser.add_argument("-o", "--save_path", type=Path)
-    parser.add_argument("-t", "--type", type=str, default="q8_0", choices=["f32", "f16", "q8_0", "q4_0", "q4_1"])
+    parser.add_argument("-t", "--type", type=str, default="q8_0", choices=["f32", "f16", "q8_0", "q4_0", "q4_1", "q4_k"])
     parser.add_argument("-n", "--name", type=str, required=True, help='model name in English')
     parser.add_argument("--vocab_dir", type=str, default='')
     parser.add_argument("--experts", type=str, default='')
