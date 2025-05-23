@@ -3,7 +3,7 @@
 ## Dependencies
 
 To keep things simple, external tools are used for accessing and processing multimedia data.
-This tools should available in OS's searching paths.
+These tools should available in OS's searching paths.
 
 * **[ffmpeg](https://ffmpeg.org/)**: v7.0.2 or compatible
 
