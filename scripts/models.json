@@ -228,6 +228,22 @@
             }
         }
     },
+    "devstral-small": {
+        "brief": "Devstral is an agentic LLM for software engineering tasks built under a collaboration between Mistral AI and All Hands AI.",
+        "default": "24b-2505",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "24b-2505": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 14740211904,
+                        "url": "chatllm_quantized_mistral_small/devstral-small-2505-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
     "mistral0.1": {
         "brief": "The Mistral-7B-Instruct-v0.1 Large Language Model (LLM) is a instruct fine-tuned version of the Mistral-7B-v0.1 generative text model using a variety of publicly available conversation datasets.",
         "default": "7b",
@@ -1948,6 +1964,22 @@
                     "q8": {
                         "size": 9994614304,
                         "url": "chatllm_quantized_20241228/persimmon-8b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "fuyu": {
+        "brief": "Fuyu-8B, a small version of the multimodal model by Adept.",
+        "default": "base-8b",
+        "license": "Creative Commons Attribution Non Commercial 4.0",
+        "variants": {
+            "base-8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 10016751152,
+                        "url": "chatllm_quantized_fuyu/fuyu-8b.bin"
                     }
                 }
             }
