@@ -38,7 +38,7 @@ namespace vision
         fclose(pp);
     }
 
-    void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, int max_grid_width, int max_patch_num, bool pad, const int *merge_kernel_size)
+    void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, int max_grid_width, int max_patch_num, PaddingMode pad, const int *merge_kernel_size)
     {
         // magick -depth 8 demo.jpeg -resize 100x100 rgb:"aaa.raw"
         rgb_pixels.clear();
@@ -64,8 +64,8 @@ namespace vision
             if (patch_num > max_patch_num)
             {
                 double ratio = std::sqrt((double)max_patch_num / patch_num);
-                height = (int)(height * ratio);
-                width  = (int)(width * ratio);
+                height = patch_size * (int)floor(((height / patch_size) * ratio));
+                width  = patch_size * (int)floor(((width  / patch_size) * ratio));
             }
         }
 
@@ -76,12 +76,23 @@ namespace vision
         const int patch_size_w = merge_kernel_size ? patch_size * merge_kernel_size[0] : patch_size;
         const int patch_size_h = merge_kernel_size ? patch_size * merge_kernel_size[1] : patch_size;
 
-        if (pad)
+        if (pad != PaddingMode::No)
         {
             aligned_width  = ((width  + patch_size_w - 1) / patch_size_w) * patch_size_w;
             aligned_height = ((height + patch_size_h - 1) / patch_size_h) * patch_size_h;
 
-            oss << " -background black -compose Copy -gravity northwest -extent " << aligned_width << "x" << aligned_height;
+            oss << " -background ";
+            switch (pad)
+            {
+            case PaddingMode::Black:
+                oss << "black";
+                break;
+
+            default:
+                oss << "white";
+                break;
+            }
+            oss << " -compose Copy -gravity northwest -extent " << aligned_width << "x" << aligned_height;
         }
         else
         {
@@ -94,7 +105,7 @@ namespace vision
         oss << " rgb:-";
         // oss << " rgb:c:\\tmp\\img.raw";
 
-        printf("%s\n", oss.str().c_str());
+        //printf("%s\n", oss.str().c_str());
 
         FILE* pp = popen(oss.str().c_str(), "rb");
 
@@ -132,14 +143,14 @@ namespace vision
     }
 
     void image_arrange(const std::vector<float> &rgb_pixels, const int width, const int patch_size,
-        std::vector<float> &arranged, const std::string &fmt)
+        std::vector<float> &arranged, const PatchesFormat fmt)
     {
         const size_t pixels_num = rgb_pixels.size() / 3;
         const int height = (int)(pixels_num / width);
         const int grid_w = width / patch_size;
         const int grid_h = height / patch_size;
         arranged.resize(rgb_pixels.size(), 0);
-        if (fmt == "patches-left-right-down channels-rgb pixels-left-right-down")
+        if (fmt == PatchesFormat::PatchesLeftRightDown_ChannelsRGB_PixelsLeftRightDown)
         {
             int64_t idx = 0;
             for (int i = 0; i < height - patch_size + 1; i += patch_size)
@@ -160,9 +171,31 @@ namespace vision
                 }
             }
         }
+        else if (fmt == PatchesLeftRightDown_PixelsLeftRightDown_ChannelsRGB)
+        {
+            int64_t idx = 0;
+            for (int i = 0; i < height - patch_size + 1; i += patch_size)
+            {
+                for (int j = 0; j < width - patch_size + 1; j += patch_size)
+                {
+                    for (int k = 0; k < patch_size; k++)
+                    {
+                        for (int l = 0; l < patch_size; l++)
+                        {
+                            const int pixel_id = (i + k) * width + (j + l);
+
+                            for (int c = 0; c < 3; c++)
+                            {
+                                arranged[idx++] = rgb_pixels[pixel_id * 3 + c];
+                            }
+                        }
+                    }
+                }
+            }
+        }
         else
         {
-            throw new std::invalid_argument(fmt.c_str());
+            throw new std::invalid_argument("invalid format");
         }
     }
 
@@ -222,7 +255,7 @@ namespace vision
         std::vector<uint8_t> pixels;
         const int merge_size[] = {2, 2};
         const int patch_size = 14;
-        vision::image_load(fn, pixels, w, h, patch_size, -1, 4096, true, merge_size);
+        vision::image_load(fn, pixels, w, h, patch_size, -1, 4096, PaddingMode::Black, merge_size);
 
         printf("%dx%d = %zd, %d\n", w, h, pixels.size() / 3, w * h == pixels.size() / 3);
 
@@ -238,7 +271,7 @@ namespace vision
 
         std::vector<float> arranged;
 
-        image_arrange(scaled, w, patch_size, arranged, "patches-left-right-down channels-rgb pixels-left-right-down");
+        image_arrange(scaled, w, patch_size, arranged, PatchesFormat::PatchesLeftRightDown_ChannelsRGB_PixelsLeftRightDown);
 
         print_data(arranged, patch_size, patch_size * patch_size * 4);
     }

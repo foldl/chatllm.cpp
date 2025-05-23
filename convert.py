@@ -553,7 +553,7 @@ def tqdm(items, desc='') -> Iterable[any]:
         used = time.perf_counter() - t
         per_item = used / (i + 1)
         remain = (total - i - 1) * per_item
-        print_progress_bar(i + 1, total, prefix=desc, suffix=f"({i}/{total}) {format_time(per_item)}/iter rem: {format_time(remain)}")
+        print_progress_bar(i + 1, total, prefix=desc, suffix=f"({i}/{total}) {format_time(per_item)}/it rem: {format_time(remain)}")
 
 def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_pp, loader_fun = None):
     tensor_info = []
@@ -1570,7 +1570,7 @@ class DeciLMConverter(BaseConverter):
     def pp(cls, config, name: str, tensor):
 
         if name.endswith('k_proj.weight'):
-            r = re.findall('model\.layers.([0-9]*)\.', name)
+            r = re.findall(r'model\.layers.([0-9]*)\.', name)
             layer_id = int(r[0])
             num_key_value_heads = config.block_configs[layer_id]['attention']['n_heads_in_group']
             return permute(tensor, num_key_value_heads)

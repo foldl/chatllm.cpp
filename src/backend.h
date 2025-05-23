@@ -56,7 +56,7 @@ namespace chatllm
     class TensorLoader
     {
     public:
-        virtual void read_tensor(const std::string &name, ggml::tensor *tensor) = 0;
+        virtual void read_tensor(const std::string &name, ggml::tensor *tensor, bool partial = false) = 0;
         virtual void read_tensor(const std::string &name,
                         const std::string &layer_prefix, int num, const std::string &suffix,
                         ggml::tensor *tensor) = 0;

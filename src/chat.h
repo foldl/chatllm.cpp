@@ -244,7 +244,7 @@ namespace chatllm
             int grid_width;
             int grid_height;
             int patch_size;
-            int token_number;
+            int patch_number;
             std::vector<float> data;
         };
     public:
@@ -293,6 +293,8 @@ namespace chatllm
 
         void set_chat_encoder(BaseHistoryEncoder *encoder);
 
+        int get_image_total_patches(void);
+
         int bos_token_id;
         int eos_token_id;
         int pad_token_id;
@@ -308,6 +310,7 @@ namespace chatllm
 
     public:
         tokenizer::Processor *tp;
+        std::vector<ImageAsPatches> images;
     protected:
         std::string sys_prompt;
         const int max_length;
@@ -317,7 +320,7 @@ namespace chatllm
         BaseHistoryEncoder *qa_encoder;
         bool auto_add_bos;
         std::set<int> terminate_ids;
-    private:
+    public:
         const int vocab_size;
     };
 
@@ -623,7 +626,7 @@ namespace chatllm
         TensorInfo(ggml::type type, int n_dim, const int64_t *ne, size_t _offset, const char *name);
         ~TensorInfo();
 
-        bool load(tokenizer::DataReader *reader, LayerBufAllocator *alloc, ggml::type target_type);
+        bool load(tokenizer::DataReader *reader, LayerBufAllocator *alloc, ggml::type target_type, size_t override_buffer_size = 0);
 
         size_t read_tensor_data(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size, ggml::type target_type);
 
@@ -683,7 +686,7 @@ namespace chatllm
             this->alloc_manager = alloc_manager;
         }
 
-        void read_tensor(const std::string &name, ggml::tensor *tensor) override;
+        void read_tensor(const std::string &name, ggml::tensor *tensor, bool partial = false) override;
         void read_tensor(const std::string &name,
                         const std::string &layer_prefix, int num, const std::string &suffix,
                         ggml::tensor *tensor) override;
@@ -709,7 +712,7 @@ namespace chatllm
         }
 
     protected:
-        void read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator);
+        void read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator, bool partial);
         void read_tensor(const std::string &name,
                         const std::string &layer_prefix, int num, const std::string &suffix,
                         ggml::tensor *tensor, LayerBufAllocator *allocator);

@@ -870,6 +870,8 @@ namespace chatllm
         return ggml_nelements(tensor);
     }
 
+    int BlockParams::num_padding_embeddings = 0;
+
     ggml::tensor *Sequential::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         ggml::tensor *output = input;
@@ -1076,7 +1078,15 @@ namespace chatllm
     void Embedding::load(const std::string &path, TensorLoader *loader)
     {
         Block::load(path, loader);
-        loader->read_tensor(path + "weight", weight);
+        loader->read_tensor(path + "weight", weight, num_padded_embeddings > 0);
+    }
+
+    size_t Embedding::get_base_nbytes(void)
+    {
+        ggml::tensor t;
+        int64_t ne[2] = {ggml::get_dim(weight, 0), num_embeddings};
+        ggml::init_tensor(&t, ggml::type_of(weight), 2, ne);
+        return ggml::nbytes(&t);
     }
 
     ggml::tensor *RobertaEmbedding::forward(ComputeContext *ctx, ggml::tensor *input, int n_past)
@@ -1926,12 +1936,6 @@ namespace chatllm
         Block::load(path, loader);
         intermediate.load(path + "intermediate.dense.", loader);
         output.load(path + "output.", loader);
-    }
-
-    ggml::tensor *FuyuEmbedding::forward(ComputeContext *ctx, ggml::tensor *patches, int patches_per_row, ggml::tensor *text_input)
-    {
-        //ggml_get_rows
-        return nullptr;
     }
 
     void Phi3SUSelfAttention::config(InitContext *ctx, int original_max_position_embeddings, float rope_theta, float short_scaling_factor, float long_scaling_factor, int factor_len, const float *short_factor, const float *long_factor)

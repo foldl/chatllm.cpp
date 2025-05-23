@@ -6,16 +6,17 @@
 
 ![](./docs/demo.gif)
 
-Inference of a bunch of models from less than 1B to more than 300B, for real-time chatting with [RAG](./docs/rag.md) on your computer (CPU & GPU),
+Inference of a bunch of models from less than 1B to more than 300B, for real-time [multimodal](./docs/multimodal.md) chat with [RAG](./docs/rag.md) on your computer (CPU & GPU),
 pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml).
 
 | [Supported Models](./docs/models.md) | [Download Quantized Models](./docs/quick_start.md#download-quantized-models) |
 
 **What's New:**
 
+* 2025-05-23: [I can see](./docs/multimodal.md): Fuyu
 * 2025-05-21: Re-quantization when loading (e.g. `--re-quantize q4_k`)
 * 2025-05-19: OuteTTS
-* 2025-05-17: Orpheus-TTS
+* 2025-05-17: [I can speak](./docs/multimodal.md): Orpheus-TTS
 * 2025-05-11: Seed-Coder
 * 2025-04-30: QWen3, MiMo
 * 2025-04-23: [ggml updated](https://github.com/ggml-org/llama.cpp/tree/658987cfc9d752dca7758987390d5fb1a7a0a54a) again

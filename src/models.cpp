@@ -1139,6 +1139,8 @@ namespace chatllm
             if (performance)
                 performance->Reset();
 
+            before_generate(gen_config);
+
             while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
             {
                 std::vector<float> lm_logits;
@@ -1213,6 +1215,8 @@ namespace chatllm
 
             if (performance)
                 performance->Accumulate(ModelPerfInfo::Type::Generation, output_ids.size() - curr_input_ids.size());
+
+            after_generate();
 
 //printf("\nn_past = %d\n", n_past);
             return output_ids;
@@ -1301,6 +1305,12 @@ namespace chatllm
         }
 
     protected:
+        virtual void before_generate(const GenerationConfig &gen_config)
+        {}
+
+        virtual void after_generate(void)
+        {}
+
         virtual void do_build_graph(ForwardContext &ctc, const std::vector<int> &input_ids,
                                        const GenerationConfig &gen_config,
                                        int past)
@@ -2419,6 +2429,7 @@ namespace chatllm
         CASE(MINICPM3,              minicpm::v3, 1)             \
                                                                 \
         CASE(PERSIMMON,             adept::persimmon, 1)        \
+        CASE(FUYU,                  adept::fuyu, 1)             \
                                                                 \
         CASE(GEMMA,                 gemma::v1, 1)               \
         CASE(GEMMA2,                gemma::v2, 2)               \

@@ -172,6 +172,20 @@ namespace chatllm
         void build_forward_expand(ComputeContext *ctx, ggml::tensor * tensor);
     };
 
+    // facility to pass extra params when constructing Blocks.
+    // single thread assumed.
+    class BlockParams
+    {
+    public:
+        static int num_padding_embeddings; // number extra (padding) embedding
+        class PadEmbedding
+        {
+        public:
+            PadEmbedding(int n, int max) { BlockParams::num_padding_embeddings = n > max ? max : (n >= 0 ? n : 0); }
+            ~PadEmbedding(void) { BlockParams::num_padding_embeddings = 0; }
+        };
+    };
+
     class Block
     {
     public:
@@ -349,9 +363,10 @@ namespace chatllm
     class Embedding : public Block
     {
     public:
-        Embedding() : weight(nullptr) {}
         Embedding(InitContext *ctx, int num_embeddings, int embedding_dim)
-            : weight(ggml::new_tensor_2d(ctx, ggml::type_fallback(ctx->dtype, embedding_dim), embedding_dim, num_embeddings))
+            : num_embeddings(num_embeddings), num_padded_embeddings(BlockParams::num_padding_embeddings),
+              weight(ggml::new_tensor_2d(ctx, ggml::type_fallback(ctx->dtype, embedding_dim), embedding_dim,
+                     num_embeddings + BlockParams::num_padding_embeddings))
         {
             ggml::set_input(weight);
         }
@@ -365,20 +380,18 @@ namespace chatllm
 
         int64_t get_param_num(bool effective_only) const override
         {
-            return ggml::nelements(weight);
+            return ggml::nelements(weight) / (num_embeddings + num_padded_embeddings) * num_embeddings;
         }
+
+        // bytes without padding
+        size_t get_base_nbytes(void);
 
         void load(const std::string &path, TensorLoader *loader) override;
 
     public:
+        const int num_embeddings;
+        const int num_padded_embeddings;
         ggml::tensor *weight;
-    };
-
-    class VisualEmbedding  : public Embedding
-    {
-    public:
-        VisualEmbedding(InitContext *ctx, int num_embeddings, int embedding_dim)
-            : Embedding(ctx, num_embeddings, embedding_dim) {}
     };
 
     class Linear : public Block
@@ -386,7 +399,7 @@ namespace chatllm
     public:
         Linear() : weight(nullptr), bias(nullptr) {}
         Linear(InitContext *ctx, int in_features, int out_features, bool use_bias = true)
-            : weight(ggml::new_tensor_2d(ctx, ctx->dtype, in_features, out_features)),
+            : weight(ggml::new_tensor_2d(ctx,  ggml::type_fallback(ctx->dtype, in_features), in_features, out_features)),
               bias(use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, out_features) : nullptr) {}
 
         Linear(InitContext *ctx, int in_features, int out_features, ggml::tensor *weight, bool use_bias = true)
@@ -2822,28 +2835,6 @@ namespace chatllm
     public:
         CohereBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
             : LMBlock2(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length, false, false) {}
-    };
-
-    class FuyuEmbedding : public VisualEmbedding
-    {
-    public:
-        FuyuEmbedding(InitContext *ctx, int num_embeddings, int embedding_dim)
-            : VisualEmbedding(ctx, num_embeddings, embedding_dim),
-              image_new_line_tok_id(0) {}
-
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *patches, int patches_per_row, ggml::tensor *text_input) override;
-
-        int64_t get_param_num(bool effective_only) const override
-        {
-            int64_t r = 0;
-            r += VisualEmbedding::get_param_num(effective_only);
-            r += vision_embed.get_param_num(effective_only);
-            return r;
-        }
-
-    public:
-        Linear vision_embed;
-        int image_new_line_tok_id;
     };
 
     class LongRoPEParam

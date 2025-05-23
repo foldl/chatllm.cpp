@@ -558,6 +558,13 @@ namespace chatllm
             encoder->set_tokenizer(this);
     }
 
+    int BaseTokenizer::get_image_total_patches(void)
+    {
+        int r = 0;
+        for (auto &image : images) r += image.patch_number;
+        return r;
+    }
+
     bool BaseTokenizer::is_terminate_token_id(int id) const
     {
         if (id == eos_token_id) return true;
@@ -1067,7 +1074,7 @@ namespace chatllm
         return ggml::nbytes(&tensor);
     }
 
-    bool TensorInfo::load(tokenizer::DataReader *reader, LayerBufAllocator *alloc, ggml::type target_type)
+    bool TensorInfo::load(tokenizer::DataReader *reader, LayerBufAllocator *alloc, ggml::type target_type, size_t override_buffer_size)
     {
         if (data)
         {
@@ -1078,7 +1085,8 @@ namespace chatllm
 
         this->original_type = ggml::type_of(tensor);
         ggml::change_type(&tensor, target_type);
-        data = alloc->alloc(alloc->get_alloc_size(&tensor, usage), usage);
+        size_t alloc_size = std::max(override_buffer_size, alloc->get_alloc_size(&tensor, usage));
+        data = alloc->alloc(alloc_size, usage);
         data->assign_to(&tensor);
         this->alloc = alloc;
 
@@ -1281,9 +1289,9 @@ namespace chatllm
         }
     }
 
-    void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor)
+    void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor, bool partial)
     {
-        read_tensor(name, tensor, alloc_manager->get_allocator(tensor));
+        read_tensor(name, tensor, alloc_manager->get_allocator(tensor), partial);
     }
 
     void ModelLoader::read_tensor(const std::string &name,
@@ -1293,7 +1301,7 @@ namespace chatllm
         read_tensor(name, layer_prefix, num, suffix, tensor, alloc_manager->get_allocator(tensor));
     }
 
-    void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator)
+    void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator, bool partial)
     {
         auto translated = translate_tensor_name(name);
         auto search = tensor_dict.find(translated);
@@ -1313,15 +1321,39 @@ namespace chatllm
 
             CHATLLM_CHECK(ndim == n_dims)
                 << "tensor " << name << " ndim mismatch: expect " << n_dims << " but got " << ndim;
-            for (int i = 0; i < ndim; i++)
+
+            if (partial)
             {
-                int64_t dim_size = t.tensor.ne[i];
-                CHATLLM_CHECK(dim_size == tensor->ne[i]) << "tensor " << name << " shape mismatch at dim " << i
-                                                         << ": expect " << tensor->ne[i] << " but got " << dim_size;
+                for (int i = 0; i < ndim; i++)
+                {
+                    int64_t dim_size = t.tensor.ne[i];
+                    if (dim_size < tensor->ne[i])
+                    {
+                        CHATLLM_CHECK(i == 1) << "partial loading only allowed on dim 1";
+                        continue;
+                    }
+                    CHATLLM_CHECK(dim_size == tensor->ne[i]) << "tensor " << name << " shape mismatch at dim " << i
+                                                            << ": expect " << tensor->ne[i] << " but got " << dim_size;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < ndim; i++)
+                {
+                    int64_t dim_size = t.tensor.ne[i];
+                    CHATLLM_CHECK(dim_size == tensor->ne[i]) << "tensor " << name << " shape mismatch at dim " << i
+                                                            << ": expect " << tensor->ne[i] << " but got " << dim_size;
+                }
             }
         }
 
-        CHATLLM_CHECK(t.load(_file.get(), allocator, tensor->type)) << "failed to load tensor: " << name;
+        size_t override_alloc_size = 0;
+        if (partial)
+        {
+            override_alloc_size = allocator->get_alloc_size(tensor, t.usage);
+        }
+
+        CHATLLM_CHECK(t.load(_file.get(), allocator, tensor->type, override_alloc_size)) << "failed to load tensor: " << name;
 
         t.assign_to(tensor);
     }

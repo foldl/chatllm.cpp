@@ -238,7 +238,7 @@
 * Zhinao (`ZhinaoForCausalLM`)
     * [x] [Chat-7B-4K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-4K), [Chat-7B-32K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-32K), [Chat-7B-360K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-360K)
 
-## Base Models
+## Text Base Models
 
 Please use `--format completion` for these models.
 
@@ -282,6 +282,11 @@ Please use `--format completion` for these models.
 
         [DAC.speech.v1.0 1.5kbps](https://huggingface.co/ibm-research/DAC.speech.v1.0/commits/main) is used as codec.
         Use these additional command line options when converting: `--name OuteTTS -a OuteTTS --dac_model /path/to/dac`
+
+## Multimodal Models
+
+* Fuyu
+    * [x] Base: [8B](https://huggingface.co/adept/fuyu-8b/commit/f41defefdb89be0d28cac19d94ce216e37cb6be5)
 
 ## RAG Models
 
