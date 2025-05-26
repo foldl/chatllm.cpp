@@ -53,7 +53,7 @@ struct Args
     std::string rpc_endpoints;
     std::string serve_rpc;
     std::string ggml_dir;
-    std::string cache_type = "f16";
+    std::string cache_dtype = "f16";
     std::string thought_tags[2] = {"", ""};
     std::string multimedia_file_tags[2] = {"", ""};
     std::string tts_export;
@@ -190,7 +190,7 @@ void usage(const std::string &prog)
               << "  +moe_on_cpu             alway use CPU for sparse operations (MoE) (default: off)\n"
               << "  --rpc_endpoints EP..    RPC endpoints (i.e. servers) for distributed inference (default: empty)\n"
               << "                          EP1;EP2, where EP ::= host:port\n"
-              << "  --cache_type T          cache type, T ::= f32 | f16 (default: f16)\n"
+              << "  --cache_dtype T         cache data type, T ::= f32 | f16 (default: f16)\n"
               << "  --batch_size N          batch size (default: 4096)\n"
               << "                          note: trade-off between prompt throughput and memory usage.\n"
               << "  --re_quantize Q         re-quantize model weights during loading (Q ::= q8_0 | q4_0 | q4_1 | q4_k | ...) (default: no re-quantization)\n"
@@ -469,7 +469,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--rpc_endpoints",               rpc_endpoints,        std::string)
             handle_para0("--serve_rpc",                   serve_rpc,            std::string)
             handle_para0("--ggml_dir",                    ggml_dir,             std::string)
-            handle_para0("--cache_type",                  cache_type,           std::string)
+            handle_para0("--cache_dtype",                 cache_dtype,          std::string)
             handle_para0("--batch_size",                  batch_size,           std::stoi)
             handle_para0("--tts_export",                  tts_export,           std::string)
             handle_para0("--re_quantize",                 re_quantize,          std::string)
@@ -834,7 +834,7 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
                                          gen_config.emb_rank_query_sep = args.emb_rank_query_sep;
 
 #define DEF_ExtraArgs(pipe_args, args)  \
-    chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers, args.moe_on_cpu, args.num_threads, args.batch_size, args.cache_type, args.re_quantize);
+    chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers, args.moe_on_cpu, args.num_threads, args.batch_size, args.cache_dtype, args.re_quantize);
 
 chatllm::BaseStreamer *get_streamer_for_log(void);
 

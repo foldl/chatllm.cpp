@@ -74,8 +74,38 @@ namespace chatllm
 
     ggml::type ggml::type_fallback(ggml::type type, int64_t last_dim)
     {
-        auto block_size = ggml_blck_size(type);
+        auto block_size = ggml::block_size(type);
         return (last_dim % block_size) != 0 ? ggml::type::GGML_TYPE_F16 : type;
+    }
+
+    int64_t ggml::block_size(const ggml::tensor *tensor)
+    {
+        return ggml::block_size(ggml::type_of(tensor));
+    }
+
+    int64_t ggml::block_size(ggml::type type)
+    {
+        return ggml_blck_size(type);
+    }
+
+    int64_t ggml::row_size(const ggml::tensor *tensor)
+    {
+        return ggml::row_size(ggml::type_of(tensor), ggml::get_dim(tensor, 0));
+    }
+
+    int64_t ggml::row_size(ggml::type type, int64_t ne0)
+    {
+        return ggml_row_size(type, ne0);
+    }
+
+    bool ggml::is_quantized(const ggml::tensor *tensor)
+    {
+        return ggml::is_quantized(ggml::type_of(tensor));
+    }
+
+    bool ggml::is_quantized(type t)
+    {
+        return ggml_is_quantized(t);
     }
 
     bool ggml::is_view_op(ggml::tensor *a)
@@ -120,6 +150,11 @@ namespace chatllm
         ggml::tensor *tensor = ggml_new_tensor_4d(ctx->get_ctx(), type, ne0, ne1, ne2, ne3);
         ctx->cb_new_tensor(tensor);
         return tensor;
+    }
+
+    ggml::tensor *ggml::new_tensor_like(ComputeContext *ctx, ggml::type type, ggml::tensor *a)
+    {
+        return ggml::new_tensor_4d(ctx, type, ggml::get_dim(a, 0), ggml::get_dim(a, 1), ggml::get_dim(a, 2), ggml::get_dim(a, 3));
     }
 
     ggml::tensor *ggml::new_zeros(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
@@ -216,7 +251,7 @@ namespace chatllm
     {
         tensor->type = type;
         tensor->nb[0] = ggml_type_size(type);
-        tensor->nb[1] = tensor->nb[0]*(tensor->ne[0]/ggml_blck_size(type));
+        tensor->nb[1] = tensor->nb[0]*(tensor->ne[0]/ggml::block_size(type));
         for (int i = 2; i < GGML_MAX_DIMS; i++) {
             tensor->nb[i] = tensor->nb[i - 1] * tensor->ne[i - 1];
         }
@@ -1540,7 +1575,7 @@ namespace chatllm
         prepare_pos_tensor(ctx, n_past, qlen);
     }
 
-    size_t CoreAttention::read_cache_data(void *buffer, size_t buffer_size) const
+    size_t KVCacheAttention::read_cache_data(void *buffer, size_t buffer_size) const
     {
         size_t r = 0;
         uint8_t *p = (uint8_t *)buffer;
@@ -1561,7 +1596,7 @@ namespace chatllm
         return r;
     }
 
-    size_t CoreAttention::write_cache_data(const void *buffer, size_t buffer_size)
+    size_t KVCacheAttention::write_cache_data(const void *buffer, size_t buffer_size)
     {
         size_t r = 0;
         const uint8_t *p = (const uint8_t *)buffer;
@@ -1593,7 +1628,7 @@ namespace chatllm
             if (remain > 0)
             {
                 ggml::tensor * k_cache_remain = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
-                                            ggml::element_size(k_cache) * k_hidden_size * shift_pending.shift);
+                                            ggml::row_size(k_cache) * shift_pending.shift);
                 ggml::tensor * k_cache_1d = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
                                             0);
 
@@ -1621,22 +1656,23 @@ namespace chatllm
 
         ggml::build_forward_expand(ctx, ggml::cpy(ctx, Vcur, v_cache_view));
 
-        ggml::tensor * k_cache_view = nullptr;
+        ggml::tensor * k_cache_view = ggml::view_1d(ctx, k_cache, qlen * k_hidden_size, ggml::row_size(k_cache) * n_past);
         ggml::tensor * k_view = nullptr;
         if (ggml::is_contiguous(k))
         {
-            k_cache_view = ggml::view_1d(ctx, k_cache, qlen * k_hidden_size,
-                                    ggml::element_size(k_cache) * k_hidden_size * n_past);
             k_view = ggml::view_1d(ctx, k, qlen * k_hidden_size, 0);
         }
-        else
+        else if (!ggml::is_quantized(k_cache))
         {
             // [qlen, heads, head_size]
             const int head_size = k_hidden_size / num_kv_heads;
             k_view = k;
-            k_cache_view = ggml::view_1d(ctx, k_cache, qlen * k_hidden_size,
-                                    ggml::element_size(k_cache) * k_hidden_size * n_past);
             k_cache_view = ggml::reshape_3d(ctx, k_cache_view, head_size, num_kv_heads, qlen);  // [qlen, heads, head_size]
+        }
+        else
+        {
+            k = ggml::cont(ctx, k);
+            k_view = ggml::view_1d(ctx, k, qlen * k_hidden_size, 0);
         }
 
         // important: storing RoPE-ed version of K in the KV cache!

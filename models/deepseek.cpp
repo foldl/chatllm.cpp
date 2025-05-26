@@ -533,7 +533,7 @@ namespace v2_light
             ggml::tensor *k_pe = nullptr;
 
             k_pe = ggml::view_2d(ctx, k_cache, k_hidden_size, n_past + qlen,
-                                k_hidden_size * ggml::element_size(k_cache),
+                                ggml::row_size(k_cache),
                                 0);
 
             return k_pe;
@@ -554,7 +554,7 @@ namespace v2_light
             ggml::tensor *k_pe, ggml::tensor *kv_lora)
         {
             ggml::tensor * pe_cache_view = ggml::view_1d(ctx, k_cache, qlen * k_hidden_size,
-                                        ggml::element_size(k_cache) * k_hidden_size * n_past);
+                                        ggml::row_size(k_cache) * n_past);
 
             ggml::tensor * kv_cache_view = ggml::view_1d(ctx, v_cache, qlen * v_hidden_size,
                                         ggml::element_size(v_cache) * v_hidden_size * n_past);

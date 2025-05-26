@@ -44,6 +44,7 @@ namespace chatllm
         ggml::tensor *new_tensor_2d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1);
         ggml::tensor *new_tensor_3d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2);
         ggml::tensor *new_tensor_4d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
+        ggml::tensor *new_tensor_like(ComputeContext *ctx, ggml::type type, ggml::tensor *a);
 
         ggml::tensor *new_zeros(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);
 
@@ -1063,14 +1064,9 @@ namespace chatllm
     public:
         CoreAttention() : num_attention_heads(0), num_kv_heads(0), max_length(0) {}
 
-        CoreAttention(InitContext *ctx, int num_attention_heads, int num_kv_heads, int max_length,
-              int64_t k_cache_ele_num, int64_t v_cache_ele_num)
+        CoreAttention(InitContext *ctx, int num_attention_heads, int num_kv_heads, int max_length)
             : num_attention_heads(num_attention_heads),
               num_kv_heads(num_kv_heads),
-              k_cache(k_cache_ele_num > 0 ? ggml::new_tensor_1d(ctx, ctx->cache_dtype, k_cache_ele_num)
-                                       : nullptr),
-              v_cache(v_cache_ele_num > 0 ? ggml::new_tensor_1d(ctx, ctx->cache_dtype, v_cache_ele_num)
-                                       : nullptr),
               pos(nullptr),
               max_length(max_length),
               attn_scaling_factor(-1.0f),
@@ -1080,15 +1076,6 @@ namespace chatllm
               causal(true),
               last_attn_scores(nullptr)
         {
-            if (k_cache_ele_num > 0)
-            {
-                ggml::set_name(k_cache, "k_cache");
-            }
-            if (v_cache_ele_num > 0)
-            {
-                ggml::set_name(v_cache, "v_cache");
-            }
-
             allocate_pos_tensor(ctx);
         }
 
@@ -1104,33 +1091,6 @@ namespace chatllm
                 r += attn_scores_pp->get_param_num(effective_only);
             return r;
         }
-
-        size_t get_cache_size(void) const override
-        {
-            size_t r = 0;
-            if (k_cache)
-                r += ggml::nbytes(k_cache);
-            if (v_cache)
-                r += ggml::nbytes(v_cache);
-            return r;
-        }
-
-        void  set_cache_buffer(BackendBuffer *buffer) override
-        {
-            size_t offset = 0;
-            if (k_cache)
-            {
-                buffer->assign_to(k_cache, offset);
-                offset += ggml::nbytes(k_cache);
-            }
-            if (v_cache)
-            {
-                buffer->assign_to(v_cache, offset);
-            }
-        }
-
-        size_t read_cache_data(void *buffer, size_t buffer_size) const override;
-        size_t write_cache_data(const void *buffer, size_t buffer_size) override;
 
     protected:
         virtual void allocate_pos_tensor(InitContext *ctx);
@@ -1180,8 +1140,6 @@ namespace chatllm
     public:
         const int num_attention_heads;
         const int num_kv_heads;
-        ggml::tensor *k_cache;
-        ggml::tensor *v_cache;
         ggml::tensor *pos;
         const int max_length;
         float attn_scaling_factor;
@@ -1202,21 +1160,58 @@ namespace chatllm
 
         KVCacheAttention(InitContext *ctx, int num_attention_heads, int num_kv_heads, int k_hidden_size, int v_hidden_size, int max_length,
                          int cache_length)
-            : CoreAttention(ctx, num_attention_heads, num_kv_heads, max_length,
-                            (int64_t)k_hidden_size * cache_length,
-                            (int64_t)v_hidden_size * cache_length),
+            : CoreAttention(ctx, num_attention_heads, num_kv_heads, max_length),
               k_hidden_size(k_hidden_size),
               v_hidden_size(v_hidden_size),
-              cache_length(cache_length)
+              cache_length(cache_length),
+              k_cache(cache_length > 0 ?
+                    ggml::new_tensor_2d(ctx, ggml::type_fallback(ctx->cache_dtype, k_hidden_size), k_hidden_size, cache_length) : nullptr),
+              v_cache(cache_length > 0 ?
+                    ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F16, cache_length, v_hidden_size) : nullptr)
         {
+            if (cache_length > 0)
+            {
+                ggml::set_name(k_cache, "k_cache");
+            }
+            if (cache_length > 0)
+            {
+                ggml::set_name(v_cache, "v_cache");
+            }
         }
+
+        size_t get_cache_size(void) const override
+        {
+            size_t r = 0;
+            if (k_cache)
+                r += ggml::nbytes(k_cache);
+            if (v_cache)
+                r += ggml::nbytes(v_cache);
+            return r;
+        }
+
+        void  set_cache_buffer(BackendBuffer *buffer) override
+        {
+            size_t offset = 0;
+            if (k_cache)
+            {
+                buffer->assign_to(k_cache, offset);
+                offset += ggml::nbytes(k_cache);
+            }
+            if (v_cache)
+            {
+                buffer->assign_to(v_cache, offset);
+            }
+        }
+
+        size_t read_cache_data(void *buffer, size_t buffer_size) const override;
+        size_t write_cache_data(const void *buffer, size_t buffer_size) override;
 
     protected:
         virtual void before_forward(ComputeContext *ctx, const int n_past, const int qlen);
 
         // k: [qlen, heads, head_size]
         // v: [qlen, hidden_size]
-        virtual void save_to_cache(ComputeContext *ctx, const int n_past, const int qlen, ggml::tensor *k, ggml::tensor *v);
+        void save_to_cache(ComputeContext *ctx, const int n_past, const int qlen, ggml::tensor *k, ggml::tensor *v) override;
 
         // output: [heads, qlen, head_size]
         virtual ggml::tensor *get_k_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen);
@@ -1228,6 +1223,8 @@ namespace chatllm
         const int k_hidden_size;
         const int v_hidden_size;
         const int cache_length;
+        ggml::tensor *k_cache;
+        ggml::tensor *v_cache;
     };
 
     class BaseConsolidatedQKVAttention : public KVCacheAttention
@@ -1433,7 +1430,7 @@ namespace chatllm
 
             {
                 ggml::tensor * k_cache_view = ggml::view_1d(ctx, k_cache, write_len * k_hidden_size,
-                        ggml::element_size(k_cache) * k_hidden_size * write_offset);
+                        ggml::row_size(k_cache) * write_offset);
 
                 ggml::tensor * v_cache_view = ggml::view_1d(ctx, v_cache, write_len * v_hidden_size,
                         ggml::element_size(v_cache) * v_hidden_size * write_offset);
@@ -1484,7 +1481,7 @@ namespace chatllm
 
             ggml::tensor *indices_view = ggml::view_1d(ctx, indices, total, 0);
             ggml::tensor *k_cache_view = ggml::view_2d(ctx, k_cache, k_hidden_size, cache_length,
-                                            k_hidden_size * ggml::element_size(k_cache), 0);
+                                            ggml::row_size(k_cache), 0);
             ggml::tensor *key_layer = ggml::get_rows(ctx, k_cache_view, indices_view);
 
             key_layer = ggml::reshape_3d(ctx, key_layer, head_size, num_kv_heads, total);  // [qlen, heads, head_size]
@@ -1551,7 +1548,7 @@ namespace chatllm
 
             ggml::tensor *key_layer = nullptr;
 
-            key_layer = ggml::view_1d(ctx, k_cache, len * k_hidden_size, offset * k_hidden_size * ggml::element_size(k_cache));
+            key_layer = ggml::view_1d(ctx, k_cache, len * k_hidden_size, offset * ggml::row_size(k_cache));
             key_layer = ggml::reshape_3d(ctx, key_layer, head_size, num_kv_heads, len);  // [qlen, heads, head_size]
             key_layer = ggml::permute(ctx, key_layer, 0, 2, 1, 3);                       // [heads, qlen, head_size]
 
@@ -1628,7 +1625,7 @@ namespace chatllm
                     int shift = cache_length - remain;
 
                     ggml::tensor * k_cache_remain = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
-                                                ggml::element_size(k_cache) * k_hidden_size * shift);
+                                                ggml::row_size(k_cache) * shift);
                     ggml::tensor * k_cache_1d = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
                                                 0);
 
@@ -1658,7 +1655,7 @@ namespace chatllm
             ggml::tensor * Vcur = ggml::transpose(ctx, v); // ggml::reshape_2d(ctx, tmpv, kv_hidden_size, qlen));
 
             ggml::tensor * k_cache_view = ggml::view_1d(ctx, k_cache, qlen * k_hidden_size,
-                                        ggml::element_size(k_cache) * k_hidden_size * write_offset);
+                                        ggml::row_size(k_cache) * write_offset);
 
             ggml::tensor * v_cache_view = ggml::view_2d(ctx, v_cache, qlen, v_hidden_size,
                     cache_length * ggml::element_size(v_cache), write_offset * ggml::element_size(v_cache));
@@ -1687,7 +1684,7 @@ namespace chatllm
 
             ggml::tensor *key_layer = nullptr;
 
-            key_layer = ggml::view_1d(ctx, k_cache, len * k_hidden_size, offset * k_hidden_size * ggml::element_size(k_cache));
+            key_layer = ggml::view_1d(ctx, k_cache, len * k_hidden_size, offset * ggml::row_size(k_cache));
             key_layer = ggml::reshape_3d(ctx, key_layer, head_size, num_kv_heads, len);  // [qlen, heads, head_size]
             key_layer = ggml::permute(ctx, key_layer, 0, 2, 1, 3);                       // [heads, qlen, head_size]
 

@@ -247,7 +247,7 @@ protected:
             ggml::fill(k_cache, 0, 0, 2 * k_hidden_size * ggml::element_size(v_cache));
 
             // an empty tensor (all 0)
-            key_layer = ggml::view_1d(ctx, k_cache, 1 * k_hidden_size, 1 * k_hidden_size * ggml::element_size(k_cache));
+            key_layer = ggml::view_1d(ctx, k_cache, 1 * k_hidden_size, 1 * ggml::row_size(k_cache));
             key_layer = ggml::reshape_3d(ctx, key_layer, head_size, num_kv_heads, 1);       // [1, heads, head_size]
         }
 
