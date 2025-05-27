@@ -1689,7 +1689,8 @@ namespace chatllm
         key_layer = ggml::view_1d(ctx, k_cache, (n_past + qlen) * k_hidden_size, 0);
         key_layer = ggml::reshape_3d(ctx, key_layer, head_size, num_kv_heads, n_past + qlen);  // [qlen, heads, head_size]
         key_layer = ggml::permute(ctx, key_layer, 0, 2, 1, 3);                                 // [heads, qlen, head_size]
-
+        if (ggml::is_quantized(key_layer))
+            key_layer = ggml::cont(ctx, key_layer);
         return key_layer;
     }
 

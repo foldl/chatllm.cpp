@@ -1486,6 +1486,8 @@ namespace chatllm
 
             key_layer = ggml::reshape_3d(ctx, key_layer, head_size, num_kv_heads, total);  // [qlen, heads, head_size]
             key_layer = ggml::permute(ctx, key_layer, 0, 2, 1, 3);                         // [heads, qlen, head_size]
+            if (ggml::is_quantized(key_layer))
+                key_layer = ggml::cont(ctx, key_layer);
 
             return key_layer;
         }
@@ -1551,6 +1553,8 @@ namespace chatllm
             key_layer = ggml::view_1d(ctx, k_cache, len * k_hidden_size, offset * ggml::row_size(k_cache));
             key_layer = ggml::reshape_3d(ctx, key_layer, head_size, num_kv_heads, len);  // [qlen, heads, head_size]
             key_layer = ggml::permute(ctx, key_layer, 0, 2, 1, 3);                       // [heads, qlen, head_size]
+            if (ggml::is_quantized(key_layer))
+                key_layer = ggml::cont(ctx, key_layer);
 
             return key_layer;
         }
@@ -1687,6 +1691,8 @@ namespace chatllm
             key_layer = ggml::view_1d(ctx, k_cache, len * k_hidden_size, offset * ggml::row_size(k_cache));
             key_layer = ggml::reshape_3d(ctx, key_layer, head_size, num_kv_heads, len);  // [qlen, heads, head_size]
             key_layer = ggml::permute(ctx, key_layer, 0, 2, 1, 3);                       // [heads, qlen, head_size]
+            if (ggml::is_quantized(key_layer))
+                key_layer = ggml::cont(ctx, key_layer);
 
             return key_layer;
         }
