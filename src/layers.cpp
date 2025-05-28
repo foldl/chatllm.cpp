@@ -279,7 +279,14 @@ namespace chatllm
 
     void ggml::from_float(ggml::type type, const float *src, void  *dst, int64_t ne0, int64_t n_rows)
     {
+        if (ggml::type::GGML_TYPE_F32 == type)
+        {
+            memcpy(dst, src, ne0 * n_rows * sizeof(float));
+            return;
+        }
         auto f = ggml_get_type_traits(type)->from_float_ref;
+        CHATLLM_CHECK(f) << "ggml::from_float: type not supported: " << type;
+
         auto s = ggml_row_size(type, ne0);
         utils::parallel_for(0, n_rows, [=](int64_t nth) {
             auto p = (              src) + nth * ne0;
@@ -391,6 +398,13 @@ namespace chatllm
     ggml::tensor *ggml::clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max)
     {
         ggml::tensor *tensor = ggml_clamp(ctx->get_ctx(), a, min, max);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::avg_pool_2d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride, float padding)
+    {
+        ggml::tensor *tensor = ggml_pool_2d(ctx->get_ctx(), a, GGML_OP_POOL_AVG, kernel_size, kernel_size, stride, stride, padding, padding);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -798,9 +812,23 @@ namespace chatllm
         return tensor;
     }
 
-    ggml::tensor *ggml::conv_2d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *b)
+    ggml::tensor *ggml::conv_2d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation)
     {
-        ggml::tensor *tensor = ggml_conv_2d_sk_p0(ctx->get_ctx(), kernel, b);
+        return ggml::conv_2d(ctx, kernel, data, stride, stride, padding, padding, dilation, dilation);
+    }
+
+    ggml::tensor *ggml::conv_2d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data,
+        int stride0, int stride1, int padding0, int padding1, int dilation0, int dilation1)
+    {
+        ggml::tensor *tensor = ggml_conv_2d(ctx->get_ctx(), kernel, data, stride0, stride1, padding0, padding1, dilation0, dilation1);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::conv_2d_depthwise(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data,
+        int stride0, int stride1, int padding0, int padding1, int dilation0, int dilation1)
+    {
+        ggml::tensor *tensor = ggml_conv_2d_dw(ctx->get_ctx(), kernel, data, stride0, stride1, padding0, padding1, dilation0, dilation1);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -1016,6 +1044,70 @@ namespace chatllm
             loader->read_tensor(path + "bias", bias);
     }
 
+    Conv2D::Conv2D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
+        int dilation, int groups, bool bias)
+      : Conv2D(ctx, in_channels, out_channels, kernel_size, kernel_size, stride, stride, padding, padding, dilation, dilation,
+               groups, bias ? out_channels : 0)
+    {}
+
+    Conv2D::Conv2D(InitContext *ctx, int in_channels, int out_channels, int kernel_size0, int kernel_size1,
+               int stride0, int stride1,
+               int padding0, int padding1,
+               int dilation0, int dilation1,
+               int groups, int bias_dim)
+     : weight(ggml::new_tensor_4d(ctx, ggml::type_fallback(ctx->dtype, kernel_size0), kernel_size0, kernel_size1, in_channels / groups, out_channels)),
+       bias(bias_dim > 0 ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, bias_dim) : nullptr),
+       in_channels(in_channels),
+       out_channels(out_channels),
+       kernel_size {kernel_size0, kernel_size1},
+       stride {stride0, stride1},
+       padding {padding0, padding1},
+       dilation {dilation0, dilation1},
+       groups(groups)
+    {
+    }
+
+    ggml::tensor *Conv2D::forward(ComputeContext *ctx, ggml::tensor *input)
+    {
+        ggml::tensor *output = nullptr;
+        if (groups == 1)
+        {
+            output = ggml::conv_2d(ctx, weight, input, stride[0], stride[1], padding[0], padding[1], dilation[0], dilation[1]);
+        }
+        else if (groups == in_channels)
+        {
+            CHATLLM_CHECK((out_channels % in_channels) == 0) << "not implemented groups: " << groups;
+            output = ggml::conv_2d_depthwise(ctx, weight, input, stride[0], stride[1], padding[0], padding[1], dilation[0], dilation[1]);
+        }
+        else
+        {
+            CHATLLM_CHECK(false) << "not implemented groups: " << groups;
+        }
+
+        if (bias)
+        {
+            auto bias_view = ggml::view_3d(ctx, bias, 1, 1, bias->ne[0], ggml::element_size(bias), ggml::element_size(bias), 0);
+            output = ggml::add(ctx, output, bias_view);
+        }
+        return output;
+    }
+
+    int64_t Conv2D::get_param_num(bool effective_only) const
+    {
+        int64_t total = ggml::nelements(weight);
+        if (bias)
+            total += ggml::nelements(bias);
+        return total;
+    }
+
+    void Conv2D::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        loader->read_tensor(path + "weight", weight);
+        if (bias)
+            loader->read_tensor(path + "bias", bias);
+    }
+
     ConvTransposed1D::ConvTransposed1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
         int output_padding, int dilation, int groups, bool bias)
         : Conv1D(ctx, out_channels, in_channels, kernel_size, stride, padding, dilation, groups, bias ? out_channels : 0),
@@ -1099,9 +1191,20 @@ namespace chatllm
 
     ggml::tensor *Embedding::forward(ComputeContext *ctx, ggml::tensor *input)
     {
-        ggml::tensor *output = (ggml::n_dims(input) == 1) && (ggml::type::GGML_TYPE_I32 == input->type)
-                                ? ggml::get_rows(ctx, weight, input)
-                                : ggml::mul_mat(ctx, weight, input);
+        ggml::tensor *output;
+        if ((ggml::n_dims(input) == 1) && (ggml::type::GGML_TYPE_I32 == input->type))
+        {
+            output = ggml::get_rows(ctx, weight, input);
+        }
+        else
+        {
+            ggml::tensor *w = weight;
+            if (num_padded_embeddings > 0)
+            {
+                w = ggml::view_2d(ctx, weight, ggml::get_dim(weight, 0), num_embeddings, ggml::row_size(ggml::type_of(weight), ggml::get_dim(weight, 0)), 0);
+            }
+            output = ggml::mul_mat(ctx, w, input);
+        }
         return output;
     }
 

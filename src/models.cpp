@@ -68,6 +68,7 @@ namespace chatllm
 
     void print_tensor(ggml::tensor *tensor, int offset, const bool full)
     {
+        const int PRINT_CNT = 64;
         print_tensor_shape("\n", tensor);
 
         std::vector<uint8_t > data;
@@ -82,7 +83,7 @@ namespace chatllm
                 const size_t n = ggml::nbytes(tensor) / sizeof(float);
                 for (size_t i = 0; i < n; i++)
                 {
-                    if (!full && ((50 < i) && (i < n - 50))) continue;
+                    if (!full && ((PRINT_CNT < i) && (i < n - PRINT_CNT))) continue;
                     float t = p[i];
                     //t = ggml_fp16_to_fp32(ggml_fp32_to_fp16(t));
                     printf("[%3d] = %+3.18f\n", (int)i, t);
@@ -96,7 +97,7 @@ namespace chatllm
                 const size_t n = ggml::nbytes(tensor) / sizeof(ggml_fp16_t);
                 for (size_t i = 0; i < n; i++)
                 {
-                    if (!full && ((50 < i) && (i < n - 50))) continue;
+                    if (!full && ((PRINT_CNT < i) && (i < n - PRINT_CNT))) continue;
 
                     printf("[%3d] = %+3.18f\n", (int)i,  ggml_fp16_to_fp32(p[i]));
                 }
@@ -140,6 +141,7 @@ namespace chatllm
         }
 
         printf("\n");
+        exit(-1);
     }
 
     static bool need_observe_tensor_evaluation_callback(ggml::tensor *tensor, void *user_data)
@@ -360,6 +362,7 @@ namespace chatllm
         MODEL_TYPE_LLAMA_MULTI      = 0x20000001,
 
         MODEL_TYPE_LLAMA4           = MODEL_TYPE_TAG_ChatImageIn + 0x0000001,
+        MODEL_TYPE_GEMMA3Vis        = MODEL_TYPE_TAG_ChatImageIn + 0x0000011,
 
         MODEL_TYPE_QWEN2_5_VL       = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000001,
 
@@ -2434,6 +2437,7 @@ namespace chatllm
         CASE(GEMMA,                 gemma::v1, 1)               \
         CASE(GEMMA2,                gemma::v2, 2)               \
         CASE(GEMMA3,                gemma::v3, 1)               \
+        CASE(GEMMA3Vis,             gemma::v3, 1)               \
                                                                 \
         CASE(COHERE_COMMAND_R,      cohere::command_r, 1)       \
         CASE(COHERE_AYA_23,         cohere::aya_23, 1)          \

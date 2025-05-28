@@ -62,14 +62,14 @@
     * [x] v3.5: [Instruct-2.4B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct), [Instruct-7.8B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct), [Instruct-32B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-32B-Instruct)
     * [x] Deep: [2.4B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-2.4B/tree/b9e0d963cc9be39abce33381f40a8da4324cf4bb), [7.8B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-7.8B/tree/19948cbbd0e9afb0f7b5a918eb7e2eb18341e076), [32B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-32B/tree/dfa797fc8d8ae6ecc0e5f7a450317cc1433b2545)
 
-* Gemma (`GemmaForCausalLM`)
+* Gemma (`GemmaForCausalLM`, `Gemma2ForCausalLM`, `Gemma3ForCausalLM`, `Gemma3ForConditionalGeneration`)
     * [x] v1.0: [Instruct-2B](https://huggingface.co/google/gemma-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-7b-it)
     * [x] v1.1: [Instruct-2B](https://huggingface.co/google/gemma-1.1-2b-it), [Instruct-7B](https://huggingface.co/google/gemma-1.1-7b-it)
     * [x] CodeGemma v1.1: [Instruct-7B](https://huggingface.co/google/codegemma-1.1-7b-it)
     * [x] v2: [Instruct-2B](https://huggingface.co/google/gemma-2-2b-it), [Instruct-9B](https://huggingface.co/google/gemma-2-9b-it), [Instruct-27B](https://huggingface.co/google/gemma-2-27b-it)
-    * [x] v3: [Instruct-1B](https://huggingface.co/google/gemma-3-1b-it/tree/9b99be88fdd7a2496bf644baade44348ad736c95), [Instruct-4B](https://huggingface.co/google/gemma-3-4b-it/tree/dbd91bbaf64a0e591f4340ce8b66fd1dba9ab6bd), [Instruct-12B](https://huggingface.co/google/gemma-3-12b-it/tree/7553b6f39c33dc229bfbfe3831f7bcdbb6b738c7), [Instruct-27B](https://huggingface.co/google/gemma-3-27b-it/tree/dfb98f29ff907e391ceed2be3834ca071ea260f1)
+    * [x] v3: [Instruct-1B](https://huggingface.co/google/gemma-3-1b-it/tree/9b99be88fdd7a2496bf644baade44348ad736c95)
 
-    Note: Only download `tokenizer.model`, but not `tokenizer.json` when converting.
+    Note: Only download `tokenizer.model` and DO NOT download `tokenizer.json` when converting.
 
 * Granite (`GraniteForCausalLM`, `GraniteMoeForCausalLM`)
     * [x] v3.0: [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.0-1b-a400m-instruct), [Instruct-3B-A800M](https://huggingface.co/ibm-granite/granite-3.0-3b-a800m-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.0-2b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.0-8b-instruct)
@@ -179,6 +179,8 @@
 
         Note: Please download `config.json` & `tokenizer.json` from [here](https://huggingface.co/mistralai/Mistral-Small-24B-Instruct-2501/tree/20b2ed1c4e9af44b9ad125f79f713301e27737e2).
 
+    * [x] Devstral: [Small-2505](https://huggingface.co/mistralai/Devstral-Small-2505/tree/a6e97eaf3bfe308cb5396675a716147b2ced37c8)
+
 * Olm (`OlmoeForCausalLM`, `Olmo2ForCausalLM`)
     * [x] OLMoE: [Instruct-7B](https://huggingface.co/allenai/OLMoE-1B-7B-0924-Instruct)
     * [x] OLM-2: [Instruct-7B](https://huggingface.co/allenai/OLMo-2-1124-7B-Instruct), [Instruct-13B](https://huggingface.co/allenai/OLMo-2-1124-13B-Instruct), [Instruct-32B](https://huggingface.co/allenai/OLMo-2-0325-32B-Instruct/tree/5942a2f5e0bc38c2a5f5200cec2ea236d5984547)
@@ -285,8 +287,14 @@ Please use `--format completion` for these models.
 
 ## Multimodal Models
 
-* Fuyu
+* Fuyu (`FuyuForCausalLM`)
     * [x] Base: [8B](https://huggingface.co/adept/fuyu-8b/commit/f41defefdb89be0d28cac19d94ce216e37cb6be5)
+
+* Gemma (`Gemma3ForConditionalGeneration`)
+    * [x] v3: [Instruct-4B](https://huggingface.co/google/gemma-3-4b-it/tree/dbd91bbaf64a0e591f4340ce8b66fd1dba9ab6bd), [Instruct-12B](https://huggingface.co/google/gemma-3-12b-it/tree/7553b6f39c33dc229bfbfe3831f7bcdbb6b738c7), [Instruct-27B](https://huggingface.co/google/gemma-3-27b-it/tree/dfb98f29ff907e391ceed2be3834ca071ea260f1)
+    * [x] MedGemma: [Instruct-4B](https://huggingface.co/google/medgemma-4b-it/commit/698f7911b8e0569ff4ebac5d5552f02a9553063c)
+
+    Note: Only download `tokenizer.model` and DO NOT download `tokenizer.json` when converting.
 
 ## RAG Models
 

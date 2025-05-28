@@ -960,6 +960,15 @@
                     }
                 }
             },
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4702295504,
+                        "url": "chatllm_quantized_gemma-3/gemma-3-4b-it.bin"
+                    }
+                }
+            },
             "4b-lm": {
                 "default": "q8",
                 "quantized": {
@@ -984,6 +993,22 @@
                     "q4_0": {
                         "size": 15201602176,
                         "url": "chatllm_quantized_gemma-3/gemma-3-27b-lm-q4_0.bin"
+                    }
+                }
+            }
+        }
+    },
+    "medgemma": {
+        "brief": "MedGemma is a collection of Gemma 3 variants that are trained for performance on medical text and image comprehension.",
+        "default": "4b",
+        "license": "https://developers.google.com/health-ai-developer-foundations/terms",
+        "variants": {
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4702296176,
+                        "url": "chatllm_quantized_gemma-3/medgemma-4b-it.bin"
                     }
                 }
             }

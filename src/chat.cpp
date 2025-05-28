@@ -558,10 +558,10 @@ namespace chatllm
             encoder->set_tokenizer(this);
     }
 
-    int BaseTokenizer::get_image_total_patches(void)
+    int BaseTokenizer::get_image_total_emb_vectors(void)
     {
         int r = 0;
-        for (auto &image : images) r += image.patch_number;
+        for (auto &image : media_emb) r += image.emb_vec_number;
         return r;
     }
 
@@ -1301,6 +1301,13 @@ namespace chatllm
         read_tensor(name, layer_prefix, num, suffix, tensor, alloc_manager->get_allocator(tensor));
     }
 
+    bool ModelLoader::has_tensor(const std::string &name) const
+    {
+        auto translated = translate_tensor_name(name);
+        auto search = tensor_dict.find(translated);
+        return search != tensor_dict.end();
+    }
+
     void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator, bool partial)
     {
         auto translated = translate_tensor_name(name);
@@ -1358,7 +1365,7 @@ namespace chatllm
         t.assign_to(tensor);
     }
 
-    std::string ModelLoader::translate_tensor_name(const std::string &name)
+    std::string ModelLoader::translate_tensor_name(const std::string &name) const
     {
         std::string translated_name = name;
         for (const auto &pair : name_translation)

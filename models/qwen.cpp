@@ -727,11 +727,11 @@ namespace v2_5_vl
 
         void clear_images(void) override
         {
-            images.clear();
+            media_emb.clear();
         }
 
     public:
-        std::vector<rgb_image> images;
+        std::vector<rgb_image> media_emb;
     };
 }
 

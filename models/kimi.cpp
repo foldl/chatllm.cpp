@@ -164,9 +164,9 @@ namespace vl
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
         {
-            ggml::tensor *x = ggml::conv_2d(ctx, proj, input);
+           //  ggml::tensor *x = ggml::conv_2d(ctx, proj, input);
 
-            return x;
+            return nullptr;
         }
     public:
         ggml::tensor *proj;

@@ -204,6 +204,7 @@ class ModelType(Enum):
     LlaMAMulti    = 0x20000001
 
     LlaMA4                  = ModelTypeTagChatImageIn + 0x0000001
+    Gemma3Vis               = ModelTypeTagChatImageIn + 0x0000011
 
     Qwen2_5VL               = ModelTypeTagChatImageVideoIn + 0x0000001
     KimiVL                  = ModelTypeTagChatImageVideoIn + 0x0000100
@@ -4994,13 +4995,26 @@ class Gemma3Converter(BaseConverter):
 
         new_dict = {}
         for k in state_dict:
-            kk = k
+            kk: str = k
             if kk.startswith('language_model.'):
                 kk = kk[len('language_model.'):]
 
-            if not kk.startswith('model.'): continue
-
-            new_dict[kk] = Gemma3Converter.pp(config, kk, state_dict[k])
+            if kk.startswith('model.'):
+                new_dict[kk] = Gemma3Converter.pp(config, kk, state_dict[k])
+            else:
+                kk = kk.replace('vision_tower.', '')
+                kk = kk.replace('mm_input_projection_weight', 'mm_input_projection.weight')
+                kk = kk.replace('.fc1.', '.fc0.')
+                kk = kk.replace('.fc2.', '.fc1.')
+                kk = kk.replace('.out_proj.', '.o_proj.')
+                kk = kk.replace('.layer_norm1.', '.input_layernorm.')
+                kk = kk.replace('.layer_norm2.', '.post_attention_layernorm.')
+                if 'mm_input_projection.weight' in kk:
+                    new_dict[kk] = torch.transpose(state_dict[k], 0, 1)
+                elif 'mm_soft_emb_norm' in kk:
+                    new_dict[kk] = 1.0 + state_dict[k]
+                else:
+                    new_dict[kk] = state_dict[k]
 
         return new_dict
 
@@ -5038,6 +5052,12 @@ class Gemma3Converter(BaseConverter):
             config.rope_local_base_freq = 10000.0
         if config.rope_theta is None:
             config.rope_theta = 1_000_000.0
+
+        if config.vision_config is not None:
+            cfg = AttributeDict(config.vision_config)
+            if cfg.hidden_act is not None:
+                assert cfg.hidden_act == 'gelu_pytorch_tanh'
+            assert cfg.model_type == 'siglip_vision_model'
 
         assert (config.attention_bias is None) or (config.attention_bias == False), 'attention_bias must == False'
         assert (config.hidden_activation is None) or (config.hidden_activation == 'gelu_pytorch_tanh'), "hidden_activation must  == 'gelu_pytorch_tanh'"
@@ -5091,6 +5111,38 @@ class Gemma3Converter(BaseConverter):
         weight_names += [
             "model.norm.weight",
         ]
+
+        if config.vision_config is not None:
+            cfg = AttributeDict(config.vision_config)
+            weight_names += [
+                "multi_modal_projector.mm_input_projection.weight",
+                "multi_modal_projector.mm_soft_emb_norm.weight",
+                "vision_model.embeddings.patch_embedding.bias",
+                "vision_model.embeddings.patch_embedding.weight",
+                "vision_model.embeddings.position_embedding.weight",
+                "vision_model.post_layernorm.bias",
+                "vision_model.post_layernorm.weight",
+            ]
+
+            for i in range(cfg.num_hidden_layers):
+                weight_names += [
+                    f"vision_model.encoder.layers.{i}.input_layernorm.bias",
+                    f"vision_model.encoder.layers.{i}.input_layernorm.weight",
+                    f"vision_model.encoder.layers.{i}.post_attention_layernorm.bias",
+                    f"vision_model.encoder.layers.{i}.post_attention_layernorm.weight",
+                    f"vision_model.encoder.layers.{i}.mlp.fc1.bias",
+                    f"vision_model.encoder.layers.{i}.mlp.fc1.weight",
+                    f"vision_model.encoder.layers.{i}.mlp.fc0.bias",
+                    f"vision_model.encoder.layers.{i}.mlp.fc0.weight",
+                    f"vision_model.encoder.layers.{i}.self_attn.k_proj.bias",
+                    f"vision_model.encoder.layers.{i}.self_attn.k_proj.weight",
+                    f"vision_model.encoder.layers.{i}.self_attn.o_proj.bias",
+                    f"vision_model.encoder.layers.{i}.self_attn.o_proj.weight",
+                    f"vision_model.encoder.layers.{i}.self_attn.q_proj.bias",
+                    f"vision_model.encoder.layers.{i}.self_attn.q_proj.weight",
+                    f"vision_model.encoder.layers.{i}.self_attn.v_proj.bias",
+                    f"vision_model.encoder.layers.{i}.self_attn.v_proj.weight",
+                ]
 
         return weight_names
 
@@ -7007,7 +7059,8 @@ def main():
     elif arch == 'Gemma3ForCausalLM':
         Gemma3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Gemma3ForConditionalGeneration':
-        print(f"WARNING: only LM is supported")
+        if config.vision_config is not None:
+            Gemma3Converter.MODEL_TYPE = ModelType.Gemma3Vis
         Gemma3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'CohereForCausalLM':
         CohereCommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

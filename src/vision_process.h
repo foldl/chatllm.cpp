@@ -28,10 +28,32 @@ namespace vision
         // [patch0, patch1, ...,    // row0: left --> right
         //  ....................    // row1: left --> right
         //  ....................]
-        // patch   ::= [p0, p11, ...,   // row0 within a patch: left --> right
+        // patch   ::= [p0, p1, ...,    // row0 within a patch: left --> right
         //              ...]            // row1 ....
         // pixel   ::= [r, g, b]
         PatchesLeftRightDown_PixelsLeftRightDown_ChannelsRGB,
+
+        // channels-rgb patches-left-right-down pixels-left-right-down
+        // [ch_r, ch_g, ch_b]
+        // channel ::= [patch0, patch1, ...,    // row0: left --> right
+        //              ....................    // row1: left --> right
+        //              ....................]
+        // patch   ::= [v0, v1, ...,    // row0 within a patch: left --> right
+        //              ...]            // row1 ....
+        ChannelsRGB_PatchesLeftRightDown_PixelsLeftRightDown,
+
+        // channels-rgb pixels-left-right-down
+        // [ch_r, ch_g, ch_b]
+        // channel   ::= [v0, v1, ...,    // row0 within the picture: left --> right
+        //                ...]            // row1 ....
+        ChannelsRGB_PixelsLeftRightDown,
+    };
+
+    class Resize
+    {
+    public:
+        Resize(int width, int height);
+        ~Resize(void);
     };
 
     void image_dimension(const char *fn, int &width, int &height);

@@ -9,6 +9,31 @@
 
 namespace vision
 {
+    struct Params
+    {
+        bool do_resize;
+        int resize_width;
+        int resize_height;
+    };
+
+    static Params params {
+        .do_resize {false},
+        .resize_width {0},
+        .resize_height {0},
+    };
+
+    Resize::Resize(int width, int height)
+    {
+        params.do_resize = true;
+        params.resize_height = height;
+        params.resize_width  = width;
+    }
+
+    Resize::~Resize(void)
+    {
+        params.do_resize = false;
+    }
+
     void image_dimension(const char *fn, int &width, int &height)
     {
         width  = -1;
@@ -45,27 +70,35 @@ namespace vision
         width  = -1;
         height = -1;
         image_dimension(fn, width, height);
-        if (width < 0) return;
+        if (width <= 0) return;
 
         std::ostringstream oss;
         oss << "magick -depth 8 \"" << std::string(fn) << "\"";
 
-        if (max_grid_width > 0)
+        if (params.do_resize)
         {
-            int new_w = std::min(width, patch_size * max_grid_width);
-            double ratio = (double)new_w / width;
-            height = (int)(height * ratio);
-            width  = new_w;
+            width = params.resize_width;
+            height = params.resize_height;
         }
-
-        if (max_patch_num > 0)
+        else
         {
-            int patch_num = (width / patch_size) * (height / patch_size);
-            if (patch_num > max_patch_num)
+            if (max_grid_width > 0)
             {
-                double ratio = std::sqrt((double)max_patch_num / patch_num);
-                height = patch_size * (int)floor(((height / patch_size) * ratio));
-                width  = patch_size * (int)floor(((width  / patch_size) * ratio));
+                int new_w = std::min(width, patch_size * max_grid_width);
+                double ratio = (double)new_w / width;
+                height = (int)(height * ratio);
+                width  = new_w;
+            }
+
+            if (max_patch_num > 0)
+            {
+                int patch_num = (width / patch_size) * (height / patch_size);
+                if (patch_num > max_patch_num)
+                {
+                    double ratio = std::sqrt((double)max_patch_num / patch_num);
+                    height = patch_size * (int)floor(((height / patch_size) * ratio));
+                    width  = patch_size * (int)floor(((width  / patch_size) * ratio));
+                }
             }
         }
 
@@ -150,51 +183,92 @@ namespace vision
         const int grid_w = width / patch_size;
         const int grid_h = height / patch_size;
         arranged.resize(rgb_pixels.size(), 0);
-        if (fmt == PatchesFormat::PatchesLeftRightDown_ChannelsRGB_PixelsLeftRightDown)
+        switch (fmt)
         {
-            int64_t idx = 0;
-            for (int i = 0; i < height - patch_size + 1; i += patch_size)
+        case PatchesFormat::PatchesLeftRightDown_ChannelsRGB_PixelsLeftRightDown:
             {
-                for (int j = 0; j < width - patch_size + 1; j += patch_size)
+                int64_t idx = 0;
+                for (int i = 0; i < height - patch_size + 1; i += patch_size)
                 {
-                    for (int c = 0; c < 3; c++)
+                    for (int j = 0; j < width - patch_size + 1; j += patch_size)
+                    {
+                        for (int c = 0; c < 3; c++)
+                        {
+                            for (int k = 0; k < patch_size; k++)
+                            {
+                                for (int l = 0; l < patch_size; l++)
+                                {
+                                    int pixel_id = (i + k) * width + (j + l);
+                                    arranged[idx++] = rgb_pixels[pixel_id * 3 + c];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        case PatchesLeftRightDown_PixelsLeftRightDown_ChannelsRGB:
+            {
+                int64_t idx = 0;
+                for (int i = 0; i < height - patch_size + 1; i += patch_size)
+                {
+                    for (int j = 0; j < width - patch_size + 1; j += patch_size)
                     {
                         for (int k = 0; k < patch_size; k++)
                         {
                             for (int l = 0; l < patch_size; l++)
                             {
-                                int pixel_id = (i + k) * width + (j + l);
-                                arranged[idx++] = rgb_pixels[pixel_id * 3 + c];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        else if (fmt == PatchesLeftRightDown_PixelsLeftRightDown_ChannelsRGB)
-        {
-            int64_t idx = 0;
-            for (int i = 0; i < height - patch_size + 1; i += patch_size)
-            {
-                for (int j = 0; j < width - patch_size + 1; j += patch_size)
-                {
-                    for (int k = 0; k < patch_size; k++)
-                    {
-                        for (int l = 0; l < patch_size; l++)
-                        {
-                            const int pixel_id = (i + k) * width + (j + l);
+                                const int pixel_id = (i + k) * width + (j + l);
 
-                            for (int c = 0; c < 3; c++)
-                            {
-                                arranged[idx++] = rgb_pixels[pixel_id * 3 + c];
+                                for (int c = 0; c < 3; c++)
+                                {
+                                    arranged[idx++] = rgb_pixels[pixel_id * 3 + c];
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-        else
-        {
+            break;
+        case ChannelsRGB_PatchesLeftRightDown_PixelsLeftRightDown:
+            {
+                int64_t idx = 0;
+                for (int c = 0; c < 3; c++)
+                {
+                    for (int i = 0; i < height - patch_size + 1; i += patch_size)
+                    {
+                        for (int j = 0; j < width - patch_size + 1; j += patch_size)
+                        {
+                            for (int k = 0; k < patch_size; k++)
+                            {
+                                for (int l = 0; l < patch_size; l++)
+                                {
+                                    const int pixel_id = (i + k) * width + (j + l);
+                                    arranged[idx++] = rgb_pixels[pixel_id * 3 + c];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        case ChannelsRGB_PixelsLeftRightDown:
+            {
+                int64_t idx = 0;
+                for (int c = 0; c < 3; c++)
+                {
+                    for (int i = 0; i < height; i++)
+                    {
+                        for (int j = 0; j < width; j++)
+                        {
+                            const int pixel_id = i * width + j;
+                            arranged[idx++] = rgb_pixels[pixel_id * 3 + c];
+                        }
+                    }
+                }
+            }
+            break;
+        default:
             throw new std::invalid_argument("invalid format");
         }
     }

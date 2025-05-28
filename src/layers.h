@@ -149,11 +149,17 @@ namespace chatllm
 
         ggml::tensor *abs(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max);
+        ggml::tensor *avg_pool_2d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride, float padding = 0.0f);
 
-        ggml::tensor *conv_2d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *b);
-        ggml::tensor *conv_1d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation);
+        ggml::tensor *conv_1d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding = 0, int dilation = 1);
         ggml::tensor *conv_1d_depthwise(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation);
         ggml::tensor *conv_transposed_1d( ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation);
+
+        ggml::tensor *conv_2d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation);
+        ggml::tensor *conv_2d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data,
+            int stride0, int stride1, int padding0, int padding1, int dilation0, int dilation1);
+        ggml::tensor *conv_2d_depthwise(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data,
+            int stride0, int stride1, int padding0, int padding1, int dilation0, int dilation1);
 
         ggml::tensor *map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom2(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);
@@ -184,6 +190,7 @@ namespace chatllm
         public:
             PadEmbedding(int n, int max) { BlockParams::num_padding_embeddings = n > max ? max : (n >= 0 ? n : 0); }
             ~PadEmbedding(void) { BlockParams::num_padding_embeddings = 0; }
+            int get(void) const { return BlockParams::num_padding_embeddings; }
         };
     };
 
@@ -328,6 +335,37 @@ namespace chatllm
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
     protected:
         const int output_padding;
+    };
+
+    class Conv2D: public Block
+    {
+    public:
+        Conv2D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding = 0,
+               int dilation = 1, int groups = 1, bool bias = true);
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+
+        int64_t get_param_num(bool effective_only) const override;
+
+        void load(const std::string &path, TensorLoader *loader) override;
+    protected:
+        Conv2D(InitContext *ctx, int in_channels, int out_channels,
+               int kernel_size0, int kernel_size1,
+               int stride0, int stride1,
+               int padding0, int padding1,
+               int dilation0, int dilation1,
+               int groups, int bias_dim);
+    public:
+        ggml::tensor *weight;
+        ggml::tensor *bias;
+    protected:
+        const int in_channels;
+        const int out_channels;
+        const int kernel_size[2];
+        const int stride[2];
+        const int padding[2];
+        const int dilation[2];
+        const int groups;
     };
 
     class Unary : public Block
@@ -843,6 +881,10 @@ namespace chatllm
 
             hidden_states = input_layernorm.forward(ctx, hidden_states);
             hidden_states = Base::attention.forward(ctx, hidden_states, n_past);
+            if (Base::get_id() == 0)
+            {
+                //inspect_tensor(hidden_states, "attention");
+            }
 
             if (scale_depth > 0.0f)
             {

@@ -180,7 +180,7 @@ namespace fuyu
         {}
         void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
     public:
-        const VisualConfig *vis_config;
+        const VisualConfig *vis_config = nullptr;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -263,7 +263,7 @@ namespace fuyu
         {
             if (vis_emb.get() == nullptr) return;
 
-            if (tok->images.size() < 1) return;
+            if (tok->media_emb.size() < 1) return;
 
             run_model(gen_config, tok, dtype, buf);
         }
@@ -275,7 +275,7 @@ namespace fuyu
             ctx.gctx = GGMLContext({.mem_size = backend_context->buf_compute_meta.size(), .mem_buffer = backend_context->buf_compute_meta.data(), .no_alloc = true});
             ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
-            const int total_patches = tok->get_image_total_patches();
+            const int total_patches = tok->get_image_total_emb_vectors();
             ggml::tensor *patches = ggml::new_tensor_2d(&ctx, ggml::type::GGML_TYPE_F32, 3 * vis_config.patch_size * vis_config.patch_size, total_patches);
 
             dbg_ctx = &ctx;
@@ -299,7 +299,7 @@ namespace fuyu
             }
 
             size_t offset = 0;
-            for (auto &image : tok->images)
+            for (auto &image : tok->media_emb)
             {
                 size_t size = image.data.size() * sizeof(image.data[0]);
                 Backend::write_tensor_data(patches, image.data.data(), offset, size);
@@ -382,7 +382,7 @@ namespace fuyu
 
         void after_generate(void) override
         {
-            tokenizer->images.clear();
+            tokenizer->media_emb.clear();
         }
 
     public:
@@ -425,20 +425,20 @@ namespace fuyu
 
                 vision::image_normalize(scaled, vis_config->image_mean, vis_config->image_std);
 
-                tok->images.push_back({.grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
+                tok->media_emb.push_back({.grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
 
-                auto &image = tok->images.back();
+                auto &image = tok->media_emb.back();
 
                 vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::PatchesLeftRightDown_PixelsLeftRightDown_ChannelsRGB);
 
-                image.patch_number = image.grid_width * image.grid_height;
+                image.emb_vec_number = image.grid_width * image.grid_height;
 
-                CHATLLM_CHECK(image.patch_number) << "too many image patches!";
+                CHATLLM_CHECK(image.emb_vec_number) << "too many image patches!";
 
-                const int total_patches = tok->get_image_total_patches();
+                const int total_patches = tok->get_image_total_emb_vectors();
                 CHATLLM_CHECK(total_patches <= MAX_PATCH_NUM) << "too many image patches!";
 
-                int id = total_patches - image.patch_number + tok->vocab_size;
+                int id = total_patches - image.emb_vec_number + tok->vocab_size;
                 for (int j = 0; j < image.grid_height; j++)
                 {
                     for (int i = 0; i < image.grid_width; i++)

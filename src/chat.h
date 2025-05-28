@@ -239,12 +239,12 @@ namespace chatllm
     class BaseTokenizer
     {
     public:
-        struct ImageAsPatches
+        struct MediaAsEmbeddingVector
         {
             int grid_width;
             int grid_height;
             int patch_size;
-            int patch_number;
+            int emb_vec_number;
             std::vector<float> data;
         };
     public:
@@ -293,7 +293,7 @@ namespace chatllm
 
         void set_chat_encoder(BaseHistoryEncoder *encoder);
 
-        int get_image_total_patches(void);
+        int get_image_total_emb_vectors(void);
 
         int bos_token_id;
         int eos_token_id;
@@ -310,7 +310,7 @@ namespace chatllm
 
     public:
         tokenizer::Processor *tp;
-        std::vector<ImageAsPatches> images;
+        std::vector<MediaAsEmbeddingVector> media_emb;
     protected:
         std::string sys_prompt;
         const int max_length;
@@ -691,6 +691,8 @@ namespace chatllm
                         const std::string &layer_prefix, int num, const std::string &suffix,
                         ggml::tensor *tensor) override;
 
+        bool has_tensor(const std::string &name) const override;
+
         void load_all_tensors(void);
 
         tokenizer::DataReader *get_reader()
@@ -720,7 +722,7 @@ namespace chatllm
         void read_tensor(const std::string &name,
                          const std::vector<std::string> &concat_list, ggml::tensor *tensor, LayerBufAllocator *allocator);
 
-        std::string translate_tensor_name(const std::string &name);
+        std::string translate_tensor_name(const std::string &name) const;
     private:
         ModelLoader(tokenizer::DataReader *mapped_file)
             : _file(std::unique_ptr<tokenizer::DataReader>(mapped_file)),

@@ -988,6 +988,14 @@ namespace json {
                 return ret;
             }
 
+            long long ToInt(int fallback) const {
+                std::error_code ec;
+                long long ret = ToInt( ec );
+                if(ec)
+                    return fallback;
+                return ret;
+            }
+
             /**
              * @param ok [OUT] Output parameter giving feedback if the conversion was successful.
              * @returns If class type is Integral, Floating or Boolean, the stored value. If the class type is

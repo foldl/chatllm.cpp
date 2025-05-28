@@ -66,6 +66,7 @@ namespace chatllm
         virtual void read_tensor(const std::string &name,
                         const std::string &layer_prefix, int num, const std::string &suffix,
                         ggml::tensor *tensor) = 0;
+        virtual bool has_tensor(const std::string &name) const = 0;
     };
 
     // Is `ggml_backend_buffer_type_t` a good name?
