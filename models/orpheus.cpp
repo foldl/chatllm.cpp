@@ -276,7 +276,7 @@ namespace snac
 
         ggml::tensor *dequantize(ComputeContext *ctx, const std::vector<ggml::tensor *> &embed_id)
         {
-            CHATLLM_CHECK(embed_id.size() == n_codebooks) << "embed_id.size() != n_codebooks";
+            CHATLLM_CHECK((int)embed_id.size() == n_codebooks) << "embed_id.size() != n_codebooks";
 
             ggml::tensor *output = nullptr;
             for (int i = 0; i < n_codebooks; i++)
@@ -350,7 +350,7 @@ namespace snac
             pyramid_transverse(pyramid, this->pyramid);
             delete pyramid;
 
-            CHATLLM_CHECK(this->pyramid.size() == frame_size) << "what?";
+            CHATLLM_CHECK((int)this->pyramid.size() == frame_size) << "what?";
         }
 
         static int64_t number_of_static_tensors(const Config &config)
@@ -379,7 +379,6 @@ namespace snac
         void decode_frame(const GenerationConfig &gen_config, BackendContext &_context, const std::vector<int> &multiframe, const int64_t count, std::vector<float> &pcm_samples)
         {
             const int num_frames = (int)(multiframe.size() / frame_size);
-            const int max_stride = config.vq_strides[0];
 
             for (int i = 0; i < config.vq_stride_count; i++)
                 codes[i].clear();

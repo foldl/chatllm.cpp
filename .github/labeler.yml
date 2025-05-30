@@ -1,0 +1,18 @@
+# https://github.com/actions/labeler
+documentation:
+    - changed-files:
+        - any-glob-to-any-file:
+            - docs/**
+devops:
+    - changed-files:
+        - any-glob-to-any-file:
+            - .github/**
+script:
+    - changed-files:
+        - any-glob-to-any-file:
+            - scripts/**
+ggml:
+    - changed-files:
+        - any-glob-to-any-file:
+            - ggml/**
+

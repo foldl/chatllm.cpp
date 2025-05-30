@@ -4,7 +4,8 @@
 #include <cmath>
 
 #if defined(_MSC_VER)
-#define popen _popen
+#define popen  _popen
+#define pclose _pclose
 #endif
 
 namespace vision
@@ -48,7 +49,7 @@ namespace vision
         while (!feof(pp))
         {
             char buffer[1024];
-            fgets(buffer, sizeof(buffer) - 1, pp);
+            if (NULL == fgets(buffer, sizeof(buffer) - 1, pp)) continue;
 
             std::string s(buffer);
 
@@ -60,7 +61,7 @@ namespace vision
             }
         }
 
-        fclose(pp);
+        pclose(pp);
     }
 
     void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, int max_grid_width, int max_patch_num, PaddingMode pad, const int *merge_kernel_size)
@@ -150,7 +151,7 @@ namespace vision
                 rgb_pixels.insert(rgb_pixels.end(), buffer, buffer + cnt);
         }
 
-        fclose(pp);
+        pclose(pp);
 
         width  = aligned_width;
         height = aligned_height;
@@ -180,8 +181,6 @@ namespace vision
     {
         const size_t pixels_num = rgb_pixels.size() / 3;
         const int height = (int)(pixels_num / width);
-        const int grid_w = width / patch_size;
-        const int grid_h = height / patch_size;
         arranged.resize(rgb_pixels.size(), 0);
         switch (fmt)
         {
@@ -276,7 +275,7 @@ namespace vision
     static void print_data(const std::vector<float> &pixels, const int group_size = 10, int max_elem = 100)
     {
         const size_t cnt = pixels.size();
-        for (size_t j = 0; (j < cnt) && (j < max_elem); j++)
+        for (size_t j = 0; (j < cnt) && (j < (size_t)max_elem); j++)
         {
             if ((j % group_size) == 0)
             {
@@ -304,7 +303,7 @@ namespace vision
         int w, h;
         std::vector<uint8_t> pixels;
         vision::image_load(fn, pixels, w, h, 14, 16);
-        printf("%dx%d = %zd, %d\n", w, h, pixels.size() / 3, w * h == pixels.size() / 3);
+        printf("%dx%d = %zd, %d\n", w, h, pixels.size() / 3, w * h == (int)(pixels.size() / 3));
 
         std::vector<float> scaled;
         image_rescale(pixels, scaled);
@@ -331,7 +330,7 @@ namespace vision
         const int patch_size = 14;
         vision::image_load(fn, pixels, w, h, patch_size, -1, 4096, PaddingMode::Black, merge_size);
 
-        printf("%dx%d = %zd, %d\n", w, h, pixels.size() / 3, w * h == pixels.size() / 3);
+        printf("%dx%d = %zd, %d\n", w, h, pixels.size() / 3, w * h == (int)(pixels.size() / 3));
 
         std::vector<float> scaled;
         image_rescale(pixels, scaled);

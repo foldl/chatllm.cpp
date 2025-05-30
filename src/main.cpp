@@ -146,7 +146,7 @@ static bool is_same_command_option(const char *a, const char *b)
     return *a == *b;
 }
 
-static bool is_same_command_option(const std::string &a, const std::string &b)
+bool is_same_command_option(const std::string &a, const std::string &b)
 {
     return is_same_command_option(a.c_str(), b.c_str());
 }

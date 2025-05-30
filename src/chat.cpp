@@ -257,11 +257,21 @@ namespace chatllm
     {
     }
 
+    Messages::Messages() : Messages("", "")
+    {
+    }
+
     void Messages::clear(void)
     {
         history.clear();
         cursor = 0;
         round = -1;
+    }
+
+    void Messages::set_mm_tags(const std::string &opening, const std::string &closing)
+    {
+        mm_opening = opening;
+        mm_closing = closing;
     }
 
     void Messages::push_back(const Message &m)

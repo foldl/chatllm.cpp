@@ -1589,8 +1589,6 @@ namespace chatllm
     ggml::tensor *CoreAttention::calc_attn_scores(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
         ggml::tensor *key_layer, ggml::tensor *query_layer, ggml::tensor *value_layer)
     {
-        const int head_size = hidden_size / num_attention_heads;
-
         // note auto-broadcasting in ggml_mul_mat for `repeat > 1`
         ggml::tensor *attn_scores = ggml::mul_mat(ctx, key_layer, query_layer); // [heads, qlen, klen]
 

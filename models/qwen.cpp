@@ -715,7 +715,6 @@ namespace v2_5_vl
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 auto &layer = get_typed_transformer<ModelClass>()->layers[i];
-
             }
         }
 
@@ -898,7 +897,11 @@ namespace ds_r1_distill_v3
         Tokenizer(BaseConfig config)
             : ds_r1_distill::Tokenizer(config)
         {
-            std::string date_str = std::format("{:%Y-%m-%d, %A}", std::chrono::system_clock::now());
+            std::time_t now = std::time(nullptr);
+            std::tm* timeinfo = std::localtime(&now);
+            char buffer[1000];
+            std::strftime(buffer, sizeof(buffer), "%Y-%m-%d, %A", timeinfo);
+            std::string date_str(buffer);
             sys_prompt = "该助手为DeepSeek-R1，由深度求索公司创造。\n今天是" + date_str + "。";
         }
     };

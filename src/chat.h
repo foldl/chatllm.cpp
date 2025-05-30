@@ -158,6 +158,7 @@ namespace chatllm
     class Messages
     {
     public:
+        Messages();
         Messages(const std::string &opening, const std::string &closing);
 
         void push_back(const std::string &content, MsgRole role);
@@ -192,6 +193,8 @@ namespace chatllm
         void move_cursor_to_end(void) const;
         void move_cursor_to_end(void);
 
+        void set_mm_tags(const std::string &opening, const std::string &closing);
+
         const std::string & get_opening(void) const
         {
             return mm_opening;
@@ -208,8 +211,8 @@ namespace chatllm
         std::string sep;
         bool auto_aggregate;
         int round;
-        const std::string mm_opening;
-        const std::string mm_closing;
+        std::string mm_opening;
+        std::string mm_closing;
     };
 
     std::string to_string(ggml::tensor *tensor, bool with_data = true);
