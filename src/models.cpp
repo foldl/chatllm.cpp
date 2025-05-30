@@ -283,8 +283,9 @@ namespace chatllm
         MODEL_TYPE_MARCO_O1 = 0x751,
         MODEL_TYPE_QWQ      = 0x752,
         MODEL_TYPE_READERLM2= 0x753,
-        MODEL_TYPE_DEEPSEEK_R1_DISTILL_QWEN = 0x754,
-        MODEL_TYPE_QWEN3    = 0x755,
+        MODEL_TYPE_DEEPSEEK_R1_DISTILL_QWEN     = 0x754,
+        MODEL_TYPE_QWEN3                        = 0x755,
+        MODEL_TYPE_DEEPSEEK_R1_DISTILL_QWEN3    = 0x756,
 
         MODEL_TYPE_BLUELM   = 0x800,
 
@@ -2408,6 +2409,7 @@ namespace chatllm
         CASE(QWQ,                   qwen::qwq, 1)               \
         CASE(READERLM2,             jina::readerlm, 1)          \
         CASE(DEEPSEEK_R1_DISTILL_QWEN, qwen::ds_r1_distill, 1)  \
+        CASE(DEEPSEEK_R1_DISTILL_QWEN3,qwen::ds_r1_distill_v3, 1)\
         CASE(AQUILA2,               aquila::v2, 1)              \
         CASE(QWEN2_5_VL,            qwen::v2_5_vl, 1)           \
         CASE(QWEN3,                 qwen::v3, 1)                \

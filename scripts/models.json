@@ -2220,6 +2220,15 @@
                     }
                 }
             },
+            "qwen3-8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8707846800,
+                        "url": "chatllm_quantized_deepseek_r1/ds-r1-0528-qwen3-8b.bin"
+                    }
+                }
+            },
             "qwen-32b": {
                 "default": "q4_0",
                 "quantized": {

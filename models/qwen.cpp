@@ -574,7 +574,7 @@ namespace ds_r1_distill
     class Tokenizer : public BaseTokenizer
     {
     public:
-        Tokenizer(const Config &config)
+        Tokenizer(const BaseConfig &config)
             : Tokenizer(config, &_chat_encoder)
         {}
 
@@ -825,7 +825,8 @@ namespace v3
                     });
             }
 
-            CHATLLM_CHECK(config.yarn_scaling_factor <= 0) << "TODO: YaRN";
+            if (config.yarn_scaling_factor > 0.0)
+                ggml::log(GGML_LOG_LEVEL_WARN, "TODO: YaRN (yarn_scaling_factor = %f) not implemented", config.yarn_scaling_factor);
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
@@ -885,4 +886,22 @@ namespace v3
     public:
         Config config;
     };
+}
+
+namespace ds_r1_distill_v3
+{
+    typedef v3::Config Config;
+
+    class Tokenizer : public ds_r1_distill::Tokenizer
+    {
+    public:
+        Tokenizer(BaseConfig config)
+            : ds_r1_distill::Tokenizer(config)
+        {
+            std::string date_str = std::format("{:%Y-%m-%d, %A}", std::chrono::system_clock::now());
+            sys_prompt = "该助手为DeepSeek-R1，由深度求索公司创造。\n今天是" + date_str + "。";
+        }
+    };
+
+    typedef v3::ConditionalGeneration ConditionalGeneration;
 }

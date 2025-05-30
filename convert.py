@@ -125,8 +125,9 @@ class ModelType(Enum):
     MarcoO1  = 0x751
     QwQ      = 0x752
     ReaderLM2= 0x753
-    DeepSeek_R1_Distill_QWen = 0x754
-    QWen3    = 0x755
+    DeepSeek_R1_Distill_QWen    = 0x754
+    QWen3                       = 0x755
+    DeepSeek_R1_Distill_QWen3   = 0x756
 
     BlueLM  = 0x800
 
@@ -4504,6 +4505,8 @@ class QWen3Converter(BaseConverter):
                 "original_max_position_embeddings": -1
             }
         else:
+            if not 'type' in rope_scaling:
+                rope_scaling['type'] = rope_scaling['rope_type']
             assert rope_scaling['type'] == 'yarn', 'rope_scaling must be yarn'
             config.max_position_embeddings = int(rope_scaling['original_max_position_embeddings'] * rope_scaling['factor'])
 
@@ -7117,6 +7120,9 @@ def main():
     elif arch == 'AprielForCausalLM':
         AprielConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch in ['Qwen3MoeForCausalLM', 'Qwen3ForCausalLM']:
+        QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'deepseek-r1-distill-qwen3':
+        QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'reka-flash-3':
         assert config.rope_scaling is None, 'config.rope_scaling must be null'

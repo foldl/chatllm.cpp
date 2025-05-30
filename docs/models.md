@@ -214,6 +214,7 @@
     * [x] QwQ: [32B-Preview](https://huggingface.co/Qwen/QwQ-32B-Preview), [32B](https://huggingface.co/Qwen/QwQ-32B) (`-a QwQ`)
     * [x] [ReaderLM-v2](https://huggingface.co/jinaai/ReaderLM-v2) (`-a ReaderLM-v2`)
     * [x] DeepSeek-R1-Distill-QWen: [1.5B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B), [7B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B), [14B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B), [32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B), [DeepScaleR-1.5B-Preview](https://huggingface.co/agentica-org/DeepScaleR-1.5B-Preview) (`-a DeepSeek-R1-Distill-QWen`)
+    * [x] DeepSeek-R1-0528-Qwen3: [8B](https://huggingface.co/deepseek-ai/DeepSeek-R1-0528-Qwen3-8B/tree/6e8885a6ff5c1dc5201574c8fd700323f23c25fa)  (`-a DeepSeek-R1-Distill-QWen3`)
     * [x] Skywork-OR1: [Math-7B](https://huggingface.co/Skywork/Skywork-OR1-Math-7B/tree/33731701b9dc7d5510effd440d5b1518be393f14), [7B-Preview](https://huggingface.co/Skywork/Skywork-OR1-7B-Preview/tree/23ba8a3362d4c679fccbb506a51365ce191398c2), [32B-Preview](https://huggingface.co/Skywork/Skywork-OR1-32B-Preview/tree/ba6cba290ca145dc6a13bd806f0a141e4b63bd4a)
     * [x] OlympicCoder: [7B](https://huggingface.co/open-r1/OlympicCoder-7B/tree/097f57223ba8fee3130ce7f739dabae3dd0ad0b9), [32B](https://huggingface.co/open-r1/OlympicCoder-32B/tree/34113aee9d255591a1fa75b60d1e3422e82c3b1f)
     * [x] v3: [235B-A22B](https://huggingface.co/Qwen/Qwen3-235B-A22B/tree/04127485f4b84439c34689fdee54a616531bf00d) (💣 not tested),
