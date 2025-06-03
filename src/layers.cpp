@@ -277,6 +277,11 @@ namespace chatllm
         return (int)tensor->ne[dim];
     }
 
+    void ggml::set_dim(ggml::tensor * tensor, int dim, int64_t n)
+    {
+        tensor->ne[dim] = n;
+    }
+
     void ggml::from_float(ggml::type type, const float *src, void  *dst, int64_t ne0, int64_t n_rows)
     {
         if (ggml::type::GGML_TYPE_F32 == type)
@@ -536,6 +541,45 @@ namespace chatllm
         ggml::tensor *tensor = ggml::map_custom1(ctx, a, ggml_compute_forward_flip, GGML_N_TASKS_MAX, (void *)(intptr_t)dim);
         ctx->cb_op_tensor(tensor);
         return tensor;
+    }
+
+    ggml::tensor *ggml::interpolate(ComputeContext *ctx, ggml::tensor *a, InterpolateMode mode, float scale_factor)
+    {
+        return interpolate(ctx, a, mode,
+            int64_t(a->ne[0] * scale_factor), int64_t(a->ne[1] * scale_factor),
+            int64_t(a->ne[2] * scale_factor), int64_t(a->ne[3] * scale_factor));
+    }
+
+    ggml::tensor *ggml::interpolate(ComputeContext *ctx, ggml::tensor *a, InterpolateMode mode, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
+    {
+        switch (mode)
+        {
+        case InterpolateMode::Nearest:
+            {
+                ggml::tensor *tensor = ggml_upscale_ext(ctx->get_ctx(), a, (int)ne0, (int)ne1, (int)ne2, (int)ne3, GGML_SCALE_MODE_NEAREST);
+                ctx->cb_op_tensor(tensor);
+                return tensor;
+            }
+        case InterpolateMode::Bilinear:
+            {
+                ggml::tensor *tensor = ggml_upscale_ext(ctx->get_ctx(), a, (int)ne0, (int)ne1, (int)ne2, (int)ne3, GGML_SCALE_MODE_BILINEAR);
+                ctx->cb_op_tensor(tensor);
+                return tensor;
+            }
+        case InterpolateMode::Bicubic:
+            {
+                std::vector<tensor *> tensors;
+                tensors.push_back(a);
+                ggml::tensor *tensor = custom(ctx, ggml_compute_forward_bicubic, GGML_N_TASKS_MAX, nullptr, tensors,
+                        ggml::type_of(a), ne0, ne1, ne2, ne3);
+                return tensor;
+            }
+        default:
+            {
+                CHATLLM_CHECK(false) << "not implemented interpolate mode: " << mode;
+                return NULL;
+            }
+        }
     }
 
     ggml::tensor *ggml::norm(ComputeContext *ctx, ggml::tensor *a, float eps)

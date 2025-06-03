@@ -706,3 +706,54 @@ static void ggml_custom_compute_forward_zeroes(struct ggml_tensor * dst , int it
 {
     memset(dst->data, 0, ggml::nbytes(dst));
 }
+
+// ref: https://www.ece.mcmaster.ca/~xwu/interp_1.pdf
+static void ggml_compute_forward_bicubic_f16(ggml::tensor * dst, const ggml::tensor * a, int ith, int nth, void * userdata)
+{
+    const ggml::tensor *src0 = a;
+
+    CHATLLM_CHECK(ggml::type_of(a) == ggml::type::GGML_TYPE_F32);
+
+    GGML_TENSOR_UNARY_OP_LOCALS
+
+    const int nr = (int)ggml::nrows(dst);
+
+    // rows per thread
+    const int dr = (nr + nth - 1)/nth;
+
+    // row range for this thread
+    const int ir0 = dr*ith;
+    const int ir1 = MIN(ir0 + dr, nr);
+
+    // row index used to determine which thread to use
+    int ir = 0;
+
+    for (int64_t i3 = 0; i3 < ne3; i3++) {
+        for (int64_t i2 = 0; i2 < ne2; i2++) {
+            for (int64_t i1 = 0; i1 < ne1; i1++) {
+                if (ir++ < ir0) continue;
+                if (ir   > ir1) break;
+                for (int64_t i0 = 0; i0 < ne0 / 4; i0++) {
+
+                    const float * const src = (float *)((char *) src0->data + i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
+                          float * dst_data  = (float *)((char *)  dst->data + i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0);
+
+
+                }
+            }
+        }
+    }
+}
+
+static void ggml_compute_forward_bicubic(struct ggml_tensor * dst , int ith, int nth, void * userdata)
+{
+    switch (dst->type)
+    {
+    case GGML_TYPE_F16:
+        ggml_compute_forward_bicubic_f16(dst, dst->src[0], ith, nth, userdata);
+        break;
+    default:
+        GGML_ASSERT(false);
+        break;
+    }
+}

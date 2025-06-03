@@ -1313,7 +1313,9 @@ namespace chatllm
         {}
 
         virtual void after_generate(void)
-        {}
+        {
+            tokenizer->media_emb.clear();
+        }
 
         virtual void do_build_graph(ForwardContext &ctc, const std::vector<int> &input_ids,
                                        const GenerationConfig &gen_config,

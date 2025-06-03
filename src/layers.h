@@ -107,11 +107,19 @@ namespace chatllm
         ggml::tensor *reshape_4d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
 
         ggml::tensor *repeat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
-
         ggml::tensor *repeat_interleave(ComputeContext *ctx, ggml::tensor *a, int repeat, int dim = 0);
 
         ggml::tensor *permute(ComputeContext *ctx, ggml::tensor *a, int axis0, int axis1, int axis2, int axis3);
         ggml::tensor *flip(ComputeContext *ctx, ggml::tensor *a, int dim = 0);
+
+        enum InterpolateMode
+        {
+            Nearest = 0,
+            Bilinear = 2,
+            Bicubic = 3,
+        };
+        ggml::tensor *interpolate(ComputeContext *ctx, ggml::tensor *a, InterpolateMode mode, float scale_factor);
+        ggml::tensor *interpolate(ComputeContext *ctx, ggml::tensor *a, InterpolateMode mode, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
 
         ggml::tensor *norm(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
@@ -669,6 +677,16 @@ namespace chatllm
         Linear fc0;
         Linear fc1;
         ActFunc act;
+    };
+
+    // a common setup
+    class TheBiasedGELUMLP : public TheMLP
+    {
+    public:
+        TheBiasedGELUMLP(InitContext *ctx, int hidden_size, int intermediate_size)
+            : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true)
+        {
+        }
     };
 
     class GLMMLP : public TheMLP
@@ -2450,15 +2468,7 @@ namespace chatllm
         LayerNorm output_layernorm;
     };
 
-    class Phi2MLP : public TheMLP
-    {
-    public:
-        Phi2MLP(InitContext *ctx, int hidden_size, int intermediate_size)
-            : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true)
-        {
-            // set_prec(ggml::prec::GGML_PREC_F32);
-        }
-    };
+    typedef TheBiasedGELUMLP Phi2MLP;
 
     template <class InputNormBlock,
               class AttentionBlock,
@@ -2930,14 +2940,7 @@ namespace chatllm
         }
     };
 
-    class StarCoder2MLP : public TheMLP
-    {
-    public:
-        StarCoder2MLP(InitContext *ctx, int hidden_size, int intermediate_size)
-            : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true)
-        {
-        }
-    };
+    typedef TheBiasedGELUMLP StarCoder2MLP;
 
     template <int sliding_window_len, bool qvk_bias = true, bool o_bias = true> class StarCoder2Block : public LMBlock1<LayerNorm, StarCoder2SelfAttention<sliding_window_len, qvk_bias, o_bias>, LayerNorm, StarCoder2MLP>
     {

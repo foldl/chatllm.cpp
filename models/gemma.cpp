@@ -401,14 +401,7 @@ public:
     ggml::tensor *position_embedding;
 };
 
-class SigMLP : public TheMLP
-{
-public:
-    SigMLP(InitContext *ctx, int hidden_size, int intermediate_size)
-        : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true)
-    {
-    }
-};
+typedef TheBiasedGELUMLP SigMLP;
 
 class MultiModalProjector : public Block
 {

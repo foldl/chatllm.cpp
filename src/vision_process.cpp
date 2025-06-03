@@ -15,13 +15,54 @@ namespace vision
         bool do_resize;
         int resize_width;
         int resize_height;
+
+        int merge_kernel_size[2];
+
+        int max_grid_width;
+        int max_grid_height;
+        int max_patch_num;
     };
 
     static Params params {
-        .do_resize {false},
-        .resize_width {0},
-        .resize_height {0},
+        .do_resize      = false,
+        .resize_width   = 0,
+        .resize_height  = 0,
+        .merge_kernel_size = {0, 0},
+
+        .max_grid_width     = 0,
+        .max_grid_height    = 0,
+        .max_patch_num      = 0,
     };
+
+    MaxGridWidth::MaxGridWidth(int value)
+    {
+        params.max_grid_width = value;
+    }
+
+    MaxGridWidth::~MaxGridWidth()
+    {
+        params.max_grid_width = 0;
+    }
+
+    MaxGridHeight::MaxGridHeight(int value)
+    {
+        params.max_grid_height = value;
+    }
+
+    MaxGridHeight::~MaxGridHeight()
+    {
+        params.max_grid_height = 0;
+    }
+
+    MaxPatchNum::MaxPatchNum(int value)
+    {
+        params.max_patch_num = value;
+    }
+
+    MaxPatchNum::~MaxPatchNum()
+    {
+        params.max_patch_num = 0;
+    }
 
     Resize::Resize(int width, int height)
     {
@@ -33,6 +74,24 @@ namespace vision
     Resize::~Resize(void)
     {
         params.do_resize = false;
+    }
+
+    MergeKernel::MergeKernel(int size0, int size1)
+    {
+        params.merge_kernel_size[0] = size0;
+        params.merge_kernel_size[1] = size1;
+    }
+
+    MergeKernel::MergeKernel(const int *sizes)
+        : MergeKernel(sizes[0], sizes[1])
+    {
+
+    }
+
+    MergeKernel::~MergeKernel()
+    {
+        params.merge_kernel_size[0] = 0;
+        params.merge_kernel_size[1] = 0;
     }
 
     void image_dimension(const char *fn, int &width, int &height)
@@ -64,7 +123,7 @@ namespace vision
         pclose(pp);
     }
 
-    void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, int max_grid_width, int max_patch_num, PaddingMode pad, const int *merge_kernel_size)
+    void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, PaddingMode pad)
     {
         // magick -depth 8 demo.jpeg -resize 100x100 rgb:"aaa.raw"
         rgb_pixels.clear();
@@ -83,20 +142,28 @@ namespace vision
         }
         else
         {
-            if (max_grid_width > 0)
+            if (params.max_grid_width > 0)
             {
-                int new_w = std::min(width, patch_size * max_grid_width);
+                int new_w = std::min(width, patch_size * params.max_grid_width);
                 double ratio = (double)new_w / width;
                 height = (int)(height * ratio);
                 width  = new_w;
             }
 
-            if (max_patch_num > 0)
+            if (params.max_grid_height > 0)
+            {
+                int new_h = std::min(height, patch_size * params.max_grid_height);
+                double ratio = (double)new_h / height;
+                width  = (int)(width * ratio);
+                height = new_h;
+            }
+
+            if (params.max_patch_num > 0)
             {
                 int patch_num = (width / patch_size) * (height / patch_size);
-                if (patch_num > max_patch_num)
+                if (patch_num > params.max_patch_num)
                 {
-                    double ratio = std::sqrt((double)max_patch_num / patch_num);
+                    double ratio = std::sqrt((double)params.max_patch_num / patch_num);
                     height = patch_size * (int)floor(((height / patch_size) * ratio));
                     width  = patch_size * (int)floor(((width  / patch_size) * ratio));
                 }
@@ -107,8 +174,8 @@ namespace vision
 
         int aligned_width  = 0;
         int aligned_height = 0;
-        const int patch_size_w = merge_kernel_size ? patch_size * merge_kernel_size[0] : patch_size;
-        const int patch_size_h = merge_kernel_size ? patch_size * merge_kernel_size[1] : patch_size;
+        const int patch_size_w = params.merge_kernel_size[0] > 0 ? patch_size * params.merge_kernel_size[0] : patch_size;
+        const int patch_size_h = params.merge_kernel_size[1] > 0 ? patch_size * params.merge_kernel_size[1] : patch_size;
 
         if (pad != PaddingMode::No)
         {
@@ -302,8 +369,11 @@ namespace vision
     {
         int w, h;
         std::vector<uint8_t> pixels;
-        vision::image_load(fn, pixels, w, h, 14, 16);
-        printf("%dx%d = %zd, %d\n", w, h, pixels.size() / 3, w * h == (int)(pixels.size() / 3));
+
+        MaxGridWidth param1(16);
+
+        vision::image_load(fn, pixels, w, h, 14);
+        printf("%dx%d = %zd, %d\n", w, h, pixels.size() / 3, w * h == pixels.size() / 3);
 
         std::vector<float> scaled;
         image_rescale(pixels, scaled);
@@ -328,7 +398,10 @@ namespace vision
         std::vector<uint8_t> pixels;
         const int merge_size[] = {2, 2};
         const int patch_size = 14;
-        vision::image_load(fn, pixels, w, h, patch_size, -1, 4096, PaddingMode::Black, merge_size);
+        MergeKernel merge(merge_size[0], merge_size[1]);
+        MaxPatchNum param(4096);
+
+        vision::image_load(fn, pixels, w, h, patch_size, PaddingMode::Black);
 
         printf("%dx%d = %zd, %d\n", w, h, pixels.size() / 3, w * h == (int)(pixels.size() / 3));
 

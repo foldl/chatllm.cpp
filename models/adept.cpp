@@ -380,11 +380,6 @@ namespace fuyu
             Backend::write_tensor_data(emb.weight, buf.data(), offset, buf.size());
         }
 
-        void after_generate(void) override
-        {
-            tokenizer->media_emb.clear();
-        }
-
     public:
         Config config;
         VisualEmbeddingGeneration visual;
@@ -416,7 +411,10 @@ namespace fuyu
                 int w, h;
                 std::vector<uint8_t> pixels;
                 const int patch_size = vis_config->patch_size;
-                vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, -1, MAX_PATCH_NUM, vision::PaddingMode::White);
+
+                vision::MaxPatchNum param(MAX_PATCH_NUM);
+
+                vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, vision::PaddingMode::White);
 
                 if (w <= 0) continue;
 

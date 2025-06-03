@@ -56,8 +56,37 @@ namespace vision
         ~Resize(void);
     };
 
+    class MergeKernel
+    {
+    public:
+        MergeKernel(int size0, int size1);
+        MergeKernel(const int *sizes);
+        ~MergeKernel(void);
+    };
+
+    class MaxGridWidth
+    {
+    public:
+        MaxGridWidth(int value);
+        ~MaxGridWidth();
+    };
+
+    class MaxGridHeight
+    {
+    public:
+        MaxGridHeight(int value);
+        ~MaxGridHeight();
+    };
+
+    class MaxPatchNum
+    {
+    public:
+        MaxPatchNum(int value);
+        ~MaxPatchNum();
+    };
+
     void image_dimension(const char *fn, int &width, int &height);
-    void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, int max_grid_width = -1, int max_patch_num = -1, PaddingMode pad = PaddingMode::No, const int *merge_kernel_size = nullptr);
+    void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, PaddingMode pad = PaddingMode::No);
     void image_rescale(const std::vector<uint8_t> &rgb_pixels, std::vector<float> &scaled_rgb_pixels, float scale_factor = 1/255.0f);
     void image_normalize(std::vector<float> &rgb_pixels, const float *mean, const float *std_d);
 

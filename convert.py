@@ -6082,7 +6082,7 @@ class KimiVLConverter(BaseConverter):
                 txt_dict[name.replace('language_model.', '')] = tensor
             elif name.startswith('vision_tower.encoder.'):
 
-                name = name.replace('vision_tower.encoder.', 'visual.')
+                name = name.replace('vision_tower.encoder.', 'vision_model.encoder.')
                 if '.wo.' in name:
                     r[name.replace('.wo.', '.attn.o_proj.')] = tensor
                 elif name.endswith('.wqkv.bias') or name.endswith('.wqkv.weight'):
@@ -6092,10 +6092,12 @@ class KimiVLConverter(BaseConverter):
                     r[name.replace('.wqkv.', '.attn.q_proj.')] = q
                     r[name.replace('.wqkv.', '.attn.k_proj.')] = k
                     r[name.replace('.wqkv.', '.attn.v_proj.')] = v
+                elif '.final_layernorm.' in name:
+                    txt_dict[name.replace('encoder.', '')] = tensor
                 else:
                     r[name] = tensor
             elif name.startswith('vision_tower.'):
-                txt_dict[name.replace('vision_tower.', 'visual.')] = tensor
+                txt_dict[name.replace('vision_tower.', 'vision_model.')] = tensor
             else:
                 r[name] = tensor
 
@@ -6114,22 +6116,22 @@ class KimiVLConverter(BaseConverter):
 
         for i in range(config.vision_config['num_hidden_layers']):
             weight_names += [
-                f"visual.blocks.{i}.attn.q_proj.bias",
-                f"visual.blocks.{i}.attn.q_proj.weight",
-                f"visual.blocks.{i}.attn.k_proj.bias",
-                f"visual.blocks.{i}.attn.k_proj.weight",
-                f"visual.blocks.{i}.attn.v_proj.bias",
-                f"visual.blocks.{i}.attn.v_proj.weight",
-                f"visual.blocks.{i}.attn.o_proj.bias",
-                f"visual.blocks.{i}.attn.o_proj.weight",
-                f"visual.blocks.{i}.mlp.fc0.bias",
-                f"visual.blocks.{i}.mlp.fc0.weight",
-                f"visual.blocks.{i}.mlp.fc1.bias",
-                f"visual.blocks.{i}.mlp.fc1.weight",
-                f"visual.blocks.{i}.norm0.bias",
-                f"visual.blocks.{i}.norm0.weight",
-                f"visual.blocks.{i}.norm1.bias",
-                f"visual.blocks.{i}.norm1.weight",
+                f"vision_model.encoder.blocks.{i}.attn.q_proj.bias",
+                f"vision_model.encoder.blocks.{i}.attn.q_proj.weight",
+                f"vision_model.encoder.blocks.{i}.attn.k_proj.bias",
+                f"vision_model.encoder.blocks.{i}.attn.k_proj.weight",
+                f"vision_model.encoder.blocks.{i}.attn.v_proj.bias",
+                f"vision_model.encoder.blocks.{i}.attn.v_proj.weight",
+                f"vision_model.encoder.blocks.{i}.attn.o_proj.bias",
+                f"vision_model.encoder.blocks.{i}.attn.o_proj.weight",
+                f"vision_model.encoder.blocks.{i}.mlp.fc0.bias",
+                f"vision_model.encoder.blocks.{i}.mlp.fc0.weight",
+                f"vision_model.encoder.blocks.{i}.mlp.fc1.bias",
+                f"vision_model.encoder.blocks.{i}.mlp.fc1.weight",
+                f"vision_model.encoder.blocks.{i}.norm0.bias",
+                f"vision_model.encoder.blocks.{i}.norm0.weight",
+                f"vision_model.encoder.blocks.{i}.norm1.bias",
+                f"vision_model.encoder.blocks.{i}.norm1.weight",
             ]
 
         weight_names += [
@@ -6139,11 +6141,11 @@ class KimiVLConverter(BaseConverter):
             "multi_modal_projector.linear_2.weight",
             "multi_modal_projector.pre_norm.bias",
             "multi_modal_projector.pre_norm.weight",
-            "visual.final_layernorm.bias",
-            "visual.final_layernorm.weight",
-            "visual.patch_embed.pos_emb.weight",
-            "visual.patch_embed.proj.bias",
-            "visual.patch_embed.proj.weight",
+            "vision_model.final_layernorm.bias",
+            "vision_model.final_layernorm.weight",
+            "vision_model.patch_embed.pos_emb.weight",
+            "vision_model.patch_embed.proj.bias",
+            "vision_model.patch_embed.proj.weight",
         ]
 
         return weight_names

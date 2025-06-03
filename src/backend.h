@@ -31,6 +31,7 @@ namespace chatllm
 
         int n_dims(const ggml::tensor * tensor);
         int get_dim(const ggml::tensor * tensor, int dim);
+        void set_dim(ggml::tensor * tensor, int dim, int64_t n);
 
         void from_float(ggml::type type, const float *src, void  *dst, int64_t ne0, int64_t n_rows);
         void to_float  (ggml::type type, const void  *src, float *dst, int64_t ne0, int64_t n_rows);
