@@ -1322,9 +1322,9 @@ namespace chatllm
     {
         // input: [seqlen, normalized_shape]
         ggml::tensor *output = ggml::norm(ctx, input, eps);
-        output = ggml::mul_inplace(ctx, output, weight);
+        output = ggml::mul(ctx, output, weight);
         if (bias)
-            output = ggml::add_inplace(ctx, output, bias);
+            output = ggml::add(ctx, output, bias);
         return output;
     }
 
