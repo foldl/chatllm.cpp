@@ -320,6 +320,10 @@ namespace chatllm
 
         BackendContext();
 
+        static std::string get_ngl_of_model(const std::map<std::string, std::string> &model_n_gpu_layers, const std::string &model_id, const std::string fallback_id = "any");
+
+        void init(const std::map<std::string, std::string> &model_n_gpu_layers, const std::string &model_id, const int n_layers, const size_t graph_max_nodes_num, const int n_threads, const std::string fallback_id = "any");
+        void init(const std::string &gpu_cfgs, const int n_layers, const size_t graph_max_nodes_num, const int n_threads);
         void init(const std::vector<gpu_cfg> &gpu_cfgs, const int n_layers, const size_t graph_max_nodes_num, const int n_threads);
 
         ~BackendContext();

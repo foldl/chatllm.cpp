@@ -540,17 +540,20 @@ protected:
 class VisualEmbeddingGeneration
 {
 public:
-    VisualEmbeddingGeneration(BackendContext *backend_context, const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 2048)
-        :
-        backend_context(backend_context), GRAPH_SIZE(GRAPH_SIZE), _ctx(backend_context)
+    VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 4096)
+        : GRAPH_SIZE(GRAPH_SIZE), _ctx(&backend_context), n_threads(runtime_config.n_threads)
     {
+        _ctx.cache_dtype = runtime_config.cache_type;
+        model_gpu_layers = BackendContext::get_ngl_of_model(runtime_config.model_gpu_layers, "vis");
     }
 
     bool load(ModelLoader &loader)
     {
         if (vis_model.get())
         {
+            loader.push_allocator_manager(&backend_context.layer_allocators);
             vis_model->load("vision_model.", &loader);
+            loader.pop_allocator_manager();
             return vis_model->is_loaded();
         }
         else
@@ -587,6 +590,7 @@ public:
         const size_t ctx_size = num_tensors * tensor_ovhd;
         _ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         _ctx.dtype = dtype;
+        backend_context.init(model_gpu_layers, vis_config.num_hidden_layers, GRAPH_SIZE, n_threads);
 
         vis_model.reset(new VisionTransformer(&_ctx, vis_config, lm_hidden_size));
 
@@ -606,10 +610,11 @@ public:
 protected:
     bool run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf)
     {
-        ForwardContext ctx(backend_context);
-        ctx.gctx = GGMLContext({.mem_size = backend_context->buf_compute_meta.size(), .mem_buffer = backend_context->buf_compute_meta.data(), .no_alloc = true});
+        ForwardContext ctx(&backend_context);
+        ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
         ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
+        ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
         ggml::tensor *media_emb = ggml::new_tensor_4d(&ctx, ggml::type::GGML_TYPE_F32, vis_config.image_size, vis_config.image_size, 3, tok->media_emb.size());
 
         dbg_ctx = &ctx;
@@ -618,6 +623,7 @@ protected:
 
         if (ggml::type_of(r) != dtype)
         {
+            ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
             ggml::tensor *t = ggml::new_tensor_4d(&ctx, dtype, ggml::get_dim(r, 0), ggml::get_dim(r, 1), ggml::get_dim(r, 2), ggml::get_dim(r, 3));
             r = ggml::cpy(&ctx, r, t);
         }
@@ -628,7 +634,7 @@ protected:
 
         if (gen_config.dump_dot.size() > 0)
         {
-            backend_context->dump_graph(ctx.get_cgraph(), gen_config.dump_dot.c_str());
+            backend_context.dump_graph(ctx.get_cgraph(), gen_config.dump_dot.c_str());
             exit(-1);
         }
 
@@ -651,9 +657,11 @@ protected:
 
 protected:
     std::unique_ptr<VisionTransformer> vis_model;
-    BackendContext *backend_context;
+    BackendContext backend_context;
     const size_t GRAPH_SIZE;
     InitContext _ctx; // weight context
+    const int n_threads;
+    std::string model_gpu_layers;
 public:
     Config vis_config;
 };
@@ -761,7 +769,7 @@ public:
         : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config),
           sliding_window(config.sliding_window),
           sliding_window_pattern(config.sliding_window_pattern),
-          visual(w_ctx_.get_backend_context(), runtime_config)
+          visual(runtime_config)
     {
         const size_t tensor_ovhd = ggml_tensor_overhead();
         size_t num_tensors = 2;

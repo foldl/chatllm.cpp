@@ -45,7 +45,6 @@ struct Args
     std::string layer_spec;
     std::string load_session;
     std::string save_session;
-    std::string n_gpu_layers;
     std::string cur_vs_name = "default";
     std::string dump_dot;
     std::string emb_rank_query_sep;
@@ -58,6 +57,7 @@ struct Args
     std::string multimedia_file_tags[2] = {"", ""};
     std::string tts_export;
     std::string re_quantize;
+    std::map<std::string, std::string> model_n_gpu_layers;
     int max_length = -1;
     int max_context_length = 512;
     bool interactive = false;
@@ -184,9 +184,15 @@ void usage(const std::string &prog)
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
               << "Performance options:\n"
               << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
-              << "  -ngl, --n_gpu_layers N  number of model layers to offload to a backend device (GPU) (default: GPU not used)\n"
+              << "  -ngl, --n_gpu_layers N  number of the main model layers to offload to a backend device (GPU) (default: GPU not used)\n"
               << "                          N ::= one_spec;...\n"
               << "                          one_spec ::= [id:]spec, where spec ::= [n|epilog|prolog|all]\n"
+              << "                          `-ngl N` is equiv. to `-mgl any N`.\n"
+              << "  -mgl, --model_gpu_layers MODEL N\n"
+              << "                          number of accessray model layers to offload to a backend device (GPU) (default: GPU not used)\n"
+              << "                          MODEL ::= main | any | vis | tts | asr | ... \n"
+              << "                          `main` and `any` are two special identifiers for the main model and wildcard to any model. \n"
+              << "                          N ::= one_spec;..., see `-ngl`\n"
               << "  +moe_on_cpu             alway use CPU for sparse operations (MoE) (default: off)\n"
               << "  --rpc_endpoints EP..    RPC endpoints (i.e. servers) for distributed inference (default: empty)\n"
               << "                          EP1;EP2, where EP ::= host:port\n"
@@ -428,6 +434,22 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                     c += 2;
                 }
             }
+            else if (is_same_command_option(arg, "-mgl") || is_same_command_option(arg, "--model_gpu_layers"))
+            {
+                if (c + 2 < argc)
+                {
+                    args.model_n_gpu_layers[argv[c + 1]] = argv[c + 2];
+                    c += 2;
+                }
+            }
+            else if (is_same_command_option(arg, "-ngl") || is_same_command_option(arg, "--n_gpu_layers"))
+            {
+                c++;
+                if (c < argc)
+                {
+                    args.model_n_gpu_layers["any"] = argv[c];
+                }
+            }
             handle_param("--model",                 "-m", model_path,           std::string)
             handle_param("--prompt",                "-p", prompt,               std::string)
             handle_para0("--prompt_file",                 prompt,               load_txt)
@@ -444,7 +466,6 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_param("--temp",                  "-t", temp,                 std::stof)
             handle_para0("--presence_penalty",            presence_penalty,     std::stof)
             handle_param("--threads",               "-n", num_threads,          std::stoi)
-            handle_param("--n_gpu_layers",          "-ngl", n_gpu_layers,       std::string)
             handle_para0("--seed",                        seed,                 std::stoi)
             handle_para0("--test",                        test_fn,              std::string)
             handle_para0("--set_vs_name",                 cur_vs_name,          std::string)
@@ -834,7 +855,8 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
                                          gen_config.emb_rank_query_sep = args.emb_rank_query_sep;
 
 #define DEF_ExtraArgs(pipe_args, args)  \
-    chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.n_gpu_layers, args.moe_on_cpu, args.num_threads, args.batch_size, args.cache_dtype, args.re_quantize);
+    chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.moe_on_cpu, args.num_threads, args.batch_size, args.cache_dtype, args.re_quantize);\
+    pipe_args.model_n_gpu_layers = args.model_n_gpu_layers
 
 chatllm::BaseStreamer *get_streamer_for_log(void);
 

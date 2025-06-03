@@ -29,13 +29,13 @@ namespace chatllm
 {
     struct RuntimeConfig
     {
-        std::string gpu_layers;
         bool moe_on_cpu;
         int n_threads;
         int batch_input_size;
         ggml::type cache_type;
-        RuntimeConfig(const std::string &gpu_layers, bool moe_on_cpu, int n_threads, int batch_input_size, ggml::type cache_type):
-            gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads), batch_input_size(batch_input_size), cache_type(cache_type)
+        std::map<std::string, std::string> model_gpu_layers;
+        RuntimeConfig(bool moe_on_cpu, int n_threads, int batch_input_size, ggml::type cache_type):
+            moe_on_cpu(moe_on_cpu), n_threads(n_threads), batch_input_size(batch_input_size), cache_type(cache_type)
         {}
     };
 
@@ -979,81 +979,7 @@ namespace chatllm
         virtual void load(const std::string &path, TensorLoader *loader, const std::vector<int> &layer_ids) = 0;
     };
 
-    static bool parse_gpu_cfg(BackendContext::gpu_cfg &cfg, const std::string &s)
-    {
-        cfg.id = 0;
-        cfg.n_layers = -1;
-        cfg.epilog = false;
-        cfg.prolog = false;
 
-        std::string t(s);
-
-        size_t pos = t.find_first_of(':');
-        std::string part = t.substr(0, pos);
-        if (pos != std::string::npos)
-        {
-            cfg.id = atoi(part.c_str());
-            t = t.substr(pos + 1);
-        }
-
-        while (t.size() > 0)
-        {
-            size_t pos = t.find_first_of(',');
-            part = t.substr(0, pos);
-
-            if (part.size() > 0)
-            {
-                if (part.compare("all") == 0)
-                {
-                    cfg.prolog = true;
-                    cfg.epilog = true;
-                    cfg.n_layers = 99999;
-                }
-                else if (part.compare("prolog") == 0)
-                    cfg.prolog = true;
-                else if (part.compare("epilog") == 0)
-                    cfg.epilog = true;
-                else
-                    cfg.n_layers = std::max(atoi(part.c_str()), 0);
-            }
-
-            if (pos == std::string::npos) break;
-            t = t.substr(pos + 1);
-        }
-
-        return (cfg.n_layers >= 1) || cfg.prolog || cfg.epilog;
-    }
-
-    static int index_of_gpu_cfg(const std::vector<BackendContext::gpu_cfg> &gpu_cfgs, int id)
-    {
-        for (int i = 0; i < (int)gpu_cfgs.size(); i++)
-            if (gpu_cfgs[i].id == id)
-                return i;
-        return -1;
-    }
-
-    static bool parse_gpu_layers(std::vector<BackendContext::gpu_cfg> &gpu_cfgs, const std::string &s)
-    {
-        std::string t(s);
-        while (t.size() > 0)
-        {
-            size_t pos = t.find_first_of(';');
-
-            BackendContext::gpu_cfg cfg;
-            if (parse_gpu_cfg(cfg, t.substr(0, pos)))
-            {
-                int index = index_of_gpu_cfg(gpu_cfgs, cfg.id);
-                if (index >= 0)
-                    gpu_cfgs[index].merge(cfg);
-                else
-                    gpu_cfgs.push_back(cfg);
-            }
-
-            if (pos == std::string::npos) break;
-            t = t.substr(pos + 1);
-        }
-        return true;
-    }
 
     class BaseModelForConditionalGeneration : public BaseModel
     {
@@ -1292,10 +1218,8 @@ namespace chatllm
 
         void prepare(const RuntimeConfig &rt_config)
         {
-            std::vector<BackendContext::gpu_cfg> gpu_cfgs;
-            parse_gpu_layers(gpu_cfgs, rt_config.gpu_layers);
             w_ctx_.user_options.moe_on_cpu = rt_config.moe_on_cpu;
-            backend_context.init(gpu_cfgs, config_.num_hidden_layers, GRAPH_SIZE, rt_config.n_threads);
+            backend_context.init(rt_config.model_gpu_layers, "main", config_.num_hidden_layers, GRAPH_SIZE, rt_config.n_threads);
         }
 
         LayerAllocatorManager *get_alloc_manager(void) override
@@ -2184,7 +2108,8 @@ namespace chatllm
             config.num_hidden_layers = (int)layers.size();
         }
 
-        RuntimeConfig rt_config(args.gpu_layers, args.moe_on_cpu, args.n_threads, args.batch_size, (ggml::type)args.cache_type);
+        RuntimeConfig rt_config(args.moe_on_cpu, args.n_threads, args.batch_size, (ggml::type)args.cache_type);
+        rt_config.model_gpu_layers = args.model_n_gpu_layers;
 
         // load model
         ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);
@@ -2192,7 +2117,8 @@ namespace chatllm
         model->set_names(loader.model_name, loader.model_native_name);
         if (layers.size() > 0)
             model->set_layer_ids(layers);
-        loader.set_allocator_manager(model->get_alloc_manager());
+
+        loader.push_allocator_manager(model->get_alloc_manager());
         model->load_more(loader.meta_json);
         model->load(loader);
 

@@ -684,10 +684,8 @@ namespace chatllm
             return s;
         }
 
-        void set_allocator_manager(LayerAllocatorManager *alloc_manager)
-        {
-            this->alloc_manager = alloc_manager;
-        }
+        void push_allocator_manager(LayerAllocatorManager *alloc_manager);
+        void pop_allocator_manager(void);
 
         void read_tensor(const std::string &name, ggml::tensor *tensor, bool partial = false) override;
         void read_tensor(const std::string &name,
@@ -745,7 +743,8 @@ namespace chatllm
         int version;
         std::map<std::string, TensorInfo> tensor_dict;
     protected:
-        LayerAllocatorManager *alloc_manager = nullptr;
+        LayerAllocatorManager *alloc_manager(void);
+        std::vector<LayerAllocatorManager *>alloc_managers;
         std::vector<std::pair<std::string, std::string>> name_translation;
 
     public:
@@ -1244,15 +1243,15 @@ namespace chatllm
         {
             int   max_length;
             std::string layer_spec;
-            std::string gpu_layers;
             bool moe_on_cpu;
             int n_threads;
             int batch_size;
             int cache_type;
             int re_quantize;
-            extra_args(int max_length, const std::string &layer_spec, const std::string &gpu_layers, bool moe_on_cpu, int n_threads, int batch_size, const std::string &cache_type,
+            std::map<std::string, std::string> model_n_gpu_layers;
+            extra_args(int max_length, const std::string &layer_spec, bool moe_on_cpu, int n_threads, int batch_size, const std::string &cache_type,
                 const std::string &re_quantize = "")
-                : max_length(max_length), layer_spec(layer_spec), gpu_layers(gpu_layers), moe_on_cpu(moe_on_cpu), n_threads(n_threads),
+                : max_length(max_length), layer_spec(layer_spec), moe_on_cpu(moe_on_cpu), n_threads(n_threads),
                   batch_size(batch_size),
                   cache_type(ggml::str_to_type(cache_type, ggml::type::GGML_TYPE_F16)),
                   re_quantize(ggml::str_to_type(re_quantize))

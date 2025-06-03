@@ -378,17 +378,22 @@ namespace vit
     class VisualEmbeddingGeneration
     {
     public:
-        VisualEmbeddingGeneration(BackendContext *backend_context, const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 2048)
+        VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 4096)
             :
-            backend_context(backend_context), GRAPH_SIZE(GRAPH_SIZE), _ctx(backend_context)
+            GRAPH_SIZE(GRAPH_SIZE), _ctx(&backend_context),
+            n_threads(runtime_config.n_threads)
         {
+            _ctx.cache_dtype = runtime_config.cache_type;
+            model_gpu_layers = BackendContext::get_ngl_of_model(runtime_config.model_gpu_layers, "vis");
         }
 
         bool load(ModelLoader &loader)
         {
             if (vis_model.get())
             {
+                loader.push_allocator_manager(&backend_context.layer_allocators);
                 vis_model->load("vision_model.", &loader);
+                loader.pop_allocator_manager();
                 return vis_model->is_loaded();
             }
             else
@@ -435,6 +440,7 @@ namespace vit
             const size_t ctx_size = num_tensors * tensor_ovhd;
             _ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             _ctx.dtype = dtype;
+            backend_context.init(model_gpu_layers, vis_config.num_hidden_layers, GRAPH_SIZE, n_threads);
 
             vis_model.reset(new VisionTransformer(&_ctx, vis_config, lm_hidden_size));
 
@@ -457,8 +463,8 @@ namespace vit
     protected:
         bool run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &image, std::vector<uint8_t> &buf)
         {
-            ForwardContext ctx(backend_context);
-            ctx.gctx = GGMLContext({.mem_size = backend_context->buf_compute_meta.size(), .mem_buffer = backend_context->buf_compute_meta.data(), .no_alloc = true});
+            ForwardContext ctx(&backend_context);
+            ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
             ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
             const int total_patches = tok->get_image_total_emb_vectors();
@@ -483,7 +489,7 @@ namespace vit
 
             if (gen_config.dump_dot.size() > 0)
             {
-                backend_context->dump_graph(ctx.get_cgraph(), gen_config.dump_dot.c_str());
+                backend_context.dump_graph(ctx.get_cgraph(), gen_config.dump_dot.c_str());
                 exit(-1);
             }
 
@@ -501,9 +507,11 @@ namespace vit
 
     protected:
         std::unique_ptr<VisionTransformer> vis_model;
-        BackendContext *backend_context;
+        BackendContext backend_context;
         const size_t GRAPH_SIZE;
         InitContext _ctx; // weight context
+        std::string model_gpu_layers;
+        const int n_threads;
     public:
         Config vis_config;
     };
@@ -682,7 +690,7 @@ namespace vl
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_KIMI_VL)
             : ExtendEmbedding(),
               deepseek::v3_light::ConditionalGeneration(config, runtime_config, type),
-              visual(w_ctx_.get_backend_context(), runtime_config)
+              visual(runtime_config)
         {
             delete pad_arg;
             pad_arg = nullptr;

@@ -548,6 +548,105 @@ namespace chatllm
         return backends.size() > 1;
     }
 
+    static bool parse_gpu_cfg(BackendContext::gpu_cfg &cfg, const std::string &s)
+    {
+        cfg.id = 0;
+        cfg.n_layers = -1;
+        cfg.epilog = false;
+        cfg.prolog = false;
+
+        std::string t(s);
+
+        size_t pos = t.find_first_of(':');
+        std::string part = t.substr(0, pos);
+        if (pos != std::string::npos)
+        {
+            cfg.id = atoi(part.c_str());
+            t = t.substr(pos + 1);
+        }
+
+        while (t.size() > 0)
+        {
+            size_t pos = t.find_first_of(',');
+            part = t.substr(0, pos);
+
+            if (part.size() > 0)
+            {
+                if (part.compare("all") == 0)
+                {
+                    cfg.prolog = true;
+                    cfg.epilog = true;
+                    cfg.n_layers = 99999;
+                }
+                else if (part.compare("prolog") == 0)
+                    cfg.prolog = true;
+                else if (part.compare("epilog") == 0)
+                    cfg.epilog = true;
+                else
+                    cfg.n_layers = std::max(atoi(part.c_str()), 0);
+            }
+
+            if (pos == std::string::npos) break;
+            t = t.substr(pos + 1);
+        }
+
+        return (cfg.n_layers >= 1) || cfg.prolog || cfg.epilog;
+    }
+
+    static int index_of_gpu_cfg(const std::vector<BackendContext::gpu_cfg> &gpu_cfgs, int id)
+    {
+        for (int i = 0; i < (int)gpu_cfgs.size(); i++)
+            if (gpu_cfgs[i].id == id)
+                return i;
+        return -1;
+    }
+
+    static bool parse_gpu_layers(std::vector<BackendContext::gpu_cfg> &gpu_cfgs, const std::string &s)
+    {
+        std::string t(s);
+        while (t.size() > 0)
+        {
+            size_t pos = t.find_first_of(';');
+
+            BackendContext::gpu_cfg cfg;
+            if (parse_gpu_cfg(cfg, t.substr(0, pos)))
+            {
+                int index = index_of_gpu_cfg(gpu_cfgs, cfg.id);
+                if (index >= 0)
+                    gpu_cfgs[index].merge(cfg);
+                else
+                    gpu_cfgs.push_back(cfg);
+            }
+
+            if (pos == std::string::npos) break;
+            t = t.substr(pos + 1);
+        }
+        return true;
+    }
+
+    std::string BackendContext::get_ngl_of_model(const std::map<std::string, std::string> &model_n_gpu_layers, const std::string &model_id, const std::string fallback_id)
+    {
+        std::string gpu_cfgs;
+        auto k = model_n_gpu_layers.find(model_id);
+        if (k == model_n_gpu_layers.end())
+            k = model_n_gpu_layers.find(fallback_id);
+        if (k != model_n_gpu_layers.end())
+            gpu_cfgs = k->second;
+        return gpu_cfgs;
+    }
+
+    void BackendContext::init(const std::map<std::string, std::string> &model_n_gpu_layers, const std::string &model_id, const int n_layers, const size_t graph_max_nodes_num, const int n_threads, const std::string fallback_id)
+    {
+        init(get_ngl_of_model(model_n_gpu_layers, model_id, fallback_id), n_layers, graph_max_nodes_num, n_threads);
+    }
+
+    void BackendContext::init(const std::string &gpu_cfgs, const int n_layers, const size_t graph_max_nodes_num, const int n_threads)
+    {
+        std::vector<BackendContext::gpu_cfg> cfgs;
+        parse_gpu_layers(cfgs, gpu_cfgs);
+        init(cfgs, n_layers, graph_max_nodes_num, n_threads);
+    }
+
     void BackendContext::init(const std::vector<gpu_cfg> &gpu_cfgs, const int n_layers, const size_t graph_max_nodes_num, const int n_threads)
     {
         int prolog_id = -1;

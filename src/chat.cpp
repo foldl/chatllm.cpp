@@ -1299,16 +1299,31 @@ namespace chatllm
         }
     }
 
+    LayerAllocatorManager *ModelLoader::alloc_manager()
+    {
+        return alloc_managers.back();
+    }
+
+    void ModelLoader::push_allocator_manager(LayerAllocatorManager *alloc_manager)
+    {
+        alloc_managers.push_back(alloc_manager);
+    }
+
+    void ModelLoader::pop_allocator_manager(void)
+    {
+        alloc_managers.pop_back();
+    }
+
     void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor, bool partial)
     {
-        read_tensor(name, tensor, alloc_manager->get_allocator(tensor), partial);
+        read_tensor(name, tensor, alloc_manager()->get_allocator(tensor), partial);
     }
 
     void ModelLoader::read_tensor(const std::string &name,
                     const std::string &layer_prefix, int num, const std::string &suffix,
                     ggml::tensor *tensor)
     {
-        read_tensor(name, layer_prefix, num, suffix, tensor, alloc_manager->get_allocator(tensor));
+        read_tensor(name, layer_prefix, num, suffix, tensor, alloc_manager()->get_allocator(tensor));
     }
 
     bool ModelLoader::has_tensor(const std::string &name) const
