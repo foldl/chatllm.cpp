@@ -297,6 +297,9 @@ Please use `--format completion` for these models.
 
     Note: Only download `tokenizer.model` and DO NOT download `tokenizer.json` when converting.
 
+* Kimi (`KimiVLForConditionalGeneration`)
+    * [x] VL: [A3B-Instruct](https://huggingface.co/moonshotai/Kimi-VL-A3B-Instruct/tree/7a3c132a7b0f1f1677f5a72f258bd3afded7d357), [A3B-Thinking](https://huggingface.co/moonshotai/Kimi-VL-A3B-Thinking/commit/16681d8ac24e505088698e4e34ea494dd6e24400)
+
 ## RAG Models
 
 * Text Embedding (`XLMRobertaModel`)

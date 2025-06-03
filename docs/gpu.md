@@ -51,6 +51,15 @@ The full format of `-ngl` is `-ngl [id:]layer_specs[;id:layer_specs]..`. `id` is
 Suppose device 0 is GPU, and device 1 is CPU, `-ngl 1:5;0:10` will put the first 5 layers to CPU, the next 10 layers to GPU,
 and all other layers to CPU as default.
 
+You can use `-mgl` (`--model_gpu_layers`) to specify number of layers of a specific model to be deployed to different backend devices.
+`-mgl MODEL N`, in which `N` shares the same syntax as `-ngl` and `MODEL` can be
+
+* `main`: the main model.
+* `vis`: the vision accessory model (which typically project images/videos into LLM).
+* `any`: any model.
+
+`-ngl N` is equivalent to `-mgl any N`.
+
 Tip: Use `--show_devices` to check all available devices and `--show` to check basic hyper parameters of a model.
 
 ## Known issues

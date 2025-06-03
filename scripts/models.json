@@ -2776,5 +2776,25 @@
                 }
             }
         }
+    },
+    "kimi-vl": {
+        "brief": "Kimi-VL, an efficient open-source Mixture-of-Experts (MoE) vision-language model (VLM) that offers advanced multimodal reasoning, long-context understanding, and strong agent capabilities.",
+        "default": "a3b-instruct",
+        "license": "MIT",
+        "variants": {
+            "a3b-instruct": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 17566398608,
+                        "url": "chatllm_quantized_kimi-vl/kimi-vl.bin"
+                    },
+                    "q4_1": {
+                        "size": 10447149072,
+                        "url": "chatllm_quantized_kimi-vl/kimi-vl-q4_1.bin"
+                    }
+                }
+            }
+        }
     }
 }

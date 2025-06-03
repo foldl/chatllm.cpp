@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-06-03: Kimi-VL
 * 2025-05-28: Gemma3 fully supported
 * 2025-05-23: [I can see](./docs/multimodal.md): Fuyu
 * 2025-05-21: Re-quantization when loading (e.g. `--re-quantize q4_k`)
