@@ -601,7 +601,7 @@ static void ggml_backend_rpc_set_tensor_from_object(ggml_tensor * tensor, const 
     ggml_backend_rpc_buffer_context * ctx = (ggml_backend_rpc_buffer_context *)buffer->context;
     rpc_msg_set_tensor_from_obj_req request = {};
     request.tensor = serialize_tensor(tensor);
-    strncpy_s(request.obj_id, object_id, sizeof(request.obj_id) - 1);
+    strncpy(request.obj_id, object_id, sizeof(request.obj_id) - 1);
     request.obj_offset  = object_offset;
     request.offset      = offset;
     request.size        = size;
