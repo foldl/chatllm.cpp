@@ -2,7 +2,7 @@
 
 [中文版](README_zh.md) | [日本語](README_ja.md)
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![CI](https://github.com/foldl/chatllm.cpp/actions/workflows/build.yml/badge.svg)](https://github.com/foldl/chatllm.cpp/actions/workflows/build.yml)
 
 ![](./docs/demo.gif)
 
