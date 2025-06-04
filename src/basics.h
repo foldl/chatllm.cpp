@@ -70,4 +70,6 @@ namespace utils
 
     // for (i = start; i < end; i++) { func(i); }
     void parallel_for(int64_t start, int64_t end, std::function<void(int64_t)> func, int num_threads = 0);
+
+    std::string load_file(const char *fn);
 }

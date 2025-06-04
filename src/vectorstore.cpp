@@ -457,4 +457,15 @@ namespace utils
             }
         }
     }
+
+    std::string load_file(const char *fn)
+    {
+        std::ifstream file(fn);
+        if (!file.is_open()) return "";
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+
+        return buffer.str();
+    }
 }

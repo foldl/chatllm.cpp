@@ -153,11 +153,6 @@ namespace dac
             }
         }
 
-        void set_additional_args(const std::map<std::string, std::string> &args)
-        {
-            //
-        }
-
         bool load_more(ggml::type dtype, const json::JSON &config)
         {
             const auto cfg = config["dac_config.json"];
@@ -252,6 +247,8 @@ namespace tts_llama
     // translation of:
     // https://github.com/edwko/OuteTTS/blob/main/outetts/version/v3/prompt_processor.py
     // https://github.com/edwko/OuteTTS/blob/main/outetts/version/v3/tokens.py
+
+    json::JSON speaker;
 
     // Special Tokens structure
     struct SpecialTokens
@@ -359,13 +356,13 @@ namespace tts_llama
     {
         std::vector<std::string> codes;
 
-        for (const auto& word_item : words.ObjectRange())
+        for (const auto& word_item : words.ArrayRange())
         {
-            std::string word = word_item.second["word"].ToString() + special_tokens.features;
-            word += format_string(special_tokens.time, word_item.second["duration"].ToFloat());
+            std::string word = word_item["word"].ToString() + special_tokens.features;
+            word += format_string(special_tokens.time, word_item["duration"].ToFloat());
 
             // Add features
-            std::vector<std::string> features = get_features(word_item.second["features"], special_tokens);
+            std::vector<std::string> features = get_features(word_item["features"], special_tokens);
             for (const auto& feature : features)
             {
                 word += feature;
@@ -373,10 +370,10 @@ namespace tts_llama
 
             // Add pairs of c1 and c2
             std::vector<std::string> pairs;
-            for (size_t idx = 0; idx < word_item.second["c1"].length(); idx++)
+            for (size_t idx = 0; idx < word_item["c1"].length(); idx++)
             {
-                std::string c1 = format_string(special_tokens.c1, (int)word_item.second["c1"][(unsigned)idx].ToInt());
-                std::string c2 = format_string(special_tokens.c2, (int)word_item.second["c2"][(unsigned)idx].ToInt());
+                std::string c1 = format_string(special_tokens.c1, (int)word_item["c1"][(unsigned)idx].ToInt());
+                std::string c2 = format_string(special_tokens.c2, (int)word_item["c2"][(unsigned)idx].ToInt());
                 pairs.push_back(c1 + c2);
             }
 
@@ -533,15 +530,19 @@ namespace tts_llama
         return prompt;
     }
 
-    static json::JSON speaker_from_file(const std::string & speaker_file)
+    std::string get_completion_prompt(const std::string& text)
     {
-        std::ifstream file(speaker_file);
-        CHATLLM_CHECK(file) << "Failed to open file: " << speaker_file;
+        json::JSON clone(speaker);
+        return get_completion_prompt(text, clone);
+    }
 
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-
-        return json::JSON::Load(buffer.str());
+    static void load_speaker_from_args(const std::map<std::string, std::string> &args)
+    {
+        auto x = args.find("speaker");
+        if (x != args.end())
+        {
+            speaker = json::JSON::Load(utils::load_file(x->second.c_str()));
+        }
     }
 
     std::vector<std::vector<int>> extract_codebooks(const std::string& codes) {
@@ -647,7 +648,7 @@ namespace tts_llama
 
         void set_additional_args(const std::map<std::string, std::string> &args) override
         {
-            codec.set_additional_args(args);
+            load_speaker_from_args(args);
         }
 
     public:
@@ -733,7 +734,7 @@ namespace tts_qwen3
 
         void set_additional_args(const std::map<std::string, std::string> &args) override
         {
-            codec.set_additional_args(args);
+            tts_llama::load_speaker_from_args(args);
         }
 
     public:
