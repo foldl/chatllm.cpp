@@ -742,7 +742,7 @@ NearestKeywordSearcher::Node *NearestKeywordSearcher::make_tree(std::vector<Item
     return r;
 }
 
-void NearestKeywordSearcher::rebuild(const std::unordered_map<int, std::string> keywords)
+void NearestKeywordSearcher::rebuild(const std::unordered_map<_vocab::id, std::string> keywords)
 {
     root.reset(nullptr);
 
@@ -750,7 +750,7 @@ void NearestKeywordSearcher::rebuild(const std::unordered_map<int, std::string> 
 
     for (auto & st: keywords)
     {
-        sub.emplace_back(st.second, st.first);
+        sub.emplace_back(st.second, (int)st.first);
     }
     root.reset(make_tree(sub, 0, -1));
 }

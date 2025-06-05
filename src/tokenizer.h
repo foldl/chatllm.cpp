@@ -196,7 +196,7 @@ protected:
 class NearestKeywordSearcher
 {
 public:
-    void rebuild(const std::unordered_map<int, std::string> keywords);
+    void rebuild(const std::unordered_map<_vocab::id, std::string> keywords);
 
     std::string search(std::string &input, int &kw_id) const;
 
