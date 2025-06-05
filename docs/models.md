@@ -280,11 +280,15 @@ Please use `--format completion` for these models.
         [SNAC-24kHz](https://huggingface.co/mlx-community/snac_24khz/tree/556af1cd3b1c5f2d294f6aa9bb886245d7b716ac) is used as codec.
         Use these additional command line options when converting: `--name Orpheus-TTS -a Orpheus-TTS --snac_model /path/to/snac_24kHz`
 
+        Use `--set voice XX` to select voice `XX`, such as `tara`. [More info](https://github.com/canopyai/Orpheus-TTS?tab=readme-ov-file#prompting).
+
 * OuteTTS:
     * [x] 1.0: [1B](https://huggingface.co/OuteAI/Llama-OuteTTS-1.0-1B/commit/911e296ce01148a01f3af9329163b0d298ac33a1), [0.6B](https://huggingface.co/OuteAI/OuteTTS-1.0-0.6B/tree/e7bcd87b0ca47fd8c46317c8f745a5e4e19c7b5c)
 
         [DAC.speech.v1.0 1.5kbps](https://huggingface.co/ibm-research/DAC.speech.v1.0/commits/main) is used as codec.
         Use these additional command line options when converting: `--name OuteTTS -a OuteTTS --dac_model /path/to/dac`
+
+        Use `--set speaker /path/to/speaker.json` to select a speaker profile. [More info](https://github.com/edwko/OuteTTS/blob/main/docs/interface_usage.md#creating-custom-speaker-profiles).
 
 ## Multimodal Models
 

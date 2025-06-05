@@ -5,6 +5,7 @@
 #include <cstring>
 #include <limits>
 #include <regex>
+#include <iostream>
 
 #include "unicode.h"
 #include "chat.h"
@@ -474,6 +475,7 @@ size_t BPEProcessor2::Load(DataReader *data_reader, int n_vocab)
     vocab_.id_to_token.resize(piece_size);
     load_vocab_merges(vocab_, reader);
     build_special_token_cache(vocab_);
+    searcher.rebuild(vocab_.special_tokens_cache);
 
     return reader.get_total_size();
 }
@@ -694,37 +696,115 @@ const std::string BPEProcessor3::IdToPiece(int id) const
     }
 }
 
-static std::string search_first_special_token(std::string &input, const _vocab &vocab, int &sp_tok_id)
+NearestKeywordSearcher::Node *NearestKeywordSearcher::make_tree(std::vector<Item> &items, char ch, int value)
 {
-    sp_tok_id = -1;
-    auto nearest_match = std::string::npos;
-    for (auto & st: vocab.special_tokens_cache)
+    Node * r = new Node();
+    r->ch = ch;
+    r->value = items.size() < 1 ? value : -1;
+
+    while (true)
     {
-        const auto & special_id     = st.first;
-        const auto & special_token  = st.second;
+        bool flag = false;
+        char tag = 0;
+        int  v   = -1;
 
-        auto match = input.find(special_token, 0);
-
-        if (match < nearest_match)
+        std::vector<Item> sub;
+        for (int i = (int)items.size() - 1; i >= 0; i--)
         {
-            nearest_match = match;
-            sp_tok_id = special_id;
+            if (items[i].s.size() < 1) continue;
+
+            if (!flag)
+            {
+                flag = true;
+                tag = items[i].s[0];
+                v   = items[i].value;
+            }
+            else
+            {
+                if (items[i].s[0] != tag) continue;
+            }
+
+            if (items[i].s.size() > 1)
+                sub.emplace_back(items[i].s.substr(1), items[i].value);
+
+            // mark as visited
+            items[i].s = "";
+        }
+
+        if (!flag) break;
+
+        Node *child = make_tree(sub, tag, v);
+        r->child.emplace_back(std::unique_ptr<Node>(child));
+    }
+
+    std::sort(r->child.begin(), r->child.end(), [](auto &p1, auto &p2) { return p1->ch <= p2->ch; });
+
+    return r;
+}
+
+void NearestKeywordSearcher::rebuild(const std::unordered_map<int, std::string> keywords)
+{
+    root.reset(nullptr);
+
+    std::vector<Item> sub;
+
+    for (auto & st: keywords)
+    {
+        sub.emplace_back(st.second, st.first);
+    }
+    root.reset(make_tree(sub, 0, -1));
+}
+
+int NearestKeywordSearcher::match(const std::string &input, int index, Node *node, int &level) const
+{
+    if (node->child.size() < 1) return node->value;
+    if (index >= (int)input.size()) return -1;
+    const char ch = input[index];
+
+    int low  = 0;
+    int high = (int)node->child.size() - 1;
+    while (high >= low)
+    {
+        // assuming no overflow
+        int middle = (high + low) / 2;
+        Node *n = node->child[middle].get();
+        if (n->ch < ch)
+        {
+            low = middle + 1;
+        }
+        else if (ch < n->ch)
+        {
+            high = middle - 1;
+        }
+        else
+        {
+            level++;
+            return match(input, index + 1, n, level);
         }
     }
 
-    if (sp_tok_id >= 0)
+    return -1;
+}
+
+std::string NearestKeywordSearcher::search(std::string &input, int &kw_id) const
+{
+    int index = 0;
+    while (index < (int)input.size())
     {
-        const auto & special_token  = vocab.special_tokens_cache.at(sp_tok_id);
-        std::string r = input.substr(0, nearest_match);
-        input = input.substr(nearest_match + special_token.size());
-        return r;
+        int len = 0;
+        kw_id = match(input, index, root.get(), len);
+        if (kw_id >= 0)
+        {
+            std::string r = input.substr(0, index);
+            input = input.substr(index + len);
+            return r;
+        }
+        index++;
     }
-    else
-    {
-        std::string r(input);
-        input = "";
-        return r;
-    }
+
+    std::string r(input);
+    input = "";
+    return r;
 }
 
 int BPEProcessor2::DoEncode(const std::string &input,
@@ -734,7 +814,7 @@ int BPEProcessor2::DoEncode(const std::string &input,
     int sp_tok_id = -1;
     while (text.size() > 0)
     {
-        auto leading = search_first_special_token(text, vocab_, sp_tok_id);
+        auto leading = searcher.search(text, sp_tok_id);
         DoEncode2(leading, ids);
         if (sp_tok_id < 0) break;
         ids->push_back(sp_tok_id);

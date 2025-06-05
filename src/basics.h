@@ -72,4 +72,6 @@ namespace utils
     void parallel_for(int64_t start, int64_t end, std::function<void(int64_t)> func, int num_threads = 0);
 
     std::string load_file(const char *fn);
+
+    //#define TIME_STAMP (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
 }

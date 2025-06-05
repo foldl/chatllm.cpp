@@ -500,7 +500,8 @@ namespace tts_llama
         std::string normalized_text = text_normalization(text);
 
         std::string prompt;
-        if (!speaker.IsNull()) {
+        if (!speaker.IsNull())
+        {
             // Merge speaker text
             auto [merged_text, separator] = merge_speaker_text(normalized_text, speaker["text"].ToString());
             normalized_text = merged_text;
@@ -580,7 +581,7 @@ namespace tts_llama
 
     void Tokenizer::encode(const std::string &text, std::vector<int> &ids) const
     {
-        auto prompt = get_completion_prompt(text, json::JSON::_null);
+        auto prompt = get_completion_prompt(text);
         BaseTokenizer::encode(prompt, ids);
     }
 
@@ -689,7 +690,7 @@ namespace tts_qwen3
 
     void Tokenizer::encode(const std::string &text, std::vector<int> &ids) const
     {
-        auto prompt = tts_llama::get_completion_prompt(text, json::JSON::_null);
+        auto prompt = tts_llama::get_completion_prompt(text);
         BaseTokenizer::encode(prompt, ids);
     }
 

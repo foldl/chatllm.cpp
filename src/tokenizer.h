@@ -193,6 +193,34 @@ protected:
             std::vector<int> *ids) const override;
 };
 
+class NearestKeywordSearcher
+{
+public:
+    void rebuild(const std::unordered_map<int, std::string> keywords);
+
+    std::string search(std::string &input, int &kw_id) const;
+
+protected:
+
+    struct Item
+    {
+        std::string s;
+        int value;
+    };
+    struct Node
+    {
+        char ch;
+        int value;
+        std::vector<std::unique_ptr<Node>> child;
+    };
+
+    Node *make_tree(std::vector<Item> &items, char ch, int value);
+
+    int match(const std::string &input, int index, Node *node, int &level) const;
+
+    std::unique_ptr<Node> root;
+};
+
 class BPEProcessor2: public Processor
 {
 public:
@@ -212,6 +240,7 @@ protected:
             std::vector<int> *ids) const;
 
     std::vector<std::string> regex_exprs;
+    NearestKeywordSearcher searcher;
 };
 
 class BPEProcessor3: public BPEProcessor2
