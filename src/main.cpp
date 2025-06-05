@@ -66,7 +66,9 @@ struct Args
     float top_p = 0.7f;
     float temp = 0.7f;
     float tfs_z = 0.95f;
-    float presence_penalty = 1.0f;
+    float presence_penalty = 0.0f;
+    float repeat_penalty = 1.0f;
+    float frequency_penalty = 0.0f;
     int num_threads = 0;
     bool multi_line = false;
     int seed;
@@ -90,6 +92,7 @@ struct Args
     bool moe_on_cpu = false;
     int batch_size = 4096;
     bool detect_thoughts = false;
+    int penalty_window = 256;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -153,6 +156,7 @@ bool is_same_command_option(const std::string &a, const std::string &b)
 
 void usage(const std::string &prog)
 {
+    Args args;
     std::cout << "Usage: " << prog << " [options]\n"
               << "\n"
               << "Basic options:\n"
@@ -176,7 +180,7 @@ void usage(const std::string &prog)
               << "                            --layer_spec 0:3,1:4 (3 + 3 = 6 layers are selected, layer #1/2 are used twice)\n"
               << "                                                 layer structure: 0->1->2->1->2->3\n"
               << "  -c, --max_context_length N\n"
-              << "                          max context length (default: 512)\n"
+              << "                          max context length (default: " << args.max_context_length << ")\n"
               << "  --extending EXT         context extending method (EXT = restart | shift | none)\n"
               << "                          (default: none if `--load_session` is specified, otherwise restart)\n"
               << "  --multi                 enabled multiple lines of input                                                         [*]\n"
@@ -197,18 +201,21 @@ void usage(const std::string &prog)
               << "  --rpc_endpoints EP..    RPC endpoints (i.e. servers) for distributed inference (default: empty)\n"
               << "                          EP1;EP2, where EP ::= host:port\n"
               << "  --cache_dtype T         cache data type, T ::= f32 | f16 (default: f16)\n"
-              << "  --batch_size N          batch size (default: 4096)\n"
+              << "  --batch_size N          batch size (default: " << args.batch_size << ")\n"
               << "                          note: trade-off between prompt throughput and memory usage.\n"
               << "  --re_quantize Q         re-quantize model weights during loading (Q ::= q8_0 | q4_0 | q4_1 | q4_k | ...) (default: no re-quantization)\n"
               << "                          note: it does not make sense to re-quantize to a larger size.\n"
               << "Sampling options:\n"
               << "  --sampling ALG          sampling algorithm (ALG = greedy | top_p | tfs) (default: top_p) \n"
               << "                          where, tfs = Tail Free Sampling\n"
-              << "  -t, --temp T            temperature (default: 0.7) (Note: `-t 0` also sets sampling algorithm to greedy)\n"
-              << "  --top_k N               top-k sampling (default: 20)\n"
-              << "  --top_p N               top-p sampling (default: 0.7)\n"
-              << "  --tfs_z Z               Z param for TFS (default: 0.95)\n"
-              << "  --presence_penalty N    presence repetition penalty (default: 1.0, no penalty)\n"
+              << "  -t, --temp T            temperature (default: " << args.temp << ") (Note: `-t 0` also sets sampling algorithm to greedy)\n"
+              << "  --top_k N               top-k sampling (default: " << args.top_k << ")\n"
+              << "  --top_p N               top-p sampling (default: " << args.top_p << ")\n"
+              << "  --tfs_z Z               Z param for TFS (default: " << args.tfs_z << ")\n"
+              << "  --repeat_penalty N      repetition penalty (default: " << args.repeat_penalty << ", 1.0=no penalty)\n"
+              << "  --presence_penalty N    penalty alpha for presence (default: " << args.presence_penalty << ", 0.0=disabled)\n"
+              << "  --frequency_penalty N   penalty alpha for probability (default: " << args.frequency_penalty << ", 0.0=disabled)\n"
+              << "  --penalty_window N      last N tokens to consider for penalize (default: " << args.penalty_window << ", 0=disable all)\n"
               << "  --seed N                seed for random generator (default: random)\n"
               << "  --beam_size N           beam size for generation (default: -1, disabled)\n"
               << "                          functionality of beam search limited.\n"
@@ -465,6 +472,9 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--tfs_z",                       tfs_z,                std::stof)
             handle_param("--temp",                  "-t", temp,                 std::stof)
             handle_para0("--presence_penalty",            presence_penalty,     std::stof)
+            handle_para0("--repeat_penalty",              repeat_penalty,       std::stof)
+            handle_para0("--frequency_penalty",           frequency_penalty,    std::stof)
+            handle_para0("--penalty_window",              penalty_window,       std::stoi)
             handle_param("--threads",               "-n", num_threads,          std::stoi)
             handle_para0("--seed",                        seed,                 std::stoi)
             handle_para0("--test",                        test_fn,              std::string)
@@ -852,7 +862,10 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
 #define DEF_GenerationConfig(gen_config, args) chatllm::GenerationConfig gen_config(args.max_length, args.max_context_length, args.temp > 0, args.reversed_role, \
                                          args.top_k, args.top_p, args.temp, args.num_threads, args.sampling, args.presence_penalty, args.tfs_z); \
                                          gen_config.set_ai_prefix(args.ai_prefix); gen_config.dump_dot = args.dump_dot; \
-                                         gen_config.emb_rank_query_sep = args.emb_rank_query_sep;
+                                         gen_config.emb_rank_query_sep = args.emb_rank_query_sep; \
+                                         gen_config.repeat_penalty = args.repeat_penalty; \
+                                         gen_config.frequency_penalty = args.frequency_penalty; \
+                                         gen_config.penalty_window = args.penalty_window;
 
 #define DEF_ExtraArgs(pipe_args, args)  \
     chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.moe_on_cpu, args.num_threads, args.batch_size, args.cache_dtype, args.re_quantize);\

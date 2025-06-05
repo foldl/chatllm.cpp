@@ -721,20 +721,113 @@ namespace chatllm
         }
     }
 
+    class LogitsPenalty
+    {
+    public:
+        LogitsPenalty()
+            : repeat_penalty_en(false),
+              freq_penalty_en(false),
+              inv_repeat_penalty(0.0f), repeat_penalty(0.0f), freq_penalty(0.0f), presence_penalty(0.0f)
+        {}
+
+        LogitsPenalty(const GenerationConfig &gen_config)
+            : repeat_penalty_en((gen_config.penalty_window > 0) && (gen_config.repeat_penalty != 1.0f) && (gen_config.repeat_penalty > 0.0f)),
+              freq_penalty_en((gen_config.penalty_window > 0) && (gen_config.frequency_penalty != 0.0f) || (gen_config.presence_penalty != 0.0f)),
+              inv_repeat_penalty(repeat_penalty_en ? 1 / gen_config.repeat_penalty : 0.0f),
+              repeat_penalty(gen_config.repeat_penalty),
+              freq_penalty(freq_penalty_en ? gen_config.frequency_penalty / gen_config.penalty_window : 0.0f),
+              presence_penalty(gen_config.presence_penalty)
+        {
+            if (gen_config.penalty_window > 0)
+            {
+                token_history.resize(gen_config.penalty_window);
+            }
+            reset();
+        }
+
+        virtual void skip_this(int token_id)
+        {
+            skip_tokens.emplace(token_id);
+        }
+
+        virtual void reset()
+        {
+            for (size_t i = 0; i < token_history.size(); i++)
+                token_history[i] = -1;
+            hist_write = 0;
+            memset(token_count.data(), 0, token_count.size() * sizeof(token_count[0]));
+        }
+
+        virtual void accept_choice(int token_id)
+        {
+            if (token_history.size() < 1) return;
+            int id = token_history[hist_write];
+            if ((0 <= id) && (id < (int)token_count.size()))
+                token_count[id]--;
+            token_history[hist_write++] = token_id;
+            if (hist_write >= token_history.size()) hist_write = 0;
+            if ((0 <= token_id) && (token_id < (int)token_count.size()))
+                token_count[token_id]++;
+        }
+
+        virtual void process(float *logits, const int vocab_size)
+        {
+            if (token_history.size() < 1) return;
+
+            if (vocab_size != (int)token_count.size())
+            {
+                token_count.resize(vocab_size);
+            }
+
+            for (int i = 0; i < vocab_size; i++)
+            {
+                if (repeat_penalty_en)
+                {
+                    if (token_count[i] > 0)
+                        logits[i] *= logits[i] > 0 ? inv_repeat_penalty : repeat_penalty;
+                }
+
+                if (freq_penalty_en)
+                    logits[i] -= float(token_count[i]) * freq_penalty + float(token_count[i] > 0) * presence_penalty;
+            }
+        }
+
+    protected:
+        const bool repeat_penalty_en;
+        const bool freq_penalty_en;
+        const float inv_repeat_penalty;
+        const float repeat_penalty;
+        const float freq_penalty;
+        const float presence_penalty;
+        std::vector<int> token_history;
+        std::vector<int> token_count;
+        size_t hist_write;
+        std::set<int> skip_tokens;
+    };
+
     class Sampler
     {
     public:
         static const int ABORT = -1;
+        Sampler() : penalty() {}
 
+        Sampler(const GenerationConfig &gen_config)
+            : penalty(gen_config)
+        {}
     public:
         virtual void seed(int x)
         {
             gen.seed((unsigned int)x);
         }
 
-        virtual void reset() {}
+        virtual void reset()
+        {
+            penalty.reset();
+        }
 
         virtual int sampling(float *logits, const int vocab_size) = 0;
+    public:
+        LogitsPenalty penalty;
     protected:
         std::mt19937 gen;
     };
@@ -751,40 +844,26 @@ namespace chatllm
     class NonGreedySampler: public Sampler
     {
     public:
-        NonGreedySampler(float temperature, float presence_penalty, int top_k)
-            : inv_temp(0.0f), inv_presence_penalty(0.0f), presence_penalty(presence_penalty), top_k(top_k)
+        NonGreedySampler(const GenerationConfig &gen_config, float temperature, int top_k)
+            : Sampler(gen_config),
+              inv_temp(0.0f), top_k(top_k)
         {
             temp_en = fabs(temperature - 1.0f) > 1e-5f;
             if (temp_en) inv_temp = 1.f / temperature;
-
-            presence_penalty_en = fabs(presence_penalty - 1.0f) > 1e-5f;
-            if (presence_penalty_en) inv_presence_penalty = 1.0f / presence_penalty;
         }
 
-        void reset() override
-        {
-            g.clear();
-        }
 
         int sampling(float *logits, const int vocab_size) override
         {
-            g.resize(vocab_size, 0);
-            token_scores.resize(vocab_size);
-
             if (temp_en)
             {
                 for (int i = 0; i < vocab_size; i++)
                     logits[i] *= inv_temp;
             }
 
-            if (presence_penalty_en)
-            {
-                for (int i = 0; i < vocab_size; i++)
-                {
-                    if (g[i] > 0)
-                        logits[i] *= logits[i] > 0 ? inv_presence_penalty : presence_penalty;
-                }
-            }
+            penalty.process(logits, vocab_size);
+
+            token_scores.resize(vocab_size);
 
             for (int i = 0; i < vocab_size; i++)
             {
@@ -813,7 +892,8 @@ namespace chatllm
             std::discrete_distribution<> dist(logits, logits + token_scores.size());
             int next_token_id = token_scores[dist(gen)].id;
 
-            g[next_token_id] += 1;
+            penalty.accept_choice(next_token_id);
+
             return next_token_id;
         }
 
@@ -846,20 +926,16 @@ namespace chatllm
 
         virtual void do_sampling(float *logits, const int vocab_size) = 0;
         bool temp_en;
-        bool presence_penalty_en;
         float inv_temp;
-        float inv_presence_penalty;
-        float presence_penalty;
         int top_k;
         std::vector<TokenIdScore> token_scores;
-        std::vector<int> g;
     };
 
     class TopPSampler : public NonGreedySampler
     {
     public:
-        TopPSampler(float temperature, float presence_penalty, int top_k, float top_p)
-            : NonGreedySampler(temperature, presence_penalty, top_k), top_p(top_p)
+        TopPSampler(const GenerationConfig &gen_config, float temperature, int top_k, float top_p)
+            : NonGreedySampler(gen_config, temperature, top_k), top_p(top_p)
         {}
 
     protected:
@@ -895,8 +971,8 @@ namespace chatllm
     class FreeTailSampler : public NonGreedySampler
     {
     public:
-        FreeTailSampler(float temperature, float presence_penalty, int top_k, float z)
-            : NonGreedySampler(temperature, presence_penalty, top_k), z(z)
+        FreeTailSampler(const GenerationConfig &gen_config, float temperature, int top_k, float z)
+            : NonGreedySampler(gen_config, temperature, top_k), z(z)
         {}
 
     protected:
@@ -952,9 +1028,9 @@ namespace chatllm
             if (gen_config.do_sample)
             {
                 if (gen_config.sampling == "top_p")
-                    r = new TopPSampler(gen_config.temperature, gen_config.presence_penalty, gen_config.top_k, gen_config.top_p);
+                    r = new TopPSampler(gen_config, gen_config.temperature, gen_config.top_k, gen_config.top_p);
                 else if (gen_config.sampling == "tfs")
-                    r = new FreeTailSampler(gen_config.temperature, gen_config.presence_penalty, gen_config.top_k, gen_config.tfs_z);
+                    r = new FreeTailSampler(gen_config, gen_config.temperature, gen_config.top_k, gen_config.tfs_z);
                 else if (gen_config.sampling != "greedy")
                     CHATLLM_CHECK(false) << "unknown sampling algorithm: " << gen_config.sampling;
             }

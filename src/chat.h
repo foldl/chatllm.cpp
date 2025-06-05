@@ -791,9 +791,12 @@ namespace chatllm
         bool do_sample;
         bool reversed_role;
         int top_k;
+        int penalty_window;
         float top_p;
         float temperature;
         float presence_penalty;
+        float repeat_penalty;
+        float frequency_penalty;
         float tfs_z;
         std::string sampling;
         std::string ai_prefix;
