@@ -455,6 +455,159 @@ jobs:
   build-linux-cross:
     uses: ./.github/workflows/build-linux-cross.yml
 
+  macOS-latest-cmake-ios:
+    runs-on: macos-latest
+    if: false
+
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2.16
+        with:
+          key: macOS-latest-cmake-ios
+          evict-old-files: 1d
+
+      - name: Dependencies
+        id: depends
+        continue-on-error: true
+        run: |
+          brew update
+
+      - name: Build
+        id: cmake_build
+        run: |
+          sysctl -a
+          cmake -B build -G Xcode \
+            -DGGML_METAL_USE_BF16=ON \
+            -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DLLAMA_BUILD_COMMON=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_TOOLS=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_SERVER=OFF \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+            -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM=ggml
+          cmake --build build --config Release -j $(sysctl -n hw.logicalcpu) -- CODE_SIGNING_ALLOWED=NO
+
+  macOS-latest-cmake-tvos:
+    runs-on: macos-latest
+    if: false
+
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2.16
+        with:
+          key: macOS-latest-cmake-tvos
+          evict-old-files: 1d
+
+      - name: Dependencies
+        id: depends
+        continue-on-error: true
+        run: |
+          brew update
+
+      - name: Build
+        id: cmake_build
+        run: |
+          sysctl -a
+          cmake -B build -G Xcode \
+            -DGGML_METAL_USE_BF16=ON \
+            -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DLLAMA_BUILD_COMMON=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_TOOLS=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_SERVER=OFF \
+            -DCMAKE_SYSTEM_NAME=tvOS \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+            -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM=ggml
+          cmake --build build --config Release -j $(sysctl -n hw.logicalcpu) -- CODE_SIGNING_ALLOWED=NO
+
+  macOS-latest-cmake-visionos:
+    runs-on: macos-latest
+    if: false
+
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: Dependencies
+        id: depends
+        continue-on-error: true
+        run: |
+          brew update
+
+      - name: Build
+        id: cmake_build
+        run: |
+          sysctl -a
+          cmake -B build -G Xcode \
+            -DGGML_METAL_USE_BF16=ON \
+            -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DLLAMA_BUILD_COMMON=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_TOOLS=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_SERVER=OFF \
+            -DCMAKE_SYSTEM_NAME=visionOS \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=1.0 \
+            -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM=ggml
+          cmake --build build --config Release -j $(sysctl -n hw.logicalcpu) -- CODE_SIGNING_ALLOWED=NO
+
+  macOS-latest-swift:
+    runs-on: macos-latest
+    if: false
+
+    strategy:
+      matrix:
+        destination: ['generic/platform=macOS', 'generic/platform=iOS', 'generic/platform=tvOS']
+
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2.16
+        with:
+          key: macOS-latest-swift
+          evict-old-files: 1d
+
+      - name: Dependencies
+        id: depends
+        continue-on-error: true
+        run: |
+          brew update
+
+      - name: Build llama.cpp with CMake
+        id: cmake_build
+        run: |
+          sysctl -a
+          cmake -B build -G Xcode \
+            -DGGML_METAL_USE_BF16=ON \
+            -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DLLAMA_CURL=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_TOOLS=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_SERVER=OFF \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake --build build --config Release -j $(sysctl -n hw.logicalcpu)
+
+      - name: xcodebuild for swift package
+        id: xcodebuild
+        run: |
+          ./build-xcframework.sh
+
   windows-msys2:
     runs-on: windows-latest
     if: false
