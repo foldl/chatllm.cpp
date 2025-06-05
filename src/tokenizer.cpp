@@ -725,7 +725,7 @@ NearestKeywordSearcher::Node *NearestKeywordSearcher::make_tree(std::vector<Item
             }
 
             if (items[i].s.size() > 1)
-                sub.emplace_back(items[i].s.substr(1), items[i].value);
+                sub.emplace_back(items[i].s.substr(1), (int)items[i].value);
 
             // mark as visited
             items[i].s = "";

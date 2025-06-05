@@ -206,6 +206,8 @@ protected:
     {
         std::string s;
         int value;
+
+        Item(const std::string &s, const int value) : s(s), value(value) {}
     };
     struct Node
     {
