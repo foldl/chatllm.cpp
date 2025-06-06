@@ -134,7 +134,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
 {
     auto transformer = get_typed_transformer<ModelClass>();
 
-    loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+    transformer->word_embeddings->load("model.embed_tokens.", &loader);
     for (int i = 0; i < config.num_hidden_layers; i++)
     {
         std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
@@ -162,7 +162,7 @@ void ConditionalGeneration::load(ModelLoader &loader)
                            transformer->layers[i].mlp.gate.weight);
     }
 
-    loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+    transformer->final_layernorm->load("model.norm.", &loader);
 
     CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
         << "corrupted model weights";

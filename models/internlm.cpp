@@ -35,7 +35,7 @@ public:
     {
         TransformerClass *transformer = dynamic_cast<TransformerClass *>(Base::transformer);
 
-        loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+        transformer->word_embeddings->load("model.embed_tokens.", &loader);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
@@ -63,7 +63,7 @@ public:
             loader.read_tensor(layer_prefix + "input_layernorm.weight",          transformer->layers[i].input_layernorm.weight);
             loader.read_tensor(layer_prefix + "post_attention_layernorm.weight", transformer->layers[i].post_attention_layernorm.weight);
         }
-        loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+        transformer->final_layernorm->load("model.norm.", &loader);
         loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
         CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())

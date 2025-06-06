@@ -139,7 +139,7 @@ namespace v1_moe
         typedef CombinedMLP<DeepSeekSparseMoE<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, SiLUMLP> DeepSeekMoEMLP;
         typedef LMBlock1<RMSNorm, LlamaSelfAttention, RMSNorm, DeepSeekMoEMLP> DeepSeekMoEBlock;
         typedef BaseModelForConditionalGeneration Base;
-        typedef HeterogeneousModel<Config, Embedding, RMSNorm> ModelClass;
+        typedef HeterogeneousModel ModelClass;
     public:
         ConditionalGeneration0() = default;
 
@@ -184,7 +184,11 @@ namespace v1_moe
                 }
             };
 
-            auto transformer = new ModelClass(&w_ctx_, config, false, create_layer);
+            auto transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
+                create_embedding<Embedding>(&w_ctx_, config),
+                create_final_norm<RMSNorm>(&w_ctx_, config),
+                create_lm_head(&w_ctx_, config, false), create_layer);
+
             Base::transformer = transformer;
 
             #define config_rope(attention)     do { \
@@ -683,7 +687,7 @@ namespace v2_light
         typedef CombinedMLP<DeepSeekSparseMoE<NUM_EXPERTS, EFFECTIVE_EXPERTS_PER_TOK>, SiLUMLP> DeepSeekMoEMLP;
         typedef LMBlock1<RMSNorm, SpeedMLAttention, RMSNorm, DeepSeekMoEMLP> DeepSeek2MoEBlock;
         typedef BaseModelForConditionalGeneration Base;
-        typedef HeterogeneousModel<Config, Embedding, RMSNorm> ModelClass;
+        typedef HeterogeneousModel ModelClass;
     public:
         ConditionalGeneration0() = default;
 
@@ -735,8 +739,10 @@ namespace v2_light
                 }
             };
 
-            auto transformer = new ModelClass(
-                &w_ctx_, config, false, create_layer);
+            auto transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
+                create_embedding<Embedding>(&w_ctx_, config),
+                create_final_norm<RMSNorm>(&w_ctx_, config),
+                create_lm_head(&w_ctx_, config, false), create_layer);
             Base::transformer = transformer;
 
             float m = 1.0f;

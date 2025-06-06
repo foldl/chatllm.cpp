@@ -105,7 +105,7 @@ public:
     {
         auto transformer = get_typed_transformer<ModelClass>();
 
-        loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+        transformer->word_embeddings->load("model.embed_tokens.", &loader);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
@@ -120,7 +120,7 @@ public:
             loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
             loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
         }
-        loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+        transformer->final_layernorm->load("model.norm.", &loader);
 
         CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
@@ -257,7 +257,7 @@ template <class Layer> static void load_layer(ModelLoader &loader, const std::st
 class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
 public:
-    typedef HeterogeneousModel<BaseConfig, Embedding, RMSNorm> ModelClass;
+    typedef HeterogeneousModel ModelClass;
 public:
     ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA2)
         : BaseModelForConditionalGeneration(type, config, runtime_config), config(config),
@@ -286,7 +286,11 @@ public:
             }
         };
 
-        transformer = new ModelClass(&w_ctx_, config, nullptr, create_layer);
+        transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
+                    create_embedding<Embedding>(&w_ctx_, config),
+                    create_final_norm<RMSNorm>(&w_ctx_, config),
+                    nullptr,
+                    create_layer);
 
         get_typed_transformer<ModelClass>()->logits_pp = &logits_pp;
 
@@ -309,7 +313,7 @@ public:
     {
         auto transformer = get_typed_transformer<ModelClass>();
 
-        loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+        transformer->word_embeddings->load("model.embed_tokens.", &loader);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
@@ -322,7 +326,7 @@ public:
                 load_layer<Gemma2FullBlock>(loader, layer_prefix, transformer->get_layer(i));
             }
         }
-        loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+        transformer->final_layernorm->load("model.norm.", &loader);
 
         CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
@@ -763,7 +767,7 @@ template <class Layer> static void setup_layer(Block *block, const Config &confi
 class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
 public:
-    typedef HeterogeneousModel<BaseConfig, Embedding, RMSNorm> ModelClass;
+    typedef HeterogeneousModel ModelClass;
 public:
     ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA3)
         : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config),
@@ -804,7 +808,10 @@ public:
         BlockParams::PadEmbedding padding(1024, 1024); // 4 media_emb
         _chat_encoder.MAX_PATCH_NUM = padding.get();
 
-        transformer = new ModelClass(&w_ctx_, config, nullptr, create_layer);
+        transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
+                    create_embedding<Embedding>(&w_ctx_, config),
+                    create_final_norm<RMSNorm>(&w_ctx_, config),
+                    nullptr, create_layer);
 
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
@@ -856,12 +863,12 @@ public:
     void before_generate(const GenerationConfig &gen_config) override
     {
         std::vector<uint8_t> buf;
-        auto &emb = dynamic_cast<ModelClass *>(transformer)->word_embeddings;
-        visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb.weight), buf);
+        auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
+        visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
         if (buf.size() < 1) return;
 
-        size_t offset = emb.get_base_nbytes();
-        Backend::write_tensor_data(emb.weight, buf.data(), offset, buf.size());
+        size_t offset = emb->get_base_nbytes();
+        Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
     }
 
 public:

@@ -108,7 +108,7 @@ public:
     {
         auto transformer = get_typed_transformer<ModelClass>();
 
-        loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+        transformer->word_embeddings->load("model.embed_tokens.", &loader);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
@@ -122,7 +122,7 @@ public:
             loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
             loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
         }
-        loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+        transformer->final_layernorm->load("model.norm.", &loader);
 
         CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
@@ -234,7 +234,7 @@ namespace v2
     class ConditionalGeneration : public BaseModelForConditionalGeneration
     {
     public:
-        typedef HeterogeneousModel<BaseConfig, Embedding, LayerNormNoBias> ModelClass;
+        typedef HeterogeneousModel ModelClass;
         typedef Cohere2SWABlock<SLIDING_WINDOW_LEN> Cohere2SWABlock4k;
 
     public:
@@ -266,7 +266,10 @@ namespace v2
                 }
             };
 
-            transformer = new ModelClass(&w_ctx_, config, nullptr, create_layer);
+            transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
+                    create_embedding<Embedding>(&w_ctx_, config),
+                    create_final_norm<LayerNormNoBias>(&w_ctx_, config),
+                    nullptr, create_layer);
 
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
@@ -295,7 +298,7 @@ namespace v2
                 loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", layer->attention.q_proj.weight);         \
                 loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", layer->attention.v_proj.weight);
 
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            transformer->word_embeddings->load("model.embed_tokens.", &loader);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
@@ -310,7 +313,7 @@ namespace v2
                     LOAD_TENSORS();
                 }
             }
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            transformer->final_layernorm->load("model.norm.", &loader);
 
             CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights: " << w_ctx_.get_used_mem() / ggml_tensor_overhead() << " != " << w_ctx_.get_mem_size() / ggml_tensor_overhead();

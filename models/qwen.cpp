@@ -196,7 +196,7 @@ namespace v1
     void ConditionalGeneration::load(ModelLoader &loader)
     {
         auto transformer = get_typed_transformer<ModelClass>();
-        loader.read_tensor("transformer.wte.weight", transformer->word_embeddings.weight);
+        transformer->word_embeddings->load("transformer.wte.", &loader);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             std::string layer_prefix = "transformer.h." + std::to_string(layer_ids[i]) + '.';
@@ -216,7 +216,7 @@ namespace v1
             loader.read_tensor(layer_prefix + "mlp.w1.weight",   transformer->layers[i].mlp.up_proj.weight);
             loader.read_tensor(layer_prefix + "mlp.w2.weight", transformer->layers[i].mlp.gate_proj.weight);
         }
-        loader.read_tensor("transformer.ln_f.weight", transformer->final_layernorm.weight);
+        transformer->final_layernorm->load("transformer.ln_f.", &loader);
         loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
         CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
@@ -390,7 +390,7 @@ namespace v2_moe
         {
             auto transformer = Base::get_typed_transformer<ModelClass>();
 
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            transformer->word_embeddings->load("model.embed_tokens.", &loader);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
@@ -418,7 +418,7 @@ namespace v2_moe
                 loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer->layers[i].attention.v_proj.bias);
                 loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
             }
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            transformer->final_layernorm->load("model.norm.", &loader);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
             CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
@@ -794,7 +794,7 @@ namespace v3
     {
     public:
         typedef BaseModelForConditionalGeneration Base;
-        typedef HeterogeneousModel<Config, Embedding, RMSNorm> ModelClass;
+        typedef HeterogeneousModel ModelClass;
     public:
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_QWEN3)
             : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
@@ -811,14 +811,20 @@ namespace v3
 
             if (config.tie_word_embeddings)
             {
-                transformer = new ModelClass(&w_ctx_, config, nullptr,
+                transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
+                    create_embedding<Embedding>(&w_ctx_, config),
+                    create_final_norm<RMSNorm>(&w_ctx_, config),
+                    nullptr,
                     [&](InitContext *ctx, int layer_index) {
                         return create_layer(ctx, layer_index);
                     });
             }
             else
             {
-                transformer = new ModelClass(&w_ctx_, config, false,
+                transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
+                    create_embedding<Embedding>(&w_ctx_, config),
+                    create_final_norm<RMSNorm>(&w_ctx_, config),
+                    create_lm_head(&w_ctx_, config, false),
                     [&](InitContext *ctx, int layer_index) {
                         return create_layer(ctx, layer_index);
                     });

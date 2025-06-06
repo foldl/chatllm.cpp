@@ -1484,24 +1484,23 @@ namespace chatllm
         return oss.str();
     }
 
-    template <class Config, class Embedding, class FinalNorm> class HeterogeneousModel : public ModelBlock
+    class HeterogeneousModel : public ModelBlock
     {
     public:
         HeterogeneousModel() = default;
 
-        HeterogeneousModel(InitContext *ctx, const Config &config, bool lm_head_bias, std::function<Block *(InitContext *, int)> create_layer)
-                : HeterogeneousModel(ctx, config, new Linear(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, config.vocab_size, lm_head_bias), create_layer)
-        {}
-
-        HeterogeneousModel(InitContext *ctx, const Config &config, Block *lm_head, std::function<Block *(InitContext *, int)> create_layer)
-        : config(config),
-          word_embeddings(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), config.vocab_size, config.hidden_size, config.max_length),
-          final_layernorm(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size),
-          lm_head(lm_head), logits_pp(nullptr),
+        HeterogeneousModel(InitContext *ctx, int num_hidden_layers, int hidden_size,
+            Block *word_embeddings, Block *final_layernorm,
+            Block *lm_head, std::function<Block *(InitContext *, int)> create_layer)
+        : num_hidden_layers(num_hidden_layers), hidden_size(hidden_size),
+          word_embeddings(word_embeddings),
+          final_layernorm(final_layernorm),
+          lm_head(lm_head),
+          logits_pp(nullptr),
           cache_size(0)
         {
-            layers.reserve(config.num_hidden_layers);
-            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+            layers.reserve(num_hidden_layers);
+            for (int layer_id = 0; layer_id < num_hidden_layers; layer_id++)
             {
                 ctx->move_to_layer(layer_id);
                 auto layer = create_layer(ctx, layer_id);
@@ -1516,12 +1515,20 @@ namespace chatllm
             }
         }
 
+        ~HeterogeneousModel()
+        {
+            if (word_embeddings) delete word_embeddings;
+            if (final_layernorm) delete final_layernorm;
+            if (lm_head) delete lm_head;
+            for (auto b : layers) delete b;
+        }
+
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) override
         {
             before_forward(ctx, input_ids, n_past);
 
             ctx->move_to_layer(LayerAllocatorManager::Prolog);
-            ggml::tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
+            ggml::tensor *hidden_states = word_embeddings->forward(ctx, input_ids);
             for (auto &layer : layers)
             {
                 ctx->move_to_layer(layer->get_id());
@@ -1547,9 +1554,9 @@ namespace chatllm
         int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
-            r += word_embeddings.get_param_num(effective_only);
+            r += word_embeddings->get_param_num(effective_only);
             r += get_param_num_of_layers(effective_only);
-            r += final_layernorm.get_param_num(effective_only);
+            r += final_layernorm->get_param_num(effective_only);
             if (lm_head)
                 r += lm_head->get_param_num(effective_only);
             if (logits_pp)
@@ -1570,7 +1577,7 @@ namespace chatllm
 
             std::vector<uint8_t> buffer;
 
-            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+            for (int layer_id = 0; layer_id < num_hidden_layers; layer_id++)
             {
                 auto layer = layers[layer_id];
                 buffer.resize(layer->get_cache_size());
@@ -1594,7 +1601,7 @@ namespace chatllm
 
             std::vector<uint8_t> buffer;
 
-            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+            for (int layer_id = 0; layer_id < num_hidden_layers; layer_id++)
             {
                 auto layer = layers[layer_id];
                 buffer.resize(layer->get_cache_size());
@@ -1610,7 +1617,7 @@ namespace chatllm
 
         int save_session(ModelSessionMemory &session) const override
         {
-            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+            for (int layer_id = 0; layer_id < num_hidden_layers; layer_id++)
             {
                 auto layer = layers[layer_id];
                 const size_t size = layer->get_cache_size();
@@ -1624,7 +1631,7 @@ namespace chatllm
 
         int load_session(ModelSessionMemory &session) override
         {
-            for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+            for (int layer_id = 0; layer_id < num_hidden_layers; layer_id++)
             {
                 auto layer = layers[layer_id];
                 size_t size = 0;
@@ -1639,12 +1646,12 @@ namespace chatllm
 
         void load(const std::string &path, TensorLoader *loader, const std::vector<int> &layer_ids) override
         {
-            word_embeddings.load(path + "embed_tokens.", loader);
-            final_layernorm.load(path + "norm.", loader);
+            word_embeddings->load(path + "embed_tokens.", loader);
+            final_layernorm->load(path + "norm.", loader);
             if (lm_head)
                 lm_head->load("lm_head.", loader);
 
-            for (int i = 0; i < config.num_hidden_layers; i++)
+            for (int i = 0; i < num_hidden_layers; i++)
             {
                 std::string layer_prefix = path + "layers." + std::to_string(layer_ids[i]) + '.';
                 layers[i]->load(layer_prefix, loader);
@@ -1667,28 +1674,29 @@ namespace chatllm
             return r;
         }
 
-        ggml::tensor *final_steps(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
+        virtual ggml::tensor *final_steps(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
         {
-            hidden_states = ggml::view_2d(ctx, hidden_states, config.hidden_size, 1,
-                config.hidden_size * ggml::element_size(hidden_states),
-                (input_ids->ne[0] - 1) * config.hidden_size * ggml::element_size(hidden_states));
+            hidden_states = ggml::view_2d(ctx, hidden_states, hidden_size, 1,
+                hidden_size * ggml::element_size(hidden_states),
+                (input_ids->ne[0] - 1) * hidden_size * ggml::element_size(hidden_states));
 
-            ggml::tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
+            ggml::tensor *transformer_outputs = final_layernorm->forward(ctx, hidden_states);
 
             transformer_outputs =
-                    ggml::view_1d(ctx, transformer_outputs, config.hidden_size, 0);
+                    ggml::view_1d(ctx, transformer_outputs, hidden_size, 0);
 
             ggml::tensor *lm_logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
-                                             : word_embeddings.forward(ctx, transformer_outputs);
+                                             : word_embeddings->forward(ctx, transformer_outputs);
 
             if (logits_pp)
                 lm_logits = logits_pp->forward(ctx, lm_logits);
             return lm_logits;
         }
     public:
-        Config config;
-        Embedding word_embeddings;
-        FinalNorm final_layernorm;
+        const int num_hidden_layers;
+        const int hidden_size;
+        Block *word_embeddings;
+        Block *final_layernorm;
         Block *lm_head;
         Block *logits_pp;
     protected:
@@ -1697,11 +1705,26 @@ namespace chatllm
         size_t cache_size;
     };
 
+    template <class Embedding> Block *create_embedding(InitContext *ctx, const BaseConfig &config)
+    {
+        return new Embedding(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), config.vocab_size, config.hidden_size, config.max_length);
+    }
+
+    template <class FinalNorm> Block *create_final_norm(InitContext *ctx, const BaseConfig &config)
+    {
+        return new FinalNorm(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size);
+    }
+
+    Block *create_lm_head(InitContext *ctx, const BaseConfig &config, bool bias = false)
+    {
+        return new Linear(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, config.vocab_size, bias);
+    }
+
     template <class Config, class Embedding, class FinalNorm, class LayerBlock, typename... _Types> class Model :
-        public HeterogeneousModel<Config, Embedding, FinalNorm>
+        public HeterogeneousModel
     {
     private:
-        typedef HeterogeneousModel<Config, Embedding, FinalNorm> Base;
+        typedef HeterogeneousModel Base;
     protected:
         class Accessor
         {
@@ -1724,11 +1747,16 @@ namespace chatllm
     public:
         Model() = default;
         Model(InitContext *ctx, const Config &config, bool lm_head_bias, _Types... layer_args)
-            : Model(ctx, config, new Linear(ctx, config.hidden_size, config.vocab_size, lm_head_bias), std::forward<_Types>(layer_args)...)
+            : Model(ctx, config,
+                create_lm_head(ctx, config, lm_head_bias),
+                std::forward<_Types>(layer_args)...)
         {}
 
         Model(InitContext *ctx, const Config &config, Block *lm_head, _Types... layer_args)
-        : HeterogeneousModel<Config, Embedding, FinalNorm>(ctx, config, lm_head,
+        : HeterogeneousModel(ctx, config.num_hidden_layers, config.hidden_size,
+                            create_embedding<Embedding>(ctx, config),
+                            create_final_norm<FinalNorm>(ctx, config),
+                            lm_head,
                             [&](InitContext *ctx, int layer_index) {
                                 return new LayerBlock(ctx, std::forward<_Types>(layer_args)...);
                             })
@@ -1752,7 +1780,7 @@ namespace chatllm
     {
     public:
         typedef Model<Config, Embedding, FinalBlock, LayerBlock, _Types...> Base;
-        typedef HeterogeneousModel<Config, Embedding, FinalBlock> BaseBase;
+        typedef HeterogeneousModel BaseBase;
 
         EmbeddingModel() = default;
 
@@ -1761,25 +1789,10 @@ namespace chatllm
         {
         }
 
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) override
-        {
-            Base::before_forward(ctx, input_ids, n_past);
-
-            ctx->move_to_layer(LayerAllocatorManager::Prolog);
-            ggml::tensor *hidden_states = Base::word_embeddings.forward(ctx, input_ids, n_past);
-            for (auto &layer : BaseBase::layers)
-            {
-                ctx->move_to_layer(layer->get_id());
-                hidden_states = layer->forward(ctx, hidden_states, n_past);
-            }
-            ctx->move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
-            return final_steps(ctx, input_ids, hidden_states);
-        }
-
     protected:
-        ggml::tensor *final_steps(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
+        ggml::tensor *final_steps(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states) override
         {
-            ggml::tensor *transformer_outputs = Base::final_layernorm.forward(ctx, hidden_states);
+            ggml::tensor *transformer_outputs = Base::final_layernorm->forward(ctx, hidden_states);
 
             return transformer_outputs;
         }

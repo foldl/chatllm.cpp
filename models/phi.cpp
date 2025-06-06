@@ -261,7 +261,7 @@ namespace v2
         void ConditionalGeneration::load(ModelLoader &loader)
         {
             auto transformer = get_typed_transformer<ModelClass>();
-            loader.read_tensor("transformer.embd.wte.weight", transformer->word_embeddings.weight);
+            transformer->word_embeddings->load("transformer.embd.wte.", &loader);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "transformer.h." + std::to_string(layer_ids[i]) + '.';
@@ -283,9 +283,7 @@ namespace v2
                 loader.read_tensor(layer_prefix + "mlp.fc2.bias",   transformer->layers[i].mlp.fc1.bias);
                 loader.read_tensor(layer_prefix + "mlp.fc2.weight", transformer->layers[i].mlp.fc1.weight);
             }
-
-            loader.read_tensor("lm_head.ln.bias", transformer->final_layernorm.bias);
-            loader.read_tensor("lm_head.ln.weight", transformer->final_layernorm.weight);
+            transformer->final_layernorm->load("lm_head.ln.", &loader);
 
             loader.read_tensor("lm_head.linear.bias", dynamic_cast<Linear *>(transformer->lm_head)->bias);
             loader.read_tensor("lm_head.linear.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
@@ -334,7 +332,7 @@ namespace v2
         void ConditionalGeneration::load(ModelLoader &loader)
         {
             auto transformer = get_typed_transformer<ModelClass>();
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            transformer->word_embeddings->load("model.embed_tokens.", &loader);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
@@ -356,9 +354,7 @@ namespace v2
                 loader.read_tensor(layer_prefix + "mlp.fc2.bias",   transformer->layers[i].mlp.fc1.bias);
                 loader.read_tensor(layer_prefix + "mlp.fc2.weight", transformer->layers[i].mlp.fc1.weight);
             }
-
-            loader.read_tensor("model.final_layernorm.bias", transformer->final_layernorm.bias);
-            loader.read_tensor("model.final_layernorm.weight", transformer->final_layernorm.weight);
+            transformer->final_layernorm->load("model.final_layernorm.", &loader);
 
             loader.read_tensor("lm_head.bias", dynamic_cast<Linear *>(transformer->lm_head)->bias);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
@@ -779,7 +775,7 @@ namespace v3_moe
         void load(ModelLoader &loader) override
         {
             auto transformer = get_typed_transformer<ModelClass>();
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            transformer->word_embeddings->load("model.embed_tokens.", &loader);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
@@ -810,8 +806,7 @@ namespace v3_moe
                 loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
                 loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer->layers[i].attention.v_proj.bias);
             }
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
-            loader.read_tensor("model.norm.bias",   transformer->final_layernorm.bias);
+            transformer->final_layernorm->load("model.norm.", &loader);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
             loader.read_tensor("lm_head.bias",   dynamic_cast<Linear *>(transformer->lm_head)->bias);
         }

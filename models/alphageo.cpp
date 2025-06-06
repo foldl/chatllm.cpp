@@ -558,7 +558,7 @@ public:
     {
         auto transformer = get_typed_transformer<ModelClass>();
 
-        loader.read_tensor("model.embed_tokens.weight",     transformer->word_embeddings.weight);
+        transformer->word_embeddings->load("model.embed_tokens.", &loader);
 
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
@@ -578,7 +578,7 @@ public:
             loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
         }
 
-        loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+        transformer->final_layernorm->load("model.norm.", &loader);
 
         CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";

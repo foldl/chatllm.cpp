@@ -140,7 +140,7 @@ namespace moe
         void load(ModelLoader &loader) override
         {
             auto transformer = get_typed_transformer<ModelClass>();
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            transformer->word_embeddings->load("model.embed_tokens.", &loader);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
@@ -165,7 +165,7 @@ namespace moe
                 loader.read_tensor(layer_prefix + "self_attn.q_norm.weight", transformer->layers[i].attention.q_norm.weight);
                 loader.read_tensor(layer_prefix + "self_attn.k_norm.weight", transformer->layers[i].attention.k_norm.weight);
             }
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            transformer->final_layernorm->load("model.norm.", &loader);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
             CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
@@ -228,7 +228,7 @@ namespace dense
         void load(ModelLoader &loader) override
         {
             auto transformer = get_typed_transformer<ModelClass>();
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            transformer->word_embeddings->load("model.embed_tokens.", &loader);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
@@ -251,7 +251,7 @@ namespace dense
                 loader.read_tensor(layer_prefix + "self_attn.q_norm.weight", transformer->layers[i].attention.q_norm.weight);
                 loader.read_tensor(layer_prefix + "self_attn.k_norm.weight", transformer->layers[i].attention.k_norm.weight);
             }
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            transformer->final_layernorm->load("model.norm.", &loader);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
             CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())

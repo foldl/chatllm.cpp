@@ -19,7 +19,7 @@ class ConditionalGeneration : public BaseModelForConditionalGeneration
 {
 public:
     typedef BaseModelForConditionalGeneration Base;
-    typedef HeterogeneousModel<Config, Embedding, RMSNorm> ModelClass;
+    typedef HeterogeneousModel ModelClass;
 
 public:
     ConditionalGeneration() = default;
@@ -63,8 +63,10 @@ public:
             }
         };
 
-        transformer = new ModelClass(
-            &w_ctx_, config, false, create_layer);
+        transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
+                    create_embedding<Embedding>(&w_ctx_, config),
+                    create_final_norm<RMSNorm>(&w_ctx_, config),
+                    create_lm_head(&w_ctx_, config, false), create_layer);
 
         CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights: " << w_ctx_.get_used_mem() / ggml_tensor_overhead() << " vs "
@@ -74,8 +76,7 @@ public:
     void load(ModelLoader &loader) override
     {
         auto transformer = get_typed_transformer<ModelClass>();
-        loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
-
+        transformer->word_embeddings->load("model.embed_tokens.", &loader);
 
         #define LOAD_MLP()                                                                              \
             loader.read_tensor(layer_prefix + "mlp.down_proj.weight", layer->mlp.down_proj.weight);     \
@@ -107,7 +108,7 @@ public:
             }
 
         }
-        loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+        transformer->final_layernorm->load("model.norm.", &loader);
 
         #undef LOAD_MLP
 

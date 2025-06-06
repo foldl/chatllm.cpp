@@ -587,6 +587,7 @@ namespace multi
                        int num_key_value_heads, int max_length, int n_future_tokens)
             : Model<BaseConfig, Embedding, RMSNorm, LlamaBlock, int, int, int, int, int>(
                     ctx, config, false, hidden_size, num_attention_heads, intermediate_size, num_key_value_heads, max_length),
+              config(config),
               n_future_tokens(n_future_tokens)
         {
             effective_n = n_future_tokens;
@@ -617,7 +618,7 @@ namespace multi
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) override
         {
-            ggml::tensor *hidden_states = word_embeddings.forward(ctx, input_ids);
+            ggml::tensor *hidden_states = word_embeddings->forward(ctx, input_ids);
             for (int i = 0; i <= config.num_hidden_layers - 2; i++)
             {
                 hidden_states = get_layer(i)->forward(ctx, hidden_states, n_past);
@@ -662,19 +663,20 @@ namespace multi
                                         config.hidden_size * ggml::element_size(hidden_states),
                                         (input_ids->ne[0] - 1) * config.hidden_size * ggml::element_size(hidden_states));
 
-            ggml::tensor *transformer_outputs = final_layernorm.forward(ctx, hidden_states);
+            ggml::tensor *transformer_outputs = final_layernorm->forward(ctx, hidden_states);
 
             transformer_outputs =
                     ggml::view_1d(ctx, transformer_outputs, config.hidden_size, 0);
 
             ggml::tensor *logits = lm_head ? lm_head->forward(ctx, transformer_outputs)
-                                             : word_embeddings.forward(ctx, transformer_outputs);
+                                             : word_embeddings->forward(ctx, transformer_outputs);
 
             if (logits_pp)
                 logits = logits_pp->forward(ctx, logits);
             return logits;
         }
     public:
+        Config config;
         const int n_future_tokens;
         std::vector<LlamaBlock *> extra_heads;
         std::vector<Block *> prediction_heads;
@@ -707,7 +709,7 @@ namespace multi
         void load(ModelLoader &loader) override
         {
             auto transformer = Base::get_typed_transformer<MultiPredModel>();
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            transformer->word_embeddings->load("model.embed_tokens.", &loader);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
@@ -737,7 +739,7 @@ namespace multi
                 loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->extra_heads[i]->attention.q_proj.weight);
                 loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->extra_heads[i]->attention.v_proj.weight);
             }
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            transformer->final_layernorm->load("model.norm.", &loader);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
             CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
@@ -948,7 +950,7 @@ namespace v4
         typedef LlamaMoEBlock_<SelfAttention, LlamaMoEMLP> LlamaMoEBlock;
         typedef LMBlock1<RMSNorm, SelfAttention, RMSNorm, SiLUMLP> LlamaDenseBlock;
         typedef BaseModelForConditionalGeneration Base;
-        typedef HeterogeneousModel<Config, Embedding, RMSNorm> ModelClass;
+        typedef HeterogeneousModel ModelClass;
     public:
         ConditionalGeneration0() = default;
 
@@ -992,8 +994,10 @@ namespace v4
                 }
             };
 
-            auto transformer = new ModelClass(
-                &w_ctx_, config, false, create_layer);
+            auto transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
+                create_embedding<Embedding>(&w_ctx_, config),
+                create_final_norm<RMSNorm>(&w_ctx_, config),
+                create_lm_head(&w_ctx_, config, false), create_layer);
             Base::transformer = transformer;
 
             std::vector<float> freq_factors_value;
@@ -1042,8 +1046,8 @@ namespace v4
         {
             auto transformer = get_typed_transformer<ModelClass>();
 
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            transformer->word_embeddings->load("model.embed_tokens.", &loader);
+            transformer->final_layernorm->load("model.norm.", &loader);
             loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
             SelfAttention *attention = nullptr;

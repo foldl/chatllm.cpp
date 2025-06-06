@@ -77,7 +77,7 @@ namespace v1
         {
             auto transformer = get_typed_transformer<ModelClass>();
 
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            transformer->word_embeddings->load("model.embed_tokens.", &loader);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
@@ -92,7 +92,7 @@ namespace v1
                 loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
                 loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
             }
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            transformer->final_layernorm->load("model.norm.", &loader);
 
             if (transformer->lm_head)
                 loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
@@ -332,7 +332,7 @@ namespace moe
         {
             auto transformer = get_typed_transformer<ModelClass>();
 
-            loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
+            transformer->word_embeddings->load("model.embed_tokens.", &loader);
             for (int i = 0; i < config.num_hidden_layers; i++)
             {
                 std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
@@ -351,7 +351,7 @@ namespace moe
                 loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
                 loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
             }
-            loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
+            transformer->final_layernorm->load("model.norm.", &loader);
 
             CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
                 << "corrupted model weights";
@@ -644,7 +644,7 @@ namespace emb_light
         {
             {
                 auto transformer = get_typed_transformer<ModelClass>();
-                transformer->final_layernorm.set_max_length(&w_ctx_, config.max_length);
+                (dynamic_cast<MiniCPMMeanPooling *>(transformer->final_layernorm))->set_max_length(&w_ctx_, config.max_length);
             }
         }
     };

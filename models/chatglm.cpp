@@ -187,7 +187,7 @@ namespace v1
     {
         TransformerClass *transformer = dynamic_cast<TransformerClass *>(this->transformer);
 
-        loader.read_tensor("transformer.word_embeddings.weight", transformer->word_embeddings.weight);
+        transformer->word_embeddings->load("transformer.word_embeddings.", &loader);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             std::string layer_prefix = "transformer.layers." + std::to_string(layer_ids[i]) + '.';
@@ -208,8 +208,7 @@ namespace v1
             loader.read_tensor(layer_prefix + "mlp.dense_4h_to_h.weight", transformer->layers[i].mlp.fc1.weight);
             loader.read_tensor(layer_prefix + "mlp.dense_4h_to_h.bias", transformer->layers[i].mlp.fc1.bias);
         }
-        loader.read_tensor("transformer.final_layernorm.weight", transformer->final_layernorm.weight);
-        loader.read_tensor("transformer.final_layernorm.bias", transformer->final_layernorm.bias);
+        transformer->final_layernorm->load("transformer.final_layernorm.", &loader);
 
         CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
@@ -339,7 +338,7 @@ namespace v2
     void ConditionalGeneration::load(ModelLoader &loader)
     {
         TransformerClass *transformer = dynamic_cast<TransformerClass *>(this->transformer);
-        loader.read_tensor("transformer.embedding.word_embeddings.weight", transformer->word_embeddings.weight);
+        transformer->word_embeddings->load("transformer.embedding.word_embeddings.", &loader);
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             std::string layer_prefix = "transformer.encoder.layers." + std::to_string(layer_ids[i]) + '.';
@@ -354,7 +353,7 @@ namespace v2
             loader.read_tensor(layer_prefix + "mlp.dense_h_to_4h.weight", transformer->layers[i].mlp.dense_h_to_4h.weight);
             loader.read_tensor(layer_prefix + "mlp.dense_4h_to_h.weight", transformer->layers[i].mlp.dense_4h_to_h.weight);
         }
-        loader.read_tensor("transformer.encoder.final_layernorm.weight", transformer->final_layernorm.weight);
+        transformer->final_layernorm->load("transformer.encoder.final_layernorm.", &loader);
         loader.read_tensor("transformer.output_layer.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
 
         CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())

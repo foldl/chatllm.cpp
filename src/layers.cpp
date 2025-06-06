@@ -1271,7 +1271,7 @@ namespace chatllm
         return ggml::nbytes(&t);
     }
 
-    ggml::tensor *RobertaEmbedding::forward(ComputeContext *ctx, ggml::tensor *input, int n_past)
+    ggml::tensor *RobertaEmbedding::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         int qlen = (int)input->ne[0];
 

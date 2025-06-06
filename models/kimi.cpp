@@ -723,12 +723,12 @@ namespace vl
         void before_generate(const GenerationConfig &gen_config) override
         {
             std::vector<uint8_t> buf;
-            auto &emb = dynamic_cast<ModelClass *>(transformer)->word_embeddings;
-            visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb.weight), buf);
+            auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
+            visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
             if (buf.size() < 1) return;
 
-            size_t offset = emb.get_base_nbytes();
-            Backend::write_tensor_data(emb.weight, buf.data(), offset, buf.size());
+            size_t offset = emb->get_base_nbytes();
+            Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
         }
     public:
         vit::VisualEmbeddingGeneration visual;

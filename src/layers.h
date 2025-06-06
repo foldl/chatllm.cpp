@@ -581,7 +581,7 @@ namespace chatllm
         }
 
         using Block::forward;
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int n_past) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
 
         int64_t get_param_num(bool effective_only) const override
         {

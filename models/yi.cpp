@@ -44,8 +44,6 @@ public:
     ConditionalGeneration() = default;
     ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_YI);
 
-    void load(ModelLoader &loader) override;
-
 public:
     Config config;
 };
@@ -140,31 +138,4 @@ ConditionalGeneration::ConditionalGeneration(const Config &config, const Runtime
         attention.freq_base = config.rope_theta;
         attention.freq_scale = 1 / config.rope_scaling;
     }
-}
-
-void ConditionalGeneration::load(ModelLoader &loader)
-{
-    auto transformer = get_typed_transformer<ModelClass>();
-    loader.read_tensor("model.embed_tokens.weight", transformer->word_embeddings.weight);
-    for (int i = 0; i < config.num_hidden_layers; i++)
-    {
-        std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
-        loader.read_tensor(layer_prefix + "input_layernorm.weight",
-                           transformer->layers[i].input_layernorm.weight);
-        loader.read_tensor(layer_prefix + "mlp.down_proj.weight", transformer->layers[i].mlp.down_proj.weight);
-        loader.read_tensor(layer_prefix + "mlp.gate_proj.weight", transformer->layers[i].mlp.gate_proj.weight);
-        loader.read_tensor(layer_prefix + "mlp.up_proj.weight", transformer->layers[i].mlp.up_proj.weight);
-        loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",
-                           transformer->layers[i].post_attention_layernorm.weight);
-
-        loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
-        loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
-    }
-    loader.read_tensor("model.norm.weight", transformer->final_layernorm.weight);
-    loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
-
-    CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
-        << "corrupted model weights";
 }
