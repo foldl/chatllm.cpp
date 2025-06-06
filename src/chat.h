@@ -250,6 +250,13 @@ namespace chatllm
             int emb_vec_number;
             std::vector<float> data;
         };
+
+        enum EmbeddingPurpose
+        {
+            Document,
+            Query,
+        };
+
     public:
         BaseTokenizer(const BaseConfig &config,
                         BaseHistoryEncoder *chat_encoder,
@@ -268,6 +275,7 @@ namespace chatllm
         virtual void encode_external_text_completion(const std::string &text, std::vector<int> &ids) const;
 
         virtual void encode_qa(const std::string &q, const std::string &a, std::vector<int> &ids) const;
+        virtual void encode_embedding(const std::string &text, std::vector<int> &ids, EmbeddingPurpose purpose) const;
 
         virtual std::string decode(const std::vector<int> &ids) const;
 
@@ -1320,7 +1328,7 @@ namespace chatllm
         void set_extending_method(ExtendingMethod method);
         virtual void set_additional_args(const std::map<std::string, std::string> &args);
 
-        void text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result);
+        void text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result, BaseTokenizer::EmbeddingPurpose purpose = BaseTokenizer::EmbeddingPurpose::Document);
         void text_tokenize(const std::string &input, const GenerationConfig &gen_config, std::vector<int> &result);
         float qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config);
 

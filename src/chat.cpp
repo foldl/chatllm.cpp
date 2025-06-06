@@ -613,6 +613,11 @@ namespace chatllm
         tp->Encode(input, &ids);
     }
 
+    void BaseTokenizer::encode_embedding(const std::string &text, std::vector<int> &ids, EmbeddingPurpose purpose) const
+    {
+        encode(text, ids);
+    }
+
     std::vector<int> BaseTokenizer::encode(const std::string &text) const
     {
         std::vector<int> ids;
@@ -1851,11 +1856,11 @@ namespace chatllm
         tokenizer->encode(input, result);
     }
 
-    void Pipeline::text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result)
+    void Pipeline::text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result, BaseTokenizer::EmbeddingPurpose purpose)
     {
         if (!modelobj.loaded) return;
         std::vector<int> input_ids;
-        tokenizer->encode(input, input_ids);
+        tokenizer->encode_embedding(input, input_ids, purpose);
         model->text_embedding(gen_config, input_ids, result);
     }
 

@@ -313,10 +313,13 @@ Please use `--format completion` for these models.
 
         Note: Only dense embedding is implemented.
 
+    * Qwen-3 Embedding: [0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B/tree/b22da495047858cce924d27d76261e96be6febc0), [4B](https://huggingface.co/Qwen/Qwen3-Embedding-4B/tree/636cd9bf47d976946cdbb2b0c3ca0cb2f8eea5ff), [8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B/commit/4e423935c619ae4df87b646a3ce949610c66241c)
+
 * QA Ranking (`XLMRobertaForSequenceClassification`)
     * [x] [BCE-ReRanker](https://huggingface.co/maidalun1020/bce-reranker-base_v1)
     * [x] [BGE-ReRanker-M3](https://huggingface.co/BAAI/bge-reranker-v2-m3) (`-a BGE-Reranker-M3`)
     * [x] [MiniCPM-Reranker-Light](https://huggingface.co/openbmb/MiniCPM-Reranker-Light)
+    * [x] Qwen-3 Reranker: [0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B/tree/ad4c588e592307dad69ff0fabc1b3ca5ea8e9f76), [4B](https://huggingface.co/Qwen/Qwen3-Reranker-4B/tree/57906229d41697e4494d50ca5859598cf86154a1), [8B](https://huggingface.co/Qwen/Qwen3-Reranker-8B/tree/d678ef8b29dd0eb9d784473da5d5169b21ec948a)
 
 ## LoRA Models
 

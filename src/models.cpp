@@ -141,7 +141,6 @@ namespace chatllm
         }
 
         printf("\n");
-        exit(-1);
     }
 
     static bool need_observe_tensor_evaluation_callback(ggml::tensor *tensor, void *user_data)
@@ -359,6 +358,8 @@ namespace chatllm
         MODEL_TYPE_ORPHEUS_TTS              = 0x10000106,
         MODEL_TYPE_OUTE_TTS_LLAMA           = 0x10000107,
         MODEL_TYPE_OUTE_TTS_QWEN3           = 0x10000108,
+        MODEL_TYPE_QWEN3_Embedding          = 0x10000109,
+        MODEL_TYPE_QWEN3_ReRanker           = 0x1000010A,
 
         MODEL_TYPE_LLAMA_MULTI      = 0x20000001,
 
@@ -377,10 +378,12 @@ namespace chatllm
         case MODEL_TYPE_BCE_Embedding:
         case MODEL_TYPE_BGE_M3:
         case MODEL_TYPE_MiniCPM_Embedding_Light:
+        case MODEL_TYPE_QWEN3_Embedding:
             return ModelPurpose::TextEmbedding;
         case MODEL_TYPE_BCE_ReRanker:
         case MODEL_TYPE_BGE_ReRanker_M3:
         case MODEL_TYPE_MiniCPM_ReRanker_Light:
+        case MODEL_TYPE_QWEN3_ReRanker:
             return ModelPurpose::Ranker;
         case MODEL_TYPE_ORPHEUS_TTS:
         case MODEL_TYPE_OUTE_TTS_LLAMA:
@@ -1556,6 +1559,11 @@ namespace chatllm
         this->final_steps = std::move(final_steps);
     }
 
+    ModelFinalSteps *HeterogeneousModel::get_final_steps()
+    {
+        return final_steps.get();
+    }
+
     int HeterogeneousModel::save_session(FILE *f)
     {
         struct state state = {.cache_size = cache_size };
@@ -1656,8 +1664,8 @@ namespace chatllm
     ggml::tensor *LMFinalSteps::forward(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
     {
         hidden_states = ggml::view_2d(ctx, hidden_states, model->hidden_size, 1,
-            model->hidden_size * ggml::element_size(hidden_states),
-            (input_ids->ne[0] - 1) * model->hidden_size * ggml::element_size(hidden_states));
+            ggml::row_size(hidden_states),
+            (ggml::get_dim(input_ids, 0) - 1) * ggml::row_size(hidden_states));
 
         ggml::tensor *transformer_outputs = model->final_layernorm->forward(ctx, hidden_states);
 
@@ -1681,7 +1689,12 @@ namespace chatllm
 
     ggml::tensor *EmbeddingLastTokenFinalSteps::forward(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
     {
-        return nullptr;
+        hidden_states = ggml::view_2d(ctx, hidden_states, model->hidden_size, 1,
+            ggml::row_size(hidden_states),
+            (ggml::get_dim(input_ids, 0) - 1) * ggml::row_size(hidden_states));
+        ggml::tensor *transformer_outputs = model->final_layernorm->forward(ctx, hidden_states);
+        transformer_outputs = ggml::simple_norm(ctx, transformer_outputs, 1e-5f);
+        return transformer_outputs;
     }
 
     template <class Embedding> Block *create_embedding(InitContext *ctx, const BaseConfig &config)
@@ -2481,7 +2494,10 @@ namespace chatllm
         CASE(MiniCPM_ReRanker_Light,    minicpm::ranker_light, 1)\
         CASE(ORPHEUS_TTS,               orpheus::tts, 1)        \
         CASE(OUTE_TTS_LLAMA,            oute::tts_llama, 1)     \
-        CASE(OUTE_TTS_QWEN3,            oute::tts_qwen3, 1)
+        CASE(OUTE_TTS_QWEN3,            oute::tts_qwen3, 1)     \
+        CASE(QWEN3_Embedding,           qwen::v3_emb, 1)        \
+        CASE(QWEN3_ReRanker,            qwen::v3_ranker, 1)     \
+        \
 
 
     AbstractModel *ModelFactory::load_model_again(ModelLoader &loader, const ModelObject::extra_args &args)

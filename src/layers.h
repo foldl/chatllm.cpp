@@ -125,7 +125,7 @@ namespace chatllm
         ggml::tensor *norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *rms_norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *rms_norm(ComputeContext *ctx, ggml::tensor *a, float eps);
-        ggml::tensor *simple_norm(ComputeContext *ctx, ggml::tensor *a, float eps);
+        ggml::tensor *simple_norm(ComputeContext *ctx, ggml::tensor *a, float eps); // p=2 normalization
 
         ggml::tensor *rope(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int n_dims, int mode);
         ggml::tensor *rope_ext(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c,

@@ -811,17 +811,18 @@ static void run_tts(Args &args, chatllm::Pipeline &pipeline, TextStreamer &strea
 static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
     std::vector<float> result;
+    chatllm::BaseTokenizer::EmbeddingPurpose purpose = chatllm::BaseTokenizer::EmbeddingPurpose::Document;
 
     if (!args.interactive)
     {
-        pipeline.text_embedding(args.prompt, gen_config, result);
+        pipeline.text_embedding(args.prompt, gen_config, result, purpose);
         print_embedding(result, streamer.cout);
         return;
     }
 
     while (1)
     {
-        streamer.cout << "Input > " << std::flush;
+        streamer.cout << "Input " << (purpose == chatllm::BaseTokenizer::EmbeddingPurpose::Document ? "Doc" : "Query") <<  " > " << std::flush;
         std::string input;
         if (!get_utf8_line(input, args.multi_line))
         {
@@ -831,11 +832,13 @@ static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, TextStre
         if (input.empty()) continue;
 
         result.clear();
-        pipeline.text_embedding(input, gen_config, result);
+        pipeline.text_embedding(input, gen_config, result, purpose);
         streamer.cout << "      > ";
 
         print_embedding(result, streamer.cout);
 
+        purpose = purpose == chatllm::BaseTokenizer::EmbeddingPurpose::Document ?
+                    chatllm::BaseTokenizer::EmbeddingPurpose::Query : chatllm::BaseTokenizer::EmbeddingPurpose::Document;
     }
     streamer.cout << "Bye\n";
 }

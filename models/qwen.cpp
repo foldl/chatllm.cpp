@@ -793,10 +793,9 @@ namespace v3
     class ConditionalGeneration : public BaseModelForConditionalGeneration
     {
     public:
-        typedef BaseModelForConditionalGeneration Base;
         typedef HeterogeneousModel ModelClass;
     public:
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_QWEN3)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_QWEN3, const bool skip_lm_head = false, int extra_tensors = 0)
             : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
               config(config)
         {
@@ -804,12 +803,13 @@ namespace v3
             const int sparse_layers = get_sparse_layer_num();
             const size_t num_tensors = 3 + (config.tie_word_embeddings ? -1 : 0)
                                          + (config.num_hidden_layers - sparse_layers) * 14
-                                         + sparse_layers * (14 + 1);
+                                         + sparse_layers * (14 + 1)
+                                         + extra_tensors;
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
 
-            if (config.tie_word_embeddings)
+            if (skip_lm_head || config.tie_word_embeddings)
             {
                 transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
                     create_embedding<Embedding>(&w_ctx_, config),
@@ -837,18 +837,18 @@ namespace v3
             {
                 if (config.layer_is_sparse[i])
                 {
-                    auto layer = (QWen3MoEBlock128_8 *)Base::get_typed_transformer<ModelClass>()->get_layer(i);
+                    auto layer = (QWen3MoEBlock128_8 *)get_typed_transformer<ModelClass>()->get_layer(i);
                     layer->attention.freq_base = config.rope_theta;
                     layer->mlp.norm_topk_prob = config.norm_topk_prob != 0;
                 }
                 else
                 {
-                    auto layer = (QWen3Block *)Base::get_typed_transformer<ModelClass>()->get_layer(i);
+                    auto layer = (QWen3Block *)get_typed_transformer<ModelClass>()->get_layer(i);
                     layer->attention.freq_base = config.rope_theta;
                 }
             }
 
-            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
+            CHATLLM_CHECK(w_ctx_.get_used_mem() + extra_tensors * ggml_tensor_overhead() == w_ctx_.get_mem_size())
                 << "corrupted model weights: " << w_ctx_.get_used_mem() / ggml_tensor_overhead() << " != " << w_ctx_.get_mem_size() / ggml_tensor_overhead();
         }
 
@@ -913,4 +913,151 @@ namespace ds_r1_distill_v3
     };
 
     typedef v3::ConditionalGeneration ConditionalGeneration;
+}
+
+
+namespace v3_emb
+{
+    typedef v3::Config Config;
+
+    class Tokenizer : public v3::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config)
+            : v3::Tokenizer(config)
+        {
+            task = "Given a web search query, retrieve relevant passages that answer the query";
+        }
+
+        void encode_embedding(const std::string &text, std::vector<int> &ids, EmbeddingPurpose purpose) const override;
+
+    public:
+        std::string task;
+    };
+
+    void Tokenizer::encode_embedding(const std::string &text, std::vector<int> &ids, EmbeddingPurpose purpose) const
+    {
+        std::ostringstream oss;
+        switch (purpose)
+        {
+        case EmbeddingPurpose::Query:
+            oss << "Instruct: " << task << "\nQuery:" << text;
+            BaseTokenizer::encode(oss.str(), ids);
+            break;
+
+        default:
+            BaseTokenizer::encode(text, ids);
+            break;
+        }
+        ids.push_back(eos_token_id);
+    }
+
+
+    class ConditionalGeneration : public v3::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_QWEN3_Embedding, const bool skip_lm_head = true, int extra_tensors = 0)
+            : v3::ConditionalGeneration(config, runtime_config, type, skip_lm_head, extra_tensors)
+        {
+            dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(std::make_unique<EmbeddingLastTokenFinalSteps>());
+        }
+
+        void set_additional_args(const std::map<std::string, std::string> &args) override
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+            auto it = args.find("task");
+            if (it != args.end())
+            {
+                tok->task = it->second;
+            }
+        }
+    };
+}
+
+namespace v3_ranker
+{
+    typedef v3::Config Config;
+
+    class Tokenizer : public v3_emb::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config)
+            : v3_emb::Tokenizer(config)
+        {
+        }
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
+
+        void encode_qa(const std::string &q, const std::string &a, std::vector<int> &ids) const override;
+    public:
+        int yes_token_id;
+        int no_token_id;
+    };
+
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
+    {
+        size_t size = v3_emb::Tokenizer::load(buffer, n_vocab);
+
+        yes_token_id = tp->PieceToId("yes");
+         no_token_id = tp->PieceToId("no");
+
+        return size;
+    }
+
+    void Tokenizer::encode_qa(const std::string &q, const std::string &a, std::vector<int> &ids) const
+    {
+        std::ostringstream oss;
+        oss << "<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be \"yes\" or \"no\".<|im_end|>\n<|im_start|>user\n";
+        oss << "<Instruct>: " << task << "\n<Query>: " << q << "\n<Document>: " << a;
+        oss << "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n";
+
+        BaseTokenizer::encode(oss.str(), ids);
+    }
+
+    class FinalSteps : public LMFinalSteps
+    {
+    public:
+        ggml::tensor *forward(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states) override;
+    public:
+        ggml::tensor *yes_no_ids;
+    };
+
+    ggml::tensor *FinalSteps::forward(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
+    {
+        ggml::tensor *logits = LMFinalSteps::forward(model, ctx, input_ids, hidden_states);
+        logits = ggml::reshape_2d(ctx, logits, 1, ggml::get_dim(logits, 0));
+        logits = ggml::get_rows(ctx, logits, yes_no_ids);
+        logits = ggml::reshape_1d(ctx, logits, 2);
+        logits = ggml::soft_max(ctx, logits);
+        logits = ggml::view_1d(ctx, logits, 1, 0);
+        return logits;
+    }
+
+    class ConditionalGeneration : public v3_emb::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : v3_emb::ConditionalGeneration(config, runtime_config, MODEL_TYPE_QWEN3_ReRanker, false, 1)
+        {
+            dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(std::make_unique<FinalSteps>());
+
+            FinalSteps *steps = dynamic_cast<FinalSteps *>(dynamic_cast<HeterogeneousModel *>(transformer)->get_final_steps());
+            steps->yes_no_ids = ggml::new_tensor_1d(&w_ctx_, ggml::type::GGML_TYPE_I32, 2);
+            w_ctx_.get_allocator()->alloc(steps->yes_no_ids);
+            yes_no_ids = steps->yes_no_ids;
+        }
+
+        void set_tokenizer(BaseTokenizer *tokenizer) override
+        {
+            v3::ConditionalGeneration::set_tokenizer(tokenizer);
+
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+            int ids[2];
+            ids[0] = tok->yes_token_id;
+            ids[1] = tok->no_token_id;
+            Backend::write_tensor_data(yes_no_ids, ids, 0, sizeof(ids));
+        }
+    protected:
+        ggml::tensor *yes_no_ids = nullptr;
+    };
 }

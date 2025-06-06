@@ -60,6 +60,7 @@ namespace chatllm
         Block *get_layer(int index);
 
         void set_final_steps(std::unique_ptr<ModelFinalSteps> final_steps);
+        ModelFinalSteps *get_final_steps();
 
         int save_session(FILE *f) override;
         int load_session(FILE *f) override;

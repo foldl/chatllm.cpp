@@ -201,6 +201,8 @@ class ModelType(Enum):
     OrpheusTTS              = 0x10000106
     OuteTTSLlaMA            = 0x10000107
     OuteTTSQwen3            = 0x10000108
+    QWen3_Embedding         = 0x10000109
+    QWen3_ReRanker          = 0x1000010A
 
     LlaMAMulti    = 0x20000001
 
@@ -4489,6 +4491,7 @@ class QWen3Converter(BaseConverter):
     MODEL_TYPE = ModelType.QWen3
 
     layer_is_sparse = []
+    has_lm_head = True
 
     @staticmethod
     def dump_config(f, config, ggml_type):
@@ -4591,12 +4594,32 @@ class QWen3Converter(BaseConverter):
             "model.norm.weight"
         ]
 
-        if not config.tie_word_embeddings:
+        if QWen3Converter.has_lm_head and (not config.tie_word_embeddings):
             weight_names += [
                 "lm_head.weight"
             ]
 
         return weight_names
+
+class QWen3EmbConverter(BaseConverter):
+    MODEL_TYPE = ModelType.QWen3_Embedding
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            r['model.' + name] = state_dict[name]
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        QWen3Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        QWen3Converter.has_lm_head = False
+        return QWen3Converter.get_weight_names(config)
 
 def permute2(weights: torch.Tensor, n_head: int, partial_rotary_factor: float) -> torch.Tensor:
     hidden_size = weights.shape[0]
@@ -7125,6 +7148,11 @@ def main():
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
+        QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'qwen3-embedding':
+        QWen3EmbConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'qwen3-reranker':
+        QWen3Converter.MODEL_TYPE = ModelType.QWen3_ReRanker
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'reka-flash-3':
         assert config.rope_scaling is None, 'config.rope_scaling must be null'
