@@ -182,7 +182,7 @@ namespace pro
             }
 
             ctx->move_to_layer(LayerAllocatorManager::Epilog);
-            return final_steps(ctx, input_ids, hidden_states);
+            return final_steps->forward(this, ctx, input_ids, hidden_states);
         }
 
         void init_layer_fowarding(float alpha, int pair_num, const int *pairs)
