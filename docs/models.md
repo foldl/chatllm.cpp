@@ -138,7 +138,8 @@
           [SFT-1B](https://huggingface.co/openbmb/MiniCPM-1B-sft-bf16)🔥
     * [x] [2B-128k](https://huggingface.co/openbmb/MiniCPM-2B-128k) (Note: `--temp 0` is recommended.)
     * [x] [MoE-8x2B](https://huggingface.co/openbmb/MiniCPM-MoE-8x2B)
-    * [x] [4B](https://huggingface.co/openbmb/MiniCPM3-4B)
+    * [x] v3: [4B](https://huggingface.co/openbmb/MiniCPM3-4B)
+    * [x] v4: [0.5B](https://huggingface.co/openbmb/BitCPM4-0.5B/tree/fcad2c603edb0663a36e56999016cbf2d7644ea1), [8B](https://huggingface.co/openbmb/MiniCPM4-8B/tree/cd838a273dde346b7c319d443f41ecd31a71f1b6), [8B-Survey](https://huggingface.co/openbmb/MiniCPM4-Survey/tree/f3e7ca37096dbedbdd48f6bacb29513b64e78667), [8B-MCP](https://huggingface.co/openbmb/MiniCPM4-MCP/commit/4a6cefeea3115ca8fc6b03e1879e912718ba6487)
 
 * Mistral (`MistralForCausalLM`, `MixtralForCausalLM`)
     * [x] Mistral: [Instruct-7B-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2), [Instruct-7B-v0.3](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3)

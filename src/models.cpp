@@ -296,6 +296,7 @@ namespace chatllm
         MODEL_TYPE_MINICPM2 = 0x1101,
         MODEL_TYPE_MINICPM_MoE = 0x1102,
         MODEL_TYPE_MINICPM3 = 0x1110,
+        MODEL_TYPE_MINICPM4 = 0x1111,
 
         MODEL_TYPE_PERSIMMON= 0x1200,
         MODEL_TYPE_FUYU     = 0x1201,
@@ -2434,6 +2435,7 @@ namespace chatllm
         CASE(MINICPM2,              minicpm::v2, 1)             \
         CASE(MINICPM_MoE,           minicpm::moe, 1)            \
         CASE(MINICPM3,              minicpm::v3, 1)             \
+        CASE(MINICPM4,              minicpm::v4, 1)             \
                                                                 \
         CASE(PERSIMMON,             adept::persimmon, 1)        \
         CASE(FUYU,                  adept::fuyu, 1)             \

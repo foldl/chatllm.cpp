@@ -139,6 +139,7 @@ class ModelType(Enum):
     MiniCPM2    = 0x1101   # updated chat template, no tie_word_embeddings=False
     MiniCPM_MoE = 0x1102
     MiniCPM3    = 0x1110
+    MiniCPM4    = 0x1111
 
     Persimmon   = 0x1200
     Fuyu        = 0x1201
@@ -2073,6 +2074,68 @@ class MiniCPMConverter(BaseConverter):
     def get_weight_names(config):
         r = LlamaConverter.get_weight_names(config)
         if (config.tie_word_embeddings is None) or config.tie_word_embeddings:
+            r.remove('lm_head.weight')
+        return r
+
+class MiniCPM4Converter(BaseConverter):
+    MODEL_TYPE = ModelType.MiniCPM4
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return MiniCPMConverter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MAX_FACTOR_LEN = 128
+
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        if config.tie_word_embeddings is None:
+            config.tie_word_embeddings = True
+        if config.rope_scaling is not None:
+            assert config.rope_scaling['rope_type'] == 'longrope'
+            factor_len = len(config.rope_scaling['long_factor'])
+            assert factor_len <= MAX_FACTOR_LEN, "config.rope_scaling['long_factor']) must <= MAX_FACTOR_LEN"
+            factors = pad_to(config.rope_scaling['short_factor'], MAX_FACTOR_LEN) + pad_to(config.rope_scaling['long_factor'], MAX_FACTOR_LEN)
+
+            if config.max_position_embeddings == 32768:
+                print("`longrope` is configured, extend to 32k * 4.")
+                config.max_position_embeddings = 32768 * 4
+        else:
+            factor_len = 0
+            factors = pad_to([0.0], MAX_FACTOR_LEN * 2)
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id,
+            config.eos_token_id[0],
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads,
+            config.max_position_embeddings,
+            config.rope_scaling['original_max_position_embeddings'],
+            1 if config.tie_word_embeddings else 0,
+            factor_len,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        float_values = [
+            config.mup_denominator if config.mup_denominator is not None else 0.0,
+            config.dim_model_base / config.hidden_size,
+            config.rope_theta if config.mup_denominator is not None else 10000.0,
+            config.scale_depth / math.sqrt(config.num_hidden_layers),
+        ] + factors
+        f.write(struct.pack("<" + "f" * len(float_values), *float_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        r = LlamaConverter.get_weight_names(config)
+        if config.tie_word_embeddings:
             r.remove('lm_head.weight')
         return r
 
@@ -7061,9 +7124,12 @@ def main():
         OrionConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MiniCPMForCausalLM':
         if config.num_experts is None:
-            if (config.tie_word_embeddings is not None) and (not config.tie_word_embeddings):
-                MiniCPMConverter.MODEL_TYPE = ModelType.MiniCPM2
-            MiniCPMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            if (config.rope_scaling is not None) and ('rope_type' in config.rope_scaling) and (config.rope_scaling['rope_type'] == 'longrope'):
+                MiniCPM4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+            else:
+                if (config.tie_word_embeddings is not None) and (not config.tie_word_embeddings):
+                    MiniCPMConverter.MODEL_TYPE = ModelType.MiniCPM2
+                MiniCPMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
         else:
             MiniCPMMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MiniCPM3ForCausalLM':
