@@ -1113,6 +1113,31 @@
             }
         }
     },
+    "minicpm4": {
+        "brief": "MiniCPM4 series are highly efficient large language models (LLMs) designed explicitly for end-side devices.",
+        "default": "8b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8698683664,
+                        "url": "chatllm_quantized_minicpm4/minicpm4-8b.bin"
+                    }
+                }
+            },
+            "0.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 462201712,
+                        "url": "chatllm_quantized_minicpm4/minicpm4-0.5b.bin"
+                    }
+                }
+            }
+        }
+    },
     "minicpm-embedding": {
         "brief": "MiniCPM-Embedding-Light is a bilingual & cross-lingual text embedding model developed by ModelBest Inc., THUNLP and NEUIR.",
         "default": "light",
@@ -2677,6 +2702,38 @@
             }
         }
     },
+    "qwen3-emb": {
+        "brief": "The Qwen3 Embedding model series is the latest proprietary model of the Qwen family, specifically designed for text embedding and ranking tasks.",
+        "default": "0.6b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "0.6b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 637488928,
+                        "url": "chatllm_quantized_qwen3/qwen3-emb-0.6b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "qwen3-reranker": {
+        "brief": "The Qwen3 Embedding model series is the latest proprietary model of the Qwen family, specifically designed for text embedding and ranking tasks.",
+        "default": "0.6b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "0.6b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 637488928,
+                        "url": "chatllm_quantized_qwen3/qwen3-reranker-0.6b.bin"
+                    }
+                }
+            }
+        }
+    },
     "mimo": {
         "brief": "MiMo-7B, a series of models trained from scratch and born for reasoning tasks.",
         "default": "7b-rl",
@@ -2792,6 +2849,15 @@
                     "q4_1": {
                         "size": 10447149072,
                         "url": "chatllm_quantized_kimi-vl/kimi-vl-q4_1.bin"
+                    }
+                }
+            },
+            "a3b-thinking": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 10447148784,
+                        "url": "chatllm_quantized_kimi-vl/kimi-vl-thinking-q4_1.bin"
                     }
                 }
             }
