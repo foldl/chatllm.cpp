@@ -368,8 +368,8 @@ namespace chatllm
         MODEL_TYPE_GEMMA3Vis        = MODEL_TYPE_TAG_ChatImageIn + 0x0000011,
 
         MODEL_TYPE_QWEN2_5_VL       = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000001,
-
         MODEL_TYPE_KIMI_VL          = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000100,
+        MODEL_TYPE_SMOL_VLM         = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000200,
     };
 
     ModelPurpose get_model_purpose(ModelType model_type)
@@ -1963,7 +1963,7 @@ namespace chatllm
         #include "../models/numinamath.cpp"
     }
 
-    namespace smollm
+    namespace smol
     {
         #include "../models/smollm.cpp"
     }
@@ -2459,7 +2459,8 @@ namespace chatllm
                                                                 \
         CASE(INDEX,                 index, 1)                   \
                                                                 \
-        CASE(SMOLLM,                smollm, 1)                  \
+        CASE(SMOLLM,                smol::lm, 1)                \
+        CASE(SMOL_VLM,              smol::vlm, 1)               \
         CASE(LLAMA3_GROQ_TOOL,      groq, 1)                    \
                                                                 \
         CASE(OLMoE,                 allenai::moe, 1)            \

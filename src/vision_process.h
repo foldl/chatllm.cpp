@@ -85,8 +85,19 @@ namespace vision
         ~MaxPatchNum();
     };
 
+    class PreMaxImageSize
+    {
+    public:
+        PreMaxImageSize(int width, int height = -1);
+        ~PreMaxImageSize();
+        static bool PreScale(int &width, int &height);
+    };
+
+    typedef std::vector<uint8_t> image_pixels_t; // natural sequence of RGB pixels
+
     void image_dimension(const char *fn, int &width, int &height);
     void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, PaddingMode pad = PaddingMode::No);
+    void image_load_split(const char *fn, std::vector<image_pixels_t> &splits, const int split_width, const int split_height, int &splits_cols_num, int &splits_rows_num); // splits are in natural order
     void image_rescale(const std::vector<uint8_t> &rgb_pixels, std::vector<float> &scaled_rgb_pixels, float scale_factor = 1/255.0f);
     void image_normalize(std::vector<float> &rgb_pixels, const float *mean, const float *std_d);
 

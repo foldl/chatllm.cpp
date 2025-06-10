@@ -305,6 +305,9 @@ Please use `--format completion` for these models.
 * Kimi (`KimiVLForConditionalGeneration`)
     * [x] VL: [A3B-Instruct](https://huggingface.co/moonshotai/Kimi-VL-A3B-Instruct/tree/7a3c132a7b0f1f1677f5a72f258bd3afded7d357), [A3B-Thinking](https://huggingface.co/moonshotai/Kimi-VL-A3B-Thinking/commit/16681d8ac24e505088698e4e34ea494dd6e24400)
 
+* SmolVLM2 (`SmolVLMForConditionalGeneration`)
+    * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)
+
 ## RAG Models
 
 * Text Embedding (`XLMRobertaModel`)

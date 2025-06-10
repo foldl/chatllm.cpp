@@ -221,65 +221,6 @@ namespace vit
         Linear    linear_2;
     };
 
-    struct merge_patch_param
-    {
-        int grid_h;
-        int grid_w;
-        int merge_kernel_size[2];
-    };
-
-    static void ggml_custom_merge_patch(struct ggml_tensor * dst , const struct ggml_tensor * src, int ith, int nth, const merge_patch_param * param)
-    {
-        const int kernel_height = param->merge_kernel_size[0];
-        const int kernel_width  = param->merge_kernel_size[1];
-        const int new_height = param->grid_h / kernel_height;
-        const int new_width  = param->grid_w / kernel_width;
-
-        CHATLLM_CHECK(ggml::get_dim(src, 1) == (int64_t)param->grid_h * param->grid_w);
-
-        const int64_t nr  = ggml::nrows(dst);
-        const int64_t dr  = (nr + nth - 1)/nth;
-        const int64_t ir0 = dr*ith;
-        const int64_t ir1 = MIN(ir0 + dr, nr);
-
-        const int64_t nb1 = src->nb[1];
-        const int64_t nb2 = nb1 * kernel_width;
-        const int64_t nb3 = nb2 * kernel_height;
-        const int64_t nb4 = nb3 * new_width;
-
-        for (int64_t i4 = 0; i4 < new_height; i4++)
-        {
-            for (int64_t i3 = 0; i3 < new_width; i3++)
-            {
-                for (int64_t i2 = 0; i2 < kernel_height; i2++)
-                {
-                    for (int64_t i1 = 0; i1 < kernel_width; i1++)
-                    {
-                        const int64_t ir = (i2 + i4 * kernel_height) * param->grid_w + (i1 + i3 * kernel_width);
-                        if (ir < ir0) continue;
-                        if (ir > ir1) break;
-
-                        const void *src_data  = (void *)((char *)  src->data + ir*nb1);
-                              void *dst_data  = (void *)((char *)  dst->data + i4*nb4 + i3*nb3  + i2*nb2 + i1*nb1);
-                        memcpy(dst_data, src_data, nb1);
-                    }
-                }
-            }
-        }
-    }
-
-    static void ggml_custom_merge_patch(struct ggml_tensor * dst, int ith, int nth, void * userdata)
-    {
-        const merge_patch_param *param = (const merge_patch_param *)userdata;
-
-        const struct ggml_tensor * a = dst->src[0];
-        CHATLLM_CHECK(ggml::is_contiguous(a));
-        CHATLLM_CHECK(ggml::get_dim(a, 3) == 1);
-        CHATLLM_CHECK(ggml::get_dim(a, 2) == 1);
-
-        ggml_custom_merge_patch(dst, a, ith, nth, param);
-    }
-
     class VisionTransformer : public Block
     {
     public:
@@ -333,15 +274,7 @@ namespace vit
             merge_param.grid_h = grid_h;
             merge_param.grid_w = grid_w;
 
-            const int64_t kernel_height = merge_param.merge_kernel_size[0];
-            const int64_t kernel_width  = merge_param.merge_kernel_size[1];
-            const int64_t new_height    = grid_h / kernel_height;
-            const int64_t new_width     = grid_w / kernel_width;
-
-            std::vector<ggml::tensor *> params;
-            params.push_back(x);
-            auto reshaped_seq = ggml::custom(ctx, ggml_custom_merge_patch, GGML_N_TASKS_MAX, &merge_param, params, ggml::type_of(x),
-                                ggml::get_dim(x, 0), kernel_height * kernel_width * new_height * new_width * ggml::get_dim(x, 2), 1, 1);
+            auto reshaped_seq = ggml::merge_patch(ctx, x, &merge_param);
             return reshaped_seq;
         }
 
@@ -372,7 +305,7 @@ namespace vit
         MultiModalProjector multi_modal_projector;
     protected:
         bool loaded;
-        merge_patch_param merge_param;
+        ggml::merge_patch_param merge_param;
     };
 
     class VisualEmbeddingGeneration

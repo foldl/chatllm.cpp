@@ -947,6 +947,20 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::merge_patch(ComputeContext *ctx, ggml::tensor *x, const merge_patch_param *param)
+    {
+        const int64_t kernel_height = param->merge_kernel_size[0];
+        const int64_t kernel_width  = param->merge_kernel_size[1];
+        const int64_t new_height    = param->grid_h / kernel_height;
+        const int64_t new_width     = param->grid_w / kernel_width;
+
+        std::vector<ggml::tensor *> inputs;
+        inputs.push_back(x);
+        auto reshaped_seq = ggml::custom(ctx, ggml_custom_merge_patch, GGML_N_TASKS_MAX, (void *)param, inputs, ggml::type_of(x),
+                            ggml::get_dim(x, 0), kernel_height * kernel_width * new_height * new_width * ggml::get_dim(x, 2), 1, 1);
+        return reshaped_seq;
+    }
+
     struct ggml_cgraph *ggml::new_graph_custom(ComputeContext *ctx, size_t size, bool grads)
     {
         return ggml_new_graph_custom(ctx->get_ctx(), size, grads);

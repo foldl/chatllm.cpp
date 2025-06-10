@@ -244,8 +244,10 @@ namespace chatllm
     public:
         struct MediaAsEmbeddingVector
         {
-            int grid_width;
-            int grid_height;
+            int width  = -1;
+            int height = -1;
+            int grid_width  = -1;
+            int grid_height = -1;
             int patch_size;
             int emb_vec_number;
             std::vector<float> data;
@@ -439,6 +441,30 @@ namespace chatllm
     private:
         InitContext *ctx;
         ggml::type   _type;
+    };
+
+    class TypeChanger
+    {
+    public:
+        TypeChanger(InitContext *ctx, ggml::type dtype): ctx(ctx)
+        {
+            _type = ctx->cache_dtype;
+            ctx->dtype = dtype;
+        }
+
+        ~TypeChanger()
+        {
+            ctx->dtype = _type;
+        }
+
+        operator InitContext *() const
+        {
+            return ctx;
+        }
+    private:
+        InitContext *ctx;
+        ggml::type   _type;
+
     };
 
     class LayerMover

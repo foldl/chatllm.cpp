@@ -212,6 +212,7 @@ class ModelType(Enum):
 
     Qwen2_5VL               = ModelTypeTagChatImageVideoIn + 0x0000001
     KimiVL                  = ModelTypeTagChatImageVideoIn + 0x0000100
+    SmolVLM                 = ModelTypeTagChatImageVideoIn + 0x0000200
 
     MiniCPM_O               = ModelTypeTagChatImageVideoAudioInAudioOut + 0x0000001
 
@@ -1835,6 +1836,96 @@ class SmolLMConverter(BaseConverter):
     def get_weight_names(config):
         r = Llama3Converter.get_weight_names(config)
         return r[:-1]
+
+class SmolVLMConverter(BaseConverter):
+    MODEL_TYPE = ModelType.SmolVLM
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.startswith('model.text_model.'):
+                name = name.replace('model.text_model.', 'model.')
+                r[name] = SmolLMConverter.pp(SmolVLMConverter.txt_config, name, tensor)
+            elif name.startswith('model.vision_model'):
+                name = name.replace('model.vision_model.', 'vision_model.')
+
+                if 'mlp.fc1.' in name:
+                    name = name.replace('.fc1.', '.fc0.')
+                elif 'mlp.fc2.' in name:
+                    name = name.replace('.fc2.', '.fc1.')
+                elif '.out_proj.' in name:
+                    name = name.replace('.out_proj.', '.o_proj.')
+                elif name.startswith('vision_model.post_layernorm'):
+                    name = name.replace('.post_layernorm.', '.final_layernorm.')
+
+                r[name] = tensor
+            elif name.startswith('vision_tower.'):
+                r[name.replace('vision_tower.', 'vision_model.')] = tensor
+            elif name == 'model.connector.modality_projection.proj.weight':
+                r["multi_modal_projector.proj.weight"] = tensor
+            else:
+                r[name] = tensor
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        SmolVLMConverter.txt_config = AttributeDict(config.text_config)
+        if SmolVLMConverter.txt_config.bos_token_id is None:
+            SmolVLMConverter.txt_config.bos_token_id = 128_000
+        if SmolVLMConverter.txt_config.eos_token_id is None:
+            SmolVLMConverter.txt_config.eos_token_id = 128_001
+        if SmolVLMConverter.txt_config.num_attention_heads is None:
+            SmolVLMConverter.txt_config.num_attention_heads = 32
+        if SmolVLMConverter.txt_config.hidden_act is None:
+            SmolVLMConverter.txt_config.hidden_act = 'silu'
+        if SmolVLMConverter.txt_config.num_key_value_heads is None:
+            SmolVLMConverter.txt_config.num_key_value_heads = SmolVLMConverter.txt_config.num_attention_heads
+        if SmolVLMConverter.txt_config.tie_word_embeddings is None:
+            SmolVLMConverter.txt_config.tie_word_embeddings = False
+
+        assert not SmolVLMConverter.txt_config.tie_word_embeddings
+        assert not SmolVLMConverter.txt_config.qk_layer_norms
+        assert not SmolVLMConverter.txt_config.use_resampler
+        SmolLMConverter.dump_config(f, SmolVLMConverter.txt_config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = Llama3Converter.get_weight_names(SmolVLMConverter.txt_config)
+
+        for i in range(config.vision_config['num_hidden_layers']):
+            weight_names += [
+                f"vision_model.encoder.layers.{i}.self_attn.q_proj.bias",
+                f"vision_model.encoder.layers.{i}.self_attn.q_proj.weight",
+                f"vision_model.encoder.layers.{i}.self_attn.k_proj.bias",
+                f"vision_model.encoder.layers.{i}.self_attn.k_proj.weight",
+                f"vision_model.encoder.layers.{i}.self_attn.v_proj.bias",
+                f"vision_model.encoder.layers.{i}.self_attn.v_proj.weight",
+                f"vision_model.encoder.layers.{i}.self_attn.o_proj.bias",
+                f"vision_model.encoder.layers.{i}.self_attn.o_proj.weight",
+                f"vision_model.encoder.layers.{i}.mlp.fc0.bias",
+                f"vision_model.encoder.layers.{i}.mlp.fc0.weight",
+                f"vision_model.encoder.layers.{i}.mlp.fc1.bias",
+                f"vision_model.encoder.layers.{i}.mlp.fc1.weight",
+                f"vision_model.encoder.layers.{i}.layer_norm1.bias",
+                f"vision_model.encoder.layers.{i}.layer_norm1.weight",
+                f"vision_model.encoder.layers.{i}.layer_norm2.bias",
+                f"vision_model.encoder.layers.{i}.layer_norm2.weight",
+            ]
+
+        weight_names += [
+            "multi_modal_projector.proj.weight",
+            "vision_model.final_layernorm.bias",
+            "vision_model.final_layernorm.weight",
+            "vision_model.embeddings.position_embedding.weight",
+            "vision_model.embeddings.patch_embedding.bias",
+            "vision_model.embeddings.patch_embedding.weight",
+        ]
+
+        return weight_names
 
 class LlamaMultiConverter(BaseConverter):
     MODEL_TYPE = ModelType.LlaMAMulti
@@ -6965,6 +7056,8 @@ def main():
         Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'smollm':
         SmolLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'SmolVLMForConditionalGeneration':
+        SmolVLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'XverseForCausalLM':
         if config.num_experts is None:
             LlamaConverter.MODEL_TYPE = ModelType.XVERSE
