@@ -336,8 +336,7 @@ namespace vit
         bool load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config)
         {
             const auto vis_cfg = config["config.json"]["vision_config"];
-            auto pp_cfg = config["preprocessor_config.json"];
-            if (!vis_cfg.IsObject() || !pp_cfg.IsObject()) return false;
+            if (!vis_cfg.IsObject()) return false;
 
             vis_config.dtype = dtype;
 
@@ -354,19 +353,34 @@ namespace vit
             vis_config.merge_kernel_size[0]   = (int)size[0].ToInt();
             vis_config.merge_kernel_size[1]   = (int)size[1].ToInt();
 
-            auto image_mean = pp_cfg["image_mean"];
-            auto image_std  = pp_cfg["image_std"];
-            CHATLLM_CHECK(image_mean.length() == 3) << "invalid image_mean";
-            CHATLLM_CHECK(image_std.length() == 3) << "invalid image_std";
+            vis_config.in_token_limit       = 4096;
+            vis_config.pad_input            = true;
+            for (int i = 0; i < 3; i++)
+            {
+                vis_config.image_mean[i]    = 0.5f;
+                vis_config.image_std[i]     = 0.5f;
+            }
 
-            vis_config.in_token_limit   = (int  )pp_cfg["in_token_limit"].ToInt();
-            vis_config.pad_input        =        pp_cfg["pad_input"].ToBool();
-            vis_config.image_mean[0]    = (float)image_mean[0].ToFloat();
-            vis_config.image_mean[1]    = (float)image_mean[1].ToFloat();
-            vis_config.image_mean[2]    = (float)image_mean[2].ToFloat();
-            vis_config.image_std[0]     = (float)image_std[0].ToFloat();
-            vis_config.image_std[1]     = (float)image_std[1].ToFloat();
-            vis_config.image_std[2]     = (float)image_std[2].ToFloat();
+            auto pp_cfg = config["preprocessor_config.json"];
+            if (pp_cfg.IsObject())
+            {
+                vis_config.in_token_limit   = (int  )pp_cfg["in_token_limit"].ToInt();
+                vis_config.pad_input        =        pp_cfg["pad_input"].ToBool();
+
+                auto image_mean = pp_cfg["image_mean"];
+                auto image_std  = pp_cfg["image_std"];
+                CHATLLM_CHECK(image_mean.length() == 3) << "invalid image_mean";
+                CHATLLM_CHECK(image_std.length() == 3) << "invalid image_std";
+
+                vis_config.in_token_limit   = (int  )pp_cfg["in_token_limit"].ToInt();
+                vis_config.pad_input        =        pp_cfg["pad_input"].ToBool();
+                vis_config.image_mean[0]    = (float)image_mean[0].ToFloat();
+                vis_config.image_mean[1]    = (float)image_mean[1].ToFloat();
+                vis_config.image_mean[2]    = (float)image_mean[2].ToFloat();
+                vis_config.image_std[0]     = (float)image_std[0].ToFloat();
+                vis_config.image_std[1]     = (float)image_std[1].ToFloat();
+                vis_config.image_std[2]     = (float)image_std[2].ToFloat();
+            }
 
             const size_t tensor_ovhd = ggml_tensor_overhead();
             const size_t num_tensors = 11 + vis_config.num_hidden_layers * 18;
