@@ -1815,11 +1815,11 @@ namespace chatllm
 
         ggml::build_forward_expand(ctx, ggml::cpy(ctx, Vcur, v_cache_view));
 
-        ggml::tensor * k_cache_view = ggml::view_1d(ctx, k_cache, qlen * k_hidden_size, ggml::row_size(k_cache) * n_past);
+        ggml::tensor * k_cache_view = ggml::view_1d(ctx, k_cache, (int64_t)qlen * k_hidden_size, ggml::row_size(k_cache) * n_past);
         ggml::tensor * k_view = nullptr;
         if (ggml::is_contiguous(k))
         {
-            k_view = ggml::view_1d(ctx, k, qlen * k_hidden_size, 0);
+            k_view = ggml::view_1d(ctx, k, (int64_t)qlen * k_hidden_size, 0);
         }
         else if (!ggml::is_quantized(k_cache))
         {
@@ -1831,7 +1831,7 @@ namespace chatllm
         else
         {
             k = ggml::cont(ctx, k);
-            k_view = ggml::view_1d(ctx, k, qlen * k_hidden_size, 0);
+            k_view = ggml::view_1d(ctx, k, (int64_t)qlen * k_hidden_size, 0);
         }
 
         // important: storing RoPE-ed version of K in the KV cache!
