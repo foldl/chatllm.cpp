@@ -2,6 +2,8 @@
 #include <regex>
 #include <sstream>
 #include <cmath>
+#include <filesystem>
+#include "basics.h"
 
 #if defined(_MSC_VER)
 #define popen  _popen
@@ -10,6 +12,8 @@
 
 namespace vision
 {
+    namespace fs = std::filesystem;
+
     struct Params
     {
         int pre_max_width;
@@ -186,7 +190,7 @@ namespace vision
         pclose(pp);
     }
 
-    void image_load_split(const char *fn, std::vector<image_pixels_t> &splits, const int split_width, const int split_height, int &splits_cols_num, int &splits_rows_num)
+    void image_load_split(const char *fn, std::vector<image_pixels_t> &splits, bool do_split, const int split_width, const int split_height, int &splits_cols_num, int &splits_rows_num)
     {
         splits.clear();
         splits_cols_num = 0;
@@ -204,7 +208,7 @@ namespace vision
 
         splits_rows_num =(height + split_height - 1) / split_height;
         splits_cols_num =(width  + split_width  - 1) / split_width;
-        if ((splits_rows_num > 1) || (splits_cols_num > 1))
+        if (do_split && ((splits_rows_num > 1) || (splits_cols_num > 1)))
         {
             const int optimal_height = (height + splits_rows_num - 1) / splits_rows_num;
             const int optimal_width  = (width  + splits_cols_num - 1) / splits_cols_num;
@@ -442,6 +446,44 @@ namespace vision
         default:
             throw new std::invalid_argument("invalid format");
         }
+    }
+
+    VideoLoader::VideoLoader(const char *fn, float fps, const int max_frames, const int resize_width, const int resize_height)
+    {
+        if (!fs::exists(fn))
+            return;
+
+        tmp_dir = std::tmpnam(nullptr);
+        fs::create_directories(tmp_dir);
+
+        char cmd[1024];
+        if ((resize_height <= 0) || (resize_height <= 0))
+        {
+            sprintf(cmd, "ffmpeg -loglevel error -i \"%s\" -vf \"fps=%f\" -frames:v %d \"%s\"",
+                fn, fps, max_frames, (fs::path(tmp_dir) / "%04d.jpg").string().c_str());
+        }
+        else
+        {
+            sprintf(cmd, "ffmpeg -loglevel error -i \"%s\" -vf \"scale=w=%d:h=%d:force_original_aspect_ratio=1,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,fps=%f\" -frames:v %d \"%s\"",
+                fn, resize_width, resize_height, resize_width, resize_height,
+                fps, max_frames, (fs::path(tmp_dir) / "%04d.jpg").string().c_str());
+        }
+
+        int ret = std::system(cmd);
+
+        for (const auto &entry : fs::directory_iterator(tmp_dir))
+        {
+            if (entry.path().extension() == ".jpg") {
+                frames.push_back(entry.path().string());
+            }
+        }
+
+        std::sort(frames.begin(), frames.end());
+    }
+
+    VideoLoader::~VideoLoader()
+    {
+        fs::remove_all(tmp_dir);
     }
 
     static void print_data(const std::vector<float> &pixels, const int group_size = 10, int max_elem = 100)

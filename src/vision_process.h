@@ -97,9 +97,20 @@ namespace vision
 
     void image_dimension(const char *fn, int &width, int &height);
     void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, PaddingMode pad = PaddingMode::No);
-    void image_load_split(const char *fn, std::vector<image_pixels_t> &splits, const int split_width, const int split_height, int &splits_cols_num, int &splits_rows_num); // splits are in natural order
+    void image_load_split(const char *fn, std::vector<image_pixels_t> &splits, bool do_split, const int split_width, const int split_height, int &splits_cols_num, int &splits_rows_num); // splits are in natural order
     void image_rescale(const std::vector<uint8_t> &rgb_pixels, std::vector<float> &scaled_rgb_pixels, float scale_factor = 1/255.0f);
     void image_normalize(std::vector<float> &rgb_pixels, const float *mean, const float *std_d);
+
+    class VideoLoader
+    {
+    public:
+        VideoLoader(const char *fn, float fps = 1.0f, const int max_frames = 10, const int resize_width = -1, const int resize_height = -1);
+        ~VideoLoader();
+    public:
+        std::vector<std::string> frames;
+    private:
+        std::string tmp_dir;
+    };
 
     // ASSUMPTION: already properly aligned to `patch_size`
     void image_arrange(const std::vector<float> &rgb_pixels, const int width, const int patch_size,

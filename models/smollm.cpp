@@ -484,6 +484,7 @@ namespace vlm
             : BaseTokenizer::BaseTokenizer(config, encoder)
         {
             sys_prompt = "";
+            do_split = false;
         }
 
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
@@ -496,6 +497,7 @@ namespace vlm
         int fake_token_around_image_token_id;
         int global_image_token_token_id;
         int nl_token_id;
+        bool do_split;
 
         std::vector<std::vector<int>> row_col_token_ids;
     };
@@ -616,7 +618,7 @@ namespace vlm
     public:
         typedef llama::v2::GenericConditionalGeneration<LlamaBlock> Base;
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_SMOL_VLM)
-            : ExtendEmbedding(81 * 64),
+            : ExtendEmbedding(4096),
               Base(config, runtime_config, type, config.num_key_value_heads, config.max_length, 12, false),
               visual(runtime_config)
         {
@@ -648,6 +650,17 @@ namespace vlm
             _chat_encoder.vit_loaded = visual.load(loader);
         }
 
+        void set_additional_args(const std::map<std::string, std::string> &args) override
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+            auto it = args.find("do_split");
+            if (it == args.end()) it = args.find("do-split");
+            if (it != args.end())
+            {
+                tok->do_split = it->second != "0";
+            }
+        }
+
         void before_generate(const GenerationConfig &gen_config) override
         {
             std::vector<uint8_t> buf;
@@ -667,7 +680,42 @@ namespace vlm
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         append_user_opening(round_idx, ids);
 
+        std::vector<std::unique_ptr<vision::VideoLoader>> videos;
+
+        // expand video into images
+        std::vector<ContentPiece> pieces;
         for (auto &piece : user.pieces)
+        {
+            if (piece.type != ContentPiece::Type::Video)
+            {
+                pieces.push_back(piece);
+                continue;
+            }
+
+            auto video = new vision::VideoLoader(piece.content.c_str(), vis_config->video.fps, vis_config->video.max_frames);
+            videos.emplace_back(video);
+            if (video->frames.size() < 1)
+                continue;
+
+            std::ostringstream oss;
+            oss << "You are provided the following series of " << utils::num2words((int)video->frames.size())
+                << " frames from a " << utils::sec2hms((float)video->frames.size() / vis_config->video.fps) << " [H:MM:SS] video.\n";
+            pieces.emplace_back(oss.str());
+
+            for (size_t i = 0; i < video->frames.size(); i++)
+            {
+                oss.str("");
+                oss << "\nFrame from " << utils::sec2ms(i / vis_config->video.fps);
+                pieces.emplace_back(oss.str());
+
+                pieces.emplace_back(video->frames[i], ContentPiece::Type::Image);
+            }
+
+            // DEFAULT_MEDIA_OUTTRO = "\n\n"
+            pieces.emplace_back("\n\n");
+        }
+
+        for (auto &piece : pieces)
         {
             if (piece.type == ContentPiece::Type::Text)
             {
@@ -688,7 +736,7 @@ namespace vlm
                 int splits_cols_num = 0;
                 int splits_rows_num = 0;
 
-                vision::image_load_split(piece.content.c_str(), splits, image_size_per_split,  image_size_per_split, splits_cols_num, splits_rows_num);
+                vision::image_load_split(piece.content.c_str(), splits, tok->do_split, image_size_per_split,  image_size_per_split, splits_cols_num, splits_rows_num);
 
                 std::vector<float> scaled;
 

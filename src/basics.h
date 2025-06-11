@@ -73,5 +73,10 @@ namespace utils
 
     std::string load_file(const char *fn);
 
+    std::string num2words(int value);
+
+    std::string sec2hms(float seconds, bool show_ms = false);
+    std::string sec2ms(float seconds, bool show_ms = false);
+
     //#define TIME_STAMP (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
 }
