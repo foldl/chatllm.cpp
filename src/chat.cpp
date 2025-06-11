@@ -101,6 +101,17 @@ namespace chatllm
             {
                 auto tag  = inner.substr(0, pos);
                 auto path = inner.substr(pos + 1);
+                // remove quotes
+                if (path.size() >= 2)
+                {
+                    if ((path[0] == '"') && (path.back() == '"'))
+                    {
+                        path = path.substr(1, path.size() - 2);
+                    }
+                }
+
+                if (path.size() == 0) continue;
+
                 if (tag == "image")
                 {
                     push_back(path, ContentPiece::Type::Image);

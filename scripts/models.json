@@ -162,6 +162,22 @@
             }
         }
     },
+    "smolvlm2": {
+        "brief": "SmolVLM2-2.2B is a lightweight multimodal model designed to analyze video content.",
+        "default": "2.2b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "2.2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2516121904,
+                        "url": "chatllm_quantized_smolvlm2/smolvlm2-2.2b-it.bin"
+                    }
+                }
+            }
+        }
+    },
     "zhinao": {
         "brief": "360Zhinao from Qihoo360.",
         "default": "7b-4k",
