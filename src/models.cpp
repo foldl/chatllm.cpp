@@ -736,7 +736,7 @@ namespace chatllm
 
         LogitsPenalty(const GenerationConfig &gen_config)
             : repeat_penalty_en((gen_config.penalty_window > 0) && (gen_config.repeat_penalty != 1.0f) && (gen_config.repeat_penalty > 0.0f)),
-              freq_penalty_en((gen_config.penalty_window > 0) && (gen_config.frequency_penalty != 0.0f) || (gen_config.presence_penalty != 0.0f)),
+              freq_penalty_en((gen_config.penalty_window > 0) && ((gen_config.frequency_penalty != 0.0f) || (gen_config.presence_penalty != 0.0f))),
               inv_repeat_penalty(repeat_penalty_en ? 1 / gen_config.repeat_penalty : 0.0f),
               repeat_penalty(gen_config.repeat_penalty),
               freq_penalty(freq_penalty_en ? gen_config.frequency_penalty / gen_config.penalty_window : 0.0f),

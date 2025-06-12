@@ -84,6 +84,8 @@ namespace chatllm
             return *this;
         }
 
+        static Type type_parse(const char *s);
+
     public:
         std::string content;
         Type type;
@@ -162,6 +164,7 @@ namespace chatllm
         Messages(const std::string &opening, const std::string &closing);
 
         void push_back(const std::string &content, MsgRole role);
+        void push_back(const Content &content, MsgRole role);
         void push_back(const Message &m);
         void clear(void);
 

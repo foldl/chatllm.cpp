@@ -214,6 +214,7 @@ namespace chatllm
     {
     public:
         Block(): prec(ggml::prec::GGML_PREC_DEFAULT), id(0), debug(false) {}
+        virtual ~Block() {}
         virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input)
         {
             CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *input): not implemented";

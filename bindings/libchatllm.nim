@@ -87,6 +87,29 @@ proc chatllm_set_gen_max_tokens*(obj: ptr chatllm_obj; gen_max_tokens: cint) {.s
 ##
 proc chatllm_restart*(obj: ptr chatllm_obj; utf8_sys_prompt: cstring) {.stdcall, dynlib: libName, importc.}
 
+##
+## @brief prepare to generate a multimedia input, i.e. clear previously added pieces.
+##
+## Each `chatllm_obj` has a global multimedia message object, which can be used as user input,
+## or chat history, etc.
+##
+## @param[in] obj               model object
+## @return                      0 if succeeded
+##
+proc chatllm_multimedia_msg_prepare(obj: ptr chatllm_obj) {.stdcall, dynlib: libName, importc.}
+
+##
+## @brief add a piece to a multimedia message
+##
+## Remember to clear the message by `chatllm_multimedia_msg_prepare` when starting a new message.
+##
+## @param[in] obj               model object
+## @param[in] type              type ::= "text" | "image" | "video" | "audio" | ...
+## @param[in] utf8_str          content, i.e. utf8 text content, or base64 encoded data of multimedia data.
+## @return                      0 if succeeded
+##
+proc chatllm_multimedia_msg_append(obj: ptr chatllm_obj; content_type: cstring; utf8_str: cstring): cint {.stdcall, dynlib: libName, importc.}
+
 type
     RoleType* = enum
         ROLE_USER = 2,
@@ -115,6 +138,16 @@ proc chatllm_history_append*(obj: ptr chatllm_obj; role_type: int; utf8_str: cst
 ##  @return                      0 if succeeded
 ##
 proc chatllm_user_input*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.stdcall, dynlib: libName, importc.}
+
+##
+## @brief take current multimedia message as user input and run
+##
+## This function is synchronized, i.e. it returns after model generation ends and `f_end` is called.
+##
+## @param[in] obj               model object
+## @return                      0 if succeeded
+##
+proc chatllm_user_input_multimedia_msg(obj: ptr chatllm_obj): cint {.stdcall, dynlib: libName, importc.}
 
 ##
 ##  @brief set prefix for AI generation
@@ -171,16 +204,24 @@ proc chatllm_tool_completion*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.s
 ##
 proc chatllm_text_tokenize*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.stdcall, dynlib: libName, importc.}
 
+type
+    EmbeddingPurpose* = enum
+        EMBEDDING_FOR_DOC   = 0,    # for document
+        EMBEDDING_FOR_QUERY = 1,    # for query
+
 ##
-##  @brief text embedding
+## @brief text embedding
 ##
-##  embedding is emitted through `PRINTLN_EMBEDDING`.
+## embedding is emitted through `PRINTLN_EMBEDDING`.
 ##
-##  @param[in] obj               model object
-##  @param[in] utf8_str          text
-##  @return                      0 if succeeded
+## Note: Not all models support specifying purpose.(see _Qwen3-Embedding_).
 ##
-proc chatllm_text_embedding*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.stdcall, dynlib: libName, importc.}
+## @param[in] obj               model object
+## @param[in] utf8_str          text
+## @param[in] purpose           purpose, see `EmbeddingPurpose`
+## @return                      0 if succeeded
+##
+proc chatllm_text_embedding*(obj: ptr chatllm_obj; utf8_str: cstring; purpose: cint): cint {.stdcall, dynlib: libName, importc.}
 
 ##
 ##  @brief question & answer ranking
@@ -272,6 +313,14 @@ proc chatllm_async_start*(obj: ptr chatllm_obj; f_print: f_chatllm_print;
 proc chatllm_async_user_input*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.stdcall, dynlib: libName, importc.}
 
 ##
+## @brief async version of `chatllm_user_input_multimedia_msg`
+##
+## @param   ...
+## @return                      0 if started else -1
+##
+proc chatllm_async_user_input_multimedia_msg(obj: ptr chatllm_obj): cint {.stdcall, dynlib: libName, importc.}
+
+##
 ##  @brief async version of `chatllm_tool_input`
 ##
 ##  @param   ...
@@ -293,7 +342,7 @@ proc chatllm_async_tool_completion*(obj: ptr chatllm_obj; utf8_str: cstring): ci
 ##  @param   ...
 ##  @return                      0 if started else -1
 ##
-proc chatllm_async_text_embedding*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.stdcall, dynlib: libName, importc.}
+proc chatllm_async_text_embedding*(obj: ptr chatllm_obj; utf8_str: cstring; purpose: cint): cint {.stdcall, dynlib: libName, importc.}
 
 ##
 ##  @brief async version of `chatllm_qa_rank`

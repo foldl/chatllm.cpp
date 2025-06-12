@@ -48,6 +48,17 @@ namespace chatllm
         return str;
     }
 
+    ContentPiece::Type ContentPiece::type_parse(const char *s)
+    {
+        if (strcmp(s, "image") == 0)
+            return ContentPiece::Type::Image;
+        if (strcmp(s, "audio") == 0)
+            return ContentPiece::Type::Audio;
+        if (strcmp(s, "video") == 0)
+            return ContentPiece::Type::Video;
+        return ContentPiece::Type::Text;
+    }
+
     Content::Content(Messages *owner, const std::string &content) : owner(owner)
     {
         push_back(content);
@@ -285,9 +296,8 @@ namespace chatllm
         mm_closing = closing;
     }
 
-    void Messages::push_back(const Message &m)
+    void Messages::push_back(const Content &content, MsgRole role)
     {
-        MsgRole role = m.role;
         if (MsgRole::Auto == role)
         {
             if (history.size() > 0)
@@ -318,7 +328,7 @@ namespace chatllm
             if (role == last.role)
             {
                 last.content.push_back(sep);
-                last.content.push_back(m.content);
+                last.content.push_back(content);
                 return;
             }
         }
@@ -330,7 +340,12 @@ namespace chatllm
                 round++;
         }
 
-        history.emplace_back(this, m.content, role, round);
+        history.emplace_back(this, content, role, round);
+    }
+
+    void Messages::push_back(const Message &m)
+    {
+        push_back(m.content, m.role);
     }
 
     void Messages::push_back(const std::string &content, MsgRole role)
@@ -2110,7 +2125,7 @@ namespace chatllm
             }
         }
 
-        text_embedding(rewritten_query, gen_config, query_emb);
+        text_embedding(rewritten_query, gen_config, query_emb, BaseTokenizer::EmbeddingPurpose::Query);
 
         vs.get()->Query(query_emb, selected, retrieve_top_n);
 

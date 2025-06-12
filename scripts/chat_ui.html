@@ -511,6 +511,7 @@
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
+                white-space: nowrap;
             }
 
                 .collapsible-think-section .think-header:hover {
@@ -918,8 +919,8 @@
         <div class="chat-input-area">
             <div class="input-buttons-left">
                 <!-- Upload button with hidden file input -->
-                <input type="file" id="file-input" style="display: none;" accept=".txt,.md,.csv,.json,.html,.js,.css,.py,.ts,.jsx,.tsx,.log">
-                <button id="upload-button" class="icon-button" title="Upload a document">
+                <input type="file" id="file-input" style="display: none;" accept="image/*">
+                <button id="upload-button" class="icon-button" title="Upload an image">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform: scale(1.2);">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="17 8 12 3 7 8"></polyline>
@@ -1020,6 +1021,7 @@
         let currentAiMessageElement = null;
         let currentAiMessageContentDiv = null;
         let uploadedFileContext = []; // Array to store uploaded file contexts
+        let multimediaInputs = [];
 
         const THINK_TAG_PLACEHOLDER_PREFIX = "%%THINK_BLOCK_ID_";
         const THINK_TAG_PLACEHOLDER_SUFFIX = "%%";
@@ -1336,8 +1338,16 @@
                 }
             }
 
+            var msgContent = [{type: 'text', text: messageText}]
+            if (multimediaInputs.length > 0) {
+                for (let mm of multimediaInputs) {
+                    msgContent.push({type: mm.type, url: 'data:' + mm.dataUrl});
+                }
+                multimediaInputs = [];
+            }
+
             messagesForApi.push(...conversationHistory);
-            messagesForApi.push({ role: "user", content: messageText });
+            messagesForApi.push({ role: "user", content: msgContent });
 
             try {
                 const response = await fetch(`${OLLAMA_API_URL}/api/chat`, {
@@ -1350,7 +1360,7 @@
                     const errorBody = await response.text();
                     throw new Error(`API error: ${response.status} ${response.statusText}. ${errorBody}`);
                 }
-                conversationHistory.push({ role: "user", content: messageText });
+                conversationHistory.push({ role: "user", content: msgContent });
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -1483,6 +1493,45 @@
             reader.readAsText(file);
         }
 
+        function handleFileInsertImage(file) {
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const fileName = file.name;
+                const fileExt = fileName.split('.').pop().toLowerCase();
+
+                // Create a file context object
+                const fileContext = {
+                    name: fileName,
+                    dataUrl: e.target.result,
+                    ext: fileExt,
+                    type: 'image',
+                    media_type: file.type,
+                };
+
+                console.log(e.target.result)
+
+                // Add to uploaded file context array
+                multimediaInputs.push(fileContext);
+
+                // Show a notification to the user
+                showNotification(`media file "${fileName}" added`, 'success');
+
+                // Optionally, add a message to the chat UI to let the user know the file was uploaded
+                displayMessage("System", `📄 media "${fileName}" has been added to your prompt.`);
+
+                // Expand the chat interface if it's minimized
+                expandChatInterface();
+            };
+
+            reader.onerror = function() {
+                showNotification('Error reading the file', 'error');
+            };
+
+            // Read the file as text
+            reader.readAsDataURL(file);
+        }
+
         // Function to show notifications to the user
         function showNotification(message, type = 'info') {
             const notification = document.createElement('div');
@@ -1553,7 +1602,7 @@
                 }
 
                 // Process the file
-                handleFileUpload(file);
+                handleFileInsertImage(file);
 
                 // Reset the file input for future uploads
                 fileInput.value = '';
@@ -1693,13 +1742,23 @@
                 return;
             }
 
+            function makeTitle() {
+                var c = conversationHistory.find(msg => msg.role === 'user')?.content;
+                if (c instanceof String)
+                    return c.substring(0, 50);
+                if (c instanceof Array) {
+                    return c.find(m => m.type == 'text')?.text.substring(0, 50) || "Chat";
+                }
+                return "Chat";
+            }
+
             const currentSystemPrompt = systemPromptInput.value.trim();
             const chatEntry = {
                 timestamp: new Date().toISOString(),
                 systemPrompt: currentSystemPrompt, // Corrected typo here
                 conversation: [...conversationHistory], // Store a copy
                 // Optionally, store a title or first few words of user's message
-                title: conversationHistory.find(msg => msg.role === 'user')?.content.substring(0, 50) || "Chat"
+                title: makeTitle(),
             };
 
             let savedHistories = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY)) || [];

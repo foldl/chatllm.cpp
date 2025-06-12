@@ -963,7 +963,6 @@ void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::ve
             {
                 std::vector<vision::image_pixels_t> crops;
 
-                int splits_cols_num = 0;
                 vision::PanScanDir dir = vision::PanScanDir::Horizontal;
 
                 vision::image_load_pan_and_scan(piece.content.c_str(),

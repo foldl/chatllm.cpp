@@ -238,7 +238,7 @@ class HttpHandler(BaseHTTPRequestHandler):
 
         id = session_man.make_id()
         timestamp = int(time.time())
-        prompt = ''
+        prompt = []
         stream = False
         restart = False
         if 'stream' in obj:
@@ -256,9 +256,13 @@ class HttpHandler(BaseHTTPRequestHandler):
 
                 if flag:
                     if isinstance(x['content'], list):
-                        prompt = '\n'.join([o['text'] for o in x['content'] if o['type'] == 'text']) + '\n' + prompt
+                        for o in x['content']:
+                            if o['type'] == 'text':
+                                prompt.append({'type': 'text', 'text': o['text']})
+                            elif 'url' in o:
+                                prompt.append({'type': o['type'], 'url': o['url']})
                     else:
-                        prompt = str(x['content']) + '\n' + prompt
+                        prompt.append({'type': 'text', 'text': str(x['content'])})
 
             restart = counter < 2
 

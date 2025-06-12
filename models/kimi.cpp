@@ -414,8 +414,6 @@ namespace vit
             ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
             ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
-            const int total_patches = tok->get_image_total_emb_vectors();
-
             ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
             ggml::tensor *media_emb = ggml::new_tensor_4d(&ctx, ggml::type::GGML_TYPE_F32, vis_config.patch_size, vis_config.patch_size, 3, image.grid_width * image.grid_height);
 

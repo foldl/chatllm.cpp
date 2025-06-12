@@ -154,6 +154,29 @@ DLL_DECL void API_CALL chatllm_set_gen_max_tokens(struct chatllm_obj *obj, int g
  */
 DLL_DECL void API_CALL chatllm_restart(struct chatllm_obj *obj, const char *utf8_sys_prompt);
 
+/**
+ * @brief prepare to generate a multimedia input, i.e. clear previously added pieces.
+ *
+ * Each `chatllm_obj` has a global multimedia message object, which can be used as user input,
+ * or chat history, etc.
+ *
+ * @param[in] obj               model object
+ * @return                      0 if succeeded
+ */
+DLL_DECL void API_CALL chatllm_multimedia_msg_prepare(struct chatllm_obj *obj);
+
+/**
+ * @brief add a piece to a multimedia message
+ *
+ * Remember to clear the message by `chatllm_multimedia_msg_prepare` when starting a new message.
+ *
+ * @param[in] obj               model object
+ * @param[in] type              type ::= "text" | "image" | "video" | "audio" | ...
+ * @param[in] utf8_str          content, i.e. utf8 text content, or base64 encoded data of multimedia data.
+ * @return                      0 if succeeded
+ */
+DLL_DECL int API_CALL chatllm_multimedia_msg_append(struct chatllm_obj *obj, const char *type, const char *utf8_str);
+
 enum RoleType
 {
     ROLE_USER = 2,
@@ -165,7 +188,7 @@ enum RoleType
  * @brief push back a message to the end of chat history.
  *
  * This can be used to restore session after `chatllm_restart`.
- * This would not trigger generation. Use `chatllm_user_input`, etc  to start generation.
+ * This would not trigger generation. Use `chatllm_user_input`, etc to start generation.
  *
  * @param[in] obj               model object
  * @param[in] role_type         message type (see `RoleType`)
@@ -183,6 +206,16 @@ DLL_DECL void API_CALL chatllm_history_append(struct chatllm_obj *obj, int role_
  * @return                      0 if succeeded
  */
 DLL_DECL int API_CALL chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str);
+
+/**
+ * @brief take current multimedia message as user input and run
+ *
+ * This function is synchronized, i.e. it returns after model generation ends and `f_end` is called.
+ *
+ * @param[in] obj               model object
+ * @return                      0 if succeeded
+ */
+DLL_DECL int API_CALL chatllm_user_input_multimedia_msg(struct chatllm_obj *obj);
 
 /**
  * @brief set prefix for AI generation
@@ -248,16 +281,25 @@ DLL_DECL int chatllm_tool_completion(struct chatllm_obj *obj, const char *utf8_s
  */
 DLL_DECL int chatllm_text_tokenize(struct chatllm_obj *obj, const char *utf8_str);
 
+enum EmbeddingPurpose
+{
+    EMBEDDING_FOR_DOC   = 0,    // for document
+    EMBEDDING_FOR_QUERY = 1,    // for query
+};
+
 /**
  * @brief text embedding
  *
  * embedding is emitted through `PRINTLN_EMBEDDING`.
  *
+ * Note: Not all models support specifying purpose.(see _Qwen3-Embedding_).
+ *
  * @param[in] obj               model object
  * @param[in] utf8_str          text
+ * @param[in] purpose           purpose, see `EmbeddingPurpose`
  * @return                      0 if succeeded
  */
-DLL_DECL int chatllm_text_embedding(struct chatllm_obj *obj, const char *utf8_str);
+DLL_DECL int chatllm_text_embedding(struct chatllm_obj *obj, const char *utf8_str, int purpose);
 
 /**
  * @brief question & answer ranking
@@ -347,6 +389,14 @@ DLL_DECL int API_CALL chatllm_async_start(struct chatllm_obj *obj, f_chatllm_pri
 DLL_DECL int API_CALL chatllm_async_user_input(struct chatllm_obj *obj, const char *utf8_str);
 
 /**
+ * @brief async version of `chatllm_user_input_multimedia_msg`
+ *
+ * @param   ...
+ * @return                      0 if started else -1
+ */
+DLL_DECL int API_CALL chatllm_async_user_input_multimedia_msg(struct chatllm_obj *obj);
+
+/**
  * @brief async version of `chatllm_ai_continue`
 
  * @param   ...
@@ -376,7 +426,7 @@ DLL_DECL int chatllm_async_tool_completion(struct chatllm_obj *obj, const char *
  * @param   ...
  * @return                      0 if started else -1
  */
-DLL_DECL int chatllm_async_text_embedding(struct chatllm_obj *obj, const char *utf8_str);
+DLL_DECL int chatllm_async_text_embedding(struct chatllm_obj *obj, const char *utf8_str, int purpose);
 
 /**
  * @brief async version of `chatllm_qa_rank`

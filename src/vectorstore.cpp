@@ -571,4 +571,10 @@ namespace utils
             sprintf(s, "%02d:%02d", min, sec);
         return s;
      }
+
+     std::string tmpname(void)
+     {
+        // Note: theoretically unsafe!
+        return std::tmpnam(nullptr);
+     }
 }

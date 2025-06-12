@@ -531,7 +531,7 @@ namespace vision
         if (!fs::exists(fn))
             return;
 
-        tmp_dir = std::tmpnam(nullptr);
+        tmp_dir = utils::tmpname();
         fs::create_directories(tmp_dir);
 
         char cmd[1024];

@@ -2,6 +2,11 @@ import os, json
 import copy
 import binding
 
+try:
+    import requests
+except:
+    print(f"`requests` is required. use `pip install requests` to install it.")
+
 def get_model_url_on_modelscope(proj: str, fn: str, user: str = 'judd2024') -> str:
     return f"https://modelscope.cn/api/v1/models/{user}/{proj}/repo?Revision=master&FilePath={fn}"
 
@@ -43,6 +48,10 @@ def print_progress_bar (iteration, total, prefix = '', suffix = '', decimals = 1
     print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
     if (iteration == total) and auto_nl:
         print()
+
+def download_file_to_bytes(url) -> bytes:
+    r = requests.get(url)
+    return r.content if r.status_code == 200 else b''
 
 def download_file(url: str, fn: str, prefix: str):
     flag = False

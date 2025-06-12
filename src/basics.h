@@ -78,5 +78,8 @@ namespace utils
     std::string sec2hms(float seconds, bool show_ms = false);
     std::string sec2ms(float seconds, bool show_ms = false);
 
+    // create a unique temp file name (full path)
+    std::string tmpname(void);
+
     //#define TIME_STAMP (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
 }

@@ -2,7 +2,7 @@ from ctypes import *
 from enum import IntEnum
 import os, sys, signal, queue
 import threading
-import json
+import json, base64
 from typing import Any, Iterable, List, Union
 
 try:
@@ -36,6 +36,10 @@ class PrintType(IntEnum):
 
     PRINT_EVT_ASYNC_COMPLETED       = 100,   # last async operation completed (utf8_str is null)
     PRINT_EVT_THOUGHT_COMPLETED     = 101,   # thought completed
+
+class EmbeddingPurpose(IntEnum):
+    Document = 0,                   # for document
+    Query    = 1,                   # for query
 
 class LibChatLLM:
 
@@ -100,11 +104,15 @@ class LibChatLLM:
         self._chatllm_show_statistics   = self._lib.chatllm_show_statistics
         self._chatllm_save_session      = self._lib.chatllm_save_session
         self._chatllm_load_session      = self._lib.chatllm_load_session
+        self._chatllm_multimedia_msg_prepare        = self._lib.chatllm_multimedia_msg_prepare
+        self._chatllm_multimedia_msg_append         = self._lib.chatllm_multimedia_msg_append
+        self._chatllm_user_input_multimedia_msg     = self._lib.chatllm_user_input_multimedia_msg
 
         self._chatllm_async_user_input      = self._lib.chatllm_async_user_input
         self._chatllm_async_ai_continue     = self._lib.chatllm_async_ai_continue
         self._chatllm_async_tool_input      = self._lib.chatllm_async_tool_input
         self._chatllm_async_tool_completion = self._lib.chatllm_async_tool_completion
+        self._chatllm_async_user_input_multimedia_msg = self._lib.chatllm_async_user_input_multimedia_msg
 
         self._chatllm_create.restype = c_void_p
         self._chatllm_create.argtypes = []
@@ -123,10 +131,19 @@ class LibChatLLM:
         self._chatllm_async_ai_continue.restype = c_int
         self._chatllm_async_ai_continue.argtypes = [c_void_p, c_char_p]
 
+        self._chatllm_multimedia_msg_prepare.argtypes = [c_void_p]
+        self._chatllm_multimedia_msg_append.restype = c_int
+        self._chatllm_multimedia_msg_append.argtypes = [c_void_p, c_char_p, c_char_p]
+
         self._chatllm_user_input.restype = c_int
         self._chatllm_user_input.argtypes = [c_void_p, c_char_p]
         self._chatllm_async_user_input.restype = c_int
         self._chatllm_async_user_input.argtypes = [c_void_p, c_char_p]
+
+        self._chatllm_user_input_multimedia_msg.restype         = c_int
+        self._chatllm_user_input_multimedia_msg.argtypes        = [c_void_p]
+        self._chatllm_async_user_input_multimedia_msg.restype   = c_int
+        self._chatllm_async_user_input_multimedia_msg.argtypes  = [c_void_p]
 
         self._chatllm_tool_input.restype = c_int
         self._chatllm_tool_input.argtypes = [c_void_p, c_char_p]
@@ -139,7 +156,7 @@ class LibChatLLM:
         self._chatllm_async_tool_completion.argtypes = [c_void_p, c_char_p]
 
         self._chatllm_text_embedding.restype = c_int
-        self._chatllm_text_embedding.argtypes = [c_void_p, c_char_p]
+        self._chatllm_text_embedding.argtypes = [c_void_p, c_char_p, c_int]
 
         self._chatllm_text_tokenize.restype = c_int
         self._chatllm_text_tokenize.argtypes = [c_void_p, c_char_p]
@@ -241,11 +258,44 @@ class LibChatLLM:
     def set_ai_prefix(self, obj: c_void_p, prefix: str) -> int:
         return self._chatllm_set_ai_prefix(obj, c_char_p(prefix.encode()))
 
-    def chat(self, obj: c_void_p, user_input: str) -> int:
-        return self._chatllm_user_input(obj, c_char_p(user_input.encode()))
+    def _input_multimedia_msg(self, obj: c_void_p, user_input: List[dict | str]) -> int:
+        self._chatllm_multimedia_msg_prepare(obj)
+        for x in user_input:
+            if isinstance(x, str):
+                self._chatllm_multimedia_msg_append(obj, c_char_p('text'), c_char_p(x))
+            elif isinstance(x, dict):
+                t = x['type']
+                if t == 'text':
+                    data = x['text'].encode()
+                else:
+                    if 'file' in x:
+                        with open(x['file'], 'rb') as f:
+                            data = f.read()
+                    elif 'url' in x:
+                        url: str = x['url']
+                        if url.startswith('data:'):
+                            i = url.find('base64,')
+                            data = base64.decodebytes(url[i + 7 :].encode())
+                        else:
+                            data = model_downloader.download_file_to_bytes(url)
+                    else:
+                        raise Exception(f'unknown message piece: {x}')
+                    data = base64.b64encode(data)
+                self._chatllm_multimedia_msg_append(obj, c_char_p(t.encode()), c_char_p(data))
 
-    def async_chat(self, obj: c_void_p, user_input: str) -> int:
-        return self._chatllm_async_user_input(obj, c_char_p(user_input.encode()))
+    def chat(self, obj: c_void_p, user_input: str | List[dict | str]) -> int:
+        if isinstance(user_input, str):
+            return self._chatllm_user_input(obj, c_char_p(user_input.encode()))
+        elif isinstance(user_input, list):
+            self._input_multimedia_msg(obj, user_input)
+            return self._chatllm_user_input_multimedia_msg(obj)
+
+    def async_chat(self, obj: c_void_p, user_input: str | List[dict | str]) -> int:
+        if isinstance(user_input, str):
+            return self._chatllm_async_user_input(obj, c_char_p(user_input.encode()))
+        else:
+            self._input_multimedia_msg(obj, user_input)
+            self._chatllm_async_user_input_multimedia_msg(obj)
 
     def ai_continue(self, obj: c_void_p, suffix: str) -> int:
         return self._chatllm_ai_continue(obj, c_char_p(suffix.encode()))
@@ -268,8 +318,8 @@ class LibChatLLM:
     def text_tokenize(self, obj: c_void_p, text: str) -> str:
         return self._chatllm_text_tokenize(obj, c_char_p(text.encode()))
 
-    def text_embedding(self, obj: c_void_p, text: str) -> str:
-        return self._chatllm_text_embedding(obj, c_char_p(text.encode()))
+    def text_embedding(self, obj: c_void_p, text: str, purpose: EmbeddingPurpose = EmbeddingPurpose.Document) -> str:
+        return self._chatllm_text_embedding(obj, c_char_p(text.encode()), c_int(purpose.value))
 
     def qa_rank(self, obj: c_void_p, q: str, a: str) -> float:
         return self._chatllm_qa_rank(obj, c_char_p(q.encode()), c_char_p(a.encode()))
