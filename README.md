@@ -1,6 +1,6 @@
 # ChatLLM.cpp
 
-[中文版](README_zh.md) | [日本語](README_ja.md)
+[中文版](README_zh.md)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![CI](https://github.com/foldl/chatllm.cpp/actions/workflows/build.yml/badge.svg)](https://github.com/foldl/chatllm.cpp/actions/workflows/build.yml)
 
@@ -91,7 +91,7 @@ pip install -r requirements.txt
 Use `convert.py` to transform models into quantized GGML format. For example, to convert the _fp16_ base model to q8_0 (quantized int8) GGML model, run:
 
 ```sh
-# For models such as ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
+# For models such as ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2, etc
 python convert.py -i path/to/model -t q8_0 -o quantized.bin --name ModelName
 
 # For some models such as CodeLlaMA, model type should be provided by `-a`

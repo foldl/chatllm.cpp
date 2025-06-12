@@ -1,12 +1,12 @@
 # ChatLLM.cpp
 
-[English](README.md) | [日本語](README_ja.md)
+[English](README.md)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ![](./docs/demo.gif)
 
-在计算机（CPU）上实时聊天，可 [检索增强生成](./docs/rag.md) 。支持从不到 1B 到超过 300B 的一系列模型的推理。基于 [@ggerganov](https://github.com/ggerganov) 的 [ggml](https://github.com/ggerganov/ggml)，纯 C++ 实现。
+在计算机（CPU）上实时[多模态](./docs/multimodal.md)聊天，可 [检索增强生成](./docs/rag.md) 。支持从不到 1B 到超过 300B 的一系列模型的推理。基于 [@ggerganov](https://github.com/ggerganov) 的 [ggml](https://github.com/ggerganov/ggml)，纯 C++ 实现。
 
 | [支持的模型](./docs/models.md) | [下载量化模型](./docs/quick_start.md#download-quantized-models) |
 
@@ -57,12 +57,12 @@ pip install -r requirements.txt
 使用 `convert.py` 将模型转换为量化的 GGML 格式。例如，要将某个模型转换为 q8_0（int8 量化）GGML 模型，请运行以下命令：
 
 ```sh
-# 对于 ChatLLM-6B, ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2 等模型，使用以下命令转换
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin
+# 对于 ChatLLM2-6B, InternLM, LlaMA, LlaMA-2, Baichuan-2 等模型，使用以下命令转换
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin --name ModelName
 
 # 对于像 CodeLlaMA 等模型，模型的类型需要通过 `-a` 参数指定。
 # `docs/models.md` 说明了这些模型需要的 `-a` 参数。
-python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA
+python3 convert.py -i path/to/model -t q8_0 -o quantized.bin -a CodeLlaMA --name ModelName
 ```
 
 使用 `-l` 参数指定要合并的　LoRA 模型所在目录。例如:
@@ -108,8 +108,6 @@ python3 convert.py -i path/to/model -l path/to/lora/model -o quantized.bin
 现在，您可以通过以下方式与量化模型进行对话：
 
 ```sh
-./build/bin/main -m chatglm-ggml.bin                            # ChatGLM-6B
-# 你好👋！我是人工智能助手 ChatGLM-6B，很高兴见到你，欢迎问我任何问题。
 ./build/bin/main -m llama2.bin  --seed 100                      # Llama-2-Chat-7B
 # Hello! I'm here to help you with any questions or concerns ....
 ```
@@ -133,6 +131,8 @@ rlwrap ./build/bin/main -m model.bin -i
 * 本项目起初是对 [ChatGLM.cpp](https://github.com/li-plus/chatglm.cpp) 的重构，没有它，这个项目将无法实现。
 
 * 感谢那些发布了模型源代码和检查点的人。
+
+* `chat_ui.html` 改写自 [Ollama-Chat](https://github.com/Oft3r/Ollama-Chat)。
 
 ## 注意
 
