@@ -300,13 +300,16 @@ Please use `--format completion` for these models.
     * [x] v3: [Instruct-4B](https://huggingface.co/google/gemma-3-4b-it/tree/dbd91bbaf64a0e591f4340ce8b66fd1dba9ab6bd), [Instruct-12B](https://huggingface.co/google/gemma-3-12b-it/tree/7553b6f39c33dc229bfbfe3831f7bcdbb6b738c7), [Instruct-27B](https://huggingface.co/google/gemma-3-27b-it/tree/dfb98f29ff907e391ceed2be3834ca071ea260f1)
     * [x] MedGemma: [Instruct-4B](https://huggingface.co/google/medgemma-4b-it/commit/698f7911b8e0569ff4ebac5d5552f02a9553063c)
 
-    Note: Only download `tokenizer.model` and DO NOT download `tokenizer.json` when converting.
+    Note: Only download `tokenizer.model` and DO NOT download `tokenizer.json` when converting. Use `--set do-pan-and-scan 1` to enable _Pan and Scan_.
+
 
 * Kimi (`KimiVLForConditionalGeneration`)
     * [x] VL: [A3B-Instruct](https://huggingface.co/moonshotai/Kimi-VL-A3B-Instruct/tree/7a3c132a7b0f1f1677f5a72f258bd3afded7d357), [A3B-Thinking](https://huggingface.co/moonshotai/Kimi-VL-A3B-Thinking/commit/16681d8ac24e505088698e4e34ea494dd6e24400)
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
     * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)
+
+    Note: Use `--set do-split 1` to enable _Split_.
 
 ## RAG Models
 

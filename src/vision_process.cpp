@@ -247,6 +247,84 @@ namespace vision
         run_cmd(oss, image);
     }
 
+    void image_load_pan_and_scan(const char *fn, std::vector<image_pixels_t> &crops, bool do_pas,
+        const int min_crop_size, const int max_num_crops, float min_ratio_to_activate,
+        const int crop_width, const int crop_height,
+        PanScanDir &dir)
+    {
+        crops.clear();
+
+        int width = -1;
+        int height = -1;
+        image_dimension(fn, width, height);
+        if (width <= 0) return;
+
+        // whole image
+        {
+            std::ostringstream oss;
+            oss << "magick -depth 8 \"" << std::string(fn) << "\"";
+            oss << " -resize " << crop_width << "x" << crop_height << "!";
+            crops.emplace_back(image_pixels_t());
+            auto &image = crops.back();
+            run_cmd(oss, image);
+        }
+
+        int num_crops_w = 1;
+        int num_crops_h = 1;
+
+        if (width >= height)
+        {
+            auto ratio = (float)width / height;
+            if (ratio < min_ratio_to_activate)
+                return;
+            dir = PanScanDir::Horizontal;
+
+            num_crops_w = int(width / height + 0.5);
+            num_crops_w = std::min((width / min_crop_size), num_crops_w);
+
+            num_crops_w = std::max(2, num_crops_w);
+            num_crops_w = std::min(max_num_crops, num_crops_w);
+        }
+        else
+        {
+            auto ratio = (float)height / width;
+            if (ratio < min_ratio_to_activate)
+                return;
+            dir = PanScanDir::Vertical;
+
+            num_crops_h = int(height / width  + 0.5);
+            num_crops_h = std::min((height / min_crop_size), num_crops_h);
+
+            num_crops_h = std::max(2, num_crops_h);
+            num_crops_h = std::min(max_num_crops, num_crops_h);
+        }
+
+        const int crop_size_w = (width  + (num_crops_w - 1) / num_crops_w);
+        const int crop_size_h = (height + (num_crops_h - 1) / num_crops_h);
+
+        if (std::min(crop_size_w, crop_size_h) < min_crop_size)
+            return;
+
+        for (int r = 0; r < num_crops_h; r++)
+        {
+            const int start_y = r * crop_size_h;
+
+            for (int c = 0; c < num_crops_w; c++)
+            {
+                const int start_x = c * crop_size_w;
+
+                std::ostringstream oss;
+                oss << "magick -depth 8 \"" << std::string(fn) << "\"";
+                oss << " -crop " << crop_size_w << "x" << crop_size_h << "+" << start_x << "+" << start_y;
+                oss << " -resize " << crop_width << "x" << crop_height << "!";
+
+                crops.emplace_back(image_pixels_t());
+                auto &image = crops.back();
+                run_cmd(oss, image);
+            }
+        }
+    }
+
     void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, PaddingMode pad)
     {
         // magick -depth 8 demo.jpeg -resize 100x100 rgb:"aaa.raw"

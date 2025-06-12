@@ -362,6 +362,10 @@ struct Config
     float image_mean[3];
     float image_std[3];
     bool vision_use_head;
+
+    int max_num_crops;
+    int min_crop_size;
+    float min_ratio_to_activate;
 };
 
 class PatchEmbedding : public Block
@@ -377,7 +381,7 @@ public:
     ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override
     {
         auto embedding = patch_embedding.forward(ctx, input);
-        embedding = ggml::reshape_2d(ctx, embedding, ggml::get_dim(embedding, 0) * ggml::get_dim(embedding, 1), ggml::get_dim(embedding, 2));
+        embedding = ggml::reshape_3d(ctx, embedding, ggml::get_dim(embedding, 0) * ggml::get_dim(embedding, 1), ggml::get_dim(embedding, 2), ggml::get_dim(embedding, 3));
         embedding = ggml::transpose(ctx, embedding);
         embedding = ggml::cont(ctx, embedding);
         embedding = ggml::add(ctx, embedding, position_embedding);
@@ -589,6 +593,11 @@ public:
             vis_config.image_std[i]     = 0.5f;
         }
 
+        // ref: https://github.com/huggingface/transformers/blob/9487765f07ef4e5500d6ec21cad99aed4a037a3d/src/transformers/models/gemma3/processing_gemma3.py#L36
+        vis_config.min_crop_size = 256;
+        vis_config.max_num_crops =  4;
+        vis_config.min_ratio_to_activate = 1.2f;
+
         const size_t tensor_ovhd = ggml_tensor_overhead();
         const size_t num_tensors = 7 + vis_config.num_hidden_layers * 17;
         const size_t ctx_size = num_tensors * tensor_ovhd;
@@ -608,18 +617,21 @@ public:
         if ((vis_model.get() == nullptr) || (tok->media_emb.size() < 1)) return;
         if (!vis_model->is_loaded()) return;
 
-        run_model(gen_config, tok, dtype, buf);
+        for (auto &image : tok->media_emb)
+        {
+            run_model(gen_config, tok, dtype, image, buf);
+        }
     }
 
 protected:
-    bool run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf)
+    bool run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &image, std::vector<uint8_t> &buf)
     {
         ForwardContext ctx(&backend_context);
         ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
         ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
         ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
-        ggml::tensor *media_emb = ggml::new_tensor_4d(&ctx, ggml::type::GGML_TYPE_F32, vis_config.image_size, vis_config.image_size, 3, tok->media_emb.size());
+        ggml::tensor *media_emb = ggml::new_tensor_3d(&ctx, ggml::type::GGML_TYPE_F32, vis_config.image_size, vis_config.image_size, 3);
 
         dbg_ctx = &ctx;
 
@@ -642,18 +654,14 @@ protected:
             exit(-1);
         }
 
-        size_t offset = 0;
-        for (auto &image : tok->media_emb)
-        {
-            size_t size = image.data.size() * sizeof(image.data[0]);
-            Backend::write_tensor_data(media_emb, image.data.data(), offset, size);
-            offset += size;
-        }
+        Backend::write_tensor_data(media_emb, image.data.data(), 0, image.data.size() * sizeof(image.data[0]));
 
         ctx.compute();
 
-        buf.resize(ggml::nbytes(r));
-        Backend::read_tensor_data(r, buf.data());
+        size_t offset = buf.size();
+        buf.resize(offset + ggml::nbytes(r));
+        Backend::read_tensor_data(r, buf.data() + offset);
+
         ctx.reset();
 
         return true;
@@ -691,6 +699,8 @@ class ChatHistoryEncoder : public v1::ChatHistoryEncoder
 {
 public:
     void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
+protected:
+    bool append_image(const vision::image_pixels_t pixels, const int w, const int h, std::vector<int> &ids) const;
 public:
     const siglip::Config *vis_config = nullptr;
     int MAX_PATCH_NUM = 0;
@@ -717,6 +727,7 @@ public:
 public:
     int boi_token_id;
     int eoi_token_id;
+    bool do_pan_and_scan = false;
 };
 
 template <int sliding_window_len> class Gemma3SWASelfAttention : public QKNormedAttention<RMSNorm, SlidingWindowAttentionImpl<sliding_window_len>>
@@ -860,6 +871,17 @@ public:
         return r;
     }
 
+    void set_additional_args(const std::map<std::string, std::string> &args) override
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        auto it = args.find("do_pan_and_scan");
+        if (it == args.end()) it = args.find("do-pan-and-scan");
+        if (it != args.end())
+        {
+            tok->do_pan_and_scan = it->second != "0";
+        }
+    }
+
     void before_generate(const GenerationConfig &gen_config) override
     {
         std::vector<uint8_t> buf;
@@ -885,6 +907,41 @@ public:
     siglip::VisualEmbeddingGeneration visual;
 };
 
+bool ChatHistoryEncoder::append_image(const vision::image_pixels_t pixels, const int w, const int h, std::vector<int> &ids) const
+{
+    const int patch_size = vis_config->patch_size;
+    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+    std::vector<float> scaled;
+
+    vision::image_rescale(pixels, scaled);
+
+    vision::image_normalize(scaled, vis_config->image_mean, vis_config->image_std);
+
+    tok->media_emb.push_back({.grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
+
+    auto &image = tok->media_emb.back();
+
+    vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::ChannelsRGB_PixelsLeftRightDown);
+
+    image.emb_vec_number = vis_config->mm_tokens_per_image;
+
+    const int total_patches = tok->get_image_total_emb_vectors();
+    CHATLLM_CHECK(total_patches <= MAX_PATCH_NUM) << "too many image patches!";
+
+    ids.push_back(tok->nl_token_id);
+    ids.push_back(tok->nl_token_id);
+    ids.push_back(tok->boi_token_id);
+    int id = total_patches - image.emb_vec_number + tok->vocab_size;
+    for (int j = 0; j < image.emb_vec_number; j++)
+    {
+        ids.push_back(id++);
+    }
+    ids.push_back(tok->eoi_token_id);
+    ids.push_back(tok->nl_token_id);
+    ids.push_back(tok->nl_token_id);
+
+    return true;
+}
 
 void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
 {
@@ -902,40 +959,51 @@ void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::ve
         {
             CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
 
-            vision::Resize resize(vis_config->image_size, vis_config->image_size);
-
-            int w, h;
-            std::vector<uint8_t> pixels;
-            const int patch_size = vis_config->patch_size;
-            vision::image_load(piece.content.c_str(), pixels, w, h, patch_size);
-
-            if (w <= 0) continue;
-
-            std::vector<float> scaled;
-            vision::image_rescale(pixels, scaled);
-
-            vision::image_normalize(scaled, vis_config->image_mean, vis_config->image_std);
-
-            tok->media_emb.push_back({.grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
-
-            auto &image = tok->media_emb.back();
-
-            vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::ChannelsRGB_PixelsLeftRightDown);
-
-            image.emb_vec_number = vis_config->mm_tokens_per_image;
-
-            CHATLLM_CHECK(image.emb_vec_number) << "too many image patches!";
-
-            const int total_patches = tok->get_image_total_emb_vectors();
-            CHATLLM_CHECK(total_patches <= MAX_PATCH_NUM) << "too many image patches!";
-
-            ids.push_back(tok->boi_token_id);
-            int id = total_patches - image.emb_vec_number + tok->vocab_size;
-            for (int j = 0; j < image.emb_vec_number; j++)
+            if (tok->do_pan_and_scan)
             {
-                ids.push_back(id++);
+                std::vector<vision::image_pixels_t> crops;
+
+                int splits_cols_num = 0;
+                vision::PanScanDir dir = vision::PanScanDir::Horizontal;
+
+                vision::image_load_pan_and_scan(piece.content.c_str(),
+                    crops, tok->do_pan_and_scan,
+                    vis_config->min_crop_size, vis_config->max_num_crops, vis_config->min_ratio_to_activate,
+                    vis_config->image_size, vis_config->image_size,
+                    dir);
+
+                printf("crops: %d\n", (int)crops.size());
+                if (crops.size() < 1) continue;
+
+                if (crops.size() == 1)
+                {
+                    append_image(crops[0], vis_config->image_size, vis_config->image_size, ids);
+                    continue;
+                }
+
+                tok->encode("Here is the original image ", ids, false, false);
+                append_image(crops[0], vis_config->image_size, vis_config->image_size, ids);
+                tok->encode(" and here are some crops to help you see better", ids, false, false);
+
+                for (size_t i = 1; i < crops.size(); i++)
+                {
+                    tok->encode(" ", ids, false, false);
+                    append_image(crops[i], vis_config->image_size, vis_config->image_size, ids);
+                }
             }
-            ids.push_back(tok->eoi_token_id);
+            else
+            {
+                vision::Resize resize(vis_config->image_size, vis_config->image_size);
+
+                int w, h;
+                std::vector<uint8_t> pixels;
+                const int patch_size = vis_config->patch_size;
+                vision::image_load(piece.content.c_str(), pixels, w, h, patch_size);
+
+                if (w <= 0) continue;
+
+                append_image(pixels, w, h, ids);
+            }
         }
         else
         {
