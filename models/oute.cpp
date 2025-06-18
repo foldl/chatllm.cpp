@@ -539,10 +539,10 @@ namespace tts_llama
 
     static void load_speaker_from_args(const std::map<std::string, std::string> &args)
     {
-        auto x = args.find("speaker");
-        if (x != args.end())
+        auto x = utils::get_opt(args, "speaker", "");
+        if (x != "")
         {
-            speaker = json::JSON::Load(utils::load_file(x->second.c_str()));
+            speaker = json::JSON::Load(utils::load_file(x.c_str()));
         }
     }
 

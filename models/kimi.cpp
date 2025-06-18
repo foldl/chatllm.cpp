@@ -586,6 +586,8 @@ namespace vl
         int media_content_token_id;
         int media_end_token_id;
         int media_pad_token_id;
+
+        int video_max_frames = 20;
     };
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
@@ -678,6 +680,12 @@ namespace vl
             _chat_encoder.vit_loaded = visual.load(loader);
         }
 
+        void set_additional_args(const std::map<std::string, std::string> &args) override
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+            tok->video_max_frames = utils::get_opt(args, "video_max_frames", tok->video_max_frames);
+        }
+
         void before_generate(const GenerationConfig &gen_config) override
         {
             std::vector<uint8_t> buf;
@@ -697,7 +705,33 @@ namespace vl
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         append_user_opening(round_idx, ids);
 
+        std::vector<std::unique_ptr<vision::VideoLoader>> videos;
+
+        // expand video into images
+        std::vector<ContentPiece> pieces;
         for (auto &piece : user.pieces)
+        {
+            if (piece.type != ContentPiece::Type::Video)
+            {
+                pieces.push_back(piece);
+                continue;
+            }
+
+            // video is just like a collection of images.
+            // But, it's still not clear on fps.
+            // https://github.com/MoonshotAI/Kimi-VL/issues/24#issuecomment-2804163270
+            auto video = new vision::VideoLoader(piece.content.c_str(), 1.0f, tok->video_max_frames);
+            videos.emplace_back(video);
+            if (video->frames.size() < 1)
+                continue;
+
+            for (size_t i = 0; i < video->frames.size(); i++)
+            {
+                pieces.emplace_back(video->frames[i], ContentPiece::Type::Image);
+            }
+        }
+
+        for (auto &piece : pieces)
         {
             if (piece.type == ContentPiece::Type::Text)
             {

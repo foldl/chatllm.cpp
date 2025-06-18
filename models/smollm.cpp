@@ -651,12 +651,7 @@ namespace vlm
         void set_additional_args(const std::map<std::string, std::string> &args) override
         {
             Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-            auto it = args.find("do_split");
-            if (it == args.end()) it = args.find("do-split");
-            if (it != args.end())
-            {
-                tok->do_split = it->second != "0";
-            }
+            tok->do_split = utils::get_opt(args, "do-split", false);
         }
 
         void before_generate(const GenerationConfig &gen_config) override

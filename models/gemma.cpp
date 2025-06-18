@@ -874,12 +874,7 @@ public:
     void set_additional_args(const std::map<std::string, std::string> &args) override
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        auto it = args.find("do_pan_and_scan");
-        if (it == args.end()) it = args.find("do-pan-and-scan");
-        if (it != args.end())
-        {
-            tok->do_pan_and_scan = it->second != "0";
-        }
+        tok->do_pan_and_scan = utils::get_opt(args, "do-pan-and-scan", false);
     }
 
     void before_generate(const GenerationConfig &gen_config) override

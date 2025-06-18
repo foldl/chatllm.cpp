@@ -544,11 +544,7 @@ namespace tts
         void set_additional_args(const std::map<std::string, std::string> &args) override
         {
             Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-            auto it = args.find("voice");
-            if (it != args.end())
-            {
-                tok->voice = it->second;
-            }
+            tok->voice = utils::get_opt(args, "voice", tok->voice);
         }
 
         bool load_more(const json::JSON &config) override

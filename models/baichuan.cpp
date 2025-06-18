@@ -404,14 +404,9 @@ namespace m1
 
         void set_additional_args(const std::map<std::string, std::string> &args) override
         {
-            auto it = args.find("chat_template");
-            if (it != args.end())
-            {
-                if (it->second == "im")
-                {
+            if (utils::get_opt(args, "chat_template", "") == "im")
                     tokenizer->set_chat_encoder(&_im_chat_encoder);
-                }
-            }
+
         }
 
     private:
