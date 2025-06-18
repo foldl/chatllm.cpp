@@ -214,6 +214,14 @@ namespace chatllm
         }
     }
 
+    ggml::tensor *ggml::init_tensor(ggml::tensor  *tensor,
+        ggml::type type,
+        int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
+    {
+        int64_t ne[4] = {ne0, ne1, ne2, ne3};
+        return ggml::init_tensor(tensor, type, 4, ne);
+    }
+
     ggml::tensor *ggml::init_tensor(ggml::tensor *tensor,
         ggml::type    type,
         int           n_dims,
@@ -568,8 +576,15 @@ namespace chatllm
             }
         case InterpolateMode::Bicubic:
             {
+                CHATLLM_CHECK(ggml::get_dim(a, 2) == ne2);
+                CHATLLM_CHECK(ggml::get_dim(a, 3) == ne3);
+
+                if ((ggml::get_dim(a, 0) == ne0) && (ggml::get_dim(a, 1) == ne1))
+                    return a;
+
                 std::vector<tensor *> tensors;
                 tensors.push_back(a);
+
                 ggml::tensor *tensor = custom(ctx, ggml_compute_forward_bicubic, GGML_N_TASKS_MAX, nullptr, tensors,
                         ggml::type_of(a), ne0, ne1, ne2, ne3);
                 return tensor;

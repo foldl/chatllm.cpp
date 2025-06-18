@@ -23,7 +23,7 @@ namespace vit
     public:
         Learnable2DInterpPosEmb() {}
         Learnable2DInterpPosEmb(InitContext *ctx, int height, int width, int dim)
-            : pos_emb(ggml::new_tensor_3d(ctx, ggml::type::GGML_TYPE_F32, dim, width, height))
+            : pos_emb(ggml::new_tensor_3d(ctx, ggml::type::GGML_TYPE_F32, dim, height, width))
         {
         }
 
@@ -36,7 +36,22 @@ namespace vit
         {
             CHATLLM_CHECK(ggml::get_dim(input, 3) == 1);
 
-            auto output = ggml::add(ctx, input, pos_emb);
+            //input: ggml[dim, h, w]
+
+            ggml::tensor * interp = nullptr;
+            if ((ggml::get_dim(input, 1) == ggml::get_dim(pos_emb, 1)) && (ggml::get_dim(input, 2) == ggml::get_dim(pos_emb, 2)))
+            {
+                interp = pos_emb;
+            }
+            else
+            {
+                auto permuted = ggml::permute(ctx, pos_emb, 2, 0, 1, 3);
+                interp = ggml::interpolate(ctx, permuted, ggml::InterpolateMode::Bicubic,
+                    ggml::get_dim(input, 1), ggml::get_dim(input, 2), ggml::get_dim(permuted, 2), ggml::get_dim(permuted, 3));
+                interp = ggml::permute(ctx, interp, 1, 2, 0, 3);
+            }
+
+            auto output = ggml::add(ctx, input, interp);
 
             return output;
         }
@@ -106,28 +121,26 @@ namespace vit
         void before_forward(ComputeContext *ctx, const int n_past, const int qlen) override
         {
             const int len = grid_h * grid_w;
+            std::vector<int> v_pos_h;
 
             CHATLLM_CHECK(len <= max_length);
 
             ggml::set_dim(pos,   0, len);
             ggml::set_dim(pos_h, 0, len);
 
+            v_pos_h.resize(len);
 
-            for (int i = 0; i < grid_h; i++)
+            for (int i = 0; i < grid_w; i++)
             {
-                for (int j = 0; j < grid_w; j++)
-                    v_pos[i * grid_w + j] = j;
+                for (int j = 0; j < grid_h; j++)
+                {
+                    v_pos  [i * grid_h + j] = j;
+                    v_pos_h[i * grid_h + j] = i;
+                }
             }
 
-            Backend::write_tensor_data(pos, v_pos.data(), 0, len * sizeof(v_pos[0]));
-
-            for (int i = 0; i < grid_h; i++)
-            {
-                for (int j = 0; j < grid_w; j++)
-                    v_pos[i * grid_w + j] = i;
-            }
-
-            Backend::write_tensor_data(pos_h, v_pos.data(), 0, len * sizeof(v_pos[0]));
+            Backend::write_tensor_data(pos,     v_pos.data(), 0, len * sizeof(v_pos[0]));
+            Backend::write_tensor_data(pos_h, v_pos_h.data(), 0, len * sizeof(v_pos[0]));
         }
 
         ggml::tensor *apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size, ggml::tensor *pos_w, ggml::tensor *pos_h) const
@@ -185,11 +198,13 @@ namespace vit
             linear_1(ctx, hidden_size, hidden_size),
             linear_2(ctx, hidden_size, lm_hidden_size)
         {
+            memcpy(merge_param.merge_kernel_size, config.merge_kernel_size, sizeof(merge_param.merge_kernel_size));
         }
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *image_features) override
         {
-            auto output = pre_norm.forward(ctx, image_features);
+            auto output = merge_patch(ctx, image_features);
+            output = pre_norm.forward(ctx, output);
             output = ggml::reshape_2d(ctx, output,
                 hidden_size, ggml::get_dim(output, 1) / (hidden_size / ggml::get_dim(output, 0)) * ggml::get_dim(output, 2) * ggml::get_dim(output, 3));
             output = linear_1.forward(ctx, output);
@@ -214,11 +229,18 @@ namespace vit
             linear_2.load(path + "linear_2.", loader);
         }
 
+    protected:
+        ggml::tensor *merge_patch(ComputeContext *ctx, ggml::tensor *x)
+        {
+            auto reshaped_seq = ggml::merge_patch(ctx, x, &merge_param);
+            return reshaped_seq;
+        }
     public:
         const int hidden_size;
         LayerNorm pre_norm;
         Linear    linear_1;
         Linear    linear_2;
+        ggml::merge_patch_param merge_param;
     };
 
     class VisionTransformer : public Block
@@ -240,7 +262,6 @@ namespace vit
                 layer->set_id(layer_id);
                 layers.emplace_back(layer);
             }
-            memcpy(merge_param.merge_kernel_size, config.merge_kernel_size, sizeof(merge_param.merge_kernel_size));
         }
 
         int64_t get_param_num(bool effective_only) const override
@@ -269,17 +290,11 @@ namespace vit
             loaded = true;
         }
 
-        ggml::tensor *merge_patch(ComputeContext *ctx, ggml::tensor *x, int grid_h, int grid_w)
-        {
-            merge_param.grid_h = grid_h;
-            merge_param.grid_w = grid_w;
-
-            auto reshaped_seq = ggml::merge_patch(ctx, x, &merge_param);
-            return reshaped_seq;
-        }
-
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
         {
+            multi_modal_projector.merge_param.grid_h = grid_h;
+            multi_modal_projector.merge_param.grid_w = grid_w;
+
             auto output = embeddings.forward(ctx, input, grid_h, grid_w);
 
             for (size_t i = 0; i < layers.size(); i++)
@@ -289,7 +304,6 @@ namespace vit
                 output = layers[i]->forward(ctx, output, 0);
             }
             output = post_layernorm.forward(ctx, output);
-            output = merge_patch(ctx, output, grid_h, grid_w);
             output = multi_modal_projector.forward(ctx, output);
             return output;
         }
@@ -305,7 +319,6 @@ namespace vit
         MultiModalProjector multi_modal_projector;
     protected:
         bool loaded;
-        ggml::merge_patch_param merge_param;
     };
 
     class VisualEmbeddingGeneration
@@ -702,9 +715,6 @@ namespace vl
                 vision::MaxPatchNum     param2(vis_config->in_token_limit);
                 vision::MaxGridHeight   param3(512);
                 vision::MaxGridWidth    param4(512);
-
-                // TODO: cubic interpolation not ready yet. image size fixed.
-                vision::Resize          resize(896, 896);
 
                 vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, vision::PaddingMode::Black);
 

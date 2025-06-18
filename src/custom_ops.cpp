@@ -707,50 +707,411 @@ static void ggml_custom_compute_forward_zeroes(struct ggml_tensor * dst , int it
     memset(dst->data, 0, ggml::nbytes(dst));
 }
 
-// ref: https://www.ece.mcmaster.ca/~xwu/interp_1.pdf
-static void ggml_compute_forward_bicubic_f16(ggml::tensor * dst, const ggml::tensor * a, int ith, int nth, void * userdata)
+static void vect_mult_vect_4x4(float r[4], const float v[4], const float m[4][4])
 {
-    const ggml::tensor *src0 = a;
+    r[0] = v[0] * m[0][0] + v[1] * m[1][0] + v[2] * m[2][0] + v[3] * m[3][0];
+    r[1] = v[0] * m[0][1] + v[1] * m[1][1] + v[2] * m[2][1] + v[3] * m[3][1];
+    r[2] = v[0] * m[0][2] + v[1] * m[1][2] + v[2] * m[2][2] + v[3] * m[3][2];
+    r[3] = v[0] * m[0][3] + v[1] * m[1][3] + v[2] * m[2][3] + v[3] * m[3][3];
+}
 
-    CHATLLM_CHECK(ggml::type_of(a) == ggml::type::GGML_TYPE_F32);
+// ref: https://www.ece.mcmaster.ca/~xwu/interp_1.pdf
+void ggml_compute_forward_bicubic_f32_1(ggml::tensor * dst, const ggml::tensor * src0, int ith, int nth, bool align_corners)
+{
+    const static float mat_ib[4][4] =
+    {
+        {-1.0f/6,  1.0f/2, -1.0f/2,  1.0f/6},
+        { 1.0f/2, -1.0f  ,  1.0f/2,  0.0f  },
+        {-1.0f/3, -1.0f/2,  1.0f  , -1.0f/6},
+        {   0   ,  1     ,    0   ,    0   },
+    };
+
+    float f[4][4];
+    float lx[4];
+    float ly[4];
 
     GGML_TENSOR_UNARY_OP_LOCALS
 
-    const int nr = (int)ggml::nrows(dst);
+    const float sf0 = (float)ne0/src0->ne[0];
+    const float sf1 = (float)ne1/src0->ne[1];
 
-    // rows per thread
-    const int dr = (nr + nth - 1)/nth;
+    const float pixel_offset = align_corners ? 0.0f : 0.5f;
 
-    // row range for this thread
-    const int ir0 = dr*ith;
-    const int ir1 = MIN(ir0 + dr, nr);
+    for (int64_t i3 = 0; i3 < ne3; i3++)
+    {
+        for (int64_t i2 = ith; i2 < ne2; i2 += nth)
+        {
+            for (int64_t i1 = 0; i1 < ne1; i1++)
+            {
+                float y = ((float)i1 + pixel_offset) / sf1 - pixel_offset;
 
-    // row index used to determine which thread to use
-    int ir = 0;
+                int64_t y0 = (int64_t)floorf(y);
+                int64_t y_ = y0 - 1;
+                int64_t y1 = y0 + 1;
+                int64_t y2 = y0 + 2;
+                float vy[4];
 
-    for (int64_t i3 = 0; i3 < ne3; i3++) {
-        for (int64_t i2 = 0; i2 < ne2; i2++) {
-            for (int64_t i1 = 0; i1 < ne1; i1++) {
-                if (ir++ < ir0) continue;
-                if (ir   > ir1) break;
-                for (int64_t i0 = 0; i0 < ne0 / 4; i0++) {
+                y = y - floorf(y);
 
-                    const float * const src = (float *)((char *) src0->data + i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
-                          float * dst_data  = (float *)((char *)  dst->data + i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0);
+                y_ = std::max(int64_t(0), std::min(y_, ne01 - 1));
+                y0 = std::max(int64_t(0), std::min(y0, ne01 - 1));
+                y1 = std::max(int64_t(0), std::min(y1, ne01 - 1));
+                y2 = std::max(int64_t(0), std::min(y2, ne01 - 1));
 
+                vy[0] = y * y * y;
+                vy[1] = y * y;
+                vy[2] = y;
+                vy[3] = 1.0f;
 
+                // y = transpose(y * invB)
+                vect_mult_vect_4x4(ly, vy, mat_ib);
+
+                for (int64_t i0 = 0; i0 < ne0; i0++)
+                {
+                    float x = ((float)i0 + pixel_offset) / sf0 - pixel_offset;
+
+                    int64_t x0 = (int64_t)floorf(x);
+                    int64_t x_ = x0 - 1;
+                    int64_t x1 = x0 + 1;
+                    int64_t x2 = x0 + 2;
+                    float vx[4];
+
+                    x = x - floorf(x);
+
+                    x_ = std::max(int64_t(0), std::min(x_, ne00 - 1));
+                    x0 = std::max(int64_t(0), std::min(x0, ne00 - 1));
+                    x1 = std::max(int64_t(0), std::min(x1, ne00 - 1));
+                    x2 = std::max(int64_t(0), std::min(x2, ne00 - 1));
+
+                    vx[0] = x * x * x;
+                    vx[1] = x * x;
+                    vx[2] = x;
+                    vx[3] = 1.0f;
+
+                    // x = x * invB
+                    vect_mult_vect_4x4(lx, vx, mat_ib);
+
+                    f[0][0] = *(const float *)((const char *)src0->data + x_*nb00 + y_*nb01 + i2*nb02 + i3*nb03);
+                    f[1][0] = *(const float *)((const char *)src0->data + x0*nb00 + y_*nb01 + i2*nb02 + i3*nb03);
+                    f[2][0] = *(const float *)((const char *)src0->data + x1*nb00 + y_*nb01 + i2*nb02 + i3*nb03);
+                    f[3][0] = *(const float *)((const char *)src0->data + x2*nb00 + y_*nb01 + i2*nb02 + i3*nb03);
+                    f[0][1] = *(const float *)((const char *)src0->data + x_*nb00 + y0*nb01 + i2*nb02 + i3*nb03);
+                    f[1][1] = *(const float *)((const char *)src0->data + x0*nb00 + y0*nb01 + i2*nb02 + i3*nb03);
+                    f[2][1] = *(const float *)((const char *)src0->data + x1*nb00 + y0*nb01 + i2*nb02 + i3*nb03);
+                    f[3][1] = *(const float *)((const char *)src0->data + x2*nb00 + y0*nb01 + i2*nb02 + i3*nb03);
+                    f[0][2] = *(const float *)((const char *)src0->data + x_*nb00 + y1*nb01 + i2*nb02 + i3*nb03);
+                    f[1][2] = *(const float *)((const char *)src0->data + x0*nb00 + y1*nb01 + i2*nb02 + i3*nb03);
+                    f[2][2] = *(const float *)((const char *)src0->data + x1*nb00 + y1*nb01 + i2*nb02 + i3*nb03);
+                    f[3][2] = *(const float *)((const char *)src0->data + x2*nb00 + y1*nb01 + i2*nb02 + i3*nb03);
+                    f[0][3] = *(const float *)((const char *)src0->data + x_*nb00 + y2*nb01 + i2*nb02 + i3*nb03);
+                    f[1][3] = *(const float *)((const char *)src0->data + x0*nb00 + y2*nb01 + i2*nb02 + i3*nb03);
+                    f[2][3] = *(const float *)((const char *)src0->data + x1*nb00 + y2*nb01 + i2*nb02 + i3*nb03);
+                    f[3][3] = *(const float *)((const char *)src0->data + x2*nb00 + y2*nb01 + i2*nb02 + i3*nb03);
+
+                    // val = lx . F . ly
+                    float t[4];
+                    vect_mult_vect_4x4(t, lx, f);
+                    const float val = t[0] * ly[0] + t[1] * ly[1] + t[2] * ly[2] + t[3] * ly[3];
+
+                    float * y_dst = (float *)((char *)dst->data + i0*nb0 + i1*nb1 + i2*nb2 + i3*nb3);
+                    *y_dst = val;
                 }
             }
         }
     }
 }
 
+// ref: https://en.wikipedia.org/wiki/Bicubic_interpolation
+void ggml_compute_forward_bicubic_f32_2(ggml::tensor * dst, const ggml::tensor * src0, int ith, int nth, bool align_corners)
+{
+    const static float mat_b[4][4] =
+    {
+        { 1.0f,  0.0f,  0.0f,  0.0f},
+        { 0.0f,  0.0f,  1.0f,  0.0f},
+        {-3.0f,  3.0f, -2.0f, -1.0f},
+        { 2.0f, -2.0f,  1.0f,  1.0f},
+    };
+
+    float f[4][4];
+    float lx[4];
+    float ly[4];
+
+    GGML_TENSOR_UNARY_OP_LOCALS
+
+    const float sf0 = (float)ne0/src0->ne[0];
+    const float sf1 = (float)ne1/src0->ne[1];
+
+    const float pixel_offset = align_corners ? 0.0f : 0.5f;
+
+    for (int64_t i3 = 0; i3 < ne3; i3++)
+    {
+        for (int64_t i2 = ith; i2 < ne2; i2 += nth)
+        {
+            for (int64_t i1 = 0; i1 < ne1; i1++)
+            {
+                float y = ((float)i1 + pixel_offset) / sf1 - pixel_offset;
+
+                int64_t y0 = (int64_t)floorf(y);
+                int64_t y_ = y0 - 1;
+                int64_t y1 = y0 + 1;
+                int64_t y2 = y0 + 2;
+                float vy[4];
+
+                y = y - floorf(y);
+
+                y_ = std::max(int64_t(0), std::min(y_, ne01 - 1));
+                y0 = std::max(int64_t(0), std::min(y0, ne01 - 1));
+                y1 = std::max(int64_t(0), std::min(y1, ne01 - 1));
+                y2 = std::max(int64_t(0), std::min(y2, ne01 - 1));
+
+                vy[3] = y * y * y;
+                vy[2] = y * y;
+                vy[1] = y;
+                vy[0] = 1.0f;
+
+                // y = transpose(y * invB)
+                vect_mult_vect_4x4(ly, vy, mat_b);
+
+                for (int64_t i0 = 0; i0 < ne0; i0++)
+                {
+                    float x = ((float)i0 + pixel_offset) / sf0 - pixel_offset;
+
+                    int64_t x0 = (int64_t)floorf(x);
+                    int64_t x_ = x0 - 1;
+                    int64_t x1 = x0 + 1;
+                    int64_t x2 = x0 + 2;
+                    float vx[4];
+
+                    x = x - floorf(x);
+
+                    x_ = std::max(int64_t(0), std::min(x_, ne00 - 1));
+                    x0 = std::max(int64_t(0), std::min(x0, ne00 - 1));
+                    x1 = std::max(int64_t(0), std::min(x1, ne00 - 1));
+                    x2 = std::max(int64_t(0), std::min(x2, ne00 - 1));
+
+                    vx[3] = x * x * x;
+                    vx[2] = x * x;
+                    vx[1] = x;
+                    vx[0] = 1.0f;
+
+                    // x = x * invB
+                    vect_mult_vect_4x4(lx, vx, mat_b);
+
+                    #define ff(_i0, _i1)   (*(const float *)((const char *)src0->data + _i0*nb00 + _i1*nb01 + i2*nb02 + i3*nb03))
+
+                    f[0][0] = ff(x0, y0);
+                    f[0][1] = ff(x0, y1);
+                    f[1][0] = ff(x1, y0);
+                    f[1][1] = ff(x1, y1);
+
+                    f[0][2] = (ff(x0, y1) - ff(x0, y_)) / 2;  // fy(0, 0)
+                    f[0][3] = (ff(x0, y2) - ff(x0, y0)) / 2;  // fy(0, 1)
+
+                    f[1][2] = (ff(x1, y1) - ff(x1, y_)) / 2;  // fy(1, 0)
+                    f[1][3] = (ff(x1, y2) - ff(x1, y0)) / 2;  // fy(1, 1)
+
+                    f[2][0] = (ff(x1, y0) - ff(x_, y0)) / 2;  // fx(0, 0)
+                    f[2][1] = (ff(x1, y1) - ff(x_, y1)) / 2;  // fx(0, 1)
+                    f[3][0] = (ff(x2, y0) - ff(x0, y0)) / 2;  // fx(1, 0)
+                    f[3][1] = (ff(x2, y1) - ff(x0, y1)) / 2;  // fx(1, 1)
+
+                    f[2][2] = ((ff(x1, y1) - ff(x_, y1)) - (ff(x1, y_) - ff(x_, y_))) / 4;  // fxy(0, 0)
+                    f[2][3] = ((ff(x1, y2) - ff(x_, y2)) - (ff(x1, y0) - ff(x_, y0))) / 4;  // fxy(0, 1)
+                    f[3][2] = ((ff(x2, y1) - ff(x0, y1)) - (ff(x2, y_) - ff(x0, y_))) / 4;  // fxy(1, 0)
+                    f[3][3] = ((ff(x2, y2) - ff(x0, y2)) - (ff(x2, y0) - ff(x0, y0))) / 4;  // fxy(1, 1)
+
+                    #undef ff
+
+                    // val = lx . F . ly
+                    float t[4];
+                    vect_mult_vect_4x4(t, lx, f);
+                    const float val = t[0] * ly[0] + t[1] * ly[1] + t[2] * ly[2] + t[3] * ly[3];
+
+                    float * y_dst = (float *)((char *)dst->data + i0*nb0 + i1*nb1 + i2*nb2 + i3*nb3);
+                    *y_dst = val;
+                }
+            }
+        }
+    }
+}
+
+// ref: https://en.wikipedia.org/wiki/Bicubic_interpolation#Bicubic_convolution_algorithm
+// see: https://github.com/pytorch/pytorch/blob/1cce73b5f4806f266fbbcf3383057af5f2e3a0aa/aten/src/ATen/native/mps/kernels/UpSample.metal#L229
+
+template <typename accscalar_t>
+accscalar_t cubic_convolution1(accscalar_t x, accscalar_t A)
+{
+    return ((A + 2) * x - (A + 3)) * x * x + 1;
+}
+
+template <typename accscalar_t>
+accscalar_t cubic_convolution2(accscalar_t x, accscalar_t A)
+{
+    return ((A * x - 5 * A) * x + 8 * A) * x - 4 * A;
+}
+
+template <typename accscalar_t>
+void get_cubic_upsampling_coefficients(accscalar_t coeffs[4], accscalar_t t)
+{
+    accscalar_t A = -0.75f;
+
+    accscalar_t x1 = t;
+    coeffs[0] = cubic_convolution2<accscalar_t>(x1 + 1.0f, A);
+    coeffs[1] = cubic_convolution1<accscalar_t>(x1, A);
+
+    // opposite coefficients
+    accscalar_t x2 = 1.0f - t;
+    coeffs[2] = cubic_convolution1<accscalar_t>(x2, A);
+    coeffs[3] = cubic_convolution2<accscalar_t>(x2 + 1.0f, A);
+}
+
+static void ggml_compute_forward_bicubic_f32(ggml::tensor * dst, const ggml::tensor * src0, int ith, int nth, bool align_corners)
+{
+    float f[4][4];
+    float lx[4];
+    float ly[4];
+
+    GGML_TENSOR_UNARY_OP_LOCALS
+
+    const float sf0 = align_corners ? (float)(src0->ne[0] - 1) / (ne0 - 1) : (float)src0->ne[0] / ne0;
+    const float sf1 = align_corners ? (float)(src0->ne[1] - 1) / (ne1 - 1) : (float)src0->ne[1] / ne1;
+
+    const float pixel_offset = align_corners ? 0.0f : 0.5f;
+
+    for (int64_t i3 = 0; i3 < ne3; i3++)
+    {
+        for (int64_t i2 = ith; i2 < ne2; i2 += nth)
+        {
+            for (int64_t i1 = 0; i1 < ne1; i1++)
+            {
+                float y = ((float)i1 + pixel_offset) * sf1 - pixel_offset;
+
+                int64_t y0 = (int64_t)floorf(y);
+                int64_t y_ = y0 - 1;
+                int64_t y1 = y0 + 1;
+                int64_t y2 = y0 + 2;
+
+                y = y - floorf(y);
+
+                y_ = std::max(int64_t(0), std::min(y_, ne01 - 1));
+                y0 = std::max(int64_t(0), std::min(y0, ne01 - 1));
+                y1 = std::max(int64_t(0), std::min(y1, ne01 - 1));
+                y2 = std::max(int64_t(0), std::min(y2, ne01 - 1));
+
+                get_cubic_upsampling_coefficients<float>(ly, y);
+
+                for (int64_t i0 = 0; i0 < ne0; i0++)
+                {
+                    float x = ((float)i0 + pixel_offset) * sf0 - pixel_offset;
+
+                    int64_t x0 = (int64_t)floorf(x);
+                    int64_t x_ = x0 - 1;
+                    int64_t x1 = x0 + 1;
+                    int64_t x2 = x0 + 2;
+
+                    x = x - floorf(x);
+
+                    x_ = std::max(int64_t(0), std::min(x_, ne00 - 1));
+                    x0 = std::max(int64_t(0), std::min(x0, ne00 - 1));
+                    x1 = std::max(int64_t(0), std::min(x1, ne00 - 1));
+                    x2 = std::max(int64_t(0), std::min(x2, ne00 - 1));
+
+                    get_cubic_upsampling_coefficients<float>(lx, x);
+
+                    f[0][0] = *(const float *)((const char *)src0->data + x_*nb00 + y_*nb01 + i2*nb02 + i3*nb03);
+                    f[1][0] = *(const float *)((const char *)src0->data + x0*nb00 + y_*nb01 + i2*nb02 + i3*nb03);
+                    f[2][0] = *(const float *)((const char *)src0->data + x1*nb00 + y_*nb01 + i2*nb02 + i3*nb03);
+                    f[3][0] = *(const float *)((const char *)src0->data + x2*nb00 + y_*nb01 + i2*nb02 + i3*nb03);
+                    f[0][1] = *(const float *)((const char *)src0->data + x_*nb00 + y0*nb01 + i2*nb02 + i3*nb03);
+                    f[1][1] = *(const float *)((const char *)src0->data + x0*nb00 + y0*nb01 + i2*nb02 + i3*nb03);
+                    f[2][1] = *(const float *)((const char *)src0->data + x1*nb00 + y0*nb01 + i2*nb02 + i3*nb03);
+                    f[3][1] = *(const float *)((const char *)src0->data + x2*nb00 + y0*nb01 + i2*nb02 + i3*nb03);
+                    f[0][2] = *(const float *)((const char *)src0->data + x_*nb00 + y1*nb01 + i2*nb02 + i3*nb03);
+                    f[1][2] = *(const float *)((const char *)src0->data + x0*nb00 + y1*nb01 + i2*nb02 + i3*nb03);
+                    f[2][2] = *(const float *)((const char *)src0->data + x1*nb00 + y1*nb01 + i2*nb02 + i3*nb03);
+                    f[3][2] = *(const float *)((const char *)src0->data + x2*nb00 + y1*nb01 + i2*nb02 + i3*nb03);
+                    f[0][3] = *(const float *)((const char *)src0->data + x_*nb00 + y2*nb01 + i2*nb02 + i3*nb03);
+                    f[1][3] = *(const float *)((const char *)src0->data + x0*nb00 + y2*nb01 + i2*nb02 + i3*nb03);
+                    f[2][3] = *(const float *)((const char *)src0->data + x1*nb00 + y2*nb01 + i2*nb02 + i3*nb03);
+                    f[3][3] = *(const float *)((const char *)src0->data + x2*nb00 + y2*nb01 + i2*nb02 + i3*nb03);
+
+                    float t[4];
+                    vect_mult_vect_4x4(t, lx, f);
+                    const float val = t[0] * ly[0] + t[1] * ly[1] + t[2] * ly[2] + t[3] * ly[3];
+
+                    float * y_dst = (float *)((char *)dst->data + i0*nb0 + i1*nb1 + i2*nb2 + i3*nb3);
+                    *y_dst = val;
+                }
+            }
+        }
+    }
+}
+
+extern "C" void test_interp(void)
+{
+    ggml::tensor dst;
+    ggml::tensor src;
+
+    /*
+    float input[5][2][3] = {
+        {{ 0.4474,  1.9418,  0.5986},
+         {-0.6370, -0.1142,  0.8451}},
+
+        {{ 1.4538,  0.9776,  0.4454},
+         {-0.5263,  0.3359,  0.2385}},
+
+        {{-0.2411,  0.2098, -0.5852},
+         {-0.1465, -1.0969, -0.3429}},
+
+        {{-0.0207, -0.1396, -1.7902},
+         { 0.0193,  0.3782, -1.1898}},
+
+        {{-1.2405, -0.9490, -0.0471},
+         {-1.2282,  0.6968, -0.7653}}};
+    */
+
+    float input[1][2][3] = {
+        {{ 10.0f, 20.0f, 30.f},
+         { 30.0f, 40.0f, 30.f}}};
+
+    const int result_w = 4;
+    const int result_h = 4;
+
+    ggml::init_tensor(&src, ggml::type::GGML_TYPE_F32, 3, 2, 1, 1);
+    ggml::init_tensor(&dst, ggml::type::GGML_TYPE_F32, result_w, result_h, 1, 1);
+
+    float output[1][result_h][result_w] = {0};
+
+    dst.data = (void *)output;
+    src.data = (void *)input;
+
+    ggml_compute_forward_bicubic_f32(&dst, &src, 0, 1, false);
+
+    for (int i = 0; i < 1; i++)
+    {
+        printf("[\n");
+        for (int j = 0; j < result_h; j++)
+        {
+            printf("\t[\n\t\t");
+            for (int k = 0; k < result_w; k++)
+            {
+                printf("%0.4f, ", output[i][j][k]);
+            }
+            printf("\n\t],\n");
+        }
+        printf("],\n");
+    }
+
+    exit(0);
+}
+
 static void ggml_compute_forward_bicubic(struct ggml_tensor * dst , int ith, int nth, void * userdata)
 {
     switch (dst->type)
     {
-    case GGML_TYPE_F16:
-        ggml_compute_forward_bicubic_f16(dst, dst->src[0], ith, nth, userdata);
+    case GGML_TYPE_F32:
+        CHATLLM_CHECK(ggml::type_of(dst->src[0]) == ggml::type::GGML_TYPE_F32);
+        ggml_compute_forward_bicubic_f32(dst, dst->src[0], ith, nth, userdata);
         break;
     default:
         GGML_ASSERT(false);
