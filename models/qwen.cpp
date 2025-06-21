@@ -635,9 +635,9 @@ namespace audio_tower
 
     protected:
         Embedding embed_positions;
-        LayerNorm layer_norm;
         Conv1D    conv1;
         Conv1D    conv2;
+        LayerNorm layer_norm;
         Linear    multi_modal_projector;
         std::vector<std::unique_ptr<LayerBlock>> layers;
     protected:

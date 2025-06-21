@@ -348,7 +348,7 @@ namespace audio
             {
                 const auto &f = filters.filters[j];
                 const int off = f.offset;
-                int k = 0;
+                size_t k = 0;
                 float sum = 0.0f;
                 for (; k + 3 < f.weights.size(); k += 4)
                 {
@@ -362,7 +362,7 @@ namespace audio
                     sum +=  f.weights[k + 0] * fft_out[off + k + 0];
                 }
 
-                mel.data[j * mel.n_len + i] = std::log10f(std::max(1e-10f, sum));
+                mel.data[j * mel.n_len + i] = log10f(std::max(1e-10f, sum));
             }
         }
 
