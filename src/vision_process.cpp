@@ -5,11 +5,6 @@
 #include <filesystem>
 #include "basics.h"
 
-#if defined(_MSC_VER)
-#define popen  _popen
-#define pclose _pclose
-#endif
-
 namespace vision
 {
     namespace fs = std::filesystem;

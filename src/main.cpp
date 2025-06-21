@@ -15,6 +15,7 @@
 
 #include "vectorstore.h"
 #include "vision_process.h"
+#include "audio_process.h"
 #include "models.h"
 
 #if defined(_WIN32)
@@ -1218,7 +1219,7 @@ int main(int argc, const char **argv)
         utf_args.push_back(argv[i]);
 #endif
 
-    //vision::test(utf_args[1].c_str());
+    //audio::test();
     //return -1;
 
     Args args;

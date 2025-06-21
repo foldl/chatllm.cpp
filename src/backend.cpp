@@ -953,6 +953,16 @@ namespace chatllm
         return ggml_get_mem_size(get_ctx());
     }
 
+    bool ComputeContext::check_used_mem_size(bool assertion)
+    {
+        bool r = get_used_mem() == get_mem_size();
+        if (!r && assertion)
+        {
+            CHATLLM_THROW << "tensor number mismatch: " << get_used_mem() / ggml::tensor_overhead() << " (used) vs "  << get_mem_size() / ggml::tensor_overhead();;
+        }
+        return r;
+    }
+
     void ComputeContext::set_backend_context(BackendContext *backend_context)
     {
         this->backend_context = backend_context;

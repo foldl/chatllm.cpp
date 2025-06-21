@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-06-21: [I can hear](./docs/multimodal.md): Qwen2-Audio
 * 2025-06-10: SmolVLM2
 * 2025-06-07: MiniCPM4
 * 2025-06-06: Qwen-3 Embedding & Reranker
@@ -120,6 +121,12 @@ In order to build this project you have several different options.
   ```
 
   The executable is `./build/bin/main`.
+
+  There are lots of `GGML_...` options to play with. Example: Vulkan acceleration together with RPC and backend dynamic loading:
+
+  ```sh
+  cmake -B build -DGGML_VULKAN=1 -DGGML_RPC=1 -DGGML_CPU_ALL_VARIANTS=1 -DGGML_BACKEND_DL=1
+  ```
 
 ### Run
 

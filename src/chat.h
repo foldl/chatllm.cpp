@@ -251,7 +251,7 @@ namespace chatllm
             int height = -1;
             int grid_width  = -1;
             int grid_height = -1;
-            int patch_size;
+            int patch_size  = 0;
             int emb_vec_number;
             std::vector<float> data;
         };

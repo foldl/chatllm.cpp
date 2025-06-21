@@ -275,6 +275,11 @@ namespace chatllm
         return ggml_nbytes(tensor);
     }
 
+    size_t ggml::tensor_overhead(void)
+    {
+        return ggml_tensor_overhead();
+    }
+
     int ggml::n_dims(const ggml::tensor * tensor)
     {
         return ggml_n_dims(tensor);
@@ -418,6 +423,15 @@ namespace chatllm
     ggml::tensor *ggml::avg_pool_2d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride, float padding)
     {
         ggml::tensor *tensor = ggml_pool_2d(ctx->get_ctx(), a, GGML_OP_POOL_AVG, kernel_size, kernel_size, stride, stride, padding, padding);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::avg_pool_1d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride, int padding)
+    {
+        if (!ggml::is_contiguous(a))
+            a = ggml::cont(ctx, a);
+        ggml::tensor *tensor = ggml_pool_1d(ctx->get_ctx(), a, GGML_OP_POOL_AVG, kernel_size, stride, padding);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -599,6 +613,8 @@ namespace chatllm
 
     ggml::tensor *ggml::norm(ComputeContext *ctx, ggml::tensor *a, float eps)
     {
+        if (!ggml::is_contiguous(a))
+            a = ggml::cont(ctx, a);
         ggml::tensor *tensor = ggml_norm(ctx->get_ctx(), a, eps);
         ctx->cb_op_tensor(tensor);
         return tensor;
@@ -1006,7 +1022,24 @@ namespace chatllm
         return ggml_nelements(tensor);
     }
 
-    int BlockParams::num_padding_embeddings = 0;
+    int  BlockParams::num_padding_embeddings = 0;
+    bool BlockParams::OverrideKProjBiased::active = false;
+    bool BlockParams::OverrideKProjBiased::biased = false;
+
+    BlockParams::OverrideKProjBiased::OverrideKProjBiased(bool biased)
+    {
+        OverrideKProjBiased::active = true;
+        OverrideKProjBiased::biased = biased;
+    }
+    BlockParams::OverrideKProjBiased::~OverrideKProjBiased()
+    {
+        OverrideKProjBiased::active = false;
+    }
+
+    bool BlockParams::OverrideKProjBiased::get(bool biased)
+    {
+        return OverrideKProjBiased::active ? OverrideKProjBiased::biased : biased;
+    }
 
     ggml::tensor *Sequential::forward(ComputeContext *ctx, ggml::tensor *input)
     {

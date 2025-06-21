@@ -158,6 +158,7 @@ namespace chatllm
         ggml::tensor *abs(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max);
         ggml::tensor *avg_pool_2d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride, float padding = 0.0f);
+        ggml::tensor *avg_pool_1d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride,   int padding = 0);
 
         ggml::tensor *conv_1d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding = 0, int dilation = 1);
         ggml::tensor *conv_1d_depthwise(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation);
@@ -207,6 +208,17 @@ namespace chatllm
             PadEmbedding(int n, int max) { BlockParams::num_padding_embeddings = n > max ? max : (n >= 0 ? n : 0); }
             ~PadEmbedding(void) { BlockParams::num_padding_embeddings = 0; }
             int get(void) const { return BlockParams::num_padding_embeddings; }
+        };
+
+        class OverrideKProjBiased
+        {
+        public:
+            OverrideKProjBiased(bool biased);
+            ~OverrideKProjBiased();
+            static bool get(bool biased);
+        protected:
+            static bool active;
+            static bool biased;
         };
     };
 
@@ -420,8 +432,13 @@ namespace chatllm
     {
     public:
         Embedding(InitContext *ctx, int num_embeddings, int embedding_dim)
+            : Embedding(ctx, ctx->dtype, num_embeddings, embedding_dim)
+        {
+        }
+
+        Embedding(InitContext *ctx, ggml::type dtype, int num_embeddings, int embedding_dim)
             : num_embeddings(num_embeddings), num_padded_embeddings(BlockParams::num_padding_embeddings),
-              weight(ggml::new_tensor_2d(ctx, ggml::type_fallback(ctx->dtype, embedding_dim), embedding_dim,
+              weight(ggml::new_tensor_2d(ctx, ggml::type_fallback(dtype, embedding_dim), embedding_dim,
                      num_embeddings + BlockParams::num_padding_embeddings))
         {
             ggml::set_input(weight);
@@ -1344,7 +1361,7 @@ namespace chatllm
                       int cache_length)
             : KVCacheAttention(ctx, num_attention_heads, num_kv_heads, head_dim * num_kv_heads, head_dim * num_kv_heads, max_length, cache_length),
               q_proj(ctx, hidden_size, head_dim * num_attention_heads, nullptr, qkv_bias),
-              k_proj(ctx, hidden_size, head_dim * num_kv_heads, nullptr, qkv_bias),
+              k_proj(ctx, hidden_size, head_dim * num_kv_heads, nullptr, BlockParams::OverrideKProjBiased::get(qkv_bias)),
               v_proj(ctx, hidden_size, head_dim * num_kv_heads, nullptr, qkv_bias),
               o_proj(ctx, head_dim * num_attention_heads, hidden_size, o_bias)
         {

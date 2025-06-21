@@ -21,11 +21,13 @@ Use `--multimedia_file_tags` to specify a pair of tags, for example:
 --multimedia_file_tags {{ }}
 ```
 
-Then, an `image` can be embedded in prompt like this:
+Then an `image`, `audio`, or `video` can be embedded in prompt like this:
 
 ```
-{{image:/path/to/an/image/file}}
+{{tag:/path/to/an/image/file}}
 ```
+
+where `tag` is `image`, `audio`, or `video` respectively.
 
 Take Fuyu model as an example:
 

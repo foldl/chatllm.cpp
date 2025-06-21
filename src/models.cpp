@@ -22,6 +22,7 @@
 #include "layers.h"
 #include "JSON.h"
 #include "vision_process.h"
+#include "audio_process.h"
 
 json::JSON json::JSON::_null = json::JSON();
 
@@ -203,6 +204,7 @@ namespace chatllm
 
     #define MAKE_TYPE_TAG(v)            (((uint32_t)(v) >> 1) << 24)
     #define MODEL_TYPE_TAG_ChatImageIn                              MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput)
+    #define MODEL_TYPE_TAG_ChatAudioIn                              MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::AudioInput)
     #define MODEL_TYPE_TAG_ChatImageInVideoIn                       MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::VideoInput)
     #define MODEL_TYPE_TAG_ChatImageInVideoInAudioInAudioOut        MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::VideoInput + ChatModelAccessPoint::AudioInput + ChatModelAccessPoint::AudioOutput)
 
@@ -366,6 +368,8 @@ namespace chatllm
 
         MODEL_TYPE_LLAMA4           = MODEL_TYPE_TAG_ChatImageIn + 0x0000001,
         MODEL_TYPE_GEMMA3Vis        = MODEL_TYPE_TAG_ChatImageIn + 0x0000011,
+
+        MODEL_TYPE_QWEN2_AUDIO      = MODEL_TYPE_TAG_ChatAudioIn + 0x0000001,
 
         MODEL_TYPE_QWEN2_5_VL       = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000001,
         MODEL_TYPE_KIMI_VL          = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000100,
@@ -2414,6 +2418,7 @@ namespace chatllm
         CASE(DEEPSEEK_R1_DISTILL_QWEN, qwen::ds_r1_distill, 1)  \
         CASE(DEEPSEEK_R1_DISTILL_QWEN3,qwen::ds_r1_distill_v3, 1)\
         CASE(AQUILA2,               aquila::v2, 1)              \
+        CASE(QWEN2_AUDIO,           qwen::v2_audio, 1)          \
         CASE(QWEN2_5_VL,            qwen::v2_5_vl, 1)           \
         CASE(QWEN3,                 qwen::v3, 1)                \
                                                                 \

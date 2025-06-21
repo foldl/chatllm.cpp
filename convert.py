@@ -4,6 +4,7 @@ Convert Hugging Face models to GGML format
 import argparse
 from ast import Dict, Tuple
 from collections import OrderedDict
+import copy
 import json
 import struct
 import time, os
@@ -48,6 +49,7 @@ class ChatModelAP(IntEnum):
     VideoOutput     = 0x40
 
 ModelTypeTagChatImageIn = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value) >> 1) << 24
+ModelTypeTagChatAudioIn = ((ChatModelAP.Text.value + ChatModelAP.AudioInput.value) >> 1) << 24
 ModelTypeTagChatImageVideoIn = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value) >> 1) << 24
 ModelTypeTagChatImageVideoAudioInAudioOut = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value + ChatModelAP.AudioInput.value + ChatModelAP.AudioOutput.value) >> 1) << 24
 
@@ -209,6 +211,8 @@ class ModelType(Enum):
 
     LlaMA4                  = ModelTypeTagChatImageIn + 0x0000001
     Gemma3Vis               = ModelTypeTagChatImageIn + 0x0000011
+
+    Qwen2Audio              = ModelTypeTagChatAudioIn + 0x0000001
 
     Qwen2_5VL               = ModelTypeTagChatImageVideoIn + 0x0000001
     KimiVL                  = ModelTypeTagChatImageVideoIn + 0x0000100
@@ -4214,6 +4218,89 @@ class QWen2Converter(BaseConverter):
 
         return weight_names
 
+class QWen2AudioConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Qwen2Audio
+
+    txt_config = {}
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            new_name = name
+            if new_name.startswith('audio_tower.'):
+                new_name = new_name.replace('audio_tower.', 'audio.')
+                if '.out_proj.' in new_name:
+                    new_name = new_name.replace('.out_proj.', '.o_proj.')
+                elif '.fc1.' in new_name:
+                    new_name = new_name.replace('.fc1.', '.mlp.fc1.')
+                elif '.fc2.' in new_name:
+                    new_name = new_name.replace('.fc2.', '.mlp.fc2.')
+                new_name = new_name.replace('.self_attn_layer_norm.', '.input_layernorm.')
+                new_name = new_name.replace('.final_layer_norm.',     '.post_attention_layernorm.')
+            elif new_name.startswith('language_model.'):
+                new_name = new_name.replace('language_model.', '')
+
+            r[new_name] = tensor
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        txt_config = copy.deepcopy(config.text_config)
+
+        default = {
+            'hidden_act': 'silu',
+            'hidden_size': 4096,
+            'num_hidden_layers': 32,
+            'num_attention_heads': 32,
+            'num_key_value_heads': 32,
+            'use_sliding_window': False
+        }
+        for k, v in default.items():
+            if k not in txt_config:
+                txt_config[k] = v
+
+        QWen2AudioConverter.txt_config = AttributeDict(txt_config)
+        QWen2Converter.dump_config(f, QWen2AudioConverter.txt_config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = QWen2Converter.get_weight_names(QWen2AudioConverter.txt_config)
+
+        for i in range(config.audio_config['encoder_layers']):
+            weight_names += [
+                f"audio.layers.{i}.mlp.fc1.bias",
+                f"audio.layers.{i}.mlp.fc1.weight",
+                f"audio.layers.{i}.mlp.fc2.bias",
+                f"audio.layers.{i}.mlp.fc2.weight",
+                f"audio.layers.{i}.post_attention_layernorm.bias",
+                f"audio.layers.{i}.post_attention_layernorm.weight",
+                f"audio.layers.{i}.self_attn.k_proj.weight",
+                f"audio.layers.{i}.self_attn.o_proj.bias",
+                f"audio.layers.{i}.self_attn.o_proj.weight",
+                f"audio.layers.{i}.self_attn.q_proj.bias",
+                f"audio.layers.{i}.self_attn.q_proj.weight",
+                f"audio.layers.{i}.self_attn.v_proj.bias",
+                f"audio.layers.{i}.self_attn.v_proj.weight",
+                f"audio.layers.{i}.input_layernorm.bias",
+                f"audio.layers.{i}.input_layernorm.weight",
+            ]
+
+        weight_names += [
+            "audio.conv1.bias",
+            "audio.conv1.weight",
+            "audio.conv2.bias",
+            "audio.conv2.weight",
+            "audio.embed_positions.weight",
+            "audio.layer_norm.bias",
+            "audio.layer_norm.weight",
+            "multi_modal_projector.linear.bias",
+            "multi_modal_projector.linear.weight",
+        ]
+
+        return weight_names
+
 class QWen2_5VLConverter(BaseConverter):
     MODEL_TYPE = ModelType.Qwen2_5VL
 
@@ -7185,6 +7272,8 @@ def main():
             QWen2Converter.MODEL_TYPE = ModelType.ReaderLM2
             assert config.tie_word_embeddings
         QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Qwen2AudioForConditionalGeneration':
+        QWen2AudioConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2_5_VLForConditionalGeneration':
         QWen2_5VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'KimiVLForConditionalGeneration':

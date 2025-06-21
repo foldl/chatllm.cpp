@@ -93,3 +93,8 @@ namespace utils
 
     //#define TIME_STAMP (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
 }
+
+#if defined(_MSC_VER)
+#define popen  _popen
+#define pclose _pclose
+#endif
