@@ -1755,26 +1755,11 @@ static void chatllm_continue_chat(Chat *chat)
     chat->history[last_id].content.push_back(output);
 }
 
-int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
+static int chatllm_generate(struct chatllm_obj *obj)
 {
-    chatllm_multimedia_msg_prepare(obj);
-    chatllm_multimedia_msg_append(obj, "text", utf8_str);
-    return chatllm_user_input_multimedia_msg(obj);
-}
-
-int chatllm_user_input_multimedia_msg(struct chatllm_obj *obj)
-{
-    int r = 0;
+    int r = -0;
     DEF_CHAT_STREAMER();
-    auto role_user = chat->gen_config.reversed_role ? chatllm::MsgRole::Assistant : chatllm::MsgRole::User;
     auto role_asst = chat->gen_config.reversed_role ? chatllm::MsgRole::User : chatllm::MsgRole::Assistant;
-
-    if (!streamer->is_prompt) return -1;
-
-    if (chat->pipeline->is_loaded() && (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Chat))
-        return -1;
-
-    chat->history.push_back(chat->content_scratch, role_user);
 
 generate:
     std::string output = chat->pipeline->chat(chat->history, chat->gen_config, streamer);
@@ -1797,6 +1782,37 @@ generate:
     }
 
     return r;
+}
+
+int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
+{
+    DEF_CHAT_STREAMER();
+    auto role_user = chat->gen_config.reversed_role ? chatllm::MsgRole::Assistant : chatllm::MsgRole::User;
+
+    if (!streamer->is_prompt) return -1;
+
+    if (chat->pipeline->is_loaded() && (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Chat))
+        return -1;
+
+    chat->history.push_back(utf8_str, role_user);
+
+    return chatllm_generate(obj);
+}
+
+int chatllm_user_input_multimedia_msg(struct chatllm_obj *obj)
+{
+    int r = 0;
+    DEF_CHAT_STREAMER();
+    auto role_user = chat->gen_config.reversed_role ? chatllm::MsgRole::Assistant : chatllm::MsgRole::User;
+
+    if (!streamer->is_prompt) return -1;
+
+    if (chat->pipeline->is_loaded() && (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Chat))
+        return -1;
+
+    chat->history.push_back(chat->content_scratch, role_user);
+
+    return chatllm_generate(obj);
 }
 
 int chatllm_async_user_input(struct chatllm_obj *obj, const char *utf8_str)
