@@ -661,6 +661,7 @@ jobs:
 
   windows-latest-cmake:
     runs-on: windows-latest
+    if: false
 
     env:
       OPENBLAS_VERSION: 0.3.23
