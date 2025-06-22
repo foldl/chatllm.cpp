@@ -588,6 +588,7 @@ namespace vl
         int media_pad_token_id;
 
         int video_max_frames = 20;
+        bool arbitrary_resolution = false;
     };
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
@@ -683,7 +684,8 @@ namespace vl
         void set_additional_args(const std::map<std::string, std::string> &args) override
         {
             Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-            tok->video_max_frames = utils::get_opt(args, "video_max_frames", tok->video_max_frames);
+            tok->video_max_frames       = utils::get_opt(args, "video_max_frames", tok->video_max_frames);
+            tok->arbitrary_resolution   = utils::get_opt(args, "arbitrary_resolution", false);
         }
 
         void before_generate(const GenerationConfig &gen_config) override
@@ -749,6 +751,10 @@ namespace vl
                 vision::MaxPatchNum     param2(vis_config->in_token_limit);
                 vision::MaxGridHeight   param3(512);
                 vision::MaxGridWidth    param4(512);
+
+                std::unique_ptr<vision::Resize> resize;
+                if (!tok->arbitrary_resolution)
+                    resize.reset(new vision::Resize(896, 896));
 
                 vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, vision::PaddingMode::Black);
 
