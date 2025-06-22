@@ -23,41 +23,22 @@
 #include "JSON.h"
 #include "vision_process.h"
 #include "audio_process.h"
+#include "models_priv.h"
+
+#include "../models/qwen.h"
 
 json::JSON json::JSON::_null = json::JSON();
 
 namespace chatllm
 {
-    struct RuntimeConfig
-    {
-        bool moe_on_cpu;
-        int n_threads;
-        int batch_input_size;
-        ggml::type cache_type;
-        std::map<std::string, std::string> model_gpu_layers;
-        RuntimeConfig(bool moe_on_cpu, int n_threads, int batch_input_size, ggml::type cache_type):
-            moe_on_cpu(moe_on_cpu), n_threads(n_threads), batch_input_size(batch_input_size), cache_type(cache_type)
-        {}
-    };
-
-    class ForwardContext : public ComputeContext
-    {
-    public:
-        ForwardContext(BackendContext *backend_context) : ComputeContext(backend_context)
-        {
-        }
-
-        struct ggml_context *get_ctx() override { return gctx.get(); }
-        ggml_cgraph *get_cgraph(void) override { return gf; }
-
-    public:
-        GGMLContext gctx;
-        ggml_cgraph *gf;
-    };
-
     static ForwardContext *dbg_ctx = nullptr;
     static std::unordered_map<ggml::tensor *, std::string> inspected_set;
     static ggml::tensor *dbg_w = nullptr;
+
+    void set_dbg_ctx(ForwardContext *c)
+    {
+        dbg_ctx = c;
+    }
 
     void print_tensor_shape(const char *info, ggml::tensor *tensor)
     {
@@ -201,180 +182,6 @@ namespace chatllm
 
         dbg_ctx->get_backend_context()->set_eval_observe_callback(need_observe_tensor_evaluation_callback, observe_tensor_evaluation_callback, nullptr);
     }
-
-    #define MAKE_TYPE_TAG(v)            (((uint32_t)(v) >> 1) << 24)
-    #define MODEL_TYPE_TAG_ChatImageIn                              MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput)
-    #define MODEL_TYPE_TAG_ChatAudioIn                              MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::AudioInput)
-    #define MODEL_TYPE_TAG_ChatImageInVideoIn                       MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::VideoInput)
-    #define MODEL_TYPE_TAG_ChatImageInVideoInAudioInAudioOut        MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::VideoInput + ChatModelAccessPoint::AudioInput + ChatModelAccessPoint::AudioOutput)
-
-    enum ModelType
-    {
-        MODEL_TYPE_CHATGLM  = 1,
-        MODEL_TYPE_CHATGLM2 = 2,
-        MODEL_TYPE_CHATGLM3 = 3,
-        MODEL_TYPE_CODEGEEX2 = 4,
-        MODEL_TYPE_CHARACTERGLM = 5,
-        MODEL_TYPE_GLM4 = 6,
-        MODEL_TYPE_CODEGEEX4 = 7,
-        MODEL_TYPE_GLM4_0414 = 8,
-
-        MODEL_TYPE_INTERNLM     = 0x100,
-        MODEL_TYPE_INTERNLM2    = 0x101, // extended model, supporting 7B & 20B
-        MODEL_TYPE_INTERNLM2_1  = 0x102,
-        MODEL_TYPE_INTERNLM3    = 0x103,
-
-        MODEL_TYPE_LLAMA2   = 0x150,
-        MODEL_TYPE_CODELLAMA= 0x151,
-        MODEL_TYPE_WIZARDCODER      = 0x152,
-        MODEL_TYPE_WIZARDLM         = 0x153,
-        MODEL_TYPE_WIZARDMATH       = 0x154,
-        MODEL_TYPE_TIGERBOT         = 0x155,
-        MODEL_TYPE_LLAMA2PLUS       = 0x156,
-        MODEL_TYPE_MEGREZ           = 0x157,
-        MODEL_TYPE_FALCON3          = 0x158,
-        MODEL_TYPE_REKA_FLASH3      = 0x159,
-
-        MODEL_TYPE_BAICHUANLLAMA    = 0x200,
-        MODEL_TYPE_BAICHUAN         = 0x201,
-        MODEL_TYPE_BAICHUAN_M1      = 0x202,
-
-        MODEL_TYPE_DEEPSEEK = 0x300,
-        MODEL_TYPE_DEEPSEEK_CODER   = 0x301,
-        MODEL_TYPE_CODEFUSE_DEEPSEEK = 0x302,
-        MODEL_TYPE_NUMINAMATH        = 0x303,
-        MODEL_TYPE_DEEPSEEK_V2_LIGHT = 0x320,
-        MODEL_TYPE_DEEPSEEK_V2       = 0x321,
-        MODEL_TYPE_DEEPSEEK_V3_LIGHT = 0x322,   // DOES NOT EXIST
-        MODEL_TYPE_DEEPSEEK_V3       = 0x323,
-        MODEL_TYPE_DEEPSEEK_V1_MoE   = 0x324,
-        MODEL_TYPE_GIGACHAT          = 0x325,
-        MODEL_TYPE_BAILINGMOE        = 0x326,
-        MODEL_TYPE_XVERSEMOE         = 0x327,
-
-        MODEL_TYPE_YI       = 0x400,
-        MODEL_TYPE_MAP_NEO  = 0x401,
-
-        MODEL_TYPE_PHI2     = 0x500,
-        MODEL_TYPE_PHI2_V2  = 0x501,
-        MODEL_TYPE_PHI3     = 0x520,
-        MODEL_TYPE_PHI3_SU  = 0x521,
-        MODEL_TYPE_PHI3_SU2 = 0x522,
-        MODEL_TYPE_PHI3_SU3 = 0x523,
-        MODEL_TYPE_PHI3_MOE = 0x530,
-        MODEL_TYPE_PHI4     = 0x531,
-        MODEL_TYPE_PHI4_MINI= 0x532,
-
-        MODEL_TYPE_DOLPHINPHI2      = 0x510,
-        MODEL_TYPE_DOLPHINPHI2_V2   = 0x511,
-
-        MODEL_TYPE_MISTRAL  = 0x600,
-        MODEL_TYPE_MIXTRAL  = 0x601,
-        MODEL_TYPE_OPENCHAT = 0x602,
-        MODEL_TYPE_NEURALBEAGLE = 0x603,
-        MODEL_TYPE_STARLING     = 0x604,
-        MODEL_TYPE_WIZARDLM2_MOE  = 0x605,
-        MODEL_TYPE_MISTRAL2       = 0x606,
-        MODEL_TYPE_DEEPHERMES3_MISTRAL = 0x607,
-
-        MODEL_TYPE_QWEN     = 0x700,
-        MODEL_TYPE_QWEN2    = 0x710,
-        MODEL_TYPE_QWEN2TIE = 0x711,
-        MODEL_TYPE_QWEN2MoE = 0x750,
-        MODEL_TYPE_MARCO_O1 = 0x751,
-        MODEL_TYPE_QWQ      = 0x752,
-        MODEL_TYPE_READERLM2= 0x753,
-        MODEL_TYPE_DEEPSEEK_R1_DISTILL_QWEN     = 0x754,
-        MODEL_TYPE_QWEN3                        = 0x755,
-        MODEL_TYPE_DEEPSEEK_R1_DISTILL_QWEN3    = 0x756,
-
-        MODEL_TYPE_BLUELM   = 0x800,
-
-        MODEL_TYPE_STABLELM = 0x900,
-
-        MODEL_TYPE_ORION    = 0x1000,
-
-        MODEL_TYPE_MINICPM  = 0x1100,
-        MODEL_TYPE_MINICPM2 = 0x1101,
-        MODEL_TYPE_MINICPM_MoE = 0x1102,
-        MODEL_TYPE_MINICPM3 = 0x1110,
-        MODEL_TYPE_MINICPM4 = 0x1111,
-
-        MODEL_TYPE_PERSIMMON= 0x1200,
-        MODEL_TYPE_FUYU     = 0x1201,
-
-        MODEL_TYPE_GEMMA    = 0x1300,
-        MODEL_TYPE_GEMMA2   = 0x1301,
-        MODEL_TYPE_GEMMA3   = 0x1302,
-
-        MODEL_TYPE_COHERE_COMMAND_R     = 0x1400,
-        MODEL_TYPE_COHERE_AYA_23        = 0x1401,
-        MODEL_TYPE_COHERE_COMMAND_R7B   = 0x1402,
-
-        MODEL_TYPE_GROK_1           = 0x1500,
-
-        MODEL_TYPE_ZHINAO           = 0x1600,
-
-        MODEL_TYPE_LLAMA3           = 0x1700,
-        MODEL_TYPE_SMOLLM           = 0x1701,
-        MODEL_TYPE_LLAMA3_GROQ_TOOL = 0x1702,
-        MODEL_TYPE_LLAMA3_1         = 0x1703,
-        MODEL_TYPE_LLAMA3_2         = 0x1704,
-        MODEL_TYPE_EXAONE           = 0x1705,
-        MODEL_TYPE_DEEPSEEK_R1_DISTILL_LLAMA = 0x1706,
-        MODEL_TYPE_AQUILA2                   = 0x1707,
-
-        MODEL_TYPE_STARCODER2       = 0x1800,
-
-        MODEL_TYPE_XVERSE           = 0x1900,
-
-        MODEL_TYPE_INDEX            = 0x1a00,
-
-        MODEL_TYPE_OLMoE            = 0x1b00,
-        MODEL_TYPE_OLMo2            = 0x1b01,
-
-        MODEL_TYPE_ALPHAGEO_LM      = 0x1c00,
-
-        MODEL_TYPE_GRANITE_MoE      = 0x1d00,
-        MODEL_TYPE_GRANITE          = 0x1d01,
-
-        MODEL_TYPE_TELECHAT2        = 0x1e00,
-
-        MODEL_TYPE_HUNYUAN_DENSE    = 0x1f00,
-
-        MODEL_TYPE_MOONLIGHT        = 0x2000,
-
-        MODEL_TYPE_INSTELLA         = 0x2100,
-
-        MODEL_TYPE_DECILM           = 0x2200,
-
-        MODEL_TYPE_SOLARPRO         = 0x2300,
-
-        MODEL_TYPE_APRIEL           = 0x2400,
-
-        MODEL_TYPE_BCE_Embedding = 0x10000100,
-        MODEL_TYPE_BCE_ReRanker  = 0x10000101,
-        MODEL_TYPE_BGE_M3        = 0x10000102,
-        MODEL_TYPE_BGE_ReRanker_M3  = 0x10000103,
-        MODEL_TYPE_MiniCPM_Embedding_Light  = 0x10000104,
-        MODEL_TYPE_MiniCPM_ReRanker_Light   = 0x10000105,
-        MODEL_TYPE_ORPHEUS_TTS              = 0x10000106,
-        MODEL_TYPE_OUTE_TTS_LLAMA           = 0x10000107,
-        MODEL_TYPE_OUTE_TTS_QWEN3           = 0x10000108,
-        MODEL_TYPE_QWEN3_Embedding          = 0x10000109,
-        MODEL_TYPE_QWEN3_ReRanker           = 0x1000010A,
-
-        MODEL_TYPE_LLAMA_MULTI      = 0x20000001,
-
-        MODEL_TYPE_LLAMA4           = MODEL_TYPE_TAG_ChatImageIn + 0x0000001,
-        MODEL_TYPE_GEMMA3Vis        = MODEL_TYPE_TAG_ChatImageIn + 0x0000011,
-
-        MODEL_TYPE_QWEN2_AUDIO      = MODEL_TYPE_TAG_ChatAudioIn + 0x0000001,
-
-        MODEL_TYPE_QWEN2_5_VL       = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000001,
-        MODEL_TYPE_KIMI_VL          = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000100,
-        MODEL_TYPE_SMOL_VLM         = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000200,
-    };
 
     ModelPurpose get_model_purpose(ModelType model_type)
     {
@@ -1051,418 +858,394 @@ namespace chatllm
         }
     };
 
-    class BaseModelForConditionalGeneration : public BaseModel
+    BaseModelForConditionalGeneration::BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, const RuntimeConfig &runtime_config, size_t GRAPH_SIZE)
+        : BaseModel(model_type, get_model_purpose(model_type)),
+            transformer(nullptr),
+            GRAPH_SIZE(GRAPH_SIZE),
+            batch_input(runtime_config.batch_input_size), logit_scale(-1.0f),
+            w_ctx_(&backend_context),
+            config_(config)
     {
-    public:
-        BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 4096)
-            : BaseModel(model_type, get_model_purpose(model_type)),
-              transformer(nullptr),
-              GRAPH_SIZE(GRAPH_SIZE),
-              batch_input(runtime_config.batch_input_size), logit_scale(-1.0f),
-              w_ctx_(&backend_context),
-              config_(config)
+        w_ctx_.cache_dtype = runtime_config.cache_type;
+        prepare(runtime_config);
+        for (int i = 0; i < config.num_hidden_layers; i++)
+            layer_ids.push_back(i);
+    }
+
+    void BaseModelForConditionalGeneration::set_layer_ids(const std::vector<int> &ids)
+    {
+        CHATLLM_CHECK((int)ids.size() == config_.num_hidden_layers) << "length(layer_ids) must be " << config_.num_hidden_layers;
+        layer_ids.clear();
+        for (auto x : ids)
+            layer_ids.push_back(x);
+    }
+
+    int BaseModelForConditionalGeneration::get_max_length(void)
+    {
+        return config_.max_length;
+    }
+
+    void BaseModelForConditionalGeneration::shift_memory(int keep)
+    {
+        if (keep >= n_past) return;
+
+        transformer->shift_cache(n_past - keep, n_past);
+        BaseModel::shift_memory(keep);
+    }
+
+    int64_t BaseModelForConditionalGeneration::get_param_num(bool effective_only) const
+    {
+        return transformer->get_param_num(effective_only);
+    }
+
+    std::vector<int> BaseModelForConditionalGeneration::generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                                const bool continuous,
+                                bool &completed,
+                                ModelPerfInfo *performance,
+                                int gen_max_tokens,
+                                BaseStreamer *streamer)
+    {
+        CHATLLM_CHECK(gen_config.max_length <= config_.max_length)
+            << "requested max_length (" << gen_config.max_length << ") is larger than model's max_length ("
+            << config_.max_length << ")";
+
+        //for (int i = 0; i < (int)input_ids.size(); i++)
+        //    printf("%d, ", input_ids[i]);
+        //printf("\nn_past = %d, %d\n\n", n_past, continuous);
+
+        std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config, _seed));
+
+        aborted = false;
+
+        std::vector<int> curr_input_ids(input_ids);
+
+        std::vector<int> output_ids;
+        output_ids.reserve(gen_config.max_length);
+
+        if (!continuous)
         {
-            w_ctx_.cache_dtype = runtime_config.cache_type;
-            prepare(runtime_config);
-            for (int i = 0; i < config.num_hidden_layers; i++)
-                layer_ids.push_back(i);
+            n_past = 0;
+            n_past_offset = 0;
         }
 
-        virtual ~BaseModelForConditionalGeneration() = default;
+        completed = false;
 
-        void set_layer_ids(const std::vector<int> &ids) override
+        transformer->set_ctx((int)input_ids.size());
+        int next_output_idx = 0;
+
+        if (gen_max_tokens > 0)
+            gen_max_tokens = n_past + (int)curr_input_ids.size() + gen_max_tokens;
+
+        bool first_call = true;
+
+        if (performance)
+            performance->Reset();
+
+        before_generate(gen_config);
+
+        while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
         {
-            CHATLLM_CHECK((int)ids.size() == config_.num_hidden_layers) << "length(layer_ids) must be " << config_.num_hidden_layers;
-            layer_ids.clear();
-            for (auto x : ids)
-                layer_ids.push_back(x);
-        }
-
-        int get_max_length(void) override
-        {
-            return config_.max_length;
-        }
-
-        void shift_memory(int keep) override
-        {
-            if (keep >= n_past) return;
-
-            transformer->shift_cache(n_past - keep, n_past);
-            BaseModel::shift_memory(keep);
-        }
-
-        int64_t get_param_num(bool effective_only) const override
-        {
-            return transformer->get_param_num(effective_only);
-        }
-
-        std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
-                                  const bool continuous,
-                                  bool &completed,
-                                  ModelPerfInfo *performance,
-                                  int gen_max_tokens,
-                                  BaseStreamer *streamer = nullptr)
-        {
-            CHATLLM_CHECK(gen_config.max_length <= config_.max_length)
-                << "requested max_length (" << gen_config.max_length << ") is larger than model's max_length ("
-                << config_.max_length << ")";
-
-            //for (int i = 0; i < (int)input_ids.size(); i++)
-            //    printf("%d, ", input_ids[i]);
-            //printf("\nn_past = %d, %d\n\n", n_past, continuous);
-
-            std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config, _seed));
-
-            aborted = false;
-
-            std::vector<int> curr_input_ids(input_ids);
-
-            std::vector<int> output_ids;
-            output_ids.reserve(gen_config.max_length);
-
-            if (!continuous)
+            std::vector<float> lm_logits;
+            if (!generate_next_token(curr_input_ids, gen_config, lm_logits))
             {
-                n_past = 0;
-                n_past_offset = 0;
+                ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
+                aborted = true;
+                break;
             }
 
-            completed = false;
-
-            transformer->set_ctx((int)input_ids.size());
-            int next_output_idx = 0;
-
-            if (gen_max_tokens > 0)
-                gen_max_tokens = n_past + (int)curr_input_ids.size() + gen_max_tokens;
-
-            bool first_call = true;
-
-            if (performance)
-                performance->Reset();
-
-            before_generate(gen_config);
-
-            while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
+            if (first_call)
             {
-                std::vector<float> lm_logits;
-                if (!generate_next_token(curr_input_ids, gen_config, lm_logits))
+                if (performance)
+                    performance->Accumulate(ModelPerfInfo::Type::Prompt, curr_input_ids.size());
+                first_call = false;
+            }
+
+//#define DISABLE_CACHE
+#ifndef DISABLE_CACHE
+            n_past += (int)curr_input_ids.size();
+            curr_input_ids.clear();
+#endif
+            float *logits = lm_logits.data();
+            const size_t tok_num = lm_logits.size() / config_.vocab_size;
+
+            for (size_t tok_idx = 0; (tok_idx < tok_num) && !aborted; tok_idx++, logits +=  config_.vocab_size)
+            {
+                int next_token_id = sampler->sampling(logits,  config_.vocab_size);
+
+//printf("\n>>next = %d<<\n", next_token_id);
+//fflush(stdout);
+//exit(-1);
+
+                if (next_token_id == Sampler::ABORT)
                 {
-                    ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
                     aborted = true;
                     break;
                 }
 
-                if (first_call)
+                curr_input_ids.push_back(next_token_id);
+
+                int pop_output = 0;
+                int keep_idx = 0;
+                output_ids.push_back(next_token_id);
+
+                if (is_output_terminated(output_ids, keep_idx, pop_output))
                 {
-                    if (performance)
-                        performance->Accumulate(ModelPerfInfo::Type::Prompt, curr_input_ids.size());
-                    first_call = false;
+                    while (pop_output-- > 0)
+                        output_ids.pop_back();
+                    keep_idx = (int)output_ids.size();
+                    completed = true;
                 }
 
-    //#define DISABLE_CACHE
-    #ifndef DISABLE_CACHE
-                n_past += (int)curr_input_ids.size();
-                curr_input_ids.clear();
-    #endif
-                float *logits = lm_logits.data();
-                const size_t tok_num = lm_logits.size() / config_.vocab_size;
-
-                for (size_t tok_idx = 0; (tok_idx < tok_num) && !aborted; tok_idx++, logits +=  config_.vocab_size)
+                if (streamer)
                 {
-                    int next_token_id = sampler->sampling(logits,  config_.vocab_size);
-
-    //printf("\n>>next = %d<<\n", next_token_id);
-    //fflush(stdout);
-    //exit(-1);
-
-                    if (next_token_id == Sampler::ABORT)
-                    {
-                        aborted = true;
-                        break;
-                    }
-
-                    curr_input_ids.push_back(next_token_id);
-
-                    int pop_output = 0;
-                    int keep_idx = 0;
-                    output_ids.push_back(next_token_id);
-
-                    if (is_output_terminated(output_ids, keep_idx, pop_output))
-                    {
-                        while (pop_output-- > 0)
-                            output_ids.pop_back();
+                    if (keep_idx > (int)output_ids.size())
                         keep_idx = (int)output_ids.size();
-                        completed = true;
-                    }
+                    for (; next_output_idx < keep_idx; next_output_idx++)
+                        streamer->put({output_ids[next_output_idx]});
+                }
 
-                    if (streamer)
-                    {
-                        if (keep_idx > (int)output_ids.size())
-                            keep_idx = (int)output_ids.size();
-                        for (; next_output_idx < keep_idx; next_output_idx++)
-                            streamer->put({output_ids[next_output_idx]});
-                    }
-
-                    if ((gen_max_tokens > 0) && ((n_past + (int)curr_input_ids.size() >= gen_max_tokens)))
-                    {
-                        aborted = true;
-                        break;
-                    }
+                if ((gen_max_tokens > 0) && ((n_past + (int)curr_input_ids.size() >= gen_max_tokens)))
+                {
+                    aborted = true;
+                    break;
                 }
             }
+        }
 
-            if (aborted && !completed)
-                completed = true;
+        if (aborted && !completed)
+            completed = true;
 
-            if (performance)
-                performance->Accumulate(ModelPerfInfo::Type::Generation, output_ids.size() - curr_input_ids.size());
+        if (performance)
+            performance->Accumulate(ModelPerfInfo::Type::Generation, output_ids.size() - curr_input_ids.size());
 
-            after_generate();
+        after_generate();
 
 //printf("\nn_past = %d\n", n_past);
-            return output_ids;
+        return output_ids;
+    }
+
+    void BaseModelForConditionalGeneration::text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+                                std::vector<float> &embedding)
+    {
+        auto r = run_model(input_ids, gen_config, 0, embedding);
+        if (!r) ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
+    }
+
+    float BaseModelForConditionalGeneration::qa_rank(const GenerationConfig &gen_config, const std::vector<int> &input_ids)
+    {
+        std::vector<float> output;
+        auto r = run_model(input_ids, gen_config, 0, output);
+        if (!r) ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
+        CHATLLM_CHECK(output.size() == 1) << "ouput must be scaler";
+
+        return output[0];
+    }
+
+    bool BaseModelForConditionalGeneration::generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits)
+    {
+        int batch = batch_input > 1 ? batch_input : 1;
+
+        const int *p = input_ids.data();
+        int remain = (int)input_ids.size();
+        int past = n_past + n_past_offset;
+
+        for (; (remain > batch) && !aborted; p += batch, remain -= batch, past += batch)
+        {
+            if (!run_model(p, batch, gen_config, past, lm_logits))
+                return false;
         }
 
-        void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
-                                    std::vector<float> &embedding) override
+        return run_model(p, remain, gen_config,past, lm_logits);
+    }
+
+    int BaseModelForConditionalGeneration::save_session(FILE *f) const
+    {
+        int r = BaseModel::save_session(f);
+        if (r != 0)
+            return r;
+        return transformer->save_session(f);
+    }
+
+    int BaseModelForConditionalGeneration::load_session(FILE *f)
+    {
+        int r = BaseModel::load_session(f);
+        if (r != 0) return r;
+        return transformer->load_session(f);
+    }
+
+    int BaseModelForConditionalGeneration::save_session(ModelSessionMemory &session) const
+    {
+        int r = BaseModel::save_session(session);
+        if (r != 0)
+            return r;
+        return transformer->save_session(session);
+    }
+
+    int BaseModelForConditionalGeneration::load_session(ModelSessionMemory &session)
+    {
+        int r = BaseModel::load_session(session);
+        if (r != 0) return r;
+        return transformer->load_session(session);
+    }
+
+    void BaseModelForConditionalGeneration::prepare(const RuntimeConfig &rt_config)
+    {
+        w_ctx_.user_options.moe_on_cpu = rt_config.moe_on_cpu;
+        backend_context.init(rt_config.model_gpu_layers, "main", config_.num_hidden_layers, GRAPH_SIZE, rt_config.n_threads);
+    }
+
+    LayerAllocatorManager *BaseModelForConditionalGeneration::get_alloc_manager(void)
+    {
+        return &backend_context.layer_allocators;
+    }
+
+    void BaseModelForConditionalGeneration::load(ModelLoader &loader)
+    {
+        transformer->load("model.", &loader, layer_ids);
+    }
+
+    void BaseModelForConditionalGeneration::before_generate(const GenerationConfig &gen_config)
+    {}
+
+    void BaseModelForConditionalGeneration::after_generate(void)
+    {
+        tokenizer->media_emb.clear();
+    }
+
+    void BaseModelForConditionalGeneration::do_build_graph(ForwardContext &ctc, const std::vector<int> &input_ids,
+                                    const GenerationConfig &gen_config,
+                                    int past)
+    {
+
+    }
+
+    bool BaseModelForConditionalGeneration::before_initial_run(const int ids_count,
+                                    const GenerationConfig &gen_config,
+                                    int past)
+    {
+        //printf("before_initial_run 1\n");
+        //backend_context.show_buffer_sizes();
+
+        ForwardContext ctx(&backend_context);
+        ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
+        ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
+
+        ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, ids_count);
+
+        ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
+
+        if (logit_scale > 0)
+            r = ggml::scale(&ctx, r, logit_scale);
+
+        ggml::build_forward_expand(&ctx, r);
+
+        bool s = ctx.reserve_memory();
+
+        //printf("before_initial_run 2\n");
+        //backend_context.show_buffer_sizes();
+
+        return s;
+    }
+
+    bool BaseModelForConditionalGeneration::run_model(const std::vector<int> &input_ids,
+        const GenerationConfig &gen_config,
+        int past,
+        std::vector<float> &output)
+    {
+        return run_model(input_ids.data(), (int)input_ids.size(), gen_config, past, output);
+    }
+
+    bool BaseModelForConditionalGeneration::run_model(const int *input_ids, const int ids_count,
+                            const GenerationConfig &gen_config,
+                            int past,
+                            std::vector<float> &output)
+    {
+        if (!initial_run)
         {
-            auto r = run_model(input_ids, gen_config, 0, embedding);
-            if (!r) ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
+            initial_run = true;
+            int past = gen_config.max_length - ids_count;
+            if (past < 0) past = 0;
+            if (!before_initial_run(ids_count, gen_config, past))
+                return false;
         }
 
-        float qa_rank(const GenerationConfig &gen_config, const std::vector<int> &input_ids) override
-        {
-            std::vector<float> output;
-            auto r = run_model(input_ids, gen_config, 0, output);
-            if (!r) ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
-            CHATLLM_CHECK(output.size() == 1) << "ouput must be scaler";
+        ForwardContext ctx(&backend_context);
+        ctx.user_options = w_ctx_.user_options;
 
-            return output[0];
+        ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
+        ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
+
+        dbg_ctx = &ctx;
+
+        ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
+        ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, ids_count);
+
+        ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
+
+        ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
+
+        if (logit_scale > 0)
+            r = ggml::scale(&ctx, r, logit_scale);
+
+        ggml::build_forward_expand(&ctx, r);
+
+        CHATLLM_CHECK(r->type == GGML_TYPE_F32) << "output type must be float: " << r->type;
+
+        output.resize(ggml::nbytes(r) / sizeof(output[0]));
+
+        if (!ctx.allocate()) return false;
+
+        Backend::write_tensor_data(input_ids_tensor, input_ids);
+
+        if (gen_config.dump_dot.size() > 0)
+        {
+            backend_context.dump_graph(ctx.get_cgraph(), gen_config.dump_dot.c_str());
+            exit(-1);
         }
 
-        bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override
+        ctx.compute();
+
+        Backend::read_tensor_data(r, output.data());
+
+        ctx.reset();
+
+        return true;
+    }
+
+    bool BaseModelForConditionalGeneration::is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output)
+    {
+        if (output_ids.size() < 1)
+            return false;
+
+        int last_tok_id = output_ids[output_ids.size() - 1];
+
+        if (tokenizer->is_terminate_token_id(last_tok_id))
         {
-            int batch = batch_input > 1 ? batch_input : 1;
-
-            const int *p = input_ids.data();
-            int remain = (int)input_ids.size();
-            int past = n_past + n_past_offset;
-
-            for (; (remain > batch) && !aborted; p += batch, remain -= batch, past += batch)
-            {
-                if (!run_model(p, batch, gen_config, past, lm_logits))
-                    return false;
-            }
-
-            return run_model(p, remain, gen_config,past, lm_logits);
-        }
-
-        int save_session(FILE *f) const override
-        {
-            int r = BaseModel::save_session(f);
-            if (r != 0)
-                return r;
-            return transformer->save_session(f);
-        }
-
-        int load_session(FILE *f) override
-        {
-            int r = BaseModel::load_session(f);
-            if (r != 0) return r;
-            return transformer->load_session(f);
-        }
-
-        int save_session(ModelSessionMemory &session) const override
-        {
-            int r = BaseModel::save_session(session);
-            if (r != 0)
-                return r;
-            return transformer->save_session(session);
-        }
-
-        int load_session(ModelSessionMemory &session) override
-        {
-            int r = BaseModel::load_session(session);
-            if (r != 0) return r;
-            return transformer->load_session(session);
-        }
-
-        void prepare(const RuntimeConfig &rt_config)
-        {
-            w_ctx_.user_options.moe_on_cpu = rt_config.moe_on_cpu;
-            backend_context.init(rt_config.model_gpu_layers, "main", config_.num_hidden_layers, GRAPH_SIZE, rt_config.n_threads);
-        }
-
-        LayerAllocatorManager *get_alloc_manager(void) override
-        {
-            return &backend_context.layer_allocators;
-        }
-
-        void load(ModelLoader &loader) override
-        {
-            transformer->load("model.", &loader, layer_ids);
-        }
-
-    protected:
-        virtual void before_generate(const GenerationConfig &gen_config)
-        {}
-
-        virtual void after_generate(void)
-        {
-            tokenizer->media_emb.clear();
-        }
-
-        virtual void do_build_graph(ForwardContext &ctc, const std::vector<int> &input_ids,
-                                       const GenerationConfig &gen_config,
-                                       int past)
-        {
-
-        }
-
-        virtual bool before_initial_run(const int ids_count,
-                                       const GenerationConfig &gen_config,
-                                       int past)
-        {
-            //printf("before_initial_run 1\n");
-            //backend_context.show_buffer_sizes();
-
-            ForwardContext ctx(&backend_context);
-            ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
-            ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
-
-            ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, ids_count);
-
-            ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
-
-            if (logit_scale > 0)
-                r = ggml::scale(&ctx, r, logit_scale);
-
-            ggml::build_forward_expand(&ctx, r);
-
-            bool s = ctx.reserve_memory();
-
-            //printf("before_initial_run 2\n");
-            //backend_context.show_buffer_sizes();
-
-            return s;
-        }
-
-        bool run_model(const std::vector<int> &input_ids,
-            const GenerationConfig &gen_config,
-            int past,
-            std::vector<float> &output)
-        {
-            return run_model(input_ids.data(), (int)input_ids.size(), gen_config, past, output);
-        }
-
-        virtual bool run_model(const int *input_ids, const int ids_count,
-                                const GenerationConfig &gen_config,
-                                int past,
-                                std::vector<float> &output)
-        {
-            if (!initial_run)
-            {
-                initial_run = true;
-                int past = gen_config.max_length - ids_count;
-                if (past < 0) past = 0;
-                if (!before_initial_run(ids_count, gen_config, past))
-                    return false;
-            }
-
-            ForwardContext ctx(&backend_context);
-            ctx.user_options = w_ctx_.user_options;
-
-            ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
-            ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
-
-            dbg_ctx = &ctx;
-
-            ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
-            ggml::tensor *input_ids_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, ids_count);
-
-            ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
-
-            ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
-
-            if (logit_scale > 0)
-                r = ggml::scale(&ctx, r, logit_scale);
-
-            ggml::build_forward_expand(&ctx, r);
-
-            CHATLLM_CHECK(r->type == GGML_TYPE_F32) << "output type must be float: " << r->type;
-
-            output.resize(ggml::nbytes(r) / sizeof(output[0]));
-
-            if (!ctx.allocate()) return false;
-
-            Backend::write_tensor_data(input_ids_tensor, input_ids);
-
-            if (gen_config.dump_dot.size() > 0)
-            {
-                backend_context.dump_graph(ctx.get_cgraph(), gen_config.dump_dot.c_str());
-                exit(-1);
-            }
-
-            ctx.compute();
-
-            Backend::read_tensor_data(r, output.data());
-
-            ctx.reset();
-
+            pop_output = 1;
             return true;
         }
-
-        virtual bool is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output)
+        else
         {
-            if (output_ids.size() < 1)
-                return false;
-
-            int last_tok_id = output_ids[output_ids.size() - 1];
-
-            if (tokenizer->is_terminate_token_id(last_tok_id))
-            {
-                pop_output = 1;
-                return true;
-            }
-            else
-            {
-                keep_idx = (int)output_ids.size();
-                return false;
-            }
+            keep_idx = (int)output_ids.size();
+            return false;
         }
+    }
 
-        bool match_output_sequence(const std::vector<int> &output_ids, const std::vector<int> &pattern)
+    bool BaseModelForConditionalGeneration::match_output_sequence(const std::vector<int> &output_ids, const std::vector<int> &pattern)
+    {
+        if (output_ids.size() < pattern.size())
+            return false;
+
+        auto x0 = output_ids.begin() + output_ids.size() - pattern.size();
+        auto x1 = pattern.begin();
+
+        for (size_t i = 0; i < pattern.size(); i++, x0++, x1++)
         {
-            if (output_ids.size() < pattern.size())
+            if (*x0 != *x1)
                 return false;
-
-            auto x0 = output_ids.begin() + output_ids.size() - pattern.size();
-            auto x1 = pattern.begin();
-
-            for (size_t i = 0; i < pattern.size(); i++, x0++, x1++)
-            {
-                if (*x0 != *x1)
-                    return false;
-            }
-            return true;
         }
-
-        template <class T> T *get_typed_transformer(void) const
-        {
-            return dynamic_cast<T *>(transformer);
-        }
-
-    protected:
-        ModelBlock *transformer;
-        const size_t GRAPH_SIZE;
-        int batch_input;
-        float logit_scale;
-        std::vector<int> layer_ids;
-        BackendContext backend_context;
-        InitContext w_ctx_; // weight context
-    private:
-        BaseConfig config_;
-        bool initial_run = false;
-    };
+        return true;
+    }
 
     static std::string regex_replace(const std::string &input, const std::regex &regex,
                                      std::function<std::string(const std::smatch &)> format)
@@ -1702,91 +1485,10 @@ namespace chatllm
         return transformer_outputs;
     }
 
-    template <class Embedding> Block *create_embedding(InitContext *ctx, const BaseConfig &config)
-    {
-        return new Embedding(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), config.vocab_size, config.hidden_size, config.max_length);
-    }
-
-    template <class FinalNorm> Block *create_final_norm(InitContext *ctx, const BaseConfig &config)
-    {
-        return new FinalNorm(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size);
-    }
-
-    Block *create_lm_head(InitContext *ctx, const BaseConfig &config, bool bias = false)
+    Block *create_lm_head(InitContext *ctx, const BaseConfig &config, bool bias)
     {
         return new Linear(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, config.vocab_size, bias);
     }
-
-    template <class Config, class Embedding, class FinalNorm, class LayerBlock, typename... _Types> class Model :
-        public HeterogeneousModel
-    {
-    private:
-        typedef HeterogeneousModel Base;
-    protected:
-        class Accessor
-        {
-        friend Model;
-        protected:
-            Accessor() : m(nullptr) {}
-        public:
-            LayerBlock & operator[](int index)
-            {
-                if (nullptr == m)
-                {
-                    uintptr_t offset = (uintptr_t)&(((Model *)(nullptr))->layers);
-                    m = (Model *)(uintptr_t(this) - offset);
-                }
-                return *(dynamic_cast<LayerBlock *>((m->Base::layers)[index])); // .get()));
-            }
-        private:
-            Model *m;
-        };
-    public:
-        Model() = default;
-        Model(InitContext *ctx, const Config &config, bool lm_head_bias, _Types... layer_args)
-            : Model(ctx, config,
-                create_lm_head(ctx, config, lm_head_bias),
-                std::forward<_Types>(layer_args)...)
-        {}
-
-        Model(InitContext *ctx, const Config &config, Block *lm_head, _Types... layer_args)
-        : HeterogeneousModel(ctx, config.num_hidden_layers, config.hidden_size,
-                            create_embedding<Embedding>(ctx, config),
-                            create_final_norm<FinalNorm>(ctx, config),
-                            lm_head,
-                            [&](InitContext *ctx, int layer_index) {
-                                return new LayerBlock(ctx, std::forward<_Types>(layer_args)...);
-                            })
-        {
-        }
-
-    protected:
-        int64_t get_param_num_of_layers(bool effective_only) const override
-        {
-            int64_t r = 0;
-            if (Base::layers.size() > 0)
-                r += Base::layers[0]->get_param_num(effective_only) * Base::layers.size();
-            return r;
-        }
-    public:
-        Accessor layers;
-    };
-
-    template <class Config, class Embedding, class LayerBlock, class FinalBlock, typename... _Types> class EmbeddingModel : public Model
-        <Config, Embedding, FinalBlock, LayerBlock, _Types...>
-    {
-    public:
-        typedef Model<Config, Embedding, FinalBlock, LayerBlock, _Types...> Base;
-        typedef HeterogeneousModel BaseBase;
-
-        EmbeddingModel() = default;
-
-        EmbeddingModel(InitContext *ctx, const Config &config, _Types... layer_args)
-        : Base(ctx, config, nullptr, std::forward<_Types>(layer_args)...)
-        {
-            Base::set_final_steps(std::make_unique<EmbeddingPoolingFinalSteps>());
-        }
-    };
 
     namespace glm
     {
@@ -1855,11 +1557,6 @@ namespace chatllm
     namespace wizard
     {
         #include "../models/wizard.cpp"
-    }
-
-    namespace qwen
-    {
-        #include "../models/qwen.cpp"
     }
 
     namespace tigerbot

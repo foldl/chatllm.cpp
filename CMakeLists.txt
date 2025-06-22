@@ -9,10 +9,12 @@ set(CMAKE_CXX_STANDARD 20)
 
 if (MSVC)
     add_compile_options("$<$<COMPILE_LANGUAGE:C>:/utf-8>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:C>:/bigobj>")
     add_compile_options("$<$<COMPILE_LANGUAGE:C>:/D_CRT_SECURE_NO_WARNINGS>")
     add_compile_options("$<$<COMPILE_LANGUAGE:C>:/wd4996>")
     add_compile_options("$<$<COMPILE_LANGUAGE:C>:/wd4722>")
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/utf-8>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/bigobj>")
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/D_CRT_SECURE_NO_WARNINGS>")
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/wd4996>")
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/wd4722>")
@@ -43,9 +45,7 @@ if (GGML_CLBLAST)
     add_compile_definitions(GGML_USE_CLBLAST)
 endif ()
 
-add_library(libchatllm SHARED EXCLUDE_FROM_ALL
-    src/main.cpp
-    src/backend.cpp
+set(core_files src/backend.cpp
     src/chat.cpp
     src/vectorstore.cpp
     src/layers.cpp
@@ -54,7 +54,10 @@ add_library(libchatllm SHARED EXCLUDE_FROM_ALL
     src/unicode.cpp
     src/unicode-data.cpp
     src/vision_process.cpp
-    src/audio_process.cpp)
+    src/audio_process.cpp
+    models/qwen.cpp)
+
+add_library(libchatllm SHARED EXCLUDE_FROM_ALL src/main.cpp ${core_files})
 target_link_libraries(libchatllm PRIVATE ggml)
 target_compile_definitions(libchatllm PUBLIC CHATLLM_SHARED_LIB)
 SET_TARGET_PROPERTIES(libchatllm PROPERTIES PREFIX "")
@@ -63,16 +66,5 @@ set_target_properties(libchatllm
   LIBRARY_OUTPUT_DIRECTORY "../bindings"
 )
 
-add_executable(main
-    src/main.cpp
-    src/chat.cpp
-    src/backend.cpp
-    src/vectorstore.cpp
-    src/layers.cpp
-    src/tokenizer.cpp
-    src/models.cpp
-    src/unicode.cpp
-    src/unicode-data.cpp
-    src/vision_process.cpp
-    src/audio_process.cpp)
+add_executable(main src/main.cpp ${core_files})
 target_link_libraries(main PRIVATE ggml)
