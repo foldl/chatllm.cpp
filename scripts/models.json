@@ -1274,6 +1274,22 @@
             }
         }
     },
+    "qwen2-audio": {
+        "brief": "Qwen2-Audio is the new series of Qwen large audio-language models.",
+        "default": "7b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8935174032,
+                        "url": "chatllm_quantized_qwen2/qwen2-audio-7b.bin"
+                    }
+                }
+            }
+        }
+    },
     "qwen2.5" : {
         "brief": "Qwen2 is a new series of large language models from Alibaba group.",
         "default": "1.5b",
@@ -2874,6 +2890,15 @@
                     "q4_1": {
                         "size": 10447148784,
                         "url": "chatllm_quantized_kimi-vl/kimi-vl-thinking-q4_1.bin"
+                    }
+                }
+            },
+            "a3b-thinking-2506": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 10447149104,
+                        "url": "chatllm_quantized_kimi-vl/kimi-vl-thinking-2506-q4_1.bin"
                     }
                 }
             }
