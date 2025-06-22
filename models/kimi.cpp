@@ -130,12 +130,12 @@ namespace vit
 
             v_pos_h.resize(len);
 
-            for (int i = 0; i < grid_w; i++)
+            for (int i = 0; i < grid_h; i++)
             {
-                for (int j = 0; j < grid_h; j++)
+                for (int j = 0; j < grid_w; j++)
                 {
-                    v_pos  [i * grid_h + j] = j;
-                    v_pos_h[i * grid_h + j] = i;
+                    v_pos  [i * grid_w + j] = j;
+                    v_pos_h[i * grid_w + j] = i;
                 }
             }
 
