@@ -76,8 +76,8 @@ namespace utils
 
     std::string num2words(int value);
 
-    std::string sec2hms(float seconds, bool show_ms = false);
-    std::string sec2ms(float seconds, bool show_ms = false);
+    std::string sec2hms(double seconds, bool hour_2digits = false, bool show_ms = false);
+    std::string sec2ms(double seconds, bool show_ms = false);
 
     // create a unique temp file name (full path)
     std::string tmpname(void);

@@ -112,11 +112,11 @@ static chatllm::Pipeline::ExtendingMethod parse_extending_method(const std::stri
         return chatllm::Pipeline::ExtendingMethod::None;
 }
 
-// sorted by length!
 const std::vector<std::pair<std::string, std::string>> THOUGHT_TAGS = {
     {"<think>",         "</think>"},
+    {"◁think▷",         "◁/think▷"},
     {"<thought>",       "</thought>"},
-    {"<reasoning>",     "</reasoning>"}
+    {"<reasoning>",     "</reasoning>"},
 };
 
 static std::string show_default_thought_tags(void)

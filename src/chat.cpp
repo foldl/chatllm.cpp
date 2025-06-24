@@ -457,8 +457,10 @@ namespace chatllm
 
     void ThoughtChunkInterceptor::init(std::vector<std::pair<std::string, std::string>> tags)
     {
-        this->tags = tags;
+        this->tags = tags;        
         active = tags.size() > 0;
+        if (active)
+            std::sort(this->tags.begin(), this->tags.end(), [](auto& a, auto& b) { return a.first.size() < b.first.size(); });
     }
 
     void ThoughtChunkInterceptor::put_chunk(bool first, const std::string &chunk)

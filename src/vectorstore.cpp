@@ -542,7 +542,7 @@ namespace utils
         return result;
     }
 
-    std::string sec2hms(float seconds, bool show_ms)
+    std::string sec2hms(double seconds, bool hour_2digits, bool show_ms)
     {
         int sec = (int)seconds;
         int ms  = (int)((seconds - sec) * 1000000);
@@ -551,14 +551,24 @@ namespace utils
         sec %= 60;
         min %= 60;
         char s[100];
-        if (show_ms)
-            sprintf(s, "%d:%02d:%02d.%06d", hh, min, sec, ms);
+        if (hour_2digits)
+        {
+            if (show_ms)
+                sprintf(s, "%02d:%02d:%02d.%06d", hh, min, sec, ms);
+            else
+                sprintf(s, "%02d:%02d:%02d", hh, min, sec);
+        }
         else
-            sprintf(s, "%d:%02d:%02d", hh, min, sec);
+        {
+            if (show_ms)
+                sprintf(s, "%d:%02d:%02d.%06d", hh, min, sec, ms);
+            else
+                sprintf(s, "%d:%02d:%02d", hh, min, sec);
+        }
         return s;
     }
 
-    std::string sec2ms(float seconds, bool show_ms)
+    std::string sec2ms(double seconds, bool show_ms)
     {
         int sec = (int)seconds;
         int ms  = (int)((seconds - sec) * 1000000);

@@ -589,6 +589,7 @@ namespace vl
 
         int video_max_frames = 20;
         bool arbitrary_resolution = false;
+        double fps = 1.0;
     };
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
@@ -686,6 +687,7 @@ namespace vl
             Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
             tok->video_max_frames       = utils::get_opt(args, "video_max_frames", tok->video_max_frames);
             tok->arbitrary_resolution   = utils::get_opt(args, "arbitrary_resolution", false);
+            tok->fps                    = utils::get_opt(args, "fps", tok->fps);
         }
 
         void before_generate(const GenerationConfig &gen_config) override
@@ -709,6 +711,12 @@ namespace vl
 
         std::vector<std::unique_ptr<vision::VideoLoader>> videos;
 
+        std::unique_ptr<vision::Resize> resize;
+        std::unique_ptr<vision::PreMaxImageSize> max_size;
+
+        if (!tok->arbitrary_resolution)
+            resize.reset(new vision::Resize(896, 896));
+
         // expand video into images
         std::vector<ContentPiece> pieces;
         for (auto &piece : user.pieces)
@@ -719,16 +727,18 @@ namespace vl
                 continue;
             }
 
-            // video is just like a collection of images.
-            // But, it's still not clear on fps.
-            // https://github.com/MoonshotAI/Kimi-VL/issues/24#issuecomment-2804163270
-            auto video = new vision::VideoLoader(piece.content.c_str(), 1.0f, tok->video_max_frames);
+            // ref: https://huggingface.co/blog/moonshotai/kimi-vl-a3b-thinking-2506
+            auto video = new vision::VideoLoader(piece.content.c_str(), (float)tok->fps, tok->video_max_frames);
             videos.emplace_back(video);
             if (video->frames.size() < 1)
                 continue;
 
+            if (max_size.get() == nullptr)
+                max_size.reset(new vision::PreMaxImageSize(448, 448));
+
             for (size_t i = 0; i < video->frames.size(); i++)
             {
+                pieces.emplace_back(utils::sec2hms(i / tok->fps, true));
                 pieces.emplace_back(video->frames[i], ContentPiece::Type::Image);
             }
         }
@@ -751,10 +761,6 @@ namespace vl
                 vision::MaxPatchNum     param2(vis_config->in_token_limit);
                 vision::MaxGridHeight   param3(512);
                 vision::MaxGridWidth    param4(512);
-
-                std::unique_ptr<vision::Resize> resize;
-                if (!tok->arbitrary_resolution)
-                    resize.reset(new vision::Resize(896, 896));
 
                 vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, vision::PaddingMode::Black);
 
