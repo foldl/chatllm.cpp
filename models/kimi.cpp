@@ -587,9 +587,9 @@ namespace vl
         int media_end_token_id;
         int media_pad_token_id;
 
-        int video_max_frames = 20;
-        bool arbitrary_resolution = false;
-        double fps = 1.0;
+        int     video_max_frames = 20;
+        bool    native_resolution = false;
+        double  fps = 1.0;
     };
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
@@ -686,7 +686,7 @@ namespace vl
         {
             Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
             tok->video_max_frames       = utils::get_opt(args, "video_max_frames", tok->video_max_frames);
-            tok->arbitrary_resolution   = utils::get_opt(args, "arbitrary_resolution", false);
+            tok->native_resolution      = utils::get_opt(args, "native_resolution", tok->native_resolution);
             tok->fps                    = utils::get_opt(args, "fps", tok->fps);
         }
 
@@ -714,7 +714,7 @@ namespace vl
         std::unique_ptr<vision::Resize> resize;
         std::unique_ptr<vision::PreMaxImageSize> max_size;
 
-        if (!tok->arbitrary_resolution)
+        if (!tok->native_resolution)
             resize.reset(new vision::Resize(896, 896));
 
         // expand video into images
