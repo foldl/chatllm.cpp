@@ -623,6 +623,8 @@ std::vector<std::string> unicode_regex_split(const std::string & text, const std
                 break;
             }
         }
+        if (need_collapse)
+            break;
     }
 
     const auto cpts = unicode_cpts_from_utf8(text);

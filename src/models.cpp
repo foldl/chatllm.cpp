@@ -943,6 +943,12 @@ namespace chatllm
 
         before_generate(gen_config);
 
+        #if (0)
+        for (auto i : curr_input_ids)
+            printf("%d, ", i);
+        printf("\n");
+        #endif
+
         while (!aborted && !completed && (n_past + (int)curr_input_ids.size() < gen_config.max_length))
         {
             std::vector<float> lm_logits;
