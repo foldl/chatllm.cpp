@@ -503,7 +503,9 @@ namespace vl
     public:
         Tokenizer(const Config &config)
             : Tokenizer(config, &_chat_encoder)
-        {}
+        {
+            auto_add_bos = false;
+        }
 
         Tokenizer(const Config &config, BaseHistoryEncoder *chat_encoder)
             : BaseTokenizer(config, chat_encoder, nullptr, nullptr)
@@ -515,17 +517,19 @@ namespace vl
         {
             tp = new tokenizer::BPEProcessor2(
                 {
-                    "[\\p{Han}]+",
                     // FIXME: support &&
+                    // "[\\p{Han}]+",
                     //"[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}&&[^\\p{Han}]]+[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}&&[^\\p{Han}]]*(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])?",
-                    //"[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}&&[^\\p{Han}]]*[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}&&[^\\p{Han}]]+(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])?",
-                    "[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]*(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])?",
-                    "[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]*[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]+(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])?",
+                    //"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]+[\p{Ll}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?",
+
+                    "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])",
+                    "[^\\r\\n\\p{L}\\p{N}]?\\p{L}+",
+
                     "\\p{N}{1,3}",
                     " ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*",
                     "\\s*[\\r\\n]+",
                     "\\s+(?!\\S)",
-                    "\\+",
+                    //"\\s+",
                 }
             );
             size_t size = tp->Load(buffer, n_vocab);
