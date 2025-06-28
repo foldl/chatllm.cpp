@@ -2907,5 +2907,37 @@
                 }
             }
         }
+    },
+    "confucius3-math": {
+        "brief": "Confucius3-Math is a 14B parameter open-source resoning LLM developed by the NetEase Youdao AI Team, specifically optimized for K-12 mathematics education.",
+        "default": "14b",
+        "license": "MIT",
+        "variants": {
+            "14b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 15699928544,
+                        "url": "chatllm_quantized_confucius3/confucius3-math-14b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "jan-nano": {
+        "brief": "Jan-Nano is a compact 4-billion parameter language model specifically designed and trained for deep research tasks.",
+        "default": "4b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4278738464,
+                        "url": "chatllm_quantized_jan-nano/jan-nano-4b.bin"
+                    }
+                }
+            }
+        }
     }
 }

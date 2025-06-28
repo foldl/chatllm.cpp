@@ -227,6 +227,8 @@
         [1.7B](https://huggingface.co/Qwen/Qwen3-1.7B/tree/d3e258980a49b060055ea9038dad99d75923f7c4),
         [0.6B](https://huggingface.co/Qwen/Qwen3-0.6B/tree/6130ef31402718485ca4d80a6234f70d9a4cf362)
     * [x] MiMo: [7B-RL](https://huggingface.co/XiaomiMiMo/MiMo-7B-RL/tree/8c8a4968100fd7a4f0319c54438184bbeb767c82)
+    * [x] Confucius3-Math: [14B](https://huggingface.co/netease-youdao/Confucius3-Math/tree/62621490d5dccf5fea997be9df62dd8dc017f777) (`-a DeepSeek-R1-Distill-QWen`)
+    * [x] Jan-Nano: [4B](https://huggingface.co/Menlo/Jan-nano/tree/5f4e450c127322db9477400890a0dd951c9f6ab7)
 
 * Solor (`SolarForCausalLM`)
     * [x] [Pro](https://huggingface.co/upstage/solar-pro-preview-instruct/tree/dd4bcf7006df9b1ce3f87711e702e4063832aae3)
