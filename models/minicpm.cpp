@@ -278,7 +278,7 @@ namespace moe
     const int EXPERTS_PER_TOK               =  2;
 
     // make it easy to test with different number of experts.
-    #define EFFECTIVE_EXPERTS_PER_TOK       EXPERTS_PER_TOK
+    const int EFFECTIVE_EXPERTS_PER_TOK     = EXPERTS_PER_TOK;
 
     class MiniCPMSparseMoE : public BaseSparseMLP
     {

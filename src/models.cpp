@@ -26,6 +26,7 @@
 #include "models_priv.h"
 
 #include "../models/qwen.h"
+#include "../models/hunyuan.h"
 
 json::JSON json::JSON::_null = json::JSON();
 
@@ -1720,11 +1721,6 @@ namespace chatllm
         #include "../models/jina.cpp"
     }
 
-    namespace hunyuan
-    {
-        #include "../models/hunyuan.cpp"
-    }
-
     namespace moonshot
     {
         #include "../models/moonshot.cpp"
@@ -2182,6 +2178,7 @@ namespace chatllm
         CASE(TELECHAT2,             telechat::v2, 1)            \
                                                                 \
         CASE(HUNYUAN_DENSE,         hunyuan::dense, 1)          \
+        CASE(HUNYUAN_MOE_V1,        hunyuan::moe_v1, 1)         \
                                                                 \
         CASE(MOONLIGHT,             moonshot::moonlight, 1)     \
                                                                 \

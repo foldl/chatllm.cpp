@@ -144,6 +144,7 @@ namespace chatllm
         MODEL_TYPE_TELECHAT2        = 0x1e00,
 
         MODEL_TYPE_HUNYUAN_DENSE    = 0x1f00,
+        MODEL_TYPE_HUNYUAN_MOE_V1   = 0x1f01,
 
         MODEL_TYPE_MOONLIGHT        = 0x2000,
 

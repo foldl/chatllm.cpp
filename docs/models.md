@@ -78,6 +78,7 @@
 
 * HunYuan (`HunYuanForCausalLM`)
     * [x] Dense: [Instruct-7B](https://huggingface.co/tencent/Hunyuan-7B-Instruct)
+    * [x] MoE: [A13B-Instruct](https://huggingface.co/tencent/Hunyuan-A13B-Instruct/tree/202c9758065873e0ac7c80211e6275593f165442)
 
 * Instella (`InstellaForCausalLM`)
     * [x] [Instruct-3B](https://huggingface.co/amd/Instella-3B-Instruct)

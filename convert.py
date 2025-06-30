@@ -16,7 +16,7 @@ from enum import Enum, IntEnum
 from pathlib import Path
 from typing import IO, Any, Iterable, List, Optional, Tuple
 import numpy as np
-import math
+import math, gc
 
 import torch
 from torch import nn
@@ -184,6 +184,7 @@ class ModelType(Enum):
     TeleChat2       = 0x1e00
 
     HunYuanDense    = 0x1f00
+    HunYuanMoEV1    = 0x1f01
 
     MoonLight       = 0x2000
 
@@ -604,6 +605,8 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
 
             dump_tensor(f, name, tensor, tensor_ggml_type)
             tensor_info.append((name, tensor.shape, tensor_ggml_type.name))
+
+        gc.collect()
 
     print(tabulate(tensor_info, headers=["name", "shape", "dtype"]))
 
@@ -6521,6 +6524,92 @@ class HunYuanDenseConverter(BaseConverter):
 
         return weight_names
 
+class HunYuanMoEV1Converter(BaseConverter):
+    MODEL_TYPE = ModelType.HunYuanMoEV1
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            new_name = name
+            new_name = new_name.replace('.mlp.gate.wg.', '.mlp.gate.')
+            new_name = new_name.replace('.shared_mlp.', '.shared_expert.')
+
+            new_dict[new_name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.tie_word_embeddings, "tie_word_embeddings must be True"
+        assert config.attention_bias == False, "attention_bias must be False"
+        assert config.mlp_bias == False, "mlp_bias must be False"
+        assert not config.use_cla, "use_cla must be False"
+        assert not config.use_mla, "use_mla must be False"
+        assert config.rope_scaling['type'] == 'dynamic', "rope_scaling['type'] must be 'dynamic'"
+        assert config.use_qk_norm, "use_qk_norm must be True"
+        assert config.rope_scaling['alpha'] > 0, "rope_scaling['alpha'] must be > 0"
+        assert config.moe_layer_num_skipped == 0
+        assert config.use_mixed_mlp_moe
+        assert len(set(config.moe_intermediate_size)) == 1
+        assert len(set(config.moe_topk)) == 1
+        assert len(set(config.num_shared_expert)) == 1
+        assert config.attention_head_dim == config.hidden_size / config.num_attention_heads
+
+        head_dim = config.attention_head_dim
+        config.rope_theta = config.rope_theta * config.rope_scaling['alpha'] ** (head_dim / (head_dim - 2))
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.num_experts,
+
+            list(set(config.moe_intermediate_size))[0],
+            list(set(config.moe_topk))[0],
+            list(set(config.num_shared_expert))[0],
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_theta,
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            for j in range(config.num_experts):
+                    weight_names += [
+                        f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                    ]
+
+            weight_names += [
+                f"model.layers.{i}.mlp.gate.weight",
+                f"model.layers.{i}.mlp.shared_expert.down_proj.weight",
+                f"model.layers.{i}.mlp.shared_expert.gate_proj.weight",
+                f"model.layers.{i}.mlp.shared_expert.up_proj.weight",
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.key_layernorm.weight",
+                f"model.layers.{i}.self_attn.query_layernorm.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        return weight_names
+
 class SolarConverter(BaseConverter):
     MODEL_TYPE = ModelType.SolarPro
 
@@ -7380,6 +7469,8 @@ def main():
             (isinstance(config.num_experts, list) and max(config.num_experts) > 1)):
             raise Exception('HunYuanForCausalLM: only dense model is supported')
         HunYuanDenseConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'HunYuanMoEV1ForCausalLM':
+        HunYuanMoEV1Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InstellaForCausalLM':
         InstellaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'DeciLMForCausalLM':
