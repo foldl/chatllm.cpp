@@ -126,6 +126,7 @@ namespace chatllm
         MODEL_TYPE_EXAONE           = 0x1705,
         MODEL_TYPE_DEEPSEEK_R1_DISTILL_LLAMA = 0x1706,
         MODEL_TYPE_AQUILA2                   = 0x1707,
+        MODEL_TYPE_ERNIE_DENSE               = 0x1708,
 
         MODEL_TYPE_STARCODER2       = 0x1800,
 

@@ -55,8 +55,11 @@ set(core_files src/backend.cpp
     src/unicode-data.cpp
     src/vision_process.cpp
     src/audio_process.cpp
+    models/ernie.cpp
+    models/hunyuan.cpp
+    models/llama.cpp
     models/qwen.cpp
-    models/hunyuan.cpp)
+    )
 
 add_library(libchatllm SHARED EXCLUDE_FROM_ALL src/main.cpp ${core_files})
 target_link_libraries(libchatllm PRIVATE ggml)

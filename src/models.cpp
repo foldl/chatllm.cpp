@@ -25,8 +25,10 @@
 #include "audio_process.h"
 #include "models_priv.h"
 
+#include "../models/llama.h"
 #include "../models/qwen.h"
 #include "../models/hunyuan.h"
+#include "../models/ernie.h"
 
 json::JSON json::JSON::_null = json::JSON();
 
@@ -1512,11 +1514,6 @@ namespace chatllm
         #include "../models/internlm.cpp"
     }
 
-    namespace llama
-    {
-        #include "../models/llama.cpp"
-    }
-
     namespace codellama
     {
         #include "../models/codellama.cpp"
@@ -2193,6 +2190,8 @@ namespace chatllm
         CASE(KIMI_VL,               kimi::vl, 1)                \
                                                                 \
         CASE(APRIEL,                apriel, 1)                  \
+                                                                \
+        CASE(ERNIE_DENSE,           ernie::dense, 1)            \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

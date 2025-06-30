@@ -166,6 +166,7 @@ class ModelType(Enum):
     Exaone        = 0x1705
     DeepSeek_R1_Distill_LlaMA = 0x1706
     Aquila2       = 0x1707
+    ERNIE_DENSE   = 0x1708
 
     StarCoder2    = 0x1800
 
@@ -1358,6 +1359,34 @@ class Llama3Converter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return LlamaConverter.get_weight_names(config)
+
+class ERNIEDenseConverter(BaseConverter):
+    MODEL_TYPE = ModelType.ERNIE_DENSE
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return Llama3Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        if config.rope_scaling is not None:
+            assert config.rope_scaling == 1.0, 'rope_scaling must equal to 1.0'
+
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+            1 if config.tie_word_embeddings else 0,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = Llama3Converter.get_weight_names(config)
+        if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
+            weight_names.remove('lm_head.weight')
+        return weight_names
 
 class Llama31Converter(BaseConverter):
     MODEL_TYPE = ModelType.LlaMA31
@@ -7485,6 +7514,8 @@ def main():
         AprielConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch in ['Qwen3MoeForCausalLM', 'Qwen3ForCausalLM']:
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Ernie4_5_ForCausalLM':
+        ERNIEDenseConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

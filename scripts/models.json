@@ -2939,5 +2939,21 @@
                 }
             }
         }
+    },
+    "ernie": {
+        "brief": "ERNIE 4.5 models are released by Baidu.",
+        "default": "0.3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "0.3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 384864032,
+                        "url": "chatllm_quantized_ernie/ernie-4.5-0.3b.bin"
+                    }
+                }
+            }
+        }
     }
 }

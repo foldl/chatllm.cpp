@@ -58,6 +58,9 @@
 
     Two optimization modes are defined: speed (default) and memory. See `BaseMLAttention`.
 
+* ERNIE (`Ernie4_5_ForCausalLM`)
+    * [x] [0.3B](https://huggingface.co/baidu/ERNIE-4.5-0.3B-PT/tree/c163aa422d265f995b024d1322d91c4e3cb52ec8)
+
 * EXAONE (`ExaoneForCausalLM`)
     * [x] v3.5: [Instruct-2.4B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct), [Instruct-7.8B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct), [Instruct-32B](https://huggingface.co/LGAI-EXAONE/EXAONE-3.5-32B-Instruct)
     * [x] Deep: [2.4B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-2.4B/tree/b9e0d963cc9be39abce33381f40a8da4324cf4bb), [7.8B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-7.8B/tree/19948cbbd0e9afb0f7b5a918eb7e2eb18341e076), [32B](https://huggingface.co/LGAI-EXAONE/EXAONE-Deep-32B/tree/dfa797fc8d8ae6ecc0e5f7a450317cc1433b2545)
