@@ -2953,6 +2953,15 @@
                         "url": "chatllm_quantized_ernie/ernie-4.5-0.3b.bin"
                     }
                 }
+            },
+            "a3b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q8": {
+                        "size": 13643262720,
+                        "url": "chatllm_quantized_ernie/ernie-4.5-21b-a3b-q4_1.bin"
+                    }
+                }
             }
         }
     }

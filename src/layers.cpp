@@ -859,6 +859,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::cast(ComputeContext *ctx, ggml::tensor *a, ggml::type type)
+    {
+        ggml::tensor *tensor = ggml_cast(ctx->get_ctx(), a, type);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::transpose(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_transpose(ctx->get_ctx(), a);
@@ -2209,6 +2216,41 @@ namespace chatllm
         Backend::write_tensor_data(freq_factors, factors);
     }
 
+    BaseSparseMLP::BaseSparseMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
+                  ActFunc act, bool gate_use_bias, bool grouped_max)
+        :
+            num_local_experts(num_local_experts), num_experts_per_tok(num_experts_per_tok),
+            gate(ctx, hidden_size, num_local_experts, false),
+            mover(new CPUMover(ctx, ctx->user_options.moe_on_cpu)),
+            experts_gate(ctx, hidden_size, intermediate_size, num_local_experts),
+            experts_down(ctx, intermediate_size, hidden_size, num_local_experts),
+            experts_up  (ctx, hidden_size, intermediate_size, num_local_experts),
+            gate_score_correction_bias(gate_use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, num_local_experts) : nullptr),
+            group_indices(grouped_max ? ggml::new_tensor_2d(ctx, GGML_TYPE_I32, 1, num_experts_per_tok) : nullptr),
+            act(act),
+            norm_topk_prob(true),
+            score_func(ScoreFunc::Softmax),
+            routed_scaling_factor(-1.0f),
+            always_scaling(false),
+            pre_weighting(false)
+    {
+        delete mover;
+        mover = nullptr;
+
+        if (group_indices)
+        {
+            ctx->get_allocator()->alloc(group_indices);
+            std::vector<int> data;
+            data.resize(num_experts_per_tok);
+            int group_size = num_local_experts / num_experts_per_tok;
+            for (int i = 0; i < num_experts_per_tok; i++)
+            {
+                data[i] = i * group_size;
+            }
+            Backend::write_tensor_data(group_indices, data.data());
+        }
+    }
+
     ggml::tensor *BaseSparseMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
     {
         const int64_t qlen        = hidden_states->ne[1];
@@ -2239,7 +2281,23 @@ namespace chatllm
         }
 
         // select experts
-        ggml::tensor * selected_experts = ggml::top_k(ctx, corrected_score, num_experts_per_tok); // [qlen, num_experts_per_tok]
+        ggml::tensor * selected_experts = nullptr;
+        if (group_indices)
+        {
+            const int experts_per_group = n_expert / num_experts_per_tok;
+            ggml::tensor *grouped_scores = ggml::reshape_4d(ctx, corrected_score, experts_per_group, num_experts_per_tok,
+                                                            ggml::get_dim(corrected_score, 1), ggml::get_dim(corrected_score, 2));
+            selected_experts = ggml::top_k(ctx, grouped_scores, 1);
+
+            selected_experts = ggml::map_custom1(ctx, selected_experts, ggml_custom_group_index_boost, GGML_N_TASKS_MAX, (void *)(intptr_t)experts_per_group);
+
+            selected_experts = ggml::reshape_3d(ctx, selected_experts, ggml::get_dim(selected_experts, 0) * ggml::get_dim(selected_experts, 1),
+                ggml::get_dim(corrected_score, 1), ggml::get_dim(corrected_score, 2));
+        }
+        else
+        {
+            selected_experts = ggml::top_k(ctx, corrected_score, num_experts_per_tok); // [qlen, num_experts_per_tok]
+        }
 
         ggml::tensor * weights = ggml::get_rows(ctx,
             ggml::reshape_3d(ctx, probs, 1, n_expert, qlen), selected_experts); // [1, num_experts_per_tok, qlen]

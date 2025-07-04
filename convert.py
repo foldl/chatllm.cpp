@@ -197,6 +197,8 @@ class ModelType(Enum):
 
     Apriel          = 0x2400
 
+    ERNIE_MoE       = 0x2500
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -285,6 +287,7 @@ def quantize_q4_1(tensor: torch.Tensor) -> torch.CharTensor:
     tensor = torch.cat((scale.half().view(torch.int8), min_values.half().view(torch.int8), tensor), dim=-1)
     return tensor
 
+@torch.jit.script
 def qkx2_quants(x: torch.Tensor, nmax, rmin, rdelta, nstep: int, use_mad: bool):
     assert x.dim() == 1
     N = x.shape[0]
@@ -297,7 +300,7 @@ def qkx2_quants(x: torch.Tensor, nmax, rmin, rdelta, nstep: int, use_mad: bool):
     if min_x > 0: min_x = torch.tensor(0)
     if min_x == max_x:
         L = torch.zeros(N)
-        return 0.0, -min_x, L
+        return torch.tensor(0.0), -min_x, L
 
     iscale = nmax / (max_x - min_x)
     scale = 1 / iscale
@@ -322,7 +325,7 @@ def qkx2_quants(x: torch.Tensor, nmax, rmin, rdelta, nstep: int, use_mad: bool):
             this_scale = (sum_w * sum_xl - sum_x * sum_l)/D
             this_min   = (sum_l2 * sum_x - sum_l * sum_xl)/D
             if this_min > 0:
-                this_min = 0
+                this_min = torch.tensor(0)
                 this_scale = sum_xl / sum_l2
 
             diff = this_scale * l + this_min - x
@@ -335,19 +338,20 @@ def qkx2_quants(x: torch.Tensor, nmax, rmin, rdelta, nstep: int, use_mad: bool):
 
     return scale, -min_x, L
 
-def quantize_q4_k_block(tensor: torch.Tensor) -> torch.CharTensor:
+@torch.jit.script
+def quantize_q4_k_block(tensor: torch.Tensor, GGML_QK_K: int) -> torch.CharTensor:
     assert tensor.shape == (GGML_QK_K, )
     tensor = tensor.view(-1, 32)
 
-    subblocks = [qkx2_quants(tensor[i], 15, -1.0, 0.1, 20, False) for i in range(tensor.shape[0])]
+    subblocks = [qkx2_quants(tensor[i], torch.tensor(15), torch.tensor(-1.0), torch.tensor(0.1), 20, False) for i in range(tensor.shape[0])]
     scale = torch.stack([x[0] for x in subblocks])
     min_x = torch.stack([x[1] for x in subblocks])
 
     max_scale = torch.max(scale)
     max_min   = torch.max(min_x)
 
-    inv_scale = 63.0 / max_scale if max_scale > 0 else 0.0
-    inv_min   = 64.0 / max_min   if max_min   > 0 else 0.0
+    inv_scale = torch.tensor(63.0) / max_scale if max_scale > 0 else torch.tensor(0.0)
+    inv_min   = torch.tensor(64.0) / max_min   if max_min   > 0 else torch.tensor(0.0)
 
     ls = (inv_scale * scale).round().clamp(max=63)
     lm = (inv_min   * min_x).round().clamp(max=63)
@@ -380,11 +384,12 @@ def quantize_q4_k_block(tensor: torch.Tensor) -> torch.CharTensor:
 
     return r
 
-def quantize_q4_k(tensor: torch.Tensor) -> torch.CharTensor:
+@torch.jit.script
+def quantize_q4_k(tensor: torch.Tensor, GGML_QK_K: int) -> torch.CharTensor:
     # equivalent to dequantize_row_q4_K in ggml-quants.c
     assert tensor.shape[tensor.ndim - 1] % GGML_QK_K == 0
     tensor = tensor.view(-1, GGML_QK_K)
-    blocks = [quantize_q4_k_block(tensor[i]) for i in range(tensor.shape[0])]
+    blocks = [quantize_q4_k_block(tensor[i], GGML_QK_K) for i in range(tensor.shape[0])]
     tensor = torch.cat(blocks, dim=-1)
     return tensor
 
@@ -411,7 +416,7 @@ def dump_tensor(f, name: str, tensor: torch.Tensor, ggml_type: GGMLType):
         elif ggml_type == GGMLType.Q4_1:
             tensor = quantize_q4_1(tensor)
         elif ggml_type == GGMLType.Q4_K:
-            tensor = quantize_q4_k(tensor)
+            tensor = quantize_q4_k(tensor, GGML_QK_K)
         else:
             raise NotImplementedError(f"Cannot dump tensor of dtype {tensor.dtype}")
     except Exception as e:
@@ -6364,6 +6369,81 @@ class DeepSeekV3Converter(BaseConverter):
 
         return weight_names
 
+class ERNIEMoEConverter(BaseConverter):
+    MODEL_TYPE = ModelType.ERNIE_MoE
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert not config.use_bias
+        assert len(config.moe_capacity) == 3
+        if config.rope_scaling is not None:
+            assert config.rope_scaling == 1.0, 'rope_scaling must equal to 1.0'
+
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            1 if config.tie_word_embeddings else 0,
+            config.moe_num_experts,
+            config.moe_num_shared_experts,
+            config.moe_layer_start_index,
+            config.moe_intermediate_size,
+            config.moe_capacity[0],
+            config.moe_capacity[1],
+            config.moe_capacity[2],
+            config.moe_k,
+            config.moe_layer_interval,
+            1 if config.moe_use_aux_free else 0,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+            if (i >= config.moe_layer_start_index) and ((i + 1) % config.moe_layer_interval == 0):
+                weight_names += [
+                    f"model.layers.{i}.mlp.gate.weight",
+                    f"model.layers.{i}.mlp.shared_experts.gate_proj.weight",
+                    f"model.layers.{i}.mlp.shared_experts.up_proj.weight",
+                    f"model.layers.{i}.mlp.shared_experts.down_proj.weight",
+                ]
+                if config.moe_use_aux_free:
+                    weight_names += [
+                        f"model.layers.{i}.mlp.moe_statics.e_score_correction_bias",
+                    ]
+                for j in range(config.moe_num_experts):
+                    weight_names += [
+                        f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                    ]
+            else:
+                weight_names += [
+                    f"model.layers.{i}.mlp.down_proj.weight",
+                    f"model.layers.{i}.mlp.gate_proj.weight",
+                    f"model.layers.{i}.mlp.up_proj.weight",
+                ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        if not config.tie_word_embeddings:
+            weight_names += [
+                "lm_head.weight"
+            ]
+        return weight_names
+
 class KimiVLConverter(BaseConverter):
     MODEL_TYPE = ModelType.KimiVL
 
@@ -7516,6 +7596,8 @@ def main():
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Ernie4_5_ForCausalLM':
         ERNIEDenseConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Ernie4_5_MoeForCausalLM':
+        ERNIEMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

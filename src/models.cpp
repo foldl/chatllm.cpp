@@ -2192,6 +2192,7 @@ namespace chatllm
         CASE(APRIEL,                apriel, 1)                  \
                                                                 \
         CASE(ERNIE_DENSE,           ernie::dense, 1)            \
+        CASE(ERNIE_MOE,             ernie::moe, 1)              \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

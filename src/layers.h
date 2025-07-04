@@ -62,6 +62,8 @@ namespace chatllm
 
         ggml::tensor *cont(ComputeContext *ctx, ggml::tensor *a);
 
+        ggml::tensor *cast(ComputeContext *ctx, ggml::tensor *a, ggml::type type);
+
         ggml::tensor *transpose(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *concat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int dim);
 
@@ -2147,25 +2149,7 @@ namespace chatllm
         };
         BaseSparseMLP() = default;
         BaseSparseMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
-                  ActFunc act, bool gate_use_bias)
-            :
-              num_local_experts(num_local_experts), num_experts_per_tok(num_experts_per_tok),
-              gate(ctx, hidden_size, num_local_experts, false),
-              mover(new CPUMover(ctx, ctx->user_options.moe_on_cpu)),
-              experts_gate(ctx, hidden_size, intermediate_size, num_local_experts),
-              experts_down(ctx, intermediate_size, hidden_size, num_local_experts),
-              experts_up  (ctx, hidden_size, intermediate_size, num_local_experts),
-              gate_score_correction_bias(gate_use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, num_local_experts) : nullptr),
-              act(act),
-              norm_topk_prob(true),
-              score_func(ScoreFunc::Softmax),
-              routed_scaling_factor(-1.0f),
-              always_scaling(false),
-              pre_weighting(false)
-        {
-            delete mover;
-            mover = nullptr;
-        }
+                  ActFunc act, bool gate_use_bias, bool grouped_max = false);
 
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
@@ -2202,6 +2186,7 @@ namespace chatllm
         MultiLinear experts_down;
         MultiLinear experts_up;
         ggml::tensor *gate_score_correction_bias;
+        ggml::tensor *group_indices;
         const ActFunc act;
         bool norm_topk_prob;
         ScoreFunc score_func;
