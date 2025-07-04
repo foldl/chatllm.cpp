@@ -2380,7 +2380,7 @@
         }
     },
     "hunyuan": {
-        "brief": "Hunyuan-7B is developed by Tencent and stands out from many large-scale language models and is currently one of the strongest Chinese 7B Dense models.",
+        "brief": "Hunyuan-7B & Hunyuan-A13B are developed by Tencent.",
         "default": "7b",
         "license": "Tencent License",
         "variants": {
@@ -2390,6 +2390,15 @@
                     "q8": {
                         "size": 7981585920,
                         "url": "chatllm_quantized_hunyuan/hunyuan-7b.bin"
+                    }
+                }
+            },
+            "a13b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 45226040592,
+                        "url": "chatllm_quantized_hunyuan/hunyuan-a13b-q4_0.bin"
                     }
                 }
             }
