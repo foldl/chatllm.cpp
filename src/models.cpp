@@ -629,6 +629,7 @@ namespace chatllm
     public:
         static const int ABORT = -1;
         Sampler() : penalty() {}
+        virtual ~Sampler() = default;
 
         Sampler(const GenerationConfig &gen_config)
             : penalty(gen_config)

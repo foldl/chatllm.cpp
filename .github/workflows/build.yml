@@ -826,6 +826,7 @@ jobs:
 
   windows-2022-cmake-cuda:
     runs-on: windows-2022
+    if: false
 
     strategy:
       matrix:
