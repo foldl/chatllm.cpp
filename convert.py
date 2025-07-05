@@ -199,6 +199,8 @@ class ModelType(Enum):
 
     ERNIE_MoE       = 0x2500
 
+    PenguMoE        = 0x2600
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -4765,6 +4767,67 @@ class QWen2MoEConverter(BaseConverter):
 
         return weight_names
 
+class PanguMoEConverter(BaseConverter):
+    MODEL_TYPE = ModelType.PenguMoE
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert not config.tie_word_embeddings
+        assert config.intermediate_size is None
+        config.intermediate_size = config.shared_expert_intermediate_size
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.moe_intermediate_size,
+            config.num_experts_per_tok,
+            config.num_experts,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+            ]
+
+            for j in range(config.num_experts):
+                weight_names += [
+                    f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                    f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                    f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.mlp.gate.weight",
+                f"model.layers.{i}.mlp.shared_expert.down_proj.weight",
+                f"model.layers.{i}.mlp.shared_expert.gate_proj.weight",
+                f"model.layers.{i}.mlp.shared_expert.up_proj.weight",
+                f"model.layers.{i}.mlp.router_scale",
+
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.k_proj.bias",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.bias",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.bias",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.bias",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
 class QWen3Converter(BaseConverter):
     MODEL_TYPE = ModelType.QWen3
 
@@ -7598,6 +7661,8 @@ def main():
         ERNIEDenseConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Ernie4_5_MoeForCausalLM':
         ERNIEMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'PanguProMoEForCausalLM':
+        PanguMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

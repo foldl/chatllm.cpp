@@ -2149,7 +2149,7 @@ namespace chatllm
         };
         BaseSparseMLP() = default;
         BaseSparseMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
-                  ActFunc act, bool gate_use_bias, bool grouped_max = false);
+                  ActFunc act, bool gate_use_bias, bool grouped_max = false, bool router_scale = false);
 
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
@@ -2159,22 +2159,7 @@ namespace chatllm
             gate.set_prec(prec);
         }
 
-        int64_t get_param_num(bool effective_only) const override
-        {
-            int64_t r = 0;
-            r += experts_gate.get_param_num(effective_only);
-            r += experts_down.get_param_num(effective_only);
-            r += experts_up.get_param_num(effective_only);
-            if (effective_only)
-            {
-                r /= num_local_experts;
-                r *= num_experts_per_tok;
-            }
-            r += gate.get_param_num(effective_only);
-
-            return r;
-        }
-
+        int64_t get_param_num(bool effective_only) const override;
         void load(const std::string &path, TensorLoader *loader) override;
 
     public:
@@ -2187,6 +2172,7 @@ namespace chatllm
         MultiLinear experts_up;
         ggml::tensor *gate_score_correction_bias;
         ggml::tensor *group_indices;
+        ggml::tensor *router_scale;
         const ActFunc act;
         bool norm_topk_prob;
         ScoreFunc score_func;
@@ -2221,6 +2207,28 @@ namespace chatllm
 
         LlamaSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
             : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
+    };
+
+    class FullBiasedSelfAttention : public RoPESelfAttention<BaseAttention>
+    {
+    public:
+        FullBiasedSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+            : RoPESelfAttention(ctx, hidden_size, num_attention_heads, max_length, true, true)
+        {
+            rope_mode = RoPEMode::Original;
+        }
+
+        FullBiasedSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+            : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, true)
+        {
+            rope_mode = RoPEMode::Original;
+        }
+
+        FullBiasedSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
+            : RoPESelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, true, true)
+        {
+            rope_mode = RoPEMode::Original;
+        }
     };
 
     class LlamaBlock : public LMBlock1<RMSNorm, LlamaSelfAttention, RMSNorm, SiLUMLP>

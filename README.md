@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-07-05: Pangu-Pro-MoE
 * 2025-07-04: ERNIE-MoE
 * 2025-06-30: Hunyuan-A13B, ERNIE-Dense
 * 2025-06-21: [I can hear](./docs/multimodal.md): Qwen2-Audio

@@ -159,6 +159,8 @@ namespace chatllm
 
         MODEL_TYPE_ERNIE_MOE        = 0x2500,
 
+        MODEL_TYPE_PANGU_MOE        = 0x2600,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,

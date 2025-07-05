@@ -29,6 +29,7 @@
 #include "../models/qwen.h"
 #include "../models/hunyuan.h"
 #include "../models/ernie.h"
+#include "../models/pangu.h"
 
 json::JSON json::JSON::_null = json::JSON();
 
@@ -2193,6 +2194,8 @@ namespace chatllm
                                                                 \
         CASE(ERNIE_DENSE,           ernie::dense, 1)            \
         CASE(ERNIE_MOE,             ernie::moe, 1)              \
+                                                                \
+        CASE(PANGU_MOE,             pangu::moe, 1)              \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

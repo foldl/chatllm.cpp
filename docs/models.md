@@ -193,6 +193,9 @@
 * Orion (`OrionForCausalLM`)
     * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
 
+* Pangu (`PanguProMoEForCausalLM`)
+    * [x] [Pro-MoE](https://gitcode.com/ascend-tribe/pangu-pro-moe-model/tree/15e45a97fa314d86804f93f7faba107b43f8d25c)
+
 * Phi (`PhiForCausalLM`, `Phi3ForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4)
 
