@@ -824,8 +824,8 @@ jobs:
               -DGGML_CUDA=ON
             cmake --build build
 
-  windows-2019-cmake-cuda:
-    runs-on: windows-2019
+  windows-2022-cmake-cuda:
+    runs-on: windows-2022
 
     strategy:
       matrix:
@@ -863,7 +863,7 @@ jobs:
         env:
           CURL_PATH: ${{ steps.get_libcurl.outputs.curl_path }}
         run: |
-          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          call "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           cmake -S . -B build -G "Ninja Multi-Config" ^
             -DLLAMA_BUILD_SERVER=ON ^
             -DGGML_NATIVE=OFF ^
