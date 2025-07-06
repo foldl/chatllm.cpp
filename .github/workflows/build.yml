@@ -8,7 +8,6 @@ on:
     paths: [
       '.github/workflows/build.yml',
       '.github/workflows/build-linux-cross.yml',
-      '.github/workflows/build-cmake-pkg.yml',
       '**/CMakeLists.txt',
       '**/.cmake',
       '**/*.h',
@@ -493,9 +492,6 @@ jobs:
 
   build-linux-cross:
     uses: ./.github/workflows/build-linux-cross.yml
-
-  build-cmake-pkg:
-    uses: ./.github/workflows/build-cmake-pkg.yml
 
   macOS-latest-cmake-ios:
     runs-on: macos-latest
