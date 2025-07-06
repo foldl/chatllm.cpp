@@ -439,12 +439,17 @@ namespace chatllm
         return true;
     }
 
-    bool ComputeManager::start_rpc_server(int device, const char *endpoint, size_t backend_mem)
+    bool ComputeManager::start_rpc_server(int device, const char *endpoint, size_t backend_mem, const char * cache_dir)
     {
         if (!ComputeManager::backend_rpc)
         {
             ggml::log(GGML_LOG_LEVEL_ERROR, "%s: RPC backend not available", __FUNCTION__);
             return false;
+        }
+
+        if (cache_dir == nullptr)
+        {
+
         }
 
         auto rpc_start_server =
@@ -469,11 +474,12 @@ namespace chatllm
 
         ggml::log(GGML_LOG_LEVEL_INFO, "trying to start RPC server at %s, using\n", s.c_str());
         ggml::log(GGML_LOG_LEVEL_INFO, "%s - %s (%s)\n", dev.backend_name.c_str(), dev.name.c_str(), dev.description.c_str());
-        ggml::log(GGML_LOG_LEVEL_INFO, "    type: %s\n", ComputeManager::dev_type_to_str(dev.type).c_str());
+        ggml::log(GGML_LOG_LEVEL_INFO, "    type        : %s\n", ComputeManager::dev_type_to_str(dev.type).c_str());
+        ggml::log(GGML_LOG_LEVEL_INFO, "    cache dir   : %s\n", cache_dir);
         ggml::log(GGML_LOG_LEVEL_INFO, "    memory total: %zd B\n", dev.total_memory);
         ggml::log(GGML_LOG_LEVEL_INFO, "    memory free : %zd B\n", dev.free_memory);
 
-        rpc_start_server(backend, s.c_str(), backend_mem, backend_mem);
+        rpc_start_server(backend, s.c_str(), cache_dir, backend_mem, backend_mem);
         ggml_backend_free(backend);
         return true;
     }
@@ -747,7 +753,7 @@ namespace chatllm
             gg_backends.push_back(b.backend);
             gg_bufts.push_back(b.get_allocator(BufferType::Dedicated));
         }
-        sched = ggml_backend_sched_new(gg_backends.data(), gg_bufts.data(), (int)gg_backends.size(), graph_max_nodes_num, false);
+        sched = ggml_backend_sched_new(gg_backends.data(), gg_bufts.data(), (int)gg_backends.size(), graph_max_nodes_num, false, false);
     }
 
     BackendContext::~BackendContext()

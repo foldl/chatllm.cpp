@@ -251,7 +251,7 @@ namespace chatllm
         static bool get_device_info(int device, DeviceInfo &info);
         static void get_devices_info(std::vector<DeviceInfo> &devs);
 
-        static bool start_rpc_server(int device, const char *endpoints, size_t backend_mem = 0);
+        static bool start_rpc_server(int device, const char *endpoints, size_t backend_mem = 0, const char * cache_dir = nullptr);
         static bool prepare_rpc_devices(const std::string &endpoints);
 
     protected:
