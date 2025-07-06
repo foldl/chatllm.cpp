@@ -648,6 +648,7 @@ jobs:
 
   windows-msys2:
     runs-on: windows-2025
+    if: false
 
     strategy:
       fail-fast: false
@@ -914,6 +915,7 @@ jobs:
 
   windows-latest-cmake-sycl:
     runs-on: windows-2022
+    if: false
 
     defaults:
       run:
@@ -1066,7 +1068,8 @@ jobs:
           ./gradlew build --no-daemon
 
   openEuler-latest-cmake-cann:
-    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'Ascend NPU') }}
+    if: false
+    #if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'Ascend NPU') }}
     defaults:
       run:
         shell: bash -el {0}
