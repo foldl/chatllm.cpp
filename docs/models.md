@@ -237,6 +237,9 @@
     * [x] Confucius3-Math: [14B](https://huggingface.co/netease-youdao/Confucius3-Math/tree/62621490d5dccf5fea997be9df62dd8dc017f777) (`-a DeepSeek-R1-Distill-QWen`)
     * [x] Jan-Nano: [4B](https://huggingface.co/Menlo/Jan-nano/tree/5f4e450c127322db9477400890a0dd951c9f6ab7)
 
+* SmolLM-3 (`SmolLM3ForCausalLM`)
+    * [x] [3B](https://huggingface.co/HuggingFaceTB/SmolLM3-3B/tree/297fd6336cf21656d5f9d30a1db612ceeca67619)
+
 * Solor (`SolarForCausalLM`)
     * [x] [Pro](https://huggingface.co/upstage/solar-pro-preview-instruct/tree/dd4bcf7006df9b1ce3f87711e702e4063832aae3)
 

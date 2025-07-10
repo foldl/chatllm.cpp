@@ -162,6 +162,22 @@
             }
         }
     },
+    "smollm3": {
+        "brief": "SmolLM3 is a 3B parameter language model designed to push the boundaries of small models.",
+        "default": "3b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3273591504,
+                        "url": "chatllm_quantized_smol/smollm3-3b.bin"
+                    }
+                }
+            }
+        }
+    },
     "smolvlm2": {
         "brief": "SmolVLM2-2.2B is a lightweight multimodal model designed to analyze video content.",
         "default": "2.2b",

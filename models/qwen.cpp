@@ -995,11 +995,7 @@ namespace chatllm::qwen::ds_r1_distill_v3
     Tokenizer::Tokenizer(BaseConfig config)
         : ds_r1_distill::Tokenizer(config)
     {
-        std::time_t now = std::time(nullptr);
-        std::tm* timeinfo = std::localtime(&now);
-        char buffer[1000];
-        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d, %A", timeinfo);
-        std::string date_str(buffer);
+        std::string date_str = utils::now("%Y-%m-%d, %A");
         sys_prompt = "该助手为DeepSeek-R1，由深度求索公司创造。\n今天是" + date_str + "。";
     }
 }

@@ -60,6 +60,7 @@ set(core_files src/backend.cpp
     models/llama.cpp
     models/qwen.cpp
     models/pangu.cpp
+    models/smol.cpp
     )
 
 add_library(libchatllm SHARED EXCLUDE_FROM_ALL src/main.cpp ${core_files})

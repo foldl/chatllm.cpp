@@ -201,6 +201,8 @@ class ModelType(Enum):
 
     PenguMoE        = 0x2600
 
+    SmolLM3         = 0x2700
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -1879,6 +1881,31 @@ class SmolLMConverter(BaseConverter):
     def get_weight_names(config):
         r = Llama3Converter.get_weight_names(config)
         return r[:-1]
+
+class SmolLM3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.SmolLM3
+    tie_word_embeddings = True
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.rope_scaling is None
+        assert (config.layer_types.count('full_attention') == config.num_hidden_layers) or \
+               (config.use_sliding_window is None) or (not config.use_sliding_window)
+        SmolLM3Converter.tie_word_embeddings = (config.tie_word_embeddings is None) or (config.tie_word_embeddings)
+
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            config.no_rope_layer_interval,
+            1 if SmolLM3Converter.tie_word_embeddings else 0,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        r = Llama3Converter.get_weight_names(config)
+        return r[:-1] if SmolLM3Converter.tie_word_embeddings else r
 
 class SmolVLMConverter(BaseConverter):
     MODEL_TYPE = ModelType.SmolVLM
@@ -7404,6 +7431,8 @@ def main():
         Llama3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'smollm':
         SmolLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'SmolLM3ForCausalLM':
+        SmolLM3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'SmolVLMForConditionalGeneration':
         SmolVLMConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'XverseForCausalLM':

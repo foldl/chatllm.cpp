@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-07-10: SmolLM-3
 * 2025-07-05: Pangu-Pro-MoE
 * 2025-07-04: ERNIE-MoE
 * 2025-06-30: Hunyuan-A13B, ERNIE-Dense
@@ -28,21 +29,12 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 * 2025-05-17: [I can speak](./docs/multimodal.md): Orpheus-TTS
 * 2025-05-11: Seed-Coder
 * 2025-04-30: QWen3, MiMo
-* 2025-04-23: [ggml updated](https://github.com/ggml-org/llama.cpp/tree/658987cfc9d752dca7758987390d5fb1a7a0a54a) again
-* 2025-04-18: Apriel
-* 2025-04-15: GLM-4-0414
-* 2025-04-10: LlaMA4 (Language model)
-* 2025-03-27: Ling (Bailing)
-* 2025-03-26: AquilaChat2
-* 2025-03-25: DeepSeek v1 & GigaChat
 * 2025-03-24: [GGMM](./docs/ggmm.md) file format
 * 2025-02-21: [Distributed inference](./docs/rpc.md)
-* 2025-02-17: [ggml updated](https://github.com/ggml-org/llama.cpp/tree/0f2bbe656473177538956d22b6842bcaa0449fab) again
 * 2025-02-10: [GPU acceleration](./docs/gpu.md) 🔥
 * 2024-12-09: [Reversed role](./docs/fun.md#reversed-role)
 * 2024-11-21: [Continued generation](./docs/fun.md#continued-generation)
 * 2024-11-01: [generation steering](./docs/fun.md#generation-steering)
-* 2024-07-14: [ggml updated](https://github.com/ggerganov/ggml/tree/3e7e5e26f90fecf4f7c2808df7d94454630b219c)
 * 2024-06-15: [Tool calling](./docs/tool_calling.md)
 * 2024-05-29: [ggml](https://github.com/ggerganov/ggml) is forked instead of submodule
 * 2024-05-14: [OpenAI API](./docs/binding.md#openai-compatible-api), CodeGemma Base & Instruct supported

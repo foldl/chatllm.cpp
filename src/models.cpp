@@ -30,6 +30,7 @@
 #include "../models/hunyuan.h"
 #include "../models/ernie.h"
 #include "../models/pangu.h"
+#include "../models/smol.h"
 
 json::JSON json::JSON::_null = json::JSON();
 
@@ -1670,11 +1671,6 @@ namespace chatllm
         #include "../models/numinamath.cpp"
     }
 
-    namespace smol
-    {
-        #include "../models/smollm.cpp"
-    }
-
     namespace groq
     {
         #include "../models/groq.cpp"
@@ -2197,6 +2193,8 @@ namespace chatllm
         CASE(ERNIE_MOE,             ernie::moe, 1)              \
                                                                 \
         CASE(PANGU_MOE,             pangu::moe, 1)              \
+                                                                \
+        CASE(SMOLLM3,               smol::lm3, 1)               \
                                                                 \
         CASE(BCE_Embedding,         bce::embedding, 1)          \
         CASE(BCE_ReRanker,          bce::ranker, 1)             \

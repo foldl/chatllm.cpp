@@ -644,4 +644,13 @@ namespace utils
         }
         return def;
     }
+
+    std::string now(const char *fmt)
+    {
+        std::time_t now = std::time(nullptr);
+        std::tm* timeinfo = std::localtime(&now);
+        char buffer[200];
+        std::strftime(buffer, sizeof(buffer), fmt, timeinfo);
+        return std::move(std::string(buffer));
+    }
 }
