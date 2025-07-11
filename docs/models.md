@@ -129,7 +129,7 @@
     * [x] DeepSeek-R1-Distill-LlaMA: [8B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B), [70B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-70B) (`-a DeepSeek-R1-Distill-LlaMA`)
     * [x] DeepHermes-3: [Llama-3-8B-Preview](https://huggingface.co/NousResearch/DeepHermes-3-Llama-3-8B-Preview) (Use `-s ...` to enable thinking)
     * [x] Watt-tool: [8B](https://huggingface.co/watt-ai/watt-tool-8B), [70B](https://huggingface.co/watt-ai/watt-tool-70B)
-    * [x] Reke-Flash: [Flash-3](https://huggingface.co/RekaAI/reka-flash-3/tree/69cea64942e4db4809b757ae2b0d312b4b610263) (`-a Reka-Flash-3`)
+    * [x] Reke-Flash: [Flash-3](https://huggingface.co/RekaAI/reka-flash-3/tree/69cea64942e4db4809b757ae2b0d312b4b610263), [Flash-3.1](https://huggingface.co/RekaAI/reka-flash-3.1/tree/dcf8d6ee3219ca177b519cab47777d42864b54bd) (`-a Reka-Flash-3`)
     * [x] Nemotron: [Llama-3.1-Nemotron-Nano-8B](https://huggingface.co/nvidia/Llama-3.1-Nemotron-Nano-8B-v1/tree/42f62a403ee352e019834442673256e3fe3de275)
     * [x] LlaMA-4: [Scout-Instruct](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct/tree/7dab2f5f854fe665b6b2f1eccbd3c48e5f627ad8), [Maverick-Instruct](https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E-Instruct/tree/f0ee6477b90b7a6aaefd2cfdf1b4a05d36184137)
     * [x] Seed-Coder: [Instruct-8B](https://huggingface.co/ByteDance-Seed/Seed-Coder-8B-Instruct/tree/7b934eb8f2ce8f40191fa26d12236eb8bc3a77aa),

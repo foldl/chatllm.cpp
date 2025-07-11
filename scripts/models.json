@@ -2452,6 +2452,22 @@
             }
         }
     },
+    "reka-flash-3.1": {
+        "brief": "Reka Flash 3.1 is an update to our Reka Flash 3.",
+        "default": "21b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "21b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 13070239600,
+                        "url": "chatllm_quantized_reka/reka-flash-3.1-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
     "llama3-nemotron": {
         "brief": "Reasoning models that are post trained and/or derived from Llama 3.1-8B-Instruct, 3.3-70B-Instruct for reasoning, human chat preferences, and tasks, such as RAG and tool calling.",
         "default": "8b",
