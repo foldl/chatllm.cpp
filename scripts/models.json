@@ -273,6 +273,15 @@
                         "url": "chatllm_quantized_mistral_small/devstral-small-2505-q4_1.bin"
                     }
                 }
+            },
+            "24b-2507": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 14740038592,
+                        "url": "chatllm_quantized_mistral_small/devstral-small-2507-q4_1.bin"
+                    }
+                }
             }
         }
     },

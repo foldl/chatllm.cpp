@@ -180,11 +180,11 @@
     * [x] Mistral-Nemo: [Nemo-Instruct-2407](https://huggingface.co/mistralai/Mistral-Nemo-Instruct-2407)
     * [x] Small: [Instruct-24B](https://huggingface.co/mistralai/Mistral-Small-24B-Instruct-2501)
     * [x] DeepHermes-3-Mistral: [24B-Preview](https://huggingface.co/NousResearch/DeepHermes-3-Mistral-24B-Preview/tree/48072dc6c0594a3198eb862c13613c4ab1119009) (`-a DeepHermes-3-Mistral`. Default: Thinking model.)
-    * [x] Small-3.1: [Instruct-24B](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/tree/9d6393981603defaeab8131cf223412c4fdcb99a)
+    * [x] Small-3.1: [Instruct-24B](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/tree/73ce7c62b904fa83d7cb018e44c3bc06feed4d81)
 
-        Note: Please download `config.json` & `tokenizer.json` from [here](https://huggingface.co/mistralai/Mistral-Small-24B-Instruct-2501/tree/20b2ed1c4e9af44b9ad125f79f713301e27737e2).
+    * [x] Devstral: [Small-2505](https://huggingface.co/mistralai/Devstral-Small-2505/tree/a6e97eaf3bfe308cb5396675a716147b2ced37c8), [Small-2507](https://huggingface.co/mistralai/Devstral-Small-2507/tree/3178e9e2d8880880098af656c1fe223927ce74f8)
 
-    * [x] Devstral: [Small-2505](https://huggingface.co/mistralai/Devstral-Small-2505/tree/a6e97eaf3bfe308cb5396675a716147b2ced37c8)
+        Note: Please download `tokenizer.json` from [here](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/tree/73ce7c62b904fa83d7cb018e44c3bc06feed4d81).
 
 * Olm (`OlmoeForCausalLM`, `Olmo2ForCausalLM`)
     * [x] OLMoE: [Instruct-7B](https://huggingface.co/allenai/OLMoE-1B-7B-0924-Instruct)
