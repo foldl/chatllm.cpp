@@ -264,7 +264,7 @@ def quantize_q8_0(tensor: torch.Tensor) -> torch.CharTensor:
 def quantize_q4_0(tensor: torch.Tensor) -> torch.CharTensor:
     # equivalent to ggml_quantize_q4_0 in ggml.c
     assert tensor.shape[tensor.ndim - 1] % GGML_QK4_0 == 0
-    tensor = tensor.view(-1, GGML_QK4_0)
+    tensor = tensor.contiguous().view(-1, GGML_QK4_0)
     abs_max_indices = tensor.abs().max(dim=-1, keepdim=True).indices
     max_values = torch.take_along_dim(tensor, abs_max_indices, dim=-1)
     scale = max_values / -8
@@ -278,7 +278,7 @@ def quantize_q4_0(tensor: torch.Tensor) -> torch.CharTensor:
 def quantize_q4_1(tensor: torch.Tensor) -> torch.CharTensor:
     # equivalent to ggml_quantize_q4_1 in ggml.c
     assert tensor.shape[tensor.ndim - 1] % GGML_QK4_1 == 0
-    tensor = tensor.view(-1, GGML_QK4_1)
+    tensor = tensor.contiguous().view(-1, GGML_QK4_1)
     abs_max_indices = tensor.max(dim=-1, keepdim=True).indices
     max_values = torch.take_along_dim(tensor, abs_max_indices, dim=-1)
     abs_min_indices = tensor.min(dim=-1, keepdim=True).indices

@@ -1052,6 +1052,15 @@
                         "url": "chatllm_quantized_gemma-3/medgemma-4b-it.bin"
                     }
                 }
+            },
+            "27b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 17341271408,
+                        "url": "chatllm_quantized_gemma-3/medgemma-27b-it-q4_1.bin"
+                    }
+                }
             }
         }
     },

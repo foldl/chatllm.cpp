@@ -310,7 +310,7 @@ Please use `--format completion` for these models.
 
 * Gemma (`Gemma3ForConditionalGeneration`)
     * [x] v3: [Instruct-4B](https://huggingface.co/google/gemma-3-4b-it/tree/dbd91bbaf64a0e591f4340ce8b66fd1dba9ab6bd), [Instruct-12B](https://huggingface.co/google/gemma-3-12b-it/tree/7553b6f39c33dc229bfbfe3831f7bcdbb6b738c7), [Instruct-27B](https://huggingface.co/google/gemma-3-27b-it/tree/dfb98f29ff907e391ceed2be3834ca071ea260f1)
-    * [x] MedGemma: [Instruct-4B](https://huggingface.co/google/medgemma-4b-it/commit/698f7911b8e0569ff4ebac5d5552f02a9553063c)
+    * [x] MedGemma: [Instruct-4B](https://huggingface.co/google/medgemma-4b-it/commit/698f7911b8e0569ff4ebac5d5552f02a9553063c), [Instruct-27B](https://huggingface.co/google/medgemma-27b-it/tree/2d3e00ea38b50018bf5dd3aa1009457cd2d5a48f)
 
     Note: Only download `tokenizer.model` and DO NOT download `tokenizer.json` when converting. Use `--set do-pan-and-scan 1` to enable _Pan and Scan_.
 
