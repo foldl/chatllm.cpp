@@ -721,6 +721,7 @@ begin
   case APrintType of
     Ord(TPrintType.PRINT_CHAT_CHUNK):
       begin
+        FOutputAcc := FOutputAcc + S;
         if Assigned(FOnChunk) then
           FOnChunk(Self, S);
       end;
