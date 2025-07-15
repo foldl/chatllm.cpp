@@ -203,6 +203,8 @@ class ModelType(Enum):
 
     SmolLM3         = 0x2700
 
+    Exaone4         = 0x2800
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -2982,6 +2984,68 @@ class OLMo2Converter(BaseConverter):
             "model.norm.weight",
             "lm_head.weight"
         ]
+
+        return weight_names
+
+class Exaone4Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Exaone4
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MAX_LAYERS = 128
+        assert config.num_hidden_layers < MAX_LAYERS
+        assert config.rope_scaling['rope_type'] == 'llama3'
+        assert not config.attention_bias, "attention_bias must be False"
+        assert config.head_dim == config.hidden_size // config.num_attention_heads
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.sliding_window if config.sliding_window is not None else -1,
+            1 if config.tie_word_embeddings else 0,
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_theta,
+            config.rope_scaling['original_max_position_embeddings'],
+            config.rope_scaling['factor'],
+            config.rope_scaling['low_freq_factor'],
+            config.rope_scaling['high_freq_factor'],
+        ]
+        f.write(struct.pack("<fifff", *config_values))
+
+        def check_is_sliding(config, layer_idx):
+            if config.sliding_window is None:
+                return False
+            if config.layer_types is not None:
+                return config.layer_types[layer_idx] == "sliding_attention"
+            if isinstance(config.sliding_window_pattern, int):
+                return ((layer_idx + 1) % config.sliding_window_pattern) != 0
+            elif isinstance(config.sliding_window_pattern, str):
+                assert isinstance(config.sliding_window, int), (
+                    f"Sliding window must be positive integer, but got {config.sliding_window}"
+                )
+                return (
+                    layer_idx != config.num_hidden_layers - 1
+                    and config.sliding_window_pattern[layer_idx % len(config.sliding_window_pattern)] == "L"
+                )
+            else:
+                pass
+            return False
+
+        config_values = [0] * MAX_LAYERS
+        for i in range(config.num_hidden_layers):
+            if check_is_sliding(config, i):
+                config_values[i] = 1
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = OLMo2Converter.get_weight_names(config)
+        if config.tie_word_embeddings:
+            weight_names = weight_names[:-1]
 
         return weight_names
 
@@ -7663,6 +7727,8 @@ def main():
         GraniteMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'ExaoneForCausalLM':
         ExaoneConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Exaone4ForCausalLM':
+        Exaone4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'TeleChat2ForCausalLM':
         TeleChat2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'HunYuanForCausalLM':

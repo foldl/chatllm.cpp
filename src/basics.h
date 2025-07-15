@@ -93,6 +93,8 @@ namespace utils
 
     std::string now(const char *fmt = "%Y-%m-%d");
 
+    int parse_int_lists(std::vector<int> &values, const std::string &s, int num_elements);
+
     //#define TIME_STAMP (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
 }
 

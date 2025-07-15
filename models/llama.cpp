@@ -343,6 +343,7 @@ namespace chatllm::llama::v3_1
                         int num_key_value_heads, int max_length, int tensors_per_layer, bool tie_lm_head, int additional_tensor)
         : v2::GenericConditionalGeneration<Llama31Block>(config, runtime_config, type, num_key_value_heads, max_length, tensors_per_layer, tie_lm_head, additional_tensor)
     {
+        std::vector<float> freq_factors_value;
         init_llama3_freq_factors(freq_factors_value, config.hidden_size / config.num_attention_heads,
                                     config.rope_theta,
                                     config.rope_scaling_factor,

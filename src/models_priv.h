@@ -163,6 +163,8 @@ namespace chatllm
 
         MODEL_TYPE_SMOLLM3          = 0x2700,
 
+        MODEL_TYPE_EXAONE4          = 0x2800,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -197,6 +199,127 @@ namespace chatllm
         RuntimeConfig(bool moe_on_cpu, int n_threads, int batch_input_size, ggml::type cache_type):
             moe_on_cpu(moe_on_cpu), n_threads(n_threads), batch_input_size(batch_input_size), cache_type(cache_type)
         {}
+    };
+
+    template <class Config>
+    void load_config(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
+    {
+        if (0 == loader.offset_config)
+            loader.offset_config = loader.tell();
+        else
+            loader.seek(loader.offset_config, SEEK_SET);
+
+        // load config
+        config = loader.read_basic<Config>();
+        if (args.max_length > 0)
+            config.max_length = args.max_length;
+        if (args.re_quantize >= 0)
+            config.dtype = (ggml::type)args.re_quantize;
+
+        loader.offset_tokenizer = loader.tell();
+    }
+
+    template <class Config, class Tokenizer>
+    Tokenizer *load_tokenizer(ModelLoader &loader, Config &config)
+    {
+        loader.seek(loader.offset_tokenizer, SEEK_SET);
+
+        // load tokenizer
+        Tokenizer *tokenizer = new Tokenizer(config);
+        tokenizer->load(loader.get_reader(), config.vocab_size);
+        tokenizer->load_config(loader.meta_json);
+        loader.load_all_tensors();
+
+        return tokenizer;
+    }
+
+    template <class Config, class ConditionalGeneration>
+    ConditionalGeneration *load_model(ModelLoader &loader, Config &config, const ModelObject::extra_args &args)
+    {
+        std::vector<int> layers;
+        if (args.layer_spec.size() > 0)
+        {
+            utils::parse_int_lists(layers, args.layer_spec, config.num_hidden_layers);
+            config.num_hidden_layers = (int)layers.size();
+        }
+
+        RuntimeConfig rt_config(args.moe_on_cpu, args.n_threads, args.batch_size, (ggml::type)args.cache_type);
+        rt_config.model_gpu_layers = args.model_n_gpu_layers;
+
+        // load model
+        ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);
+        model->set_type(loader.model_type);
+        model->set_names(loader.model_name, loader.model_native_name);
+        if (layers.size() > 0)
+            model->set_layer_ids(layers);
+
+        loader.push_allocator_manager(model->get_alloc_manager());
+        model->load_more(loader.meta_json);
+        model->load(loader);
+
+        return model;
+    }
+
+    template <class Config, class ConditionalGeneration>
+    ConditionalGeneration *load_model(ModelLoader &loader, const ModelObject::extra_args &args)
+    {
+        Config config;
+
+        load_config<Config>(loader, config, args);
+
+        return load_model<Config, ConditionalGeneration>(loader, config, args);
+    }
+
+    template <class Config, class Tokenizer, class ConditionalGeneration>
+    bool load_model(ModelLoader &loader, ModelFactory::Result &result, const ModelObject::extra_args &args)
+    {
+        // load config
+        Config config;
+
+        load_config<Config>(loader, config, args);
+
+        // load tokenizer
+        result.tokenizer = std::unique_ptr<BaseTokenizer>(load_tokenizer<Config, Tokenizer>(loader, config));
+
+#if (0)
+        // test tokenizer
+        std::vector<int> ids = result.tokenizer->encode("\nAlice:");
+        for (auto x : ids) std::cout << x << ", ";
+        std::cout << std::endl;
+
+        //ids = {0,1,2,195,196};
+        std::cout << result.tokenizer->decode(ids) << std::endl;
+        exit(-1);
+#endif
+        // load model
+        result.model = std::unique_ptr<AbstractModel>(load_model<Config, ConditionalGeneration>(loader, config, args));
+
+        result.model->set_tokenizer(result.tokenizer.get());
+
+        return true;
+    }
+
+    class BaseImplModelLoader
+    {
+    public:
+        BaseImplModelLoader(int model_type);
+        virtual AbstractModel *load_model(ModelLoader &loader, const ModelObject::extra_args &args) = 0;
+        virtual bool load_model(ModelLoader &loader, ModelFactory::Result &result, const ModelObject::extra_args &args) = 0;
+    };
+
+    template <int model_type, class Config, class Tokenizer, class ConditionalGeneration> class ImplModelLoader : public BaseImplModelLoader
+    {
+    public:
+        ImplModelLoader() : BaseImplModelLoader(model_type) {}
+        AbstractModel *load_model(ModelLoader &loader, const ModelObject::extra_args &args) override
+        {
+            return chatllm::load_model<Config, ConditionalGeneration>(loader, args);
+        }
+
+        bool load_model(ModelLoader &loader, ModelFactory::Result &result, const ModelObject::extra_args &args) override
+        {
+            return chatllm::load_model<Config, Tokenizer, ConditionalGeneration>(loader, result, args);
+        }
     };
 
     class ForwardContext : public ComputeContext

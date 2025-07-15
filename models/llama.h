@@ -204,8 +204,6 @@ namespace chatllm::llama::v3_1
                             int num_key_value_heads, int max_length, int tensors_per_layer = 13, bool tie_lm_head = false, int additional_tensor = 0);
 
         ChunkInterceptor *get_interceptor(void) override;
-    protected:
-        std::vector<float> freq_factors_value;
     };
 }
 

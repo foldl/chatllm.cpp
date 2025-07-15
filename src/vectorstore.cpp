@@ -10,6 +10,7 @@
 #include <math.h>
 #include <string.h>
 #include <thread>
+#include <regex>
 
 #include "basics.h"
 
@@ -652,5 +653,63 @@ namespace utils
         char buffer[200];
         std::strftime(buffer, sizeof(buffer), fmt, timeinfo);
         return std::move(std::string(buffer));
+    }
+
+    static void parse_slice(std::vector<int> &values, const std::string &s, int num_elements)
+    {
+        int spec[3] = {0, num_elements, 1};
+        int index = 0;
+        std::string t(s);
+        if (t.size() > 0) index = 1;
+
+        while ((t.size() > 0) && (index <= 3))
+        {
+            size_t pos = t.find_first_of(':');
+            std::string part = t.substr(0, pos);
+            if (part.size() > 0)
+                spec[index - 1] = atoi(part.c_str());
+            if (pos == std::string::npos) break;
+            index++;
+            t = t.substr(pos + 1);
+        }
+
+        if (index < 1) return;
+
+        if (index == 1)
+        {
+            values.push_back(spec[0]);
+            return;
+        }
+
+        if (spec[2] == 0) return;
+        if (spec[0] < 0) spec[0] += num_elements;
+        if (spec[1] < 0) spec[1] += num_elements;
+
+        if (spec[2] > 0)
+        {
+            for (int i = spec[0]; i < spec[1]; i += spec[2])
+            {
+                values.push_back(i);
+            }
+        }
+        else
+        {
+            for (int i = spec[0]; i > spec[1]; i += spec[2])
+                values.push_back(i);
+        }
+    }
+
+    int parse_int_lists(std::vector<int> &values, const std::string &s, int num_elements)
+    {
+        const static std::regex r(R""([\r\n]+)"");
+        std::string t(s);
+        while (t.size() > 0)
+        {
+            size_t pos = t.find_first_of(',');
+            parse_slice(values, t.substr(0, pos), num_elements);
+            if (pos == std::string::npos) break;
+            t = t.substr(pos + 1);
+        }
+        return 0;
     }
 }

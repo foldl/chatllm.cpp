@@ -56,10 +56,11 @@ set(core_files src/backend.cpp
     src/vision_process.cpp
     src/audio_process.cpp
     models/ernie.cpp
+    models/exaone.cpp
     models/hunyuan.cpp
     models/llama.cpp
-    models/qwen.cpp
     models/pangu.cpp
+    models/qwen.cpp
     models/smol.cpp
     )
 
