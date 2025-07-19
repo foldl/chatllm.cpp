@@ -1,4 +1,5 @@
 #include "deepseek.h"
+#include <cstring>
 #include "qwen.h"
 #include "../src/vision_process.h"
 

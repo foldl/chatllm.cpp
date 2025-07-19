@@ -1,5 +1,3 @@
-#pragma once
-
 #include "../src/models.h"
 #include "../src/models_priv.h"
 #include "../src/vision_process.h"

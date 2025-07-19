@@ -24,12 +24,6 @@
 #include "audio_process.h"
 #include "models_priv.h"
 
-#include "../models/llama.h"
-#include "../models/qwen.h"
-#include "../models/deepseek.h"
-#include "../models/mistral.h"
-#include "../models/allenai.h"
-
 json::JSON json::JSON::_null = json::JSON();
 
 namespace chatllm
