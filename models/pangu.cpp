@@ -173,4 +173,6 @@ namespace chatllm::pangu::moe
 
         ModelProxy::load(loader);
     }
+
+    REGISTER_MODEL_LOADER(PANGU_MOE,             pangu::moe, 1);
 }

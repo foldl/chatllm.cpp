@@ -1,3 +1,7 @@
+#include "deepseek.h"
+
+namespace chatllm::numinamath
+{
 struct Config : public deepseek::v1::Config
 {
 };
@@ -68,3 +72,5 @@ public:
     }
 };
 
+REGISTER_MODEL_LOADER(NUMINAMATH,            numinamath, 1);
+}

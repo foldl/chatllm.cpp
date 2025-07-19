@@ -1,5 +1,8 @@
+#include "../src/models.h"
+#include "../src/models_priv.h"
+#include "../src/vision_process.h"
 
-namespace persimmon
+namespace chatllm::adept::persimmon
 {
     struct Config : public BaseConfig
     {
@@ -149,7 +152,7 @@ namespace persimmon
     }
 }
 
-namespace fuyu
+namespace chatllm::adept::fuyu
 {
     struct Config : public persimmon::Config
     {
@@ -278,7 +281,7 @@ namespace fuyu
             const int total_patches = tok->get_image_total_emb_vectors();
             ggml::tensor *patches = ggml::new_tensor_2d(&ctx, ggml::type::GGML_TYPE_F32, 3 * vis_config.patch_size * vis_config.patch_size, total_patches);
 
-            dbg_ctx = &ctx;
+            set_dbg_ctx(&ctx);
 
             auto r = vis_emb->vision_embed.forward(&ctx, patches);
 
@@ -454,4 +457,10 @@ namespace fuyu
 
         tok->encode("\n\n", ids, false, false);
     }
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(PERSIMMON,             adept::persimmon, 1);
+    REGISTER_MODEL_LOADER(FUYU,                  adept::fuyu, 1);
 }

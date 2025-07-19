@@ -1,7 +1,6 @@
 #include "models.h"
 #include <algorithm>
 #include <cmath>
-#include <codecvt>
 #include <cstring>
 #include <cstdarg>
 #include <cstdio>
@@ -27,10 +26,9 @@
 
 #include "../models/llama.h"
 #include "../models/qwen.h"
-#include "../models/hunyuan.h"
-#include "../models/ernie.h"
-#include "../models/pangu.h"
-#include "../models/smol.h"
+#include "../models/deepseek.h"
+#include "../models/mistral.h"
+#include "../models/allenai.h"
 
 json::JSON json::JSON::_null = json::JSON();
 
@@ -1259,20 +1257,6 @@ namespace chatllm
         return true;
     }
 
-    static std::string regex_replace(const std::string &input, const std::regex &regex,
-                                     std::function<std::string(const std::smatch &)> format)
-    {
-        std::ostringstream oss;
-        size_t last_index = 0;
-        for (auto it = std::sregex_iterator(input.begin(), input.end(), regex); it != std::sregex_iterator(); it++)
-        {
-            oss << it->prefix() << format(*it);
-            last_index = it->position() + it->length();
-        }
-        oss << input.substr(last_index);
-        return oss.str();
-    }
-
     HeterogeneousModel::HeterogeneousModel(InitContext *ctx, int num_hidden_layers, int hidden_size,
         Block *word_embeddings, Block *final_layernorm,
         Block *lm_head, std::function<Block *(InitContext *, int)> create_layer)
@@ -1502,280 +1486,6 @@ namespace chatllm
         return new Linear(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, config.vocab_size, bias);
     }
 
-    namespace glm
-    {
-        #include "../models/chatglm.cpp"
-    }
-
-    namespace codegeex
-    {
-        #include "../models/codegeex.cpp"
-    }
-
-    namespace internlm
-    {
-        #include "../models/internlm.cpp"
-    }
-
-    namespace codellama
-    {
-        #include "../models/codellama.cpp"
-    }
-
-    namespace deepseek
-    {
-        #include "../models/deepseek.cpp"
-    }
-
-    namespace deepseek_coder
-    {
-        #include "../models/deepseek_coder.cpp"
-    }
-
-    namespace baichuan
-    {
-        #include "../models/baichuan.cpp"
-    }
-
-    namespace yi
-    {
-        #include "../models/yi.cpp"
-    }
-    namespace phi
-    {
-        #include "../models/phi.cpp"
-    }
-
-    namespace mistral
-    {
-        #include "../models/mistral.cpp"
-    }
-
-    namespace openchat
-    {
-        #include "../models/openchat.cpp"
-    }
-
-    namespace starling
-    {
-        #include "../models/starling.cpp"
-    }
-
-    namespace wizard
-    {
-        #include "../models/wizard.cpp"
-    }
-
-    namespace tigerbot
-    {
-        #include "../models/tigerbot.cpp"
-    }
-
-    namespace bluelm
-    {
-        #include "../models/bluelm.cpp"
-    }
-
-    namespace dolphinphi2
-    {
-        #include "../models/dolphinphi2.cpp"
-    }
-
-    namespace stablelm
-    {
-        #include "../models/stablelm.cpp"
-    }
-
-    namespace neuralbeagle
-    {
-        #include "../models/neuralbeagle.cpp"
-    }
-
-    namespace bce
-    {
-        #include "../models/bce.cpp"
-    }
-
-    namespace bge
-    {
-        #include "../models/bge.cpp"
-    }
-
-    namespace orion
-    {
-        #include "../models/orion.cpp"
-    }
-
-    namespace minicpm
-    {
-        #include "../models/minicpm.cpp"
-    }
-
-    namespace adept
-    {
-        #include "../models/adept.cpp"
-    }
-
-    namespace gemma
-    {
-        #include "../models/gemma.cpp"
-    }
-
-    namespace codefuse
-    {
-        #include "../models/codefuse.cpp"
-    }
-
-    namespace characterglm
-    {
-        #include "../models/characterglm.cpp"
-    }
-
-    namespace cohere
-    {
-        #include "../models/cohere.cpp"
-    }
-
-    namespace grok
-    {
-        #include "../models/grok.cpp"
-    }
-
-    namespace zhinao
-    {
-        #include "../models/zhinao.cpp"
-    }
-
-    namespace starcoder
-    {
-        #include "../models/starcoder.cpp"
-    }
-
-    namespace m_a_p
-    {
-        #include "../models/m_a_p.cpp"
-    }
-
-    namespace xverse
-    {
-        #include "../models/xverse.cpp"
-    }
-
-    namespace index
-    {
-        #include "../models/index.cpp"
-    }
-
-    namespace numinamath
-    {
-        #include "../models/numinamath.cpp"
-    }
-
-    namespace groq
-    {
-        #include "../models/groq.cpp"
-    }
-
-    namespace allenai
-    {
-        #include "../models/allenai.cpp"
-    }
-
-    namespace alphageo
-    {
-        #include "../models/alphageo.cpp"
-    }
-
-    namespace granite
-    {
-        #include "../models/granite.cpp"
-    }
-
-    namespace megrez
-    {
-        #include "../models/megrez.cpp"
-    }
-
-    namespace falcon
-    {
-        #include "../models/falcon.cpp"
-    }
-
-    namespace telechat
-    {
-        #include "../models/telechat.cpp"
-    }
-
-    namespace jina
-    {
-        #include "../models/jina.cpp"
-    }
-
-    namespace moonshot
-    {
-        #include "../models/moonshot.cpp"
-    }
-
-    namespace instella
-    {
-        #include "../models/instella.cpp"
-    }
-
-    namespace reka
-    {
-        #include "../models/reka.cpp"
-    }
-
-    namespace hermes
-    {
-        #include "../models/hermes.cpp"
-    }
-
-    namespace decilm
-    {
-        #include "../models/decilm.cpp"
-    }
-
-    namespace solar
-    {
-        #include "../models/solar.cpp"
-    }
-
-    namespace gigachat
-    {
-        #include "../models/gigachat.cpp"
-    }
-
-    namespace aquila
-    {
-        #include "../models/aquila.cpp"
-    }
-
-    namespace bailing
-    {
-        #include "../models/bailing.cpp"
-    }
-
-    namespace kimi
-    {
-        #include "../models/kimi.cpp"
-    }
-
-    namespace apriel
-    {
-        #include "../models/apriel.cpp"
-    }
-
-    namespace orpheus
-    {
-        #include "../models/orpheus.cpp"
-    }
-
-    namespace oute
-    {
-        #include "../models/oute.cpp"
-    }
-
     static void load_file_header(ModelLoader &loader)
     {
         // load magic
@@ -1875,176 +1585,6 @@ namespace chatllm
     }
 
     #define ALL_MODELS  \
-        CASE(CHATGLM,               glm::v1, 1)                 \
-        CASE(CHATGLM2,              glm::v2, 1)                 \
-        CASE(CHATGLM3,              glm::v3, 1)                 \
-        CASE(CODEGEEX2,             codegeex::v2, 1)            \
-        CASE(CHARACTERGLM,          characterglm, 1)            \
-        CASE(GLM4,                  glm::v4, 1)                 \
-        CASE(CODEGEEX4,             codegeex::v4, 1)            \
-        CASE(GLM4_0414,             glm::glm4_0414, 1)          \
-                                                                \
-        CASE(INTERNLM,              internlm::v1, 1)            \
-        CASE(INTERNLM2,             internlm::v2, 1)            \
-        CASE(INTERNLM2_1,           internlm::v2_1, 1)          \
-        CASE(INTERNLM3,             internlm::v3, 1)            \
-                                                                \
-        CASE(LLAMA2,                llama::v2, 1)               \
-        CASE(LLAMA3,                llama::v3, 1)               \
-        CASE(CODELLAMA,             codellama, 1)               \
-        CASE(LLAMA2PLUS,            llama::v2_plus, 1)          \
-        CASE(LLAMA_MULTI,           llama::multi, 1)            \
-        CASE(LLAMA3_1,              llama::v3_1, 1)             \
-        CASE(LLAMA3_2,              llama::v3_2, 1)             \
-        CASE(MEGREZ,                megrez::chat, 1)            \
-        CASE(FALCON3,               falcon::v3, 1)              \
-        CASE(REKA_FLASH3,           reka::flash, 1)             \
-        CASE(DEEPSEEK_R1_DISTILL_LLAMA, llama::ds_r1_distill, 1)\
-        CASE(LLAMA4,                llama::v4, 1)               \
-                                                                \
-        CASE(DEEPSEEK,              deepseek::v1, 1)            \
-        CASE(DEEPSEEK_CODER,        deepseek_coder, 1)          \
-        CASE(CODEFUSE_DEEPSEEK,     codefuse::deepseek, 1)      \
-        CASE(NUMINAMATH,            numinamath, 1)              \
-        CASE(DEEPSEEK_V2_LIGHT,     deepseek::v2_light, 1)      \
-        CASE(DEEPSEEK_V2,           deepseek::v2, 1)            \
-        CASE(DEEPSEEK_V3_LIGHT,     deepseek::v3_light, 1)      \
-        CASE(DEEPSEEK_V1_MoE,       deepseek::v1_moe, 1)        \
-        CASE(BAILINGMOE,            bailing::moe, 1)            \
-        CASE(XVERSEMOE,             xverse::moe, 1)             \
-                                                                \
-        CASE(BAICHUANLLAMA,         baichuan::_7b, 1)           \
-        CASE(BAICHUAN,              baichuan::larger, 1)        \
-        CASE(BAICHUAN_M1,           baichuan::m1, 1)            \
-                                                                \
-        CASE(YI,                    yi, 1)                      \
-        CASE(MAP_NEO,               m_a_p::neo, 1)              \
-                                                                \
-        CASE(PHI2,                  phi::v2::v1, 1)             \
-        CASE(PHI2_V2,               phi::v2::v2, 1)             \
-        CASE(PHI3,                  phi::v3, 1)                 \
-        CASE(PHI3_SU,               phi::v3_su, 1)              \
-        CASE(PHI3_SU2,              phi::v3_su2, 1)             \
-        CASE(PHI3_SU3,              phi::v3_su3, 1)             \
-        CASE(PHI3_MOE,              phi::v3_moe, 1)             \
-        CASE(PHI4,                  phi::v4, 1)                 \
-        CASE(PHI4_MINI,             phi::v4_mini, 1)            \
-                                                                \
-        CASE(WIZARDCODER,           wizard::coder, 1)           \
-        CASE(WIZARDLM,              wizard::lm, 1)              \
-        CASE(WIZARDMATH,            wizard::math, 1)            \
-                                                                \
-        CASE(MISTRAL,               mistral::mistral, 1)        \
-        CASE(OPENCHAT,              openchat, 1)                \
-        CASE(MIXTRAL,               mistral::mixtral, 1)        \
-        CASE(MISTRAL2,              mistral::mistral2, 1)       \
-        CASE(DEEPHERMES3_MISTRAL,   hermes::_mistral, 1)        \
-                                                                \
-        CASE(QWEN,                  qwen::v1, 2)                \
-        CASE(QWEN2,                 qwen::v2, 1)                \
-        CASE(QWEN2MoE,              qwen::v2_moe, 1)            \
-        CASE(QWEN2TIE,              qwen::v2_tie, 1)            \
-        CASE(MARCO_O1,              qwen::marco_o1, 1)          \
-        CASE(QWQ,                   qwen::qwq, 1)               \
-        CASE(READERLM2,             jina::readerlm, 1)          \
-        CASE(DEEPSEEK_R1_DISTILL_QWEN, qwen::ds_r1_distill, 1)  \
-        CASE(DEEPSEEK_R1_DISTILL_QWEN3,qwen::ds_r1_distill_v3, 1)\
-        CASE(AQUILA2,               aquila::v2, 1)              \
-        CASE(QWEN2_AUDIO,           qwen::v2_audio, 1)          \
-        CASE(QWEN2_5_VL,            qwen::v2_5_vl, 1)           \
-        CASE(QWEN3,                 qwen::v3, 1)                \
-                                                                \
-        CASE(TIGERBOT,              tigerbot, 1)                \
-                                                                \
-        CASE(BLUELM,                bluelm, 1)                  \
-                                                                \
-        CASE(DOLPHINPHI2,           dolphinphi2::v1, 1)         \
-                                                                \
-        CASE(STABLELM,              stablelm, 1)                \
-                                                                \
-        CASE(NEURALBEAGLE,          neuralbeagle, 1)            \
-        CASE(STARLING,              starling, 1)                \
-        CASE(WIZARDLM2_MOE,         wizard::moe, 1)             \
-                                                                \
-        CASE(ORION,                 orion, 1)                   \
-                                                                \
-        CASE(MINICPM,               minicpm::v1, 1)             \
-        CASE(MINICPM2,              minicpm::v2, 1)             \
-        CASE(MINICPM_MoE,           minicpm::moe, 1)            \
-        CASE(MINICPM3,              minicpm::v3, 1)             \
-        CASE(MINICPM4,              minicpm::v4, 1)             \
-                                                                \
-        CASE(PERSIMMON,             adept::persimmon, 1)        \
-        CASE(FUYU,                  adept::fuyu, 1)             \
-                                                                \
-        CASE(GEMMA,                 gemma::v1, 1)               \
-        CASE(GEMMA2,                gemma::v2, 2)               \
-        CASE(GEMMA3,                gemma::v3, 1)               \
-        CASE(GEMMA3Vis,             gemma::v3, 1)               \
-                                                                \
-        CASE(COHERE_COMMAND_R,      cohere::command_r, 1)       \
-        CASE(COHERE_AYA_23,         cohere::aya_23, 1)          \
-        CASE(COHERE_COMMAND_R7B,    cohere::v2, 1)              \
-                                                                \
-        CASE(GROK_1,                grok::v1, 1)                \
-                                                                \
-        CASE(ZHINAO,                zhinao, 1)                  \
-                                                                \
-        CASE(STARCODER2,            starcoder::v2, 1)           \
-                                                                \
-        CASE(XVERSE,                xverse::dense, 1)           \
-                                                                \
-        CASE(INDEX,                 index, 1)                   \
-                                                                \
-        CASE(SMOLLM,                smol::lm, 1)                \
-        CASE(SMOL_VLM,              smol::vlm, 1)               \
-        CASE(LLAMA3_GROQ_TOOL,      groq, 1)                    \
-                                                                \
-        CASE(OLMoE,                 allenai::moe, 1)            \
-        CASE(OLMo2,                 allenai::dense, 1)          \
-                                                                \
-        CASE(ALPHAGEO_LM,           alphageo, 1)                \
-                                                                \
-        CASE(GRANITE_MoE,           granite::moe, 1)            \
-        CASE(GRANITE,               granite::dense, 1)          \
-                                                                \
-        CASE(TELECHAT2,             telechat::v2, 1)            \
-                                                                \
-        CASE(HUNYUAN_DENSE,         hunyuan::dense, 1)          \
-        CASE(HUNYUAN_MOE_V1,        hunyuan::moe_v1, 1)         \
-                                                                \
-        CASE(MOONLIGHT,             moonshot::moonlight, 1)     \
-                                                                \
-        CASE(INSTELLA,              instella, 1)                \
-                                                                \
-        CASE(DECILM,                decilm, 1)                  \
-                                                                \
-        CASE(SOLARPRO,              solar::pro, 1)              \
-                                                                \
-        CASE(GIGACHAT,              gigachat, 1)                \
-                                                                \
-        CASE(KIMI_VL,               kimi::vl, 1)                \
-                                                                \
-        CASE(APRIEL,                apriel, 1)                  \
-                                                                \
-        CASE(ERNIE_DENSE,           ernie::dense, 1)            \
-        CASE(ERNIE_MOE,             ernie::moe, 1)              \
-                                                                \
-        CASE(PANGU_MOE,             pangu::moe, 1)              \
-                                                                \
-        CASE(SMOLLM3,               smol::lm3, 1)               \
-                                                                \
-        CASE(BCE_Embedding,         bce::embedding, 1)          \
-        CASE(BCE_ReRanker,          bce::ranker, 1)             \
-        CASE(BGE_M3,                bge::embedding, 1)          \
-        CASE(BGE_ReRanker_M3,       bge::ranker, 1)             \
-        CASE(MiniCPM_Embedding_Light,   minicpm::emb_light, 1)  \
-        CASE(MiniCPM_ReRanker_Light,    minicpm::ranker_light, 1)\
-        CASE(ORPHEUS_TTS,               orpheus::tts, 1)        \
-        CASE(OUTE_TTS_LLAMA,            oute::tts_llama, 1)     \
-        CASE(OUTE_TTS_QWEN3,            oute::tts_qwen3, 1)     \
-        CASE(QWEN3_Embedding,           qwen::v3_emb, 1)        \
-        CASE(QWEN3_ReRanker,            qwen::v3_ranker, 1)     \
         \
 
     class ModelLoadRegistry
@@ -2067,7 +1607,10 @@ namespace chatllm
 
     void ModelLoadRegistry::reg(int model_type, BaseImplModelLoader *loader)
     {
-        get()->loaders.insert(std::pair(model_type, loader));
+        ModelLoadRegistry *obj = get();
+        CHATLLM_CHECK(obj->loaders.find(model_type) == obj->loaders.end()) << "loader of model type " << model_type << " redefined!";
+
+        obj->loaders.insert(std::pair(model_type, loader));
     }
 
     BaseImplModelLoader *ModelLoadRegistry::get_loader(int model_type)
@@ -2077,7 +1620,8 @@ namespace chatllm
         return v != obj->loaders.end() ? v->second : nullptr;
     }
 
-    BaseImplModelLoader::BaseImplModelLoader(int model_type)
+    BaseImplModelLoader::BaseImplModelLoader(int model_type, int version)
+        : version(version)
     {
         ModelLoadRegistry::reg(model_type, this);
     }
@@ -2087,51 +1631,18 @@ namespace chatllm
         int model_type = loader.model_type;
         int version = loader.version;
 
-        #define CASE(TYPE, ns, ver)         \
-            case MODEL_TYPE_ ##TYPE:        \
-            {                               \
-                CHATLLM_CHECK(version == ver) << "only support version " #ver " for now but got " << version;   \
-                return load_model<ns::Config,                                                                   \
-                                  ns::ConditionalGeneration>(loader, args);                                     \
-            }
-
-        switch ((ModelType)model_type)
-        {
-        ALL_MODELS
-        default:
-            {
-                auto _loader = ModelLoadRegistry::get_loader(model_type);
-                CHATLLM_CHECK(_loader != nullptr) << "invalid model type " << model_type;
-                return _loader->load_model(loader, args);
-            }
-        }
-
-        #undef CASE
+        auto _loader = ModelLoadRegistry::get_loader(model_type);
+        CHATLLM_CHECK(_loader != nullptr) << "invalid model type " << model_type;
+        CHATLLM_CHECK(version == _loader->version) << "only support version " << _loader->version << " for now but got " << version;
+        return _loader->load_model(loader, args);
     }
 
     bool ModelFactory::load(int model_type, int version, ModelLoader &loader, Result &result, const ModelObject::extra_args &args)
     {
-        #define CASE(TYPE, ns, ver)         \
-            case MODEL_TYPE_ ##TYPE:        \
-            {                               \
-                CHATLLM_CHECK(version == ver) << "only support version " #ver " for now but got " << version;   \
-                return load_model<ns::Config,                                                                   \
-                                  ns::Tokenizer,                                                                \
-                                  ns::ConditionalGeneration>(loader, result, args);                             \
-            }
-
-        switch ((ModelType)model_type)
-        {
-        ALL_MODELS
-        default:
-            {
-                auto _loader = ModelLoadRegistry::get_loader(model_type);
-                CHATLLM_CHECK(_loader != nullptr) << "invalid model type " << model_type;
-                return _loader->load_model(loader, result, args);
-            }
-        }
-
-        #undef CASE
+        auto _loader = ModelLoadRegistry::get_loader(model_type);
+        CHATLLM_CHECK(_loader != nullptr) << "invalid model type " << model_type;
+        CHATLLM_CHECK(version == _loader->version) << "only support version " << _loader->version << " for now but got " << version;
+        return _loader->load_model(loader, result, args);
     }
 
 } // namespace chatllm

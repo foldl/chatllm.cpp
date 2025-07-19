@@ -733,3 +733,10 @@ namespace chatllm::smol::lm3
         }
     }
 }
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(SMOLLM,                smol::lm, 1);
+    REGISTER_MODEL_LOADER(SMOL_VLM,              smol::vlm, 1);
+    REGISTER_MODEL_LOADER(SMOLLM3,               smol::lm3, 1);
+}

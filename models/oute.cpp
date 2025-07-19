@@ -1,4 +1,9 @@
-namespace dac
+#include "orpheus.h"
+#include <regex>
+#include "llama.h"
+#include "qwen.h"
+
+namespace chatllm::oute::dac
 {
     const int MAX_VQ_STRIDES = 4;
     const int MAX_RATES = 4;
@@ -98,7 +103,7 @@ namespace dac
                 embed_id.push_back(ids_tensor);
             }
 
-            dbg_ctx = &ctx;
+            set_dbg_ctx(&ctx);
 
             auto dequant = quantizer.dequantize(&ctx, embed_id);
             auto r = decoder.forward(&ctx, dequant);
@@ -214,7 +219,7 @@ namespace dac
     };
 }
 
-namespace tts_llama
+namespace chatllm::oute::tts_llama
 {
     typedef llama::v3_2::Config Config;
 
@@ -657,7 +662,7 @@ namespace tts_llama
     };
 }
 
-namespace tts_qwen3
+namespace chatllm::oute::tts_qwen3
 {
     typedef qwen::v3::Config Config;
 
@@ -741,4 +746,10 @@ namespace tts_qwen3
     public:
         dac::CodecGeneration codec;
     };
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(OUTE_TTS_LLAMA,            oute::tts_llama, 1);
+    REGISTER_MODEL_LOADER(OUTE_TTS_QWEN3,            oute::tts_qwen3, 1);
 }

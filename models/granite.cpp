@@ -1,4 +1,6 @@
-namespace moe
+#include "llama.h"
+
+namespace chatllm::granite::moe
 {
 
     struct Config : public BaseConfig
@@ -270,7 +272,7 @@ namespace moe
     };
 }
 
-namespace dense
+namespace chatllm::granite::dense
 {
     struct Config : public BaseConfig
     {
@@ -308,4 +310,10 @@ namespace dense
             logit_scale = config.logits_scaling;
         }
     };
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(GRANITE_MoE,           granite::moe, 1);
+    REGISTER_MODEL_LOADER(GRANITE,               granite::dense, 1);
 }

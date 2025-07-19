@@ -1,4 +1,6 @@
-namespace chat
+#include "llama.h"
+
+namespace chatllm::megrez::chat
 {
     typedef llama::v3::Config Config;
 
@@ -137,4 +139,6 @@ namespace chat
             : llama::v3::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_MEGREZ)
         {}
     };
+
+    REGISTER_MODEL_LOADER(MEGREZ,                megrez::chat, 1);
 }

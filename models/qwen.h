@@ -83,12 +83,7 @@ namespace chatllm::qwen
         class Tokenizer : public v1::Tokenizer
         {
         public:
-            Tokenizer(const BaseConfig &config);
-
-            Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
-                : v1::Tokenizer(config, encoder)
-            {}
-
+            Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder = nullptr);
             size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
         };
 
@@ -350,6 +345,118 @@ namespace chatllm::qwen
         };
     }
 
+    namespace vit
+    {
+        struct Config
+        {
+            ggml::type dtype;
+            int patch_size;
+            int num_attention_heads;
+            int num_hidden_layers;
+            int hidden_size;
+            int intermediate_size;
+            int spatial_merge_size;
+            int spatial_patch_size;
+            int window_size;
+            int tokens_per_second;
+            int temporal_patch_size;
+            int fullatt_block_indices_num;
+            int fullatt_block_indices[20];
+            int min_pixels;
+            int max_pixels;
+
+            float image_mean[3];
+            float image_std[3];
+        };
+
+        class PatchEmbedding : public Block
+        {
+        public:
+            PatchEmbedding(InitContext *ctx, const Config &config);
+
+            ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w);
+            int64_t get_param_num(bool effective_only) const override;
+            void load(const std::string &path, TensorLoader *loader) override;
+        public:
+            Conv3D                  proj;
+        };
+
+        class ViTSelfAttention : public RoPESelfAttention<BaseCachelessAttention>
+        {
+        public:
+            ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length);
+        protected:
+            void before_forward(ComputeContext *ctx, const int n_past, const int qlen) override;
+
+            ggml::tensor *apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size, ggml::tensor *pos_w, ggml::tensor *pos_h) const;
+            ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override;
+            ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override;
+        public:
+            ggml::tensor *pos_h;
+            int grid_w = 0;
+            int grid_h = 0;
+        };
+
+        class MLP : public TheMLP
+        {
+        public:
+            MLP(InitContext *ctx, int hidden_size, int intermediate_size, int output_size);
+        };
+
+        class MultiModalProjector : public Block
+        {
+        public:
+            MultiModalProjector(InitContext *ctx, const Config &config, int lm_hidden_size);
+
+            ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *image_features, int grid_h, int grid_w);
+            int64_t get_param_num(bool effective_only) const override;
+            void load(const std::string &path, TensorLoader *loader) override;
+        public:
+            const int hidden_size;
+            RMSNorm   pre_norm;
+            MLP       mlp;
+        };
+
+        class VisionTransformer : public Block
+        {
+        public:
+            typedef LMBlock1<RMSNorm, ViTSelfAttention, RMSNorm, GELUMLP> LayerBlock;
+            VisionTransformer(InitContext *ctx, const Config &config, int lm_hidden_size);
+
+            int64_t get_param_num(bool effective_only) const override;
+            void load(const std::string &path, TensorLoader *loader) override;
+            ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w);
+            bool is_loaded(void) const;
+        public:
+            PatchEmbedding embeddings;
+            std::vector<std::unique_ptr<LayerBlock>> layers;
+            MultiModalProjector multi_modal_projector;
+        protected:
+            bool loaded;
+        };
+
+        class VisualEmbeddingGeneration
+        {
+        public:
+            VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 4096);
+            bool load(ModelLoader &loader);
+            bool load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config);
+            void generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf);
+
+        protected:
+            bool run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &image, std::vector<uint8_t> &buf);
+        protected:
+            std::unique_ptr<VisionTransformer> vis_model;
+            BackendContext backend_context;
+            const size_t GRAPH_SIZE;
+            InitContext _ctx; // weight context
+            std::string model_gpu_layers;
+            const int n_threads;
+        public:
+            Config vis_config;
+        };
+    }
+
     namespace v2_5_vl
     {
         const int MROPE_SECTION_MAX = 4;
@@ -360,12 +467,24 @@ namespace chatllm::qwen
             int mrope_section[MROPE_SECTION_MAX];
         };
 
+        class ChatHistoryEncoder : public v1::ChatHistoryEncoder
+        {
+        public:
+            void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
+
+        public:
+            const vit::Config *vis_config = nullptr;
+            bool vit_loaded = false;
+        };
+
         class Tokenizer : public v2::Tokenizer
         {
         public:
             Tokenizer(const BaseConfig &config);
 
             size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
+
+            void inject_media(const std::string &media_type, std::vector<int> &ids, const int ids_to_inject_start, const int ids_to_inject_count);
         public:
             int object_ref_start_token_id;
             int object_ref_end_token_id;
@@ -378,12 +497,29 @@ namespace chatllm::qwen
             int vision_pad_token_id;
             int image_pad_token_id;
             int video_pad_token_id;
+
+            int video_max_frames = 20;
+            float fps = 2.0f;
         };
 
-        class ConditionalGeneration : public v2::ConditionalGeneration
+        class ExtendEmbedding
+        {
+        public:
+            ExtendEmbedding() : pad_arg(new BlockParams::PadEmbedding(4096, 4096)) {}
+        public:
+            BlockParams::PadEmbedding *pad_arg = nullptr;
+        };
+
+        class ConditionalGeneration :public ExtendEmbedding,  public v2::ConditionalGeneration
         {
         public:
             ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
+            bool load_more(const json::JSON &config) override;
+            void load(ModelLoader &loader) override;
+            void set_additional_args(const std::map<std::string, std::string> &args) override;
+            void before_generate(const GenerationConfig &gen_config) override;
+        public:
+            vit::VisualEmbeddingGeneration visual;
         };
     }
 

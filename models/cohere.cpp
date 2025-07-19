@@ -1,4 +1,7 @@
-namespace command_r
+#include "../src/models.h"
+#include "../src/models_priv.h"
+
+namespace chatllm::cohere::command_r
 {
 struct Config : public BaseConfig
 {
@@ -177,7 +180,7 @@ void ChatHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &id
 
 }
 
-namespace aya_23
+namespace chatllm::cohere::aya_23
 {
 typedef command_r::Config Config;
 
@@ -191,7 +194,7 @@ public:
 };
 }
 
-namespace v2
+namespace chatllm::cohere::v2
 {
     struct Config : public BaseConfig
     {
@@ -330,4 +333,11 @@ namespace v2
     public:
         BaseConfig config;
     };
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(COHERE_COMMAND_R,      cohere::command_r, 1);
+    REGISTER_MODEL_LOADER(COHERE_AYA_23,         cohere::aya_23, 1);
+    REGISTER_MODEL_LOADER(COHERE_COMMAND_R7B,    cohere::v2, 1);
 }

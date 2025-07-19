@@ -1,100 +1,106 @@
-struct Config : public llama::v2::Config
-{
-    int num_key_value_heads;
-    float rope_theta;
-    float rope_scaling_factor;
-    float rope_scaling_power;
-};
+#include "llama.h"
 
-class ChatHistoryEncoder : public BaseHistoryEncoder
+namespace chatllm::bluelm
 {
-public:
-    void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
-    void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
-};
-
-static ChatHistoryEncoder _chat_encoder;
-
-class Tokenizer : public llama::v2::Tokenizer
-{
-public:
-    Tokenizer(const Config &config)
-        : llama::v2::Tokenizer::Tokenizer(config, &_chat_encoder)
+    struct Config : public llama::v2::Config
     {
-    }
+        int num_key_value_heads;
+        float rope_theta;
+        float rope_scaling_factor;
+        float rope_scaling_power;
+    };
 
-    size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
-
-    bool is_special_id(int id) const override;
-public:
-    int sea_token_id;
-    int seh_token_id;
-    int ai_token_id;
-    int human_token_id;
-};
-
-class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<BlueLMBlock>
-{
-public:
-    ConditionalGeneration() = default;
-    ConditionalGeneration(const Config &config, RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_BLUELM)
-        : ConditionalGeneration(config, runtime_config, type, config.num_attention_heads, config.max_length)
-    {}
-
-    ConditionalGeneration(const Config &config, RuntimeConfig &runtime_config, ModelType type, int num_key_value_heads, int max_length)
-        : llama::v2::GenericConditionalGeneration<BlueLMBlock>(config, runtime_config, type, num_key_value_heads, max_length)
+    class ChatHistoryEncoder : public BaseHistoryEncoder
     {
-        for (int i = 0; i < config.num_hidden_layers; i++)
+    public:
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public llama::v2::Tokenizer
+    {
+    public:
+        Tokenizer(const Config &config)
+            : llama::v2::Tokenizer::Tokenizer(config, &_chat_encoder)
         {
-            auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
-            attention.freq_base = config.rope_theta;
+        }
 
-            if (config.rope_scaling_power > 0)
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
+
+        bool is_special_id(int id) const override;
+    public:
+        int sea_token_id;
+        int seh_token_id;
+        int ai_token_id;
+        int human_token_id;
+    };
+
+    class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<BlueLMBlock>
+    {
+    public:
+        ConditionalGeneration() = default;
+        ConditionalGeneration(const Config &config, RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_BLUELM)
+            : ConditionalGeneration(config, runtime_config, type, config.num_attention_heads, config.max_length)
+        {}
+
+        ConditionalGeneration(const Config &config, RuntimeConfig &runtime_config, ModelType type, int num_key_value_heads, int max_length)
+            : llama::v2::GenericConditionalGeneration<BlueLMBlock>(config, runtime_config, type, num_key_value_heads, max_length)
+        {
+            for (int i = 0; i < config.num_hidden_layers; i++)
             {
-                attention.rope_scaling_factor = config.rope_scaling_factor;
-                attention.rope_scaling_power  = config.rope_scaling_power;
+                auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
+                attention.freq_base = config.rope_theta;
+
+                if (config.rope_scaling_power > 0)
+                {
+                    attention.rope_scaling_factor = config.rope_scaling_factor;
+                    attention.rope_scaling_power  = config.rope_scaling_power;
+                }
             }
         }
+    };
+
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
+    {
+        tp = new tokenizer::BPEProcessor1();
+        size_t size = tp->Load(buffer, n_vocab);
+
+        sea_token_id = tp->PieceToId("[SEA]");
+        seh_token_id = tp->PieceToId("[SEH]");
+        ai_token_id    = tp->PieceToId("[|AI|]:");
+        human_token_id = tp->PieceToId("[|Human|]:");
+        return size;
     }
-};
 
-size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
-{
-    tp = new tokenizer::BPEProcessor1();
-    size_t size = tp->Load(buffer, n_vocab);
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-    sea_token_id = tp->PieceToId("[SEA]");
-    seh_token_id = tp->PieceToId("[SEH]");
-    ai_token_id    = tp->PieceToId("[|AI|]:");
-    human_token_id = tp->PieceToId("[|Human|]:");
-    return size;
-}
+        append_ai_opening(round_idx, ids);
+        tok->encode(ai, ids, false, false);
+    }
 
-void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
-{
-    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-    append_ai_opening(round_idx, ids);
-    tok->encode(ai, ids, false, false);
-}
+        ids.push_back(tok->bos_token_id);
+        ids.push_back(tok->human_token_id);
+        tok->encode(user, ids, false, false);
+    }
 
-void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
-{
-    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(tok->ai_token_id);
+    }
 
-    ids.push_back(tok->bos_token_id);
-    ids.push_back(tok->human_token_id);
-    tok->encode(user, ids, false, false);
-}
-
-void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
-{
-    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-    ids.push_back(tok->ai_token_id);
-}
-
-bool Tokenizer::is_special_id(int id) const
-{
-    return (id == pad_token_id) || (id == human_token_id) || (id == ai_token_id);
+    bool Tokenizer::is_special_id(int id) const
+    {
+        return (id == pad_token_id) || (id == human_token_id) || (id == ai_token_id);
+    }
+    REGISTER_MODEL_LOADER(BLUELM,                bluelm, 1);
 }

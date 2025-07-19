@@ -1,4 +1,6 @@
-namespace deepseek
+#include "deepseek.h"
+
+namespace chatllm::codefuse::deepseek
 {
     struct Config : public llama::v2::Config
     {
@@ -18,11 +20,11 @@ namespace deepseek
 
     static ChatHistoryEncoder _chat_encoder;
 
-    class Tokenizer : public deepseek_coder::Tokenizer
+    class Tokenizer : public chatllm::deepseek::coder::Tokenizer
     {
     public:
         Tokenizer(const Config &config)
-            : deepseek_coder::Tokenizer::Tokenizer(config, &_chat_encoder)
+            : chatllm::deepseek::coder::Tokenizer::Tokenizer(config, &_chat_encoder)
         {
             sys_prompt = "";
             terminate_ids.emplace(bos_token_id);
@@ -88,4 +90,6 @@ namespace deepseek
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         tok->encode("bot\n", ids, true, false);
     }
+
+    REGISTER_MODEL_LOADER(CODEFUSE_DEEPSEEK,     codefuse::deepseek, 1);
 }

@@ -1,9 +1,9 @@
-namespace v1
-{
-    struct Config : public BaseConfig
-    {
-    };
+#include "chatglm.h"
+#include <regex>
+#include <codecvt>
 
+namespace chatllm::glm::v1
+{
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
@@ -14,37 +14,8 @@ namespace v1
 
     static ChatHistoryEncoder _chat_encoder;
 
-    class Tokenizer : public BaseTokenizer
-    {
-    public:
-        Tokenizer(const Config &config) : BaseTokenizer::BaseTokenizer(config, &_chat_encoder) {}
-
-        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
-
-        void encode(const std::string &text, std::vector<int> &ids) const override;
-
-    protected:
-        std::string preprocess(const std::string &text) const override;
-        std::string postprocess(const std::string &text) const override;
-
-    public:
-        int mask_token_id;
-        int gmask_token_id;
-    };
-
-    class ConditionalGeneration : public BaseModelForConditionalGeneration
-    {
-    public:
-        typedef Model<Config, Embedding, LayerNorm, GLMBlock, int, int, int, int> TransformerClass;
-    public:
-        ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
-
-        void load(ModelLoader &loader) override;
-
-    public:
-        Config config;
-    };
+    Tokenizer::Tokenizer(const Config &config) : BaseTokenizer::BaseTokenizer(config, &_chat_encoder)
+    {}
 
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
@@ -88,6 +59,20 @@ namespace v1
 
         oss_prompt << "答：";
         tokenizer->encode(oss_prompt.str(), ids);
+    }
+
+    static std::string regex_replace(const std::string &input, const std::regex &regex,
+                                     std::function<std::string(const std::smatch &)> format)
+    {
+        std::ostringstream oss;
+        size_t last_index = 0;
+        for (auto it = std::sregex_iterator(input.begin(), input.end(), regex); it != std::sregex_iterator(); it++)
+        {
+            oss << it->prefix() << format(*it);
+            last_index = it->position() + it->length();
+        }
+        oss << input.substr(last_index);
+        return oss.str();
     }
 
     std::string Tokenizer::preprocess(const std::string &text) const
@@ -215,13 +200,8 @@ namespace v1
     }
 }
 
-namespace v2
+namespace chatllm::glm::v2
 {
-    struct Config : public BaseConfig
-    {
-        int num_kv_heads;
-    };
-
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
@@ -232,40 +212,13 @@ namespace v2
 
     static ChatHistoryEncoder _chat_encoder;
 
-    class Tokenizer : public BaseTokenizer
-    {
-    public:
-        Tokenizer(const BaseConfig &config) : BaseTokenizer::BaseTokenizer(config, &_chat_encoder) {}
+    Tokenizer::Tokenizer(const BaseConfig &config)
+        : BaseTokenizer::BaseTokenizer(config, &_chat_encoder)
+    {}
 
-        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder) : BaseTokenizer::BaseTokenizer(config, encoder) {}
-
-        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
-
-        void encode(const std::string &text, std::vector<int> &ids) const override;
-
-        bool is_special_id(int id) const override;
-
-    public:
-        int mask_token_id;
-        int gmask_token_id;
-        int smask_token_id;
-        int sop_token_id;
-        int eop_token_id;
-    };
-
-    class ConditionalGeneration : public BaseModelForConditionalGeneration
-    {
-    public:
-        typedef Model<Config, Embedding, RMSNorm, GLM2Block, int, int, int, int, int> TransformerClass;
-    public:
-        ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_CHATGLM2);
-
-        void load(ModelLoader &loader) override;
-
-    public:
-        Config config;
-    };
+    Tokenizer::Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
+        : BaseTokenizer::BaseTokenizer(config, encoder)
+    {}
 
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
@@ -361,12 +314,8 @@ namespace v2
     }
 }
 
-namespace v3
+namespace chatllm::glm::v3
 {
-    struct Config : public v2::Config
-    {
-    };
-
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
@@ -378,23 +327,13 @@ namespace v3
 
     static ChatHistoryEncoder _chat_encoder;
 
-    class Tokenizer : public v2::Tokenizer
-    {
-    public:
-        Tokenizer(const BaseConfig &config) : Tokenizer(config, &_chat_encoder) {}
+    Tokenizer::Tokenizer(const BaseConfig &config)
+        : Tokenizer(config, &_chat_encoder)
+    {}
 
-        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *_chat_encoder) : v2::Tokenizer::Tokenizer(config, _chat_encoder) {}
-
-        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
-
-        bool is_special_id(int id) const override;
-
-    public:
-        int system_token_id;
-        int user_token_id;
-        int assistant_token_id;
-        int observation_token_id;
-    };
+    Tokenizer::Tokenizer(const BaseConfig &config, BaseHistoryEncoder *_chat_encoder)
+        : v2::Tokenizer::Tokenizer(config, _chat_encoder)
+    {}
 
     class GLMInterceptor : public ChunkInterceptor
     {
@@ -454,17 +393,15 @@ namespace v3
 
     static GLMInterceptor interceptor;
 
-    class ConditionalGeneration : public v2::ConditionalGeneration
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : v2::ConditionalGeneration(config, runtime_config, MODEL_TYPE_CHATGLM3)
     {
-    public:
-        ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-            : v2::ConditionalGeneration(config, runtime_config, MODEL_TYPE_CHATGLM3)
-        {
-        }
+    }
 
-        ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
-    };
+    ChunkInterceptor *ConditionalGeneration::get_interceptor(void)
+    {
+        return &interceptor;
+    }
 
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
@@ -525,13 +462,8 @@ namespace v3
     }
 }
 
-namespace v4
+namespace chatllm::glm::v4
 {
-    struct Config : public v3::Config
-    {
-        float rope_ratio;
-    };
-
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
@@ -543,58 +475,51 @@ namespace v4
 
     static ChatHistoryEncoder _chat_encoder;
 
-    class Tokenizer : public v3::Tokenizer
+    Tokenizer::Tokenizer(const BaseConfig &config) : v3::Tokenizer(config, &_chat_encoder)
+    {}
+
+    void Tokenizer::encode(const std::string &text, std::vector<int> &ids) const
     {
-    public:
-        Tokenizer(const BaseConfig &config) : v3::Tokenizer(config, &_chat_encoder)
-        {}
+        BaseTokenizer::encode(text, ids);
+    }
 
-        void encode(const std::string &text, std::vector<int> &ids) const override
-        {
-            BaseTokenizer::encode(text, ids);
-        }
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
+    {
+        return do_load(buffer, n_vocab,
+            {
+                //[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+
+                "[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+            }
+        );
+    }
 
-        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
-        {
-            return do_load(buffer, n_vocab,
-                {
-                    //[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+
-                    "[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
-                }
-            );
-        }
-    public:
-        int nl_token_id;
+    size_t Tokenizer::do_load(tokenizer::DataReader *buffer, int n_vocab, std::vector<std::string> regex_exprs)
+    {
+        tp = new tokenizer::BPEProcessor2(regex_exprs);
+        size_t size = tp->Load(buffer, n_vocab);
+        tp->EnableReturnSpecialToken(true);
 
-    protected:
-        size_t do_load(tokenizer::DataReader *buffer, int n_vocab, std::vector<std::string> regex_exprs)
-        {
-            tp = new tokenizer::BPEProcessor2(regex_exprs);
-            size_t size = tp->Load(buffer, n_vocab);
-            tp->EnableReturnSpecialToken(true);
+        int special_id = eos_token_id + 1;
+        mask_token_id = special_id++;
+        gmask_token_id = special_id++;
+        smask_token_id = special_id++;
+        sop_token_id = special_id++;
+        eop_token_id = special_id++;
+        system_token_id = special_id++;
+        user_token_id   = special_id++;
+        assistant_token_id  = special_id++;
+        observation_token_id= special_id++;
 
-            int special_id = eos_token_id + 1;
-            mask_token_id = special_id++;
-            gmask_token_id = special_id++;
-            smask_token_id = special_id++;
-            sop_token_id = special_id++;
-            eop_token_id = special_id++;
-            system_token_id = special_id++;
-            user_token_id   = special_id++;
-            assistant_token_id  = special_id++;
-            observation_token_id= special_id++;
+        std::vector<int> ids;
+        tp->Encode("\n", &ids);
+        nl_token_id = ids[0];
 
-            std::vector<int> ids;
-            tp->Encode("\n", &ids);
-            nl_token_id = ids[0];
+        terminate_ids.insert(eos_token_id);
+        terminate_ids.insert(user_token_id);
+        terminate_ids.insert(observation_token_id);
 
-            terminate_ids.insert(eos_token_id);
-            terminate_ids.insert(user_token_id);
-            terminate_ids.insert(observation_token_id);
-
-            return size;
-        }
-    };
+        return size;
+    }
 
     class GLMInterceptor : public ChunkInterceptor
     {
@@ -657,23 +582,21 @@ namespace v4
 
     static GLMInterceptor interceptor;
 
-    class ConditionalGeneration : public v2::ConditionalGeneration
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : v2::ConditionalGeneration(config, runtime_config, type)
     {
-    public:
-        ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GLM4)
-            : v2::ConditionalGeneration(config, runtime_config, type)
+        auto transformer = get_typed_transformer<TransformerClass>();
+        for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            auto transformer = get_typed_transformer<TransformerClass>();
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                auto &attention = transformer->layers[i].attention;
-                attention.freq_base *= config.rope_ratio;
-            }
+            auto &attention = transformer->layers[i].attention;
+            attention.freq_base *= config.rope_ratio;
         }
+    }
 
-        ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
-    };
+    ChunkInterceptor *ConditionalGeneration::get_interceptor(void)
+    {
+        return &interceptor;
+    }
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
@@ -711,32 +634,21 @@ namespace v4
     }
 }
 
-namespace glm4_0414
+namespace chatllm::glm::glm4_0414
 {
-    struct Config : public BaseConfig
-    {
-        int num_key_value_heads;
-        int use_attention_bias;
-        int rope_dim;
-        float rope_theta;
-    };
+    Tokenizer::Tokenizer(const Config &config)
+        : v4::Tokenizer(config)
+    {}
 
-    class Tokenizer : public v4::Tokenizer
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
-    public:
-        Tokenizer(const Config &config) : v4::Tokenizer(config)
-        {}
-
-        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
-        {
-            return do_load(buffer, n_vocab,
-                {
-                    // (?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+
-                    "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
-                }
-            );
-        }
-    };
+        return do_load(buffer, n_vocab,
+            {
+                // (?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+
+                "(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+            }
+        );
+    }
 
     class GLM4SelfAttention : public RoPESelfAttention<BaseAttention>
     {
@@ -758,50 +670,51 @@ namespace glm4_0414
         }
     };
 
-    class ConditionalGeneration : public BaseModelForConditionalGeneration
+    typedef Model<Config, Embedding, RMSNorm, GLM4Block, int, int, int, int, int, bool, bool> ModelClass;
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
     {
-    public:
-        typedef Model<Config, Embedding, RMSNorm, GLM4Block, int, int, int, int, int, bool, bool> ModelClass;
-    public:
-        ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GLM4)
-            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
+        const size_t tensor_ovhd = ggml_tensor_overhead();
+        const size_t num_tensors = 3 + config.num_hidden_layers * (14 + (config.use_attention_bias != 0 ? 3 : 0));
+        const size_t ctx_size = num_tensors * tensor_ovhd;
+        w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+        w_ctx_.dtype = config.dtype;
+
+        transformer = new ModelClass(
+                            &w_ctx_, config, false,
+                            config.hidden_size, config.num_attention_heads, config.num_key_value_heads,
+                            config.intermediate_size, config.max_length, config.use_attention_bias != 0, false);
+
+        for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            const size_t tensor_ovhd = ggml_tensor_overhead();
-            const size_t num_tensors = 3 + config.num_hidden_layers * (14 + (config.use_attention_bias != 0 ? 3 : 0));
-            const size_t ctx_size = num_tensors * tensor_ovhd;
-            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
-            w_ctx_.dtype = config.dtype;
-
-            transformer = new ModelClass(
-                                &w_ctx_, config, false,
-                                config.hidden_size, config.num_attention_heads, config.num_key_value_heads,
-                                config.intermediate_size, config.max_length, config.use_attention_bias != 0, false);
-
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                auto &layer = get_typed_transformer<ModelClass>()->layers[i];
-                layer.attention.freq_base    = config.rope_theta;
-                layer.attention.rope_dim     = config.rope_dim;
-            }
-
-            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
-                << "corrupted model weights: " << w_ctx_.get_used_mem() / ggml_tensor_overhead() << " != " << w_ctx_.get_mem_size() / ggml_tensor_overhead();
+            auto &layer = get_typed_transformer<ModelClass>()->layers[i];
+            layer.attention.freq_base    = config.rope_theta;
+            layer.attention.rope_dim     = config.rope_dim;
         }
 
-        void load(ModelLoader &loader) override
-        {
-            // pay attention to the order
-            loader.add_tensor_name_translations({
-                {".pre_attention_layernorm.",           ".input_layernorm."},
-                {".post_attention_layernorm.",          ".post_self_attn_layernorm."},
-                {".pre_mlp_layernorm.",                 ".post_attention_layernorm."},
-            });
+        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
+            << "corrupted model weights: " << w_ctx_.get_used_mem() / ggml_tensor_overhead() << " != " << w_ctx_.get_mem_size() / ggml_tensor_overhead();
+    }
 
-            BaseModelForConditionalGeneration::load(loader);
-        }
+    void ConditionalGeneration::load(ModelLoader &loader)
+    {
+        // pay attention to the order
+        loader.add_tensor_name_translations({
+            {".pre_attention_layernorm.",           ".input_layernorm."},
+            {".post_attention_layernorm.",          ".post_self_attn_layernorm."},
+            {".pre_mlp_layernorm.",                 ".post_attention_layernorm."},
+        });
 
-    protected:
-        Config config;
-    };
+        BaseModelForConditionalGeneration::load(loader);
+    }
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(CHATGLM,               glm::v1, 1);
+    REGISTER_MODEL_LOADER(CHATGLM2,              glm::v2, 1);
+    REGISTER_MODEL_LOADER(CHATGLM3,              glm::v3, 1);
+    REGISTER_MODEL_LOADER(GLM4,                  glm::v4, 1);
+    REGISTER_MODEL_LOADER(GLM4_0414,             glm::glm4_0414, 1);
 }

@@ -1,5 +1,6 @@
 #include "qwen.h"
 #include "../src/audio_process.h"
+#include "../src/vision_process.h"
 
 namespace chatllm::qwen::v1
 {
@@ -174,8 +175,8 @@ namespace chatllm::qwen::v1
 
 namespace chatllm::qwen::v2
 {
-    Tokenizer::Tokenizer(const BaseConfig &config)
-        : Tokenizer(config, &v1::_chat_encoder)
+    Tokenizer::Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
+        : v1::Tokenizer(config, encoder ? encoder : &v1::_chat_encoder)
     {}
 
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
@@ -839,8 +840,341 @@ namespace chatllm::qwen::ds_r1_distill
     {}
 }
 
+namespace chatllm::qwen::vit
+{
+    PatchEmbedding::PatchEmbedding(InitContext *ctx, const Config &config)
+        : proj(ctx, 3, config.hidden_size,
+            config.patch_size, config.patch_size, config.temporal_patch_size,
+            config.patch_size, config.patch_size, config.temporal_patch_size,
+            0, 0, 0,
+            1, 1, 1,
+            1, false)
+    {
+    }
+
+    ggml::tensor *PatchEmbedding::forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
+    {
+        ggml::tensor *x = proj.forward(ctx, input);
+        return x;
+    }
+
+    int64_t PatchEmbedding::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += proj.get_param_num(effective_only);
+        return r;
+    }
+
+    void PatchEmbedding::load(const std::string &path, TensorLoader *loader)
+    {
+        proj.load(path + "proj.", loader);
+    }
+
+    ViTSelfAttention::ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+        : RoPESelfAttention<BaseCachelessAttention>(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, true, true),
+            pos_h(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length))
+    {
+        ctx->get_allocator()->alloc(pos_h);
+        causal = false;
+
+        CHATLLM_CHECK(rope_dim % 4 == 0);
+    }
+
+    void ViTSelfAttention::before_forward(ComputeContext *ctx, const int n_past, const int qlen)
+    {
+        const int len = grid_h * grid_w;
+        std::vector<int> v_pos_h;
+
+        CHATLLM_CHECK(len <= max_length);
+
+        ggml::set_dim(pos,   0, len);
+        ggml::set_dim(pos_h, 0, len);
+
+        v_pos_h.resize(len);
+
+        for (int i = 0; i < grid_h; i++)
+        {
+            for (int j = 0; j < grid_w; j++)
+            {
+                v_pos  [i * grid_w + j] = j;
+                v_pos_h[i * grid_w + j] = i;
+            }
+        }
+
+        Backend::write_tensor_data(pos,     v_pos.data(), 0, len * sizeof(v_pos[0]));
+        Backend::write_tensor_data(pos_h, v_pos_h.data(), 0, len * sizeof(v_pos[0]));
+    }
+
+    ggml::tensor *ViTSelfAttention::apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size, ggml::tensor *pos_w, ggml::tensor *pos_h) const
+    {
+        // ggml shape of hidden: [head_size, heads, qlen]
+        CHATLLM_CHECK(ggml::get_dim(hidden, 3) == 1);
+
+        ggml::tensor *part = ggml::view_4d(ctx, hidden, 2, ggml::get_dim(hidden, 0) / 4, ggml::get_dim(hidden, 1), ggml::get_dim(hidden, 2),
+                                            4 * ggml::element_size(hidden), ggml::row_size(hidden), ggml::row_size(hidden) * ggml::get_dim(hidden, 1), 0);
+        ggml::tensor *copy = ggml::cont(ctx, part);
+        copy = ggml::reshape_3d(ctx, copy, ggml::get_dim(copy, 0) * ggml::get_dim(copy, 1), ggml::get_dim(copy, 2), ggml::get_dim(copy, 3));
+        copy = ggml::rope_ext_inplace(ctx, copy, pos_w, freq_factors, rope_dim / 2, RoPEMode::Interleaved, n_original_ctx,
+                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);
+        copy = ggml::cpy(ctx, copy, part);
+        ggml::build_forward_expand(ctx, copy);
+
+        part = ggml::view_4d(ctx, hidden, 2, ggml::get_dim(hidden, 0) / 4, ggml::get_dim(hidden, 1), ggml::get_dim(hidden, 2),
+                            4 * ggml::element_size(hidden), ggml::row_size(hidden), ggml::row_size(hidden) * ggml::get_dim(hidden, 1), 2 * ggml::element_size(hidden));
+        copy = ggml::cont(ctx, part);
+        copy = ggml::reshape_3d(ctx, copy, ggml::get_dim(copy, 0) * ggml::get_dim(copy, 1), ggml::get_dim(copy, 2), ggml::get_dim(copy, 3));
+        copy = ggml::rope_ext_inplace(ctx, copy, pos_h, freq_factors, rope_dim / 2, RoPEMode::Interleaved, n_original_ctx,
+                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);
+        copy = ggml::cpy(ctx, copy, part);
+        ggml::build_forward_expand(ctx, copy);
+
+        hidden = ggml::reshape_4d(ctx, hidden, ggml::get_dim(hidden, 0), ggml::get_dim(hidden, 1), ggml::get_dim(hidden, 2), ggml::get_dim(hidden, 3));
+
+        return hidden;
+    }
+
+    ggml::tensor *ViTSelfAttention::apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const
+    {
+        k = apply_2d_rope(ctx, k, hidden_size, pos, pos_h);
+        return k;
+    }
+
+    ggml::tensor *ViTSelfAttention::apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const
+    {
+        q = apply_2d_rope(ctx, q, hidden_size, pos, pos_h);
+        return q;
+    }
+
+    MLP::MLP(InitContext *ctx, int hidden_size, int intermediate_size, int output_size)
+        : TheMLP(ctx, hidden_size, intermediate_size, output_size, ActFunc::GELU, true)
+    {
+    }
+
+    MultiModalProjector::MultiModalProjector(InitContext *ctx, const Config &config, int lm_hidden_size)
+        :
+        hidden_size(config.hidden_size * config.spatial_merge_size * config.spatial_merge_size),
+        pre_norm(ctx, config.hidden_size),
+        mlp(ctx, hidden_size, hidden_size, lm_hidden_size)
+    {
+    }
+
+    ggml::tensor *MultiModalProjector::forward(ComputeContext *ctx, ggml::tensor *image_features, int grid_h, int grid_w)
+    {
+        auto output = pre_norm.forward(ctx, image_features);
+        output = ggml::reshape(ctx, output, hidden_size, -1);
+        output = mlp.forward(ctx, output);
+        return output;
+    }
+
+    int64_t MultiModalProjector::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += pre_norm.get_param_num(effective_only);
+        r +=      mlp.get_param_num(effective_only);
+        return r;
+    }
+
+    void MultiModalProjector::load(const std::string &path, TensorLoader *loader)
+    {
+        pre_norm.load(path + "ln_q.", loader);
+        mlp.     load(path + "mlp.",  loader);
+    }
+
+    VisionTransformer::VisionTransformer(InitContext *ctx, const Config &config, int lm_hidden_size)
+        : embeddings(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), config),
+        multi_modal_projector(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config, lm_hidden_size),
+        loaded(false)
+    {
+        const int max_length = config.max_pixels / config.patch_size / config.patch_size;
+        for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+        {
+            ctx->move_to_layer(layer_id);
+            auto layer = new LayerBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size, max_length);
+            layer->set_id(layer_id);
+            layers.emplace_back(layer);
+        }
+    }
+
+    int64_t VisionTransformer::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += embeddings.get_param_num(effective_only);
+        r += multi_modal_projector.get_param_num(effective_only);
+        for (size_t i = 0; i < layers.size(); i++)
+            r += layers[i]->get_param_num(effective_only);
+        return r;
+    }
+
+    void VisionTransformer::load(const std::string &path, TensorLoader *loader)
+    {
+        if (!loader->has_tensor(path + "patch_embed.proj.weight")) return;
+
+        embeddings.load(path + "patch_embed.", loader);
+        multi_modal_projector.load(path + "merger.", loader);
+        for (size_t i = 0; i < layers.size(); i++)
+        {
+            std::string block_path = path + "blocks." + std::to_string(i) + ".";
+            layers[i]->load(block_path, loader);
+        }
+        loaded = true;
+    }
+
+    ggml::tensor *VisionTransformer::forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
+    {
+        auto output = embeddings.forward(ctx, input, grid_h, grid_w);
+
+        for (size_t i = 0; i < layers.size(); i++)
+        {
+            layers[i]->attention.grid_h = grid_h;
+            layers[i]->attention.grid_w = grid_w;
+            output = layers[i]->forward(ctx, output, 0);
+        }
+        output = multi_modal_projector.forward(ctx, output, grid_h, grid_w);
+        return output;
+    }
+
+    bool VisionTransformer::is_loaded(void) const
+    {
+        return loaded;
+    }
+
+
+    VisualEmbeddingGeneration::VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE)
+        :
+        GRAPH_SIZE(GRAPH_SIZE), _ctx(&backend_context),
+        n_threads(runtime_config.n_threads)
+    {
+        _ctx.cache_dtype = runtime_config.cache_type;
+        model_gpu_layers = BackendContext::get_ngl_of_model(runtime_config.model_gpu_layers, "vis");
+    }
+
+    bool VisualEmbeddingGeneration::load(ModelLoader &loader)
+    {
+        if (vis_model.get())
+        {
+            loader.push_allocator_manager(&backend_context.layer_allocators);
+            vis_model->load("visual.", &loader);
+            loader.pop_allocator_manager();
+            return vis_model->is_loaded();
+        }
+        else
+            return false;
+    }
+
+    bool VisualEmbeddingGeneration::load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config)
+    {
+        const auto vis_cfg = config["config.json"]["vision_config"];
+        if (!vis_cfg.IsObject()) return false;
+
+        vis_config.dtype = dtype;
+
+        vis_config.patch_size           = (int)vis_cfg["patch_size"].ToInt();
+        vis_config.num_attention_heads  = (int)vis_cfg["num_heads"].ToInt();
+        vis_config.num_hidden_layers    = (int)vis_cfg["depth"].ToInt();
+        vis_config.hidden_size          = (int)vis_cfg["hidden_size"].ToInt();
+        vis_config.intermediate_size    = (int)vis_cfg["intermediate_size"].ToInt();
+        vis_config.spatial_merge_size   = (int)vis_cfg["spatial_merge_size"].ToInt();
+        vis_config.spatial_patch_size   = (int)vis_cfg["spatial_patch_size"].ToInt();
+        vis_config.window_size          = (int)vis_cfg["window_size"].ToInt();
+        vis_config.tokens_per_second    = (int)vis_cfg["tokens_per_second"].ToInt();
+        vis_config.temporal_patch_size  = (int)vis_cfg["temporal_patch_size"].ToInt();
+        vis_config.min_pixels           = (int)vis_cfg["intermediate_size"].ToInt();
+        vis_config.max_pixels           = (int)vis_cfg["intermediate_size"].ToInt();
+
+        auto indexes = vis_cfg["fullatt_block_indexes"];
+        vis_config.fullatt_block_indices_num    = (int)indexes.length();
+        CHATLLM_CHECK(vis_config.fullatt_block_indices_num <= sizeof(vis_config.fullatt_block_indices) / sizeof(vis_config.fullatt_block_indices[0]));
+        for (int i = 0; i < vis_config.fullatt_block_indices_num; i++)
+            vis_config.fullatt_block_indices[i] = (int)indexes[i].ToInt();
+
+        auto pp_cfg = config["preprocessor_config.json"];
+        if (pp_cfg.IsObject())
+        {
+            auto image_mean = pp_cfg["image_mean"];
+            auto image_std  = pp_cfg["image_std"];
+            CHATLLM_CHECK(image_mean.length() == 3) << "invalid image_mean";
+            CHATLLM_CHECK(image_std.length() == 3) << "invalid image_std";
+
+            vis_config.image_mean[0]    = (float)image_mean[0].ToFloat();
+            vis_config.image_mean[1]    = (float)image_mean[1].ToFloat();
+            vis_config.image_mean[2]    = (float)image_mean[2].ToFloat();
+            vis_config.image_std[0]     = (float)image_std[0].ToFloat();
+            vis_config.image_std[1]     = (float)image_std[1].ToFloat();
+            vis_config.image_std[2]     = (float)image_std[2].ToFloat();
+        }
+
+        const size_t tensor_ovhd = ggml_tensor_overhead();
+        const size_t num_tensors = 6 + vis_config.num_hidden_layers * 15;
+        const size_t ctx_size = num_tensors * tensor_ovhd;
+        _ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+        _ctx.dtype = dtype;
+        backend_context.init(model_gpu_layers, vis_config.num_hidden_layers, GRAPH_SIZE, n_threads);
+
+        vis_model.reset(new VisionTransformer(&_ctx, vis_config, lm_hidden_size));
+
+        _ctx.check_used_mem_size(true);
+
+        return true;
+    }
+
+    void VisualEmbeddingGeneration::generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf)
+    {
+        if ((vis_model.get() == nullptr) || (tok->media_emb.size() < 1)) return;
+        if (!vis_model->is_loaded()) return;
+
+        for (auto &image : tok->media_emb)
+        {
+            run_model(gen_config, tok, dtype, image, buf);
+        }
+    }
+
+    bool VisualEmbeddingGeneration::run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &image, std::vector<uint8_t> &buf)
+    {
+        ForwardContext ctx(&backend_context);
+        ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
+        ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
+
+        ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
+        ggml::tensor *media_emb = ggml::new_tensor_4d(&ctx, ggml::type::GGML_TYPE_F32, vis_config.patch_size, vis_config.patch_size, 3, image.grid_width * image.grid_height);
+
+        chatllm::set_dbg_ctx(&ctx);
+
+        auto r = vis_model->forward(&ctx, media_emb, image.grid_height, image.grid_width);
+
+        if (ggml::type_of(r) != dtype)
+        {
+            ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
+            ggml::tensor *t = ggml::new_tensor_4d(&ctx, dtype, ggml::get_dim(r, 0), ggml::get_dim(r, 1), ggml::get_dim(r, 2), ggml::get_dim(r, 3));
+            r = ggml::cpy(&ctx, r, t);
+        }
+
+        ggml::build_forward_expand(&ctx, r);
+
+        CHATLLM_CHECK(ctx.allocate()) << "failed to allocate memory";
+
+        if (gen_config.dump_dot.size() > 0)
+        {
+            backend_context.dump_graph(ctx.get_cgraph(), gen_config.dump_dot.c_str());
+            exit(-1);
+        }
+
+        Backend::write_tensor_data(media_emb, image.data.data(), 0, image.data.size() * sizeof(image.data[0]));
+
+        ctx.compute();
+
+        size_t offset = buf.size();
+        buf.resize(offset + ggml::nbytes(r));
+        Backend::read_tensor_data(r, buf.data() + offset);
+        ctx.reset();
+
+        return true;
+    }
+}
+
 namespace chatllm::qwen::v2_5_vl
 {
+    static ChatHistoryEncoder _chat_encoder;
+
     Tokenizer::Tokenizer(const BaseConfig &config) : v2::Tokenizer(config)
     {}
 
@@ -851,13 +1185,144 @@ namespace chatllm::qwen::v2_5_vl
         return r;
     }
 
-    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-        : v2::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_QWEN2, config.tie_word_embeddings != 0)
+    void Tokenizer::inject_media(const std::string &media_type, std::vector<int> &ids, const int ids_to_inject_start, const int ids_to_inject_count)
     {
+
+    }
+
+    static BlockParams::PadEmbedding *pad_arg = nullptr;
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : ExtendEmbedding(),
+          v2::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_QWEN2_5_VL, config.tie_word_embeddings != 0),
+          visual(runtime_config)
+    {
+        delete pad_arg;
+        pad_arg = nullptr;
+
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             auto &layer = get_typed_transformer<ModelClass>()->layers[i];
         }
+    }
+
+    bool ConditionalGeneration::load_more(const json::JSON &config)
+    {
+        BaseModelForConditionalGeneration::load_more(config);
+        bool r = visual.load_more(this->config.dtype, this->config.hidden_size, config);
+        if (r)
+        {
+            _chat_encoder.vis_config = &visual.vis_config;
+        }
+        return r;
+    }
+
+    void ConditionalGeneration::load(ModelLoader &loader)
+    {
+        v2::ConditionalGeneration::load(loader);
+
+        loader.add_tensor_name_translations({
+            {".self_attn.",                 ".attn."},
+            {".o_proj.",                    ".proj."},
+            {".input_layernorm.",           ".norm1."},
+            {".post_attention_layernorm.",  ".norm2."},
+            {".merger.mlp.fc0.",            ".merger.mlp.0."},
+            {".merger.mlp.fc1.",            ".merger.mlp.2."},
+        });
+
+        _chat_encoder.vit_loaded = visual.load(loader);
+    }
+
+    void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->video_max_frames       = utils::get_opt(args, "video_max_frames", tok->video_max_frames);
+    }
+
+    void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
+    {
+        std::vector<uint8_t> buf;
+        auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
+        visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
+        if (buf.size() < 1) return;
+
+        size_t offset = emb->get_base_nbytes();
+        Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        append_user_opening(round_idx, ids);
+
+        std::vector<std::unique_ptr<vision::VideoLoader>> videos;
+
+        std::unique_ptr<vision::Resize> resize;
+        std::unique_ptr<vision::PreMaxImageSize> max_size;
+
+        // expand video into images
+        std::vector<ContentPiece> pieces;
+        for (auto &piece : user.pieces)
+        {
+            if (piece.type != ContentPiece::Type::Video)
+            {
+                pieces.push_back(piece);
+                continue;
+            }
+
+            auto video = new vision::VideoLoader(piece.content.c_str(), (float)tok->fps, tok->video_max_frames);
+            videos.emplace_back(video);
+            if (video->frames.size() < 1)
+                continue;
+
+            for (size_t i = 0; i < video->frames.size() - 1; i += 2)
+            {
+                //pieces.emplace_back(utils::sec2hms(i / tok->fps, true));
+                //pieces.emplace_back(video->frames[i], ContentPiece::Type::Image);
+            }
+        }
+
+        for (auto &piece : pieces)
+        {
+            if (piece.type == ContentPiece::Type::Text)
+            {
+                tok->encode(piece.content, ids);
+            }
+            else if (piece.type == ContentPiece::Type::Image)
+            {
+                CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
+
+                int w, h;
+                std::vector<uint8_t> pixels;
+                const int patch_size = vis_config->patch_size;
+
+                vision::MaxPatchNum     param2(vis_config->max_pixels / (vis_config->patch_size * vis_config->patch_size));
+
+                vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, vision::PaddingMode::Black);
+
+                std::vector<float> scaled;
+                vision::image_rescale(pixels, scaled);
+
+                vision::image_normalize(scaled, vis_config->image_mean, vis_config->image_std);
+
+                tok->media_emb.push_back({.grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
+
+                auto &image = tok->media_emb.back();
+
+                vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::PatchesLeftRightDown_ChannelsRGB_PixelsLeftRightDown);
+
+                const int merge_length = vis_config->temporal_patch_size * vis_config->temporal_patch_size;
+                image.emb_vec_number = image.grid_width * image.grid_height / merge_length;
+
+                const int id_start = tok->get_image_total_emb_vectors() - image.emb_vec_number + tok->vocab_size;
+                tok->inject_media("image", ids, id_start, image.emb_vec_number);
+            }
+            else
+            {
+                CHATLLM_THROW << "Unsupported content type: " << (int)piece.type;
+            }
+        }
+        ids.push_back(tok->im_end_token_id);
     }
 }
 
@@ -1104,4 +1569,21 @@ namespace chatllm::qwen::v3_ranker
         ids[1] = tok->no_token_id;
         Backend::write_tensor_data(yes_no_ids, ids, 0, sizeof(ids));
     }
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(QWEN,                  qwen::v1, 2);
+    REGISTER_MODEL_LOADER(QWEN2,                 qwen::v2, 1);
+    REGISTER_MODEL_LOADER(QWEN2MoE,              qwen::v2_moe, 1);
+    REGISTER_MODEL_LOADER(QWEN2TIE,              qwen::v2_tie, 1);
+    REGISTER_MODEL_LOADER(MARCO_O1,              qwen::marco_o1, 1);
+    REGISTER_MODEL_LOADER(QWQ,                   qwen::qwq, 1);
+    REGISTER_MODEL_LOADER(DEEPSEEK_R1_DISTILL_QWEN, qwen::ds_r1_distill, 1);
+    REGISTER_MODEL_LOADER(DEEPSEEK_R1_DISTILL_QWEN3,qwen::ds_r1_distill_v3, 1);
+    REGISTER_MODEL_LOADER(QWEN2_AUDIO,           qwen::v2_audio, 1);
+    REGISTER_MODEL_LOADER(QWEN2_5_VL,            qwen::v2_5_vl, 1);
+    REGISTER_MODEL_LOADER(QWEN3,                 qwen::v3, 1);
+    REGISTER_MODEL_LOADER(QWEN3_Embedding,           qwen::v3_emb, 1);
+    REGISTER_MODEL_LOADER(QWEN3_ReRanker,            qwen::v3_ranker, 1);
 }

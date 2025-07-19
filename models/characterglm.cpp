@@ -1,3 +1,8 @@
+#include "chatglm.h"
+#include <regex>
+
+namespace chatllm::characterglm
+{
 struct Config : public glm::v2::Config
 {
 };
@@ -115,4 +120,7 @@ void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids)
     std::ostringstream oss;
     oss << "[" << tok->bot_name << "]";
     tok->encode(oss.str(), ids);
+}
+
+REGISTER_MODEL_LOADER(CHARACTERGLM,          characterglm, 1);
 }

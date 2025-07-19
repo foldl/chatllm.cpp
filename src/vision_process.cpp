@@ -23,6 +23,9 @@ namespace vision
         int max_grid_width;
         int max_grid_height;
         int max_patch_num;
+
+        int64_t min_pixels;
+        int64_t max_pixels;
     };
 
     static Params params {
@@ -36,6 +39,9 @@ namespace vision
         .max_grid_width     = 0,
         .max_grid_height    = 0,
         .max_patch_num      = 0,
+
+        .min_pixels         = 0,
+        .max_pixels         = 0,
     };
 
     MaxGridWidth::MaxGridWidth(int value)
@@ -108,6 +114,18 @@ namespace vision
     {
         params.pre_max_width  = -1;
         params.pre_max_height = -1;
+    }
+
+    MinMaxPixels::MinMaxPixels(int64_t min_pixels, int64_t max_pixels)
+    {
+        params.min_pixels  = min_pixels;
+        params.max_pixels  = max_pixels;
+    }
+
+    MinMaxPixels::~MinMaxPixels()
+    {
+        params.min_pixels  = 0;
+        params.max_pixels  = 0;
     }
 
     bool PreMaxImageSize::PreScale(int &width, int &height)
@@ -339,6 +357,22 @@ namespace vision
         }
         else
         {
+            if ((params.min_pixels > 0) || (params.max_pixels > 0))
+            {
+                int64_t total = (int64_t)width * height;
+                if ((params.min_pixels > 0) && (total < params.min_pixels))
+                {
+                    height = width = 0;
+                    return;
+                }
+                if ((params.max_pixels > 0) && (total > params.max_pixels))
+                {
+                    double ratio = std::sqrt((double)params.max_pixels / total);
+                    width  = (int)std::floor(width * ratio);
+                    height = (int)std::floor(height * ratio);
+                }
+            }
+
             if (params.max_grid_width > 0)
             {
                 int new_w = std::min(width, patch_size * params.max_grid_width);

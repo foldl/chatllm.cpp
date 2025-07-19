@@ -1,21 +1,7 @@
-namespace v2
+#include "phi.h"
+
+namespace chatllm::phi::v2
 {
-    class QAHistoryEncoder : public BaseHistoryEncoder
-    {
-    public:
-        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
-        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
-    };
-
-    class ChatHistoryEncoder : public BaseHistoryEncoder
-    {
-    public:
-        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
-        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
-    };
-
     void QAHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         append_ai_opening(round_idx, ids);
@@ -79,70 +65,39 @@ namespace v2
     static QAHistoryEncoder _qa_encoder;
     static ChatHistoryEncoder _chat_encoder;
 
-    class Phi2Tokenizer : public BaseTokenizer
+    Phi2Tokenizer::Phi2Tokenizer(const BaseConfig &config)
+        : BaseTokenizer::BaseTokenizer(config, &_chat_encoder, &_qa_encoder),
+        qa_seq_max_len(0)
     {
-    public:
-        Phi2Tokenizer(const BaseConfig &config)
-            : BaseTokenizer::BaseTokenizer(config, &_chat_encoder, &_qa_encoder),
-            qa_seq_max_len(0)
-        {
-        }
+    }
 
-        Phi2Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
-            : BaseTokenizer::BaseTokenizer(config, encoder),
-            qa_seq_max_len(0)
-        {
-        }
-
-        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
-
-        bool is_special_id(int id) const override;
-
-    public:
-        std::vector<int> qa_terminate_seq1;
-        std::vector<int> qa_terminate_seq2;
-        std::vector<int> qa_terminate_seq3;
-        std::vector<int> qa_terminate_seq4;
-        int qa_seq_max_len;
-        std::vector<int> chat_terminate_seq;
-    };
-
-    class Phi2ConditionalGeneration : public BaseModelForConditionalGeneration
+    Phi2Tokenizer::Phi2Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
+        : BaseTokenizer::BaseTokenizer(config, encoder),
+        qa_seq_max_len(0)
     {
-    public:
-        typedef Model<BaseConfig, Embedding, LayerNorm, Phi2Block, int, int, int, int, int> ModelClass;
-    public:
-        Phi2ConditionalGeneration() = default;
-        Phi2ConditionalGeneration(const BaseConfig &config, const RuntimeConfig &runtime_config, ModelType type)
-            : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
+    }
+
+    Phi2ConditionalGeneration::Phi2ConditionalGeneration(const BaseConfig &config, const RuntimeConfig &runtime_config, ModelType type)
+        : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
+    {
+        const size_t tensor_ovhd = ggml_tensor_overhead();
+        const size_t num_tensors = 5 + config.num_hidden_layers * 17;
+        const size_t ctx_size = num_tensors * tensor_ovhd;
+        w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+        w_ctx_.dtype = config.dtype;
+
+        transformer = new ModelClass(&w_ctx_, config, true,
+                            config.hidden_size, config.num_attention_heads,
+                            config.intermediate_size, config.num_attention_heads, config.max_length);
+
+        for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            const size_t tensor_ovhd = ggml_tensor_overhead();
-            const size_t num_tensors = 5 + config.num_hidden_layers * 17;
-            const size_t ctx_size = num_tensors * tensor_ovhd;
-            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
-            w_ctx_.dtype = config.dtype;
-
-            transformer = new ModelClass(&w_ctx_, config, true,
-                                config.hidden_size, config.num_attention_heads,
-                                config.intermediate_size, config.num_attention_heads, config.max_length);
-
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                get_typed_transformer<ModelClass>()->layers[i].set_id(i);
-                get_typed_transformer<ModelClass>()->layers[i].attention.set_id(i);
-                get_typed_transformer<ModelClass>()->layers[i].attention.set_prec(ggml::prec::GGML_PREC_F32);
-            }
+            get_typed_transformer<ModelClass>()->layers[i].set_id(i);
+            get_typed_transformer<ModelClass>()->layers[i].attention.set_id(i);
+            get_typed_transformer<ModelClass>()->layers[i].attention.set_prec(ggml::prec::GGML_PREC_F32);
         }
+    }
 
-    public:
-
-
-
-        BaseConfig config;
-
-    protected:
-        bool is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output) override;
-    };
 
     bool Phi2ConditionalGeneration::is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output)
     {
@@ -223,28 +178,11 @@ namespace v2
 
     namespace v1
     {
-        struct Config : public BaseConfig
-        {
-        };
 
-        class Tokenizer : public Phi2Tokenizer
+        Tokenizer::Tokenizer(const BaseConfig &config)
+            : Phi2Tokenizer(config)
         {
-        public:
-            Tokenizer(const BaseConfig &config)
-                : Phi2Tokenizer(config)
-            {
-            }
-        };
-
-        class ConditionalGeneration : public Phi2ConditionalGeneration
-        {
-        public:
-            ConditionalGeneration() = default;
-            ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
-            ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type);
-
-            void load(ModelLoader &loader) override;
-        };
+        }
 
         ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
             : ConditionalGeneration::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_PHI2)
@@ -295,29 +233,10 @@ namespace v2
 
     namespace v2
     {
-        struct Config : public BaseConfig
+        Tokenizer::Tokenizer(const BaseConfig &config)
+            : Phi2Tokenizer(config)
         {
-            int rope_dim;
-            float rope_theta;
-        };
-
-        class Tokenizer : public Phi2Tokenizer
-        {
-        public:
-            Tokenizer(const BaseConfig &config)
-                : Phi2Tokenizer(config)
-            {
-            }
-        };
-
-        class ConditionalGeneration : public Phi2ConditionalGeneration
-        {
-        public:
-            ConditionalGeneration() = default;
-            ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
-
-            void load(ModelLoader &loader) override;
-        };
+        }
 
         ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
             : Phi2ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_PHI2)
@@ -365,149 +284,84 @@ namespace v2
     }
 }
 
-namespace v3
+namespace chatllm::phi::v3
 {
-    struct Config : public BaseConfig
-    {
-        int num_key_value_heads;
-        int original_max_position_embeddings;
-        int sliding_window;
-        float rope_theta;
-    };
-
-    class ChatHistoryEncoder : public BaseHistoryEncoder
-    {
-    public:
-        void append_sys_prompt(std::vector<int> &ids) const override;
-        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
-        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
-    public:
-        bool add_bos = true;
-    };
-
     static ChatHistoryEncoder _chat_encoder;
 
-    class Phi3Tokenizer : public BaseTokenizer
+    Phi3Tokenizer::Phi3Tokenizer(const BaseConfig &config)
+        : Phi3Tokenizer(config, &_chat_encoder)
     {
-    public:
-        Phi3Tokenizer(const BaseConfig &config)
-            : Phi3Tokenizer(config, &_chat_encoder)
-        {
-        }
+    }
 
-        Phi3Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
-            : BaseTokenizer::BaseTokenizer(config, encoder),
-              append_nl_after_end_tok(false)
-        {
-        }
-
-        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
-        {
-            tp = new tokenizer::BPEProcessor1();
-            size_t size = tp->Load(buffer, n_vocab);
-
-            system_token_id     = tp->PieceToId("<|system|>");
-            user_token_id       = tp->PieceToId("<|user|>");
-            assistant_token_id  = tp->PieceToId("<|assistant|>");
-            end_token_id        = tp->PieceToId("<|end|>");
-            nl_token_id         = tp->PieceToId("\n");
-
-            if (-1 == system_token_id)
-            {
-                CHATLLM_CHECK(tp->GetPieceSize() == 32000) << " unsupported tokenizer";
-                system_token_id     = 32006;
-                user_token_id       = 32010;
-                assistant_token_id  = 32001;
-                end_token_id        = 32007;
-            }
-
-            pad_token_id = eos_token_id;
-
-            terminate_ids.insert(end_token_id);
-
-            return size;
-        }
-
-        void encode(const std::string &msg, std::vector<int> &ids, int type_token_id, int end_token_id = -1)
-        {
-            if (type_token_id >= 0)
-            {
-                ids.push_back(type_token_id);
-                if (nl_token_id >= 0)
-                    ids.push_back(nl_token_id);
-            }
-            BaseTokenizer::encode(msg, ids);
-            if (end_token_id >= 0)
-            {
-                ids.push_back(end_token_id);
-                if (append_nl_after_end_tok)
-                    ids.push_back(nl_token_id);
-            }
-        }
-
-    public:
-        int system_token_id;
-        int user_token_id;
-        int assistant_token_id;
-        int end_token_id;
-        int nl_token_id;
-        bool append_nl_after_end_tok;
-    };
-
-    typedef Phi3Tokenizer Tokenizer;
-
-    // https://huggingface.co/microsoft/Phi-3-mini-4k-instruct/discussions/25
-    const int SLIDING_WINDOW_LEN            =  2048;
-
-    template <int sliding_window_len> class Phi3SelfAttention : public RoPESelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>
+    Phi3Tokenizer::Phi3Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
+        : BaseTokenizer::BaseTokenizer(config, encoder),
+            append_nl_after_end_tok(false)
     {
-    public:
-        Phi3SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
-            : RoPESelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>(ctx, hidden_size, num_attention_heads, max_length, false, false) {}
+    }
 
-        Phi3SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-            : RoPESelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
-    };
-
-    template <int sliding_window_len> class Phi3Block : public LMBlock1<RMSNorm, Phi3SelfAttention<sliding_window_len>, RMSNorm, SiLUMLP>
+    size_t Phi3Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
-    public:
-        Phi3Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int max_length)
-            : LMBlock1<RMSNorm, Phi3SelfAttention<sliding_window_len>, RMSNorm, SiLUMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, max_length)
-        {}
+        tp = new tokenizer::BPEProcessor1();
+        size_t size = tp->Load(buffer, n_vocab);
 
-        Phi3Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock1<RMSNorm, Phi3SelfAttention<sliding_window_len>, RMSNorm, SiLUMLP>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
-        {}
-    };
+        system_token_id     = tp->PieceToId("<|system|>");
+        user_token_id       = tp->PieceToId("<|user|>");
+        assistant_token_id  = tp->PieceToId("<|assistant|>");
+        end_token_id        = tp->PieceToId("<|end|>");
+        nl_token_id         = tp->PieceToId("\n");
 
-    typedef Phi3Block<SLIDING_WINDOW_LEN> Phi3Block4k;
-
-    class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<Phi3Block4k>
-    {
-    public:
-        ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_PHI3)
-            : ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
-        {}
-
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
-                            int num_key_value_heads, int max_length)
-            : llama::v2::GenericConditionalGeneration<Phi3Block4k>(config, runtime_config, type, num_key_value_heads, max_length, 13)
+        if (-1 == system_token_id)
         {
-            CHATLLM_CHECK(config.sliding_window == SLIDING_WINDOW_LEN - 1)
-                << "sliding_window (" << config.sliding_window << ") must be " << SLIDING_WINDOW_LEN - 1;
-
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
-                attention.freq_base = config.rope_theta;
-            }
-
-            batch_input = false;
+            CHATLLM_CHECK(tp->GetPieceSize() == 32000) << " unsupported tokenizer";
+            system_token_id     = 32006;
+            user_token_id       = 32010;
+            assistant_token_id  = 32001;
+            end_token_id        = 32007;
         }
-    };
+
+        pad_token_id = eos_token_id;
+
+        terminate_ids.insert(end_token_id);
+
+        return size;
+    }
+
+    void Phi3Tokenizer::encode(const std::string &msg, std::vector<int> &ids, int type_token_id, int end_token_id)
+    {
+        if (type_token_id >= 0)
+        {
+            ids.push_back(type_token_id);
+            if (nl_token_id >= 0)
+                ids.push_back(nl_token_id);
+        }
+        BaseTokenizer::encode(msg, ids);
+        if (end_token_id >= 0)
+        {
+            ids.push_back(end_token_id);
+            if (append_nl_after_end_tok)
+                ids.push_back(nl_token_id);
+        }
+    }
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
+    {}
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
+                        int num_key_value_heads, int max_length)
+        : llama::v2::GenericConditionalGeneration<Phi3Block4k>(config, runtime_config, type, num_key_value_heads, max_length, 13)
+    {
+        CHATLLM_CHECK(config.sliding_window == SLIDING_WINDOW_LEN - 1)
+            << "sliding_window (" << config.sliding_window << ") must be " << SLIDING_WINDOW_LEN - 1;
+
+        for (int i = 0; i < config.num_hidden_layers; i++)
+        {
+            auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
+            attention.freq_base = config.rope_theta;
+        }
+
+        batch_input = false;
+    }
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
@@ -541,22 +395,8 @@ namespace v3
     }
 }
 
-namespace v3_su
+namespace chatllm::phi::v3_su
 {
-    const int MAX_FACTOR_LEN = 128;
-
-    struct Config : public BaseConfig
-    {
-        int max_position_embeddings;
-        int num_key_value_heads;
-        int original_max_position_embeddings;
-        int sliding_window;
-        int rope_scaling;
-        float rope_theta;
-        float short_factor[MAX_FACTOR_LEN];
-        float long_factor[MAX_FACTOR_LEN];
-    };
-
     static int get_factor_len(const Config &config)
     {
         int i = MAX_FACTOR_LEN - 1;
@@ -564,115 +404,74 @@ namespace v3_su
         return i + 1;
     }
 
-    typedef v3::Phi3Tokenizer Tokenizer;
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
+    {}
 
-    class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<Phi3SUBlock>
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
+                        int num_key_value_heads, int max_length, bool tie_lm_head)
+        : llama::v2::GenericConditionalGeneration<Phi3SUBlock>(config, runtime_config, type, num_key_value_heads, max_length, 13, tie_lm_head)
     {
-    public:
-        ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_PHI3_SU)
-            : ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
-        {}
+        CHATLLM_CHECK(config.sliding_window >= config.max_length)
+            << "sliding_window (" << config.sliding_window << ") must >= " << config.max_length;
 
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
-                            int num_key_value_heads, int max_length, bool tie_lm_head = false)
-            : llama::v2::GenericConditionalGeneration<Phi3SUBlock>(config, runtime_config, type, num_key_value_heads, max_length, 13, tie_lm_head)
+        CHATLLM_CHECK(config.rope_scaling == 1)
+            << "rope_scaling (" << config.rope_scaling << ") must == " << 1;
+
+        float scaling_factor = (float)config.max_position_embeddings / config.original_max_position_embeddings;
+        if (scaling_factor <= 1.0f)
+            scaling_factor = 1.0f;
+        else
+            scaling_factor = sqrtf(1.0f + logf(scaling_factor) / logf((float)config.original_max_position_embeddings));
+
+        for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            CHATLLM_CHECK(config.sliding_window >= config.max_length)
-                << "sliding_window (" << config.sliding_window << ") must >= " << config.max_length;
-
-            CHATLLM_CHECK(config.rope_scaling == 1)
-                << "rope_scaling (" << config.rope_scaling << ") must == " << 1;
-
-            float scaling_factor = (float)config.max_position_embeddings / config.original_max_position_embeddings;
-            if (scaling_factor <= 1.0f)
-                scaling_factor = 1.0f;
-            else
-                scaling_factor = sqrtf(1.0f + logf(scaling_factor) / logf((float)config.original_max_position_embeddings));
-
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
-                attention.config(&w_ctx_, config.original_max_position_embeddings, config.rope_theta,
-                                 scaling_factor,
-                                 scaling_factor,
-                                 get_factor_len(config),
-                                 config.short_factor,
-                                 config.long_factor);
-            }
+            auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
+            attention.config(&w_ctx_, config.original_max_position_embeddings, config.rope_theta,
+                                scaling_factor,
+                                scaling_factor,
+                                get_factor_len(config),
+                                config.short_factor,
+                                config.long_factor);
         }
-    };
+    }
 }
 
-namespace v3_su2
+namespace chatllm::phi::v3_su2
 {
-    typedef v3_su::Config Config;
-
-    class Tokenizer : public v3::Tokenizer
+    Tokenizer::Tokenizer(const BaseConfig &config) : v3::Tokenizer(config, &v3::_chat_encoder)
     {
-    public:
-        Tokenizer(const BaseConfig &config) : v3::Tokenizer(config, &v3::_chat_encoder)
-        {
-            append_nl_after_end_tok = true;
-            v3::_chat_encoder.add_bos = false;
-        }
-    };
-
-    typedef v3_su::ConditionalGeneration ConditionalGeneration;
+        append_nl_after_end_tok = true;
+        v3::_chat_encoder.add_bos = false;
+    }
 }
 
-namespace v3_su3
+namespace chatllm::phi::v3_su3
 {
-    struct Config : public v3_su2::Config
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : v3_su2::ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
     {
-        float short_mscale;
-        float long_mscale;
-    };
-
-    typedef v3_su2::Tokenizer Tokenizer;
-
-    class ConditionalGeneration : public v3_su2::ConditionalGeneration
-    {
-    public:
-        ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_PHI3_SU3)
-            : v3_su2::ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length)
+        for (int i = 0; i < config.num_hidden_layers; i++)
         {
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
-                attention.config(&w_ctx_, config.original_max_position_embeddings, config.rope_theta,
-                                 config.short_mscale,
-                                 config.long_mscale,
-                                 config.hidden_size / config.num_attention_heads / 2,
-                                 config.short_factor,
-                                 config.long_factor);
-            }
+            auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
+            attention.config(&w_ctx_, config.original_max_position_embeddings, config.rope_theta,
+                                config.short_mscale,
+                                config.long_mscale,
+                                config.hidden_size / config.num_attention_heads / 2,
+                                config.short_factor,
+                                config.long_factor);
         }
-    };
+    }
 }
 
-namespace v3_moe
+namespace chatllm::phi::v3_moe
 {
-    struct Config : public v3_su3::Config
-    {
-        int num_experts_per_tok;
-        int num_local_experts;
-    };
-
-    typedef v3_su3::Tokenizer Tokenizer;
-
-    struct mixing_param
-    {
-        float jitter;
-    };
-
     static void _compute_forward_custom_sparsemixer_f32(ggml::tensor * dst, const ggml::tensor * a, const ggml::tensor * b, const ggml::tensor * c, int ith, int nth, const mixing_param *userdata)
     {
         CHATLLM_CHECK(nth == 1) << "nth must be 1";
     }
 
-    static void _compute_forward_custom_sparsemixer(ggml::tensor * dst, const ggml::tensor * a, const ggml::tensor * b, const ggml::tensor * c, int ith, int nth, void *userdata)
+    void _compute_forward_custom_sparsemixer(ggml::tensor * dst, const ggml::tensor * a, const ggml::tensor * b, const ggml::tensor * c, int ith, int nth, void *userdata)
     {
         switch (ggml::type_of(c))
         {
@@ -685,203 +484,51 @@ namespace v3_moe
         }
     }
 
-    template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class Phi3SparseMoE : public BaseSparseMLP
-    {
-    public:
-        Phi3SparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
-            : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, false)
-        {
-        }
-        // TODO: WIP
-#if (0)
-        using Block::forward;
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override
-        {
-            const int64_t hidden_size = hidden_states->ne[0];
-            const int64_t qlen        = hidden_states->ne[1];
-            const int n_expert = num_local_experts;
-
-            ggml::tensor * scores = gate.forward(ctx, hidden_states); // [qlen, num_experts]
-
-            ggml::tensor * selected_experts = ggml::new_tensor_2d(ctx, GGML_TYPE_I32, qlen, num_experts_per_tok);  // [qlen, num_experts_per_tok]
-            ggml::tensor * weights = ggml::new_tensor_3d(ctx, ggml::type_of(scores), 1, num_experts_per_tok, qlen); // [1, num_experts_per_tok, qlen]
-
-            selected_experts = ggml::map_custom3_inplace(ctx, selected_experts, weights, scores, _compute_forward_custom_sparsemixer, 1, param);
-
-            return forward_with_experts(ctx, hidden_states, selected_experts, weights);
-        }
-#endif
-    public:
-        mixing_param *param;
-    };
-
-    class Phi3SUSelfAttentionBiased : public Phi3SUSelfAttention
-    {
-    public:
-        Phi3SUSelfAttentionBiased(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-            : Phi3SUSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, true)
-        {}
-    };
-
-    template<int num_local_experts, int num_experts_per_tok> class Phi3MoEBlock : public LMBlock1<LayerNorm, Phi3SUSelfAttentionBiased, LayerNorm,
-                        Phi3SparseMoE<num_local_experts, num_experts_per_tok>>
-    {
-    public:
-        Phi3MoEBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock1<LayerNorm, Phi3SUSelfAttentionBiased, LayerNorm,
-                       Phi3SparseMoE<num_local_experts, num_experts_per_tok>>(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
-        {}
-    };
-
-    template<int _NUM_EXPERTS, int _EXPERTS_PER_TOK, ModelType type> class _ConditionalGeneration : public BaseModelForConditionalGeneration
-    {
-    public:
-        typedef BaseModelForConditionalGeneration Base;
-        typedef Model<Config, Embedding, LayerNorm, Phi3MoEBlock<_NUM_EXPERTS, _EXPERTS_PER_TOK>, int, int, int, int, int> ModelClass;
-    public:
-        _ConditionalGeneration() = default;
-
-        _ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-        : Base(type, config, runtime_config, 4096 * 2), config(config)
-        {
-            const size_t tensor_ovhd = ggml_tensor_overhead();
-            const size_t num_tensors = 3 + 2 + config.num_hidden_layers * (11 + 3 + 5);
-            const size_t ctx_size = num_tensors * tensor_ovhd;
-            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
-            w_ctx_.dtype = config.dtype;
-
-            CHATLLM_CHECK((_NUM_EXPERTS == config.num_local_experts) && (_EXPERTS_PER_TOK == config.num_experts_per_tok))
-                << "unsupported MoE param";
-
-            Base::transformer = new ModelClass(
-                                &w_ctx_, config, true,
-                                config.hidden_size, config.num_attention_heads,
-                                config.intermediate_size, config.num_key_value_heads, config.max_length);
-
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                auto &attention = Base::get_typed_transformer<ModelClass>()->layers[i].attention;
-                attention.config(&w_ctx_, config.original_max_position_embeddings, config.rope_theta,
-                                 config.short_mscale,
-                                 config.long_mscale,
-                                 config.hidden_size / config.num_attention_heads / 2,
-                                 config.short_factor,
-                                 config.long_factor);
-            }
-
-            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size()) << "corrupted model weights";
-        }
-
-        void load(ModelLoader &loader) override
-        {
-            auto transformer = get_typed_transformer<ModelClass>();
-            transformer->word_embeddings->load("model.embed_tokens.", &loader);
-            for (int i = 0; i < config.num_hidden_layers; i++)
-            {
-                std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
-
-                loader.read_tensor(layer_prefix + "mlp.experts_down.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w2.weight", transformer->layers[i].mlp.experts_down.weight);
-                loader.read_tensor(layer_prefix + "mlp.experts_gate.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w1.weight", transformer->layers[i].mlp.experts_gate.weight);
-                loader.read_tensor(layer_prefix + "mlp.experts_up.weight",   layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".w3.weight", transformer->layers[i].mlp.experts_up.weight);
-
-                loader.read_tensor(layer_prefix + "block_sparse_moe.gate.weight",
-                                transformer->layers[i].mlp.gate.weight);
-
-                loader.read_tensor(layer_prefix + "input_layernorm.weight",
-                                transformer->layers[i].input_layernorm.weight);
-                loader.read_tensor(layer_prefix + "input_layernorm.bias",
-                                transformer->layers[i].input_layernorm.bias);
-
-                loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",
-                                transformer->layers[i].post_attention_layernorm.weight);
-                loader.read_tensor(layer_prefix + "post_attention_layernorm.bias",
-                                transformer->layers[i].post_attention_layernorm.bias);
-
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.k_proj.bias",   transformer->layers[i].attention.k_proj.bias);
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.o_proj.bias",   transformer->layers[i].attention.o_proj.bias);
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", transformer->layers[i].attention.q_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.q_proj.bias",   transformer->layers[i].attention.q_proj.bias);
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", transformer->layers[i].attention.v_proj.weight);
-                loader.read_tensor(layer_prefix + "self_attn.v_proj.bias",   transformer->layers[i].attention.v_proj.bias);
-            }
-            transformer->final_layernorm->load("model.norm.", &loader);
-            loader.read_tensor("lm_head.weight", dynamic_cast<Linear *>(transformer->lm_head)->weight);
-            loader.read_tensor("lm_head.bias",   dynamic_cast<Linear *>(transformer->lm_head)->bias);
-        }
-
-    public:
-        Config config;
-    };
-
-    const int NUM_EXPERTS                   =  16;
-    const int EXPERTS_PER_TOK               =  2;
-
-    typedef _ConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, MODEL_TYPE_PHI3_MOE> ConditionalGeneration;
+    Phi3SUSelfAttentionBiased::Phi3SUSelfAttentionBiased(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
+        : Phi3SUSelfAttention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, true, true)
+    {}
 }
 
-namespace v4
+namespace chatllm::phi::v4
 {
-    typedef llama::v3::Config Config;
-
-    class ChatHistoryEncoder : public BaseHistoryEncoder
-    {
-    public:
-        void append_sys_prompt(std::vector<int> &ids) const override;
-        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
-        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
-        void append_user_opening(int round_idx, std::vector<int> &ids) const override;
-    };
-
     static ChatHistoryEncoder _chat_encoder;
 
-    class Tokenizer : public BaseTokenizer
+    Tokenizer::Tokenizer(const BaseConfig &config)
+        : BaseTokenizer(config, &_chat_encoder)
     {
-    public:
-        Tokenizer(const BaseConfig &config)
-            : BaseTokenizer(config, &_chat_encoder)
+    }
+
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
+    {
+        tp = new tokenizer::BPEProcessor2();
+        size_t size = tp->Load(buffer, n_vocab);
+
+        im_start_token_id     = tp->PieceToId("<|im_start|>");
+        im_sep_token_id       = tp->PieceToId("<|im_sep|>");
+        im_end_token_id       = tp->PieceToId("<|im_end|>");
+
+        pad_token_id = eos_token_id;
+
+        terminate_ids.insert(im_end_token_id);
+
+        return size;
+    }
+
+    void Tokenizer::encode_role(const std::string &msg, std::vector<int> &ids)
+    {
+        ids.push_back(im_start_token_id);
+        encode(msg, ids, false);
+        ids.push_back(im_sep_token_id);
+    }
+
+    void Tokenizer::encode(const std::string &msg, std::vector<int> &ids, bool add_end_tok)
+    {
+        BaseTokenizer::encode(msg, ids);
+        if (add_end_tok)
         {
+            ids.push_back(im_end_token_id);
         }
-
-        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
-        {
-            tp = new tokenizer::BPEProcessor2();
-            size_t size = tp->Load(buffer, n_vocab);
-
-            im_start_token_id     = tp->PieceToId("<|im_start|>");
-            im_sep_token_id       = tp->PieceToId("<|im_sep|>");
-            im_end_token_id       = tp->PieceToId("<|im_end|>");
-
-            pad_token_id = eos_token_id;
-
-            terminate_ids.insert(im_end_token_id);
-
-            return size;
-        }
-
-        void encode_role(const std::string &msg, std::vector<int> &ids)
-        {
-            ids.push_back(im_start_token_id);
-            encode(msg, ids, false);
-            ids.push_back(im_sep_token_id);
-        }
-
-        void encode(const std::string &msg, std::vector<int> &ids, bool add_end_tok = true)
-        {
-            BaseTokenizer::encode(msg, ids);
-            if (add_end_tok)
-            {
-                ids.push_back(im_end_token_id);
-            }
-        }
-
-    public:
-        int im_start_token_id;
-        int im_sep_token_id;
-        int im_end_token_id;
-    };
+    }
 
     void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
     {
@@ -919,54 +566,50 @@ namespace v4
         tok->encode_role("user", ids);
     }
 
-
-    class ConditionalGeneration : public llama::v3::ConditionalGeneration
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : llama::v3::ConditionalGeneration(config, runtime_config, MODEL_TYPE_PHI4)
     {
-    public:
-        ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-            : llama::v3::ConditionalGeneration(config, runtime_config, MODEL_TYPE_PHI4)
-        {
-        }
-    };
+    }
 }
 
-namespace v4_mini
+namespace chatllm::phi::v4_mini
 {
-    typedef v3_su::Config Config;
-
-    class Tokenizer : public v3_su::Tokenizer
+    Tokenizer::Tokenizer(const BaseConfig &config)
+        : v3_su::Tokenizer(config)
     {
-    public:
-        Tokenizer(const BaseConfig &config)
-            : v3_su::Tokenizer(config)
-        {
-        }
+    }
 
-        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
-        {
-            tp = new tokenizer::BPEProcessor2();
-            size_t size = tp->Load(buffer, n_vocab);
-
-            system_token_id     = tp->PieceToId("<|system|>");
-            user_token_id       = tp->PieceToId("<|user|>");
-            assistant_token_id  = tp->PieceToId("<|assistant|>");
-            end_token_id        = tp->PieceToId("<|end|>");
-            nl_token_id         = -1;
-
-            pad_token_id = eos_token_id;
-            terminate_ids.insert(end_token_id);
-
-            return size;
-        }
-    };
-
-    class ConditionalGeneration : public v3_su::ConditionalGeneration
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
-    public:
-        ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_PHI4_MINI)
-            : v3_su::ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length, true)
-        {}
-    };
+        tp = new tokenizer::BPEProcessor2();
+        size_t size = tp->Load(buffer, n_vocab);
+
+        system_token_id     = tp->PieceToId("<|system|>");
+        user_token_id       = tp->PieceToId("<|user|>");
+        assistant_token_id  = tp->PieceToId("<|assistant|>");
+        end_token_id        = tp->PieceToId("<|end|>");
+        nl_token_id         = -1;
+
+        pad_token_id = eos_token_id;
+        terminate_ids.insert(end_token_id);
+
+        return size;
+    }
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : v3_su::ConditionalGeneration(config, runtime_config, type, config.num_key_value_heads, config.max_length, true)
+    {}
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(PHI2,                  phi::v2::v1, 1);
+    REGISTER_MODEL_LOADER(PHI2_V2,               phi::v2::v2, 1);
+    REGISTER_MODEL_LOADER(PHI3,                  phi::v3, 1);
+    REGISTER_MODEL_LOADER(PHI3_SU,               phi::v3_su, 1);
+    REGISTER_MODEL_LOADER(PHI3_SU2,              phi::v3_su2, 1);
+    REGISTER_MODEL_LOADER(PHI3_SU3,              phi::v3_su3, 1);
+    REGISTER_MODEL_LOADER(PHI3_MOE,              phi::v3_moe, 1);
+    REGISTER_MODEL_LOADER(PHI4,                  phi::v4, 1);
+    REGISTER_MODEL_LOADER(PHI4_MINI,             phi::v4_mini, 1);
 }

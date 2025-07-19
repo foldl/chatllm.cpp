@@ -1,4 +1,5 @@
-namespace flash
+#include "llama.h"
+namespace chatllm::reka::flash
 {
     typedef llama::v3::Config Config;
 
@@ -105,4 +106,6 @@ namespace flash
             return false;
         }
     };
+
+    REGISTER_MODEL_LOADER(REKA_FLASH3,           reka::flash, 1);
 }

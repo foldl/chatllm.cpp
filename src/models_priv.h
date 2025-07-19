@@ -302,15 +302,16 @@ namespace chatllm
     class BaseImplModelLoader
     {
     public:
-        BaseImplModelLoader(int model_type);
+        BaseImplModelLoader(int model_type, int version);
         virtual AbstractModel *load_model(ModelLoader &loader, const ModelObject::extra_args &args) = 0;
         virtual bool load_model(ModelLoader &loader, ModelFactory::Result &result, const ModelObject::extra_args &args) = 0;
+        const int version;
     };
 
-    template <int model_type, class Config, class Tokenizer, class ConditionalGeneration> class ImplModelLoader : public BaseImplModelLoader
+    template <int model_type, class Config, class Tokenizer, class ConditionalGeneration, int ver = 1> class ImplModelLoader : public BaseImplModelLoader
     {
     public:
-        ImplModelLoader() : BaseImplModelLoader(model_type) {}
+        ImplModelLoader() : BaseImplModelLoader(model_type, ver) {}
         AbstractModel *load_model(ModelLoader &loader, const ModelObject::extra_args &args) override
         {
             return chatllm::load_model<Config, ConditionalGeneration>(loader, args);
@@ -321,6 +322,10 @@ namespace chatllm
             return chatllm::load_model<Config, Tokenizer, ConditionalGeneration>(loader, result, args);
         }
     };
+
+    #define REGISTER_MODEL_LOADER00(TYPE, ns, version, line)    static ImplModelLoader<TYPE, ns::Config, ns::Tokenizer, ns::ConditionalGeneration, version> _loader##line
+    #define REGISTER_MODEL_LOADER0(TYPE, ns, version, line)     REGISTER_MODEL_LOADER00(TYPE, ns, version, line)
+    #define REGISTER_MODEL_LOADER(TYPE, ns, version)            REGISTER_MODEL_LOADER0 (MODEL_TYPE_ ##TYPE, ns, version, __LINE__)
 
     class ForwardContext : public ComputeContext
     {

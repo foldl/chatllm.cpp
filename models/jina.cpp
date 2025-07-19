@@ -1,4 +1,7 @@
-namespace readerlm
+#include "qwen.h"
+#include "../src/models_priv.h"
+
+namespace chatllm::readerlm
 {
     typedef qwen::v2::Config Config;
 
@@ -19,4 +22,6 @@ namespace readerlm
             : qwen::v2::ConditionalGeneration(config, runtime_config, type, true)
         {}
     };
+
+    REGISTER_MODEL_LOADER(READERLM2,             readerlm, 1);
 }

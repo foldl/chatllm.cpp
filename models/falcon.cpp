@@ -1,4 +1,5 @@
-namespace v3
+#include "llama.h"
+namespace chatllm::falcon::v3
 {
     typedef llama::v3::Config Config;
 
@@ -74,4 +75,6 @@ namespace v3
             : llama::v3::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_FALCON3)
         {}
     };
+
+    REGISTER_MODEL_LOADER(FALCON3,               falcon::v3, 1);
 }

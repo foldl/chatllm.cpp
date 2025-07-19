@@ -1,4 +1,7 @@
-namespace v1
+#include "llama.h"
+#include "deepseek.h"
+
+namespace chatllm::minicpm::v1
 {
     struct Config : public BaseConfig
     {
@@ -149,7 +152,7 @@ namespace v1
     }
 }
 
-namespace v2
+namespace chatllm::minicpm::v2
 {
     typedef v1::Config Config;
 
@@ -260,7 +263,7 @@ namespace v2
     }
 }
 
-namespace moe
+namespace chatllm::minicpm::moe
 {
     struct Config : public BaseConfig
     {
@@ -362,7 +365,7 @@ namespace moe
     };
 }
 
-namespace v3
+namespace chatllm::minicpm::v3
 {
     const int MAX_FACTOR_LEN = 16;
 
@@ -381,8 +384,6 @@ namespace v3
         float short_factor[MAX_FACTOR_LEN];
         float long_factor[MAX_FACTOR_LEN];
     };
-
-    #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
     class MiniCPM3SelfAttention : public RoPESelfAttention<deepseek::v2_light::BaseMLAttention<true>>
     {
@@ -492,7 +493,7 @@ namespace v3
     };
 }
 
-namespace emb_light
+namespace chatllm::minicpm::emb_light
 {
     const int MAX_FACTOR_LEN = 32;
     struct Config : public BaseConfig
@@ -650,7 +651,7 @@ namespace emb_light
     };
 }
 
-namespace ranker_light
+namespace chatllm::minicpm::ranker_light
 {
     typedef emb_light::Config Config;
 
@@ -750,7 +751,7 @@ namespace ranker_light
     };
 }
 
-namespace v4
+namespace chatllm::minicpm::v4
 {
     const int MAX_FACTOR_LEN = 128;
     struct Config : public BaseConfig
@@ -805,4 +806,15 @@ namespace v4
             }
         }
     };
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(MINICPM,               minicpm::v1, 1);
+    REGISTER_MODEL_LOADER(MINICPM2,              minicpm::v2, 1);
+    REGISTER_MODEL_LOADER(MINICPM_MoE,           minicpm::moe, 1);
+    REGISTER_MODEL_LOADER(MINICPM3,              minicpm::v3, 1);
+    REGISTER_MODEL_LOADER(MINICPM4,              minicpm::v4, 1);
+    REGISTER_MODEL_LOADER(MiniCPM_Embedding_Light,   minicpm::emb_light, 1);
+    REGISTER_MODEL_LOADER(MiniCPM_ReRanker_Light,    minicpm::ranker_light, 1);
 }

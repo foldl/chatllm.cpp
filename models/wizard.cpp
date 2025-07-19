@@ -1,4 +1,7 @@
-namespace lm
+#include "codellama.h"
+#include "mistral.h"
+
+namespace chatllm::wizard::lm
 {
     struct Config : public llama::v2::Config
     {
@@ -78,7 +81,7 @@ namespace lm
     }
 }
 
-namespace coder
+namespace chatllm::wizard::coder
 {
     struct Config : public codellama::Config
     {
@@ -169,7 +172,7 @@ namespace coder
     }
 }
 
-namespace math
+namespace chatllm::wizard::math
 {
     struct Config : public mistral::mistral::Config
     {
@@ -193,7 +196,7 @@ namespace math
     };
 }
 
-namespace moe
+namespace chatllm::wizard::moe
 {
     typedef mistral::mixtral::Config Config;
 
@@ -211,4 +214,12 @@ const int NUM_EXPERTS                   =  8;
 const int EXPERTS_PER_TOK               =  2;
 
 typedef mistral::mixtral::_ConditionalGeneration<NUM_EXPERTS, EXPERTS_PER_TOK, MODEL_TYPE_WIZARDLM2_MOE> ConditionalGeneration;
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(WIZARDCODER,           wizard::coder, 1);
+    REGISTER_MODEL_LOADER(WIZARDLM,              wizard::lm, 1);
+    REGISTER_MODEL_LOADER(WIZARDMATH,            wizard::math, 1);
+    REGISTER_MODEL_LOADER(WIZARDLM2_MOE,         wizard::moe, 1);
 }

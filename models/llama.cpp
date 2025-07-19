@@ -692,3 +692,15 @@ namespace chatllm::llama::v4
         }
     }
 }
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(LLAMA2,                llama::v2, 1);
+    REGISTER_MODEL_LOADER(LLAMA3,                llama::v3, 1);
+    REGISTER_MODEL_LOADER(LLAMA2PLUS,            llama::v2_plus, 1);
+    REGISTER_MODEL_LOADER(LLAMA_MULTI,           llama::multi, 1);
+    REGISTER_MODEL_LOADER(LLAMA3_1,              llama::v3_1, 1);
+    REGISTER_MODEL_LOADER(LLAMA3_2,              llama::v3_2, 1);
+    REGISTER_MODEL_LOADER(DEEPSEEK_R1_DISTILL_LLAMA, llama::ds_r1_distill, 1);
+    REGISTER_MODEL_LOADER(LLAMA4,                llama::v4, 1);
+}

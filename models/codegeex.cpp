@@ -1,4 +1,6 @@
-namespace v2
+#include "chatglm.h"
+
+namespace chatllm::codegeex::v2
 {
 struct Config : public glm::v2::Config
 {
@@ -49,7 +51,7 @@ void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids)
 
 }
 
-namespace v4
+namespace chatllm::codegeex::v4
 {
 typedef glm::v4::Config Config;
 
@@ -92,4 +94,10 @@ public:
     // which shall be handled by, such as Python bindings
     ChunkInterceptor *get_interceptor(void) override { return nullptr; }
 };
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(CODEGEEX2,             codegeex::v2, 1);
+    REGISTER_MODEL_LOADER(CODEGEEX4,             codegeex::v4, 1);
 }

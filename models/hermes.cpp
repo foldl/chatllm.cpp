@@ -1,4 +1,6 @@
-namespace _mistral
+#include "mistral.h"
+
+namespace chatllm::hermes::_mistral
 {
     typedef mistral::mistral2::Config Config;
 
@@ -116,4 +118,6 @@ namespace _mistral
 
         ChunkInterceptor *get_interceptor(void) override { return nullptr; }
     };
+
+    REGISTER_MODEL_LOADER(DEEPHERMES3_MISTRAL,   hermes::_mistral, 1);
 }

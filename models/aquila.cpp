@@ -1,4 +1,6 @@
-namespace v2
+#include "llama.h"
+
+namespace chatllm::aquila::v2
 {
     struct Config : public BaseConfig
     {
@@ -205,4 +207,6 @@ namespace v2
             }
         }
     };
+
+    REGISTER_MODEL_LOADER(AQUILA2,               aquila::v2, 1);
 }

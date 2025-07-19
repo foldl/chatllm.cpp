@@ -1,4 +1,6 @@
-namespace _7b
+#include "llama.h"
+
+namespace chatllm::baichuan::_7b
 {
     struct Config : public llama::v2::Config
     {
@@ -91,7 +93,7 @@ namespace _7b
     }
 }
 
-namespace larger
+namespace chatllm::baichuan::larger
 {
     typedef _7b::Config Config;
     typedef _7b::Tokenizer Tokenizer;
@@ -111,7 +113,7 @@ namespace larger
     };
 }
 
-namespace m1
+namespace chatllm::baichuan::m1
 {
     struct Config : public BaseConfig
     {
@@ -418,4 +420,11 @@ namespace m1
     public:
         BaseConfig config;
     };
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(BAICHUANLLAMA,         baichuan::_7b, 1);
+    REGISTER_MODEL_LOADER(BAICHUAN,              baichuan::larger, 1);
+    REGISTER_MODEL_LOADER(BAICHUAN_M1,           baichuan::m1, 1);
 }

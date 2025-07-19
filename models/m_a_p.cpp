@@ -1,4 +1,6 @@
-namespace neo
+#include "yi.h"
+
+namespace chatllm::m_a_p::neo
 {
     typedef yi::Config Config;
 
@@ -67,4 +69,6 @@ namespace neo
             : yi::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_MAP_NEO)
         {}
     };
+
+    REGISTER_MODEL_LOADER(MAP_NEO,               m_a_p::neo, 1);
 }

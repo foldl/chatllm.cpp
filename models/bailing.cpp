@@ -1,4 +1,6 @@
-namespace moe
+#include "deepseek.h"
+
+namespace chatllm::bailing::moe
 {
     struct Config : public deepseek::v1_moe::Config
     {
@@ -78,4 +80,6 @@ namespace moe
             : deepseek::v1_moe::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK, EXPERTS_PER_TOK>(config, runtime_config, MODEL_TYPE_BAILINGMOE, config.head_dim)
         {}
     };
+
+    REGISTER_MODEL_LOADER(BAILINGMOE,            bailing::moe, 1);
 }

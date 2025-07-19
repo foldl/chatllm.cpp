@@ -1,25 +1,12 @@
-namespace embedding
+#include "bce.h"
+
+namespace chatllm::bce::embedding
 {
-    struct Config : public BaseConfig
+    Tokenizer::Tokenizer(const Config &config)
+        : BaseTokenizer::BaseTokenizer(config, nullptr)
     {
-    };
-
-    class Tokenizer : public BaseTokenizer
-    {
-    public:
-        Tokenizer(const Config &config)
-            : BaseTokenizer::BaseTokenizer(config, nullptr)
-        {
-            sys_prompt = "";
-        }
-
-        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
-
-        void encode(const std::string &text, std::vector<int> &ids) const override;
-
-    protected:
-        void encode(const std::string &text, std::vector<int> &ids, bool add_bos, bool add_eos, int max_length) const;
-    };
+        sys_prompt = "";
+    }
 
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
@@ -71,136 +58,112 @@ namespace embedding
         });
     }
 
-    class ConditionalGeneration : public BaseModelForConditionalGeneration
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : BaseModelForConditionalGeneration(type, config, runtime_config),
+            config(config)
     {
-    public:
-        typedef EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, BCEFinalNorm, int, int, int, int, int> ModelClass;
-    public:
-        ConditionalGeneration() = default;
+        const size_t tensor_ovhd = ggml_tensor_overhead();
+        const size_t num_tensors = 5 + config.num_hidden_layers * 19;
+        const size_t ctx_size = num_tensors * tensor_ovhd;
+        w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+        w_ctx_.dtype = config.dtype;
 
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
-            : BaseModelForConditionalGeneration(type, config, runtime_config),
-              config(config)
-        {
-            const size_t tensor_ovhd = ggml_tensor_overhead();
-            const size_t num_tensors = 5 + config.num_hidden_layers * 19;
-            const size_t ctx_size = num_tensors * tensor_ovhd;
-            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
-            w_ctx_.dtype = config.dtype;
+        transformer = new ModelClass(&w_ctx_, config,
+                                    config.hidden_size, config.num_attention_heads,
+                                    config.intermediate_size, config.num_attention_heads, config.max_length);
+    }
 
-            transformer = new ModelClass(&w_ctx_, config,
-                                        config.hidden_size, config.num_attention_heads,
-                                        config.intermediate_size, config.num_attention_heads, config.max_length);
-        }
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : ConditionalGeneration(config, runtime_config, MODEL_TYPE_BCE_Embedding)
+    {}
 
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-            : ConditionalGeneration(config, runtime_config, MODEL_TYPE_BCE_Embedding)
-        {}
+    void ConditionalGeneration::load(ModelLoader &loader)
+    {
+        fix_tensor_names(loader);
 
-        void load(ModelLoader &loader) override
-        {
-            fix_tensor_names(loader);
+        BaseModelForConditionalGeneration::load(loader);
 
-            BaseModelForConditionalGeneration::load(loader);
+        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
+            << "corrupted model weights";
+    }
 
-            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
-                << "corrupted model weights";
-        }
-
-        int get_text_embedding_dim(void) const override
-        {
-            return config.hidden_size;
-        }
-
-    public:
-        Config config;
-    };
+    int ConditionalGeneration::get_text_embedding_dim(void) const
+    {
+        return config.hidden_size;
+    }
 }
 
-namespace ranker
+namespace chatllm::bce::ranker
 {
-    struct Config : public embedding::Config
+    Tokenizer::Tokenizer(const Config &config)
+        : embedding::Tokenizer(config)
     {
-    };
+    }
 
-    class Tokenizer : public embedding::Tokenizer
+    void Tokenizer::encode_qa(const std::string &q, const std::string &a, std::vector<int> &ids) const
     {
-    public:
-        Tokenizer(const Config &config)
-            : embedding::Tokenizer(config)
+        const int max_length = this->max_length - 2;
+
+        std::vector<int> ids_q;
+        std::vector<int> ids_a;
+        BaseTokenizer::encode(q, ids_q);
+        BaseTokenizer::encode(a, ids_a);
+
+        int total = (int)ids_q.size() + (int)ids_a.size();
+
+        // this is bad
+        if (total > max_length - 4)
         {
+            int remain = max_length - 4 - (int)ids_q.size();
+            CHATLLM_CHECK(remain > 0) << "query is TOOOO long.";
+
+            ids_a.resize(remain);
         }
 
-        void encode_qa(const std::string &q, const std::string &a, std::vector<int> &ids) const override
-        {
-            const int max_length = this->max_length - 2;
+        ids.push_back(bos_token_id);
+        ids.insert(std::end(ids), std::begin(ids_q), std::end(ids_q));
+        ids.push_back(eos_token_id);
 
-            std::vector<int> ids_q;
-            std::vector<int> ids_a;
-            BaseTokenizer::encode(q, ids_q);
-            BaseTokenizer::encode(a, ids_a);
+        ids.push_back(eos_token_id);
+        ids.insert(std::end(ids), std::begin(ids_a), std::end(ids_a));
+        ids.push_back(eos_token_id);
+    }
 
-            int total = (int)ids_q.size() + (int)ids_a.size();
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : ConditionalGeneration(config, runtime_config, MODEL_TYPE_BCE_ReRanker)
+    {}
 
-            // this is bad
-            if (total > max_length - 4)
-            {
-                int remain = max_length - 4 - (int)ids_q.size();
-                CHATLLM_CHECK(remain > 0) << "query is TOOOO long.";
-
-                ids_a.resize(remain);
-            }
-
-            ids.push_back(bos_token_id);
-            ids.insert(std::end(ids), std::begin(ids_q), std::end(ids_q));
-            ids.push_back(eos_token_id);
-
-            ids.push_back(eos_token_id);
-            ids.insert(std::end(ids), std::begin(ids_a), std::end(ids_a));
-            ids.push_back(eos_token_id);
-        }
-    };
-
-    class ConditionalGeneration : public BaseModelForConditionalGeneration
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : BaseModelForConditionalGeneration(type, config, runtime_config),
+            config(config)
     {
-    public:
-        typedef EmbeddingModel<Config, RobertaEmbedding, RobertaBlock, RobertaClassificationHead, int, int, int, int, int> ModelClass;
-    public:
-        ConditionalGeneration() = default;
+        const size_t tensor_ovhd = ggml_tensor_overhead();
+        const size_t num_tensors = 9 + config.num_hidden_layers * 19;
+        const size_t ctx_size = num_tensors * tensor_ovhd;
+        w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+        w_ctx_.dtype = config.dtype;
 
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-            : ConditionalGeneration(config, runtime_config, MODEL_TYPE_BCE_ReRanker)
-        {}
+        transformer = new ModelClass(&w_ctx_, config,
+                                    config.hidden_size, config.num_attention_heads,
+                                    config.intermediate_size, config.num_attention_heads, config.max_length);
+    }
 
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
-            : BaseModelForConditionalGeneration(type, config, runtime_config),
-              config(config)
-        {
-            const size_t tensor_ovhd = ggml_tensor_overhead();
-            const size_t num_tensors = 9 + config.num_hidden_layers * 19;
-            const size_t ctx_size = num_tensors * tensor_ovhd;
-            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
-            w_ctx_.dtype = config.dtype;
+    void ConditionalGeneration::load(ModelLoader &loader)
+    {
+        embedding::fix_tensor_names(loader);
+        loader.add_tensor_name_translations({
+            {"model.norm.",           "classifier."},
+        });
 
-            transformer = new ModelClass(&w_ctx_, config,
-                                        config.hidden_size, config.num_attention_heads,
-                                        config.intermediate_size, config.num_attention_heads, config.max_length);
-        }
+        BaseModelForConditionalGeneration::load(loader);
 
-        void load(ModelLoader &loader) override
-        {
-            embedding::fix_tensor_names(loader);
-            loader.add_tensor_name_translations({
-                {"model.norm.",           "classifier."},
-            });
+        CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
+            << "corrupted model weights";
+    }
+}
 
-            BaseModelForConditionalGeneration::load(loader);
-
-            CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
-                << "corrupted model weights";
-        }
-
-    public:
-        Config config;
-    };
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(BCE_Embedding,         bce::embedding, 1);
+    REGISTER_MODEL_LOADER(BCE_ReRanker,          bce::ranker, 1);
 }

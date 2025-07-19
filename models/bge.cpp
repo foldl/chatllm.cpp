@@ -1,4 +1,6 @@
-namespace embedding
+#include "bce.h"
+
+namespace chatllm::bge::embedding
 {
     typedef bce::embedding::Config Config;
 
@@ -18,7 +20,7 @@ namespace embedding
     };
 }
 
-namespace ranker
+namespace chatllm::bge::ranker
 {
     typedef bce::ranker::Config Config;
 
@@ -36,4 +38,10 @@ namespace ranker
 
 
     };
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(BGE_M3,                bge::embedding, 1);
+    REGISTER_MODEL_LOADER(BGE_ReRanker_M3,       bge::ranker, 1);
 }

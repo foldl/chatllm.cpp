@@ -1,4 +1,7 @@
-namespace dense
+#include "llama.h"
+#include "deepseek.h"
+
+namespace chatllm::xverse::dense
 {
 typedef llama::v2::Config Config;
 
@@ -102,7 +105,7 @@ void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids)
 }
 }
 
-namespace moe
+namespace chatllm::xverse::moe
 {
     typedef deepseek::v1_moe::Config Config;
 
@@ -157,4 +160,10 @@ namespace moe
     typedef  Tokenizer;
 
     typedef deepseek::v1_moe::ConditionalGeneration ConditionalGeneration;
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(XVERSEMOE,             xverse::moe, 1);
+    REGISTER_MODEL_LOADER(XVERSE,                xverse::dense, 1);
 }

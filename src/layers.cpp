@@ -98,6 +98,12 @@ namespace chatllm
         return ggml_row_size(type, ne0);
     }
 
+    int64_t ggml::align_nelements(ggml::type type, int64_t ne0)
+    {
+        CHATLLM_CHECK(!is_quantized(type));
+        return GGML_PAD(row_size(type, ne0),  GGML_MEM_ALIGN) / element_size(type);
+    }
+
     bool ggml::is_quantized(const ggml::tensor *tensor)
     {
         return ggml::is_quantized(ggml::type_of(tensor));
@@ -267,7 +273,12 @@ namespace chatllm
 
     size_t ggml::element_size(const ggml::tensor * tensor)
     {
-        return ggml_element_size(tensor);
+        return element_size(type_of(tensor));
+    }
+
+    size_t ggml::element_size(ggml::type type)
+    {
+        return ggml_type_size(type);
     }
 
     size_t ggml::nbytes(const ggml::tensor * tensor)
@@ -525,6 +536,31 @@ namespace chatllm
         ggml::tensor *tensor = ggml_reshape_4d(ctx->get_ctx(), a, ne0, ne1, ne2, ne3);
         ctx->cb_op_tensor(tensor);
         return tensor;
+    }
+
+    ggml::tensor *ggml::reshape(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
+    {
+        int64_t ne[GGML_MAX_DIMS] = { ne0, ne1, ne2, ne3 };
+        CHATLLM_CHECK(GGML_MAX_DIMS == 4);
+
+        int neg_item = -1;
+        int64_t n = 1;
+        for (int i = 0; i < GGML_MAX_DIMS; i++)
+        {
+            if (ne[i] >= 1)
+                n *= ne[i];
+            else
+            {
+                CHATLLM_CHECK(neg_item < 0);
+                neg_item = i;
+            }
+        }
+
+        if (neg_item >= 0)
+        {
+            ne[neg_item] = ggml::nelements(a) / n;
+        }
+        return ggml::reshape_4d(ctx, a, ne[0], ne[1], ne[2], ne[3]);
     }
 
     ggml::tensor *ggml::repeat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b)
@@ -1097,6 +1133,28 @@ namespace chatllm
         }
     }
 
+    ConvBase::ConvBase(InitContext *ctx, int64_t w_ne0, int64_t w_ne1, int64_t w_ne2, int64_t w_ne3,
+            int64_t bias_dim)
+        : weight(ggml::new_tensor_4d(ctx, ggml::type_fallback(ctx->dtype, w_ne0), w_ne0, w_ne1, w_ne2, w_ne3)),
+          bias(bias_dim > 0 ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, bias_dim) : nullptr)
+    {}
+
+    int64_t ConvBase::get_param_num(bool effective_only) const
+    {
+        int64_t total = ggml::nelements(weight);
+        if (bias)
+            total += ggml::nelements(bias);
+        return total;
+    }
+
+    void ConvBase::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        loader->read_tensor(path + "weight", weight);
+        if (bias)
+            loader->read_tensor(path + "bias", bias);
+    }
+
     Conv1D::Conv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
         int dilation, int groups, bool bias)
       : Conv1D(ctx, in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias ? out_channels : 0)
@@ -1104,8 +1162,7 @@ namespace chatllm
 
     Conv1D::Conv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
         int dilation, int groups, int bias_dim)
-     : weight(ggml::new_tensor_3d(ctx, ggml::type_fallback(ctx->dtype, kernel_size), kernel_size, in_channels / groups, out_channels)),
-       bias(bias_dim > 0 ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, bias_dim) : nullptr),
+     : ConvBase(ctx, kernel_size, in_channels / groups, out_channels, 1, bias_dim),
        in_channels(in_channels),
        out_channels(out_channels),
        kernel_size(kernel_size),
@@ -1141,22 +1198,6 @@ namespace chatllm
         return output;
     }
 
-    int64_t Conv1D::get_param_num(bool effective_only) const
-    {
-        int64_t total = ggml::nelements(weight);
-        if (bias)
-            total += ggml::nelements(bias);
-        return total;
-    }
-
-    void Conv1D::load(const std::string &path, TensorLoader *loader)
-    {
-        Block::load(path, loader);
-        loader->read_tensor(path + "weight", weight);
-        if (bias)
-            loader->read_tensor(path + "bias", bias);
-    }
-
     Conv2D::Conv2D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
         int dilation, int groups, bool bias)
       : Conv2D(ctx, in_channels, out_channels, kernel_size, kernel_size, stride, stride, padding, padding, dilation, dilation,
@@ -1168,8 +1209,7 @@ namespace chatllm
                int padding0, int padding1,
                int dilation0, int dilation1,
                int groups, int bias_dim)
-     : weight(ggml::new_tensor_4d(ctx, ggml::type_fallback(ctx->dtype, kernel_size0), kernel_size0, kernel_size1, in_channels / groups, out_channels)),
-       bias(bias_dim > 0 ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, bias_dim) : nullptr),
+     : ConvBase(ctx, kernel_size0, kernel_size1, in_channels / groups, out_channels, bias_dim),
        in_channels(in_channels),
        out_channels(out_channels),
        kernel_size {kernel_size0, kernel_size1},
@@ -1205,20 +1245,27 @@ namespace chatllm
         return output;
     }
 
-    int64_t Conv2D::get_param_num(bool effective_only) const
-    {
-        int64_t total = ggml::nelements(weight);
-        if (bias)
-            total += ggml::nelements(bias);
-        return total;
-    }
+    Conv3D::Conv3D(InitContext *ctx, int in_channels, int out_channels,
+               int kernel_size0, int kernel_size1, int kernel_size2,
+               int stride0, int stride1, int stride2,
+               int padding0, int padding1, int padding2,
+               int dilation0, int dilation1, int dilation2,
+               int groups, bool bias)
+       :
+       ConvBase(ctx, kernel_size0 * kernel_size1 * kernel_size2 * in_channels, out_channels, 1, 1, bias ? out_channels : 0),
+       in_channels(in_channels),
+       out_channels(out_channels),
+       kernel_size {kernel_size0, kernel_size1, kernel_size2},
+       stride {stride0, stride1, stride2},
+       padding {padding0, padding1, padding2},
+       dilation {dilation0, dilation1, dilation2},
+       groups(groups)
+    {}
 
-    void Conv2D::load(const std::string &path, TensorLoader *loader)
+    ggml::tensor *Conv3D::forward(ComputeContext *ctx, ggml::tensor *input)
     {
-        Block::load(path, loader);
-        loader->read_tensor(path + "weight", weight);
-        if (bias)
-            loader->read_tensor(path + "bias", bias);
+        // TODO:
+        return nullptr;
     }
 
     ConvTransposed1D::ConvTransposed1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,

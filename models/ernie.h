@@ -56,3 +56,9 @@ namespace chatllm::ernie::moe
         void load(ModelLoader &loader);
     };
 }
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(ERNIE_DENSE,           ernie::dense, 1);
+    REGISTER_MODEL_LOADER(ERNIE_MOE,             ernie::moe, 1);
+}

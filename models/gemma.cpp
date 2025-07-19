@@ -1,4 +1,10 @@
-namespace v1
+#pragma once
+
+#include "../src/models.h"
+#include "../src/models_priv.h"
+#include "../src/vision_process.h"
+
+namespace chatllm::gemma::v1
 {
 struct Config : public BaseConfig
 {
@@ -167,7 +173,7 @@ void ChatHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &id
 }
 }
 
-namespace v2
+namespace chatllm::gemma::v2
 {
 struct Config : public BaseConfig
 {
@@ -346,7 +352,7 @@ public:
 };
 }
 
-namespace siglip
+namespace chatllm::gemma::siglip
 {
 struct Config
 {
@@ -633,7 +639,7 @@ protected:
         ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
         ggml::tensor *media_emb = ggml::new_tensor_3d(&ctx, ggml::type::GGML_TYPE_F32, vis_config.image_size, vis_config.image_size, 3);
 
-        dbg_ctx = &ctx;
+        set_dbg_ctx(&ctx);
 
         auto r = vis_model->forward(&ctx, media_emb);
 
@@ -680,7 +686,7 @@ public:
 
 }
 
-namespace v3
+namespace chatllm::gemma::v3
 {
 struct Config : public BaseConfig
 {
@@ -1008,4 +1014,12 @@ void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::ve
     tok->encode("", ids, false, true);
 }
 
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(GEMMA,                 gemma::v1, 1);
+    REGISTER_MODEL_LOADER(GEMMA2,                gemma::v2, 2);
+    REGISTER_MODEL_LOADER(GEMMA3,                gemma::v3, 1);
+    REGISTER_MODEL_LOADER(GEMMA3Vis,             gemma::v3, 1);
 }

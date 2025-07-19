@@ -1,6 +1,10 @@
-namespace v2
-{
+#pragma once
 
+#include "../src/models.h"
+#include "../src/models_priv.h"
+
+namespace chatllm::telechat::v2
+{
     struct Config : public BaseConfig
     {
         int num_key_value_heads;
@@ -206,4 +210,6 @@ namespace v2
 
         ids.push_back(tok->_bot_token_id);
     }
+
+    REGISTER_MODEL_LOADER(TELECHAT2,             telechat::v2, 1);
 }

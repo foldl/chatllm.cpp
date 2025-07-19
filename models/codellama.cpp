@@ -1,29 +1,19 @@
-struct Config : public llama::v2::Config
-{
-    float rope_theta;
-};
+#include "codellama.h"
 
-class Tokenizer : public llama::v2::Tokenizer
+namespace chatllm::codellama
 {
-public:
-    Tokenizer(const Config &config)
+    Tokenizer::Tokenizer(const Config &config)
         : llama::v2::Tokenizer::Tokenizer(config)
     {
         sys_prompt = "";
     }
-};
 
-class ConditionalGeneration : public llama::v2::ConditionalGeneration
-{
-public:
-    ConditionalGeneration() = default;
-
-    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
         : ConditionalGeneration(config, runtime_config, MODEL_TYPE_CODELLAMA)
     {
     }
 
-    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
         : llama::v2::ConditionalGeneration(config, runtime_config, type)
     {
         auto transformer = Base::get_typed_transformer<ModelClass>();
@@ -33,4 +23,6 @@ public:
             attention.freq_base = config.rope_theta;
         }
     }
-};
+
+    REGISTER_MODEL_LOADER(CODELLAMA, codellama, 1);
+}

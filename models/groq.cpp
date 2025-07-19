@@ -1,105 +1,112 @@
-typedef llama::v3::Config Config;
+#include "llama.h"
 
-class ChatHistoryEncoder : public llama::v3::ChatHistoryEncoder
+namespace chatllm::groq
 {
-public:
-    void append_tool(int round_idx, const std::string &content, std::vector<int> &ids) const override;
-};
+    typedef llama::v3::Config Config;
 
-static class ChatHistoryEncoder _chat_encoder;
-
-class Tokenizer : public llama::v3::Tokenizer
-{
-public:
-    Tokenizer(const Config &config)
-        : llama::v3::Tokenizer(config, &_chat_encoder)
-    {}
-
-    size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+    class ChatHistoryEncoder : public llama::v3::ChatHistoryEncoder
     {
-        size_t size = llama::v3::Tokenizer::load(buffer, n_vocab);
+    public:
+        void append_tool(int round_idx, const std::string &content, std::vector<int> &ids) const override;
+    };
 
-        tool_call_start_token_id            = tp->PieceToId("<tool_call>");
-        tool_call_end_token_id              = tp->PieceToId("</tool_call>");
-        tools_start_token_id                = tp->PieceToId("<tools>");
-        tools_end_token_id                  = tp->PieceToId("</tools>");
-        tool_response_start_token_id        = tp->PieceToId("<tool_response>");
-        tool_response_end_token_id          = tp->PieceToId("</tool_response>");
+    static class ChatHistoryEncoder _chat_encoder;
 
-        tp->EnableReturnSpecialToken(true);
+    class Tokenizer : public llama::v3::Tokenizer
+    {
+    public:
+        Tokenizer(const Config &config)
+            : llama::v3::Tokenizer(config, &_chat_encoder)
+        {}
 
-        return size;
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            size_t size = llama::v3::Tokenizer::load(buffer, n_vocab);
+
+            tool_call_start_token_id            = tp->PieceToId("<tool_call>");
+            tool_call_end_token_id              = tp->PieceToId("</tool_call>");
+            tools_start_token_id                = tp->PieceToId("<tools>");
+            tools_end_token_id                  = tp->PieceToId("</tools>");
+            tool_response_start_token_id        = tp->PieceToId("<tool_response>");
+            tool_response_end_token_id          = tp->PieceToId("</tool_response>");
+
+            tp->EnableReturnSpecialToken(true);
+
+            return size;
+        }
+
+    public:
+        int tool_call_start_token_id;
+        int tool_call_end_token_id;
+        int tools_start_token_id;
+        int tools_end_token_id;
+        int tool_response_start_token_id;
+        int tool_response_end_token_id;
+    };
+
+    void ChatHistoryEncoder::append_tool(int round_idx, const std::string &content, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::ostringstream oss;
+
+        tok->encode_header("tool", ids);
+        ids.push_back(tok->tool_response_start_token_id);
+        tok->encode_content(content, ids);
+        ids.push_back(tok->tool_response_end_token_id);
     }
 
-public:
-    int tool_call_start_token_id;
-    int tool_call_end_token_id;
-    int tools_start_token_id;
-    int tools_end_token_id;
-    int tool_response_start_token_id;
-    int tool_response_end_token_id;
-};
-
-void ChatHistoryEncoder::append_tool(int round_idx, const std::string &content, std::vector<int> &ids) const
-{
-    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-    std::ostringstream oss;
-
-    tok->encode_header("tool", ids);
-    ids.push_back(tok->tool_response_start_token_id);
-    tok->encode_content(content, ids);
-    ids.push_back(tok->tool_response_end_token_id);
-}
-
-class ToolCallingInterceptor : public ChunkInterceptor
-{
-public:
-    ToolCallingInterceptor() : ChunkInterceptor(), found_tool_call(false)
-    {}
-
-    void put_chunk(bool first, const std::string &chunk) override
+    class ToolCallingInterceptor : public ChunkInterceptor
     {
-        if (!found_tool_call)
+    public:
+        ToolCallingInterceptor() : ChunkInterceptor(), found_tool_call(false)
+        {}
+
+        void put_chunk(bool first, const std::string &chunk) override
         {
-            if (chunk == "<tool_call>")
+            if (!found_tool_call)
             {
-                found_tool_call = true;
+                if (chunk == "<tool_call>")
+                {
+                    found_tool_call = true;
+                }
+                else
+                    next->put_chunk(first, chunk);
             }
             else
-                next->put_chunk(first, chunk);
+            {
+                if (chunk == "</tool_call>")
+                    found_tool_call = false;
+                else
+                    oss << chunk;
+            }
         }
-        else
+
+        void end() override
         {
-            if (chunk == "</tool_call>")
-                found_tool_call = false;
-            else
-                oss << chunk;
+            found_tool_call = false;
+            auto s = oss.str();
+            oss.str("");
+            if (s.size() > 0)
+                streamer->putln(s.c_str(), BaseStreamer::TextType::TOOL_CALLING);
+
+            ChunkInterceptor::end();
         }
-    }
+    protected:
+        std::ostringstream oss;
+        bool found_tool_call;
+    };
 
-    void end() override
+    static class ToolCallingInterceptor interceptor;
+
+    class ConditionalGeneration : public llama::v3::ConditionalGeneration
     {
-        found_tool_call = false;
-        auto s = oss.str();
-        oss.str("");
-        if (s.size() > 0)
-            streamer->putln(s.c_str(), BaseStreamer::TextType::TOOL_CALLING);
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : llama::v3::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_LLAMA3_GROQ_TOOL)
+        {}
 
-        ChunkInterceptor::end();
-    }
-protected:
-    std::ostringstream oss;
-    bool found_tool_call;
-};
+        ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
+    };
 
-static class ToolCallingInterceptor interceptor;
-
-class ConditionalGeneration : public llama::v3::ConditionalGeneration
-{
-public:
-    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-        : llama::v3::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_LLAMA3_GROQ_TOOL)
-    {}
-
-    ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
-};
+    REGISTER_MODEL_LOADER(LLAMA3_GROQ_TOOL,      groq, 1);
+}

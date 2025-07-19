@@ -24,6 +24,7 @@ namespace chatllm
         void change_type(ggml::tensor  *tensor, ggml::type type);
 
         size_t element_size(const ggml::tensor *tensor);
+        size_t element_size(ggml::type type);
         size_t nbytes(const ggml::tensor *tensor);
         size_t tensor_overhead(void);
         int64_t nrows(const ggml::tensor *tensor);
@@ -32,6 +33,7 @@ namespace chatllm
         int64_t block_size(ggml::type type);
         int64_t row_size(const ggml::tensor *tensor);
         int64_t row_size(ggml::type type, int64_t ne0);
+        int64_t align_nelements(ggml::type type, int64_t ne0);
 
         int n_dims(const ggml::tensor * tensor);
         int get_dim(const ggml::tensor * tensor, int dim);

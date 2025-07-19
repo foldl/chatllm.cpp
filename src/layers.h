@@ -107,6 +107,7 @@ namespace chatllm
         ggml::tensor *reshape_2d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1);
         ggml::tensor *reshape_3d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2);
         ggml::tensor *reshape_4d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
+        ggml::tensor *reshape(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);
 
         ggml::tensor *repeat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
         ggml::tensor *repeat_interleave(ComputeContext *ctx, ggml::tensor *a, int repeat, int dim = 0);
@@ -326,23 +327,28 @@ namespace chatllm
         std::string path;
     };
 
-    class Conv1D: public Block
+    class ConvBase: public Block
+    {
+    public:
+        ConvBase(InitContext *ctx, int64_t w_ne0, int64_t w_ne1, int64_t w_ne2, int64_t w_ne3,
+            int64_t bias_dim);
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    protected:
+        ggml::tensor *weight;
+        ggml::tensor *bias;
+    };
+
+    class Conv1D: public ConvBase
     {
     public:
         Conv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride = 1, int padding = 0,
                int dilation = 1, int groups = 1, bool bias = true);
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
-
-        int64_t get_param_num(bool effective_only) const override;
-
-        void load(const std::string &path, TensorLoader *loader) override;
     protected:
         Conv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
                int dilation, int groups, int bias_dim);
-    public:
-        ggml::tensor *weight;
-        ggml::tensor *bias;
     protected:
         const int in_channels;
         const int out_channels;
@@ -368,17 +374,13 @@ namespace chatllm
         const int output_padding;
     };
 
-    class Conv2D: public Block
+    class Conv2D: public ConvBase
     {
     public:
         Conv2D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding = 0,
                int dilation = 1, int groups = 1, bool bias = true);
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
-
-        int64_t get_param_num(bool effective_only) const override;
-
-        void load(const std::string &path, TensorLoader *loader) override;
     protected:
         Conv2D(InitContext *ctx, int in_channels, int out_channels,
                int kernel_size0, int kernel_size1,
@@ -386,9 +388,6 @@ namespace chatllm
                int padding0, int padding1,
                int dilation0, int dilation1,
                int groups, int bias_dim);
-    public:
-        ggml::tensor *weight;
-        ggml::tensor *bias;
     protected:
         const int in_channels;
         const int out_channels;
@@ -396,6 +395,29 @@ namespace chatllm
         const int stride[2];
         const int padding[2];
         const int dilation[2];
+        const int groups;
+    };
+
+    class Conv3D: public ConvBase
+    {
+    public:
+        Conv3D(InitContext *ctx, int in_channels, int out_channels,
+               int kernel_size0, int kernel_size1, int kernel_size2,
+               int stride0, int stride1, int stride2,
+               int padding0, int padding1, int padding2,
+               int dilation0, int dilation1, int dilation2,
+               int groups, bool bias);
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+    protected:
+
+    protected:
+        const int in_channels;
+        const int out_channels;
+        const int kernel_size[3];
+        const int stride[3];
+        const int padding[3];
+        const int dilation[3];
         const int groups;
     };
 
@@ -681,8 +703,12 @@ namespace chatllm
     public:
         TheMLP() = default;
         TheMLP(InitContext *ctx, int hidden_size, int intermediate_size, ActFunc act, bool bias)
+            : TheMLP(ctx, hidden_size, intermediate_size, hidden_size, act, bias)
+        {}
+
+        TheMLP(InitContext *ctx, int hidden_size, int intermediate_size, int out_size, ActFunc act, bool bias)
             : fc0(ctx, hidden_size, intermediate_size, bias),
-              fc1(ctx, intermediate_size, hidden_size, bias),
+              fc1(ctx, intermediate_size, out_size, bias),
               act(act)
         {}
 

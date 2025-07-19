@@ -1,4 +1,9 @@
-namespace pro
+#pragma once
+
+#include "../src/models.h"
+#include "../src/models_priv.h"
+
+namespace chatllm::solar::pro
 {
     const int MAX_LEN = 20;
 
@@ -261,4 +266,6 @@ namespace pro
     protected:
         Config config;
     };
+
+    REGISTER_MODEL_LOADER(SOLARPRO,              solar::pro, 1);
 }

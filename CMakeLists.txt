@@ -55,13 +55,66 @@ set(core_files src/backend.cpp
     src/unicode-data.cpp
     src/vision_process.cpp
     src/audio_process.cpp
+    models/adept.cpp
+    models/allenai.cpp
+    models/alphageo.cpp
+    models/apriel.cpp
+    models/aquila.cpp
+    models/baichuan.cpp
+    models/bailing.cpp
+    models/bce.cpp
+    models/bge.cpp
+    models/bluelm.cpp
+    models/chatglm.cpp
+    models/characterglm.cpp
+    models/codegeex.cpp
+    models/codefuse.cpp
+    models/codellama.cpp
+    models/cohere.cpp
+    models/decilm.cpp
+    models/deepseek.cpp
+    models/dolphinphi2.cpp
     models/ernie.cpp
     models/exaone.cpp
+    models/falcon.cpp
+    models/gemma.cpp
+    models/gigachat.cpp
+    models/granite.cpp
+    models/groq.cpp
+    models/grok.cpp
+    models/hermes.cpp
     models/hunyuan.cpp
+    models/index.cpp
+    models/instella.cpp
+    models/internlm.cpp
+    models/jina.cpp
     models/llama.cpp
+    models/m_a_p.cpp
+    models/megrez.cpp
+    models/minicpm.cpp
+    models/mistral.cpp
+    models/moonshot.cpp
+    models/neuralbeagle.cpp
+    models/numinamath.cpp
+    models/orpheus.cpp
+    models/openchat.cpp
+    models/orion.cpp
+    models/oute.cpp
     models/pangu.cpp
+    models/phi.cpp
     models/qwen.cpp
+    models/reka.cpp
     models/smol.cpp
+    models/solar.cpp
+    models/stablelm.cpp
+    models/starcoder.cpp
+    models/starling.cpp
+    models/telechat.cpp
+    models/tigerbot.cpp
+    models/wizard.cpp
+    models/xverse.cpp
+    models/yi.cpp
+    models/zhinao.cpp
     )
 
 add_library(libchatllm SHARED EXCLUDE_FROM_ALL src/main.cpp ${core_files})

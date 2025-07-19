@@ -78,6 +78,13 @@ namespace vision
         ~MaxGridHeight();
     };
 
+    class MinMaxPixels
+    {
+    public:
+        MinMaxPixels(int64_t min_pixels, int64_t max_pixels);
+        ~MinMaxPixels();
+    };
+
     class MaxPatchNum
     {
     public:

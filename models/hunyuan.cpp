@@ -244,3 +244,9 @@ namespace chatllm::hunyuan::moe_v1
         ModelProxy::load(loader);
     }
 }
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(HUNYUAN_DENSE,         hunyuan::dense, 1);
+    REGISTER_MODEL_LOADER(HUNYUAN_MOE_V1,        hunyuan::moe_v1, 1);
+}

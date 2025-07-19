@@ -1,4 +1,9 @@
-namespace v2
+#pragma once
+
+#include "../src/models.h"
+#include "../src/models_priv.h"
+
+namespace chatllm::starcoder::v2
 {
     struct Config : public BaseConfig
     {
@@ -104,4 +109,6 @@ namespace v2
         CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
     }
+
+    REGISTER_MODEL_LOADER(STARCODER2,            starcoder::v2, 1);
 }
