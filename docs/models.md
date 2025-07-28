@@ -245,6 +245,7 @@
 
 * TeleChat (`TeleChat2ForCausalLM`)
     * [x] v2: [3B](https://huggingface.co/Tele-AI/TeleChat2-3B), [7B](https://huggingface.co/Tele-AI/TeleChat2-7B), [115B](https://huggingface.co/Tele-AI/TeleChat2-115B)
+    * [x] v2.5 [35B](https://huggingface.co/Tele-AI/TeleChat2.5-35B/commit/e53676611f3c5072f7696a359132eaf456272151), [115B](https://huggingface.co/Tele-AI/TeleChat2-115B/tree/8be654fe28bfe60fca4cd483297167a6e570f93b)
 
 * XVERSE (`XverseForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/xverse/XVERSE-7B-Chat), [Chat-13B](https://huggingface.co/xverse/XVERSE-13B-Chat), [Chat-65B](https://huggingface.co/xverse/XVERSE-65B-Chat)

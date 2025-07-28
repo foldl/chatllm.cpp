@@ -1824,7 +1824,7 @@ class TeleChat2Converter(BaseConverter):
     def dump_config(f, config, ggml_type):
         assert config.hidden_act is None, 'hidden_act must be None'
         assert not config.tie_word_embeddings, 'tie_word_embeddings must be False'
-        assert config.embed_layernorm is None, 'embed_layernorm must be None'
+        assert (config.embed_layernorm is None) or not config.embed_layernorm, 'embed_layernorm must be None'
         assert not config.apply_residual_connection_post_layernorm, 'apply_residual_connection_post_layernorm must be False'
         assert config.training_seqlen == config.base_seqlen, 'training_seqlen must equal to base_seqlen'
 

@@ -1779,6 +1779,22 @@
             }
         }
     },
+    "telechat2.5": {
+        "brief": "TeleChat2.5 is a large language model trained by the Artificial Intelligence Research Institute of China Telecom.",
+        "default": "35b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "35b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q8": {
+                        "size": 19939670112,
+                        "url": "chatllm_quantized_telechat/telechat2.5-35b-q4_0.bin"
+                    }
+                }
+            }
+        }
+    },
     "alphageometry-lm": {
         "brief": "TeleChat2 is a large language model trained by the Artificial Intelligence Research Institute of China Telecom.",
         "default": "0.2b",
