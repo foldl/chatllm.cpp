@@ -88,6 +88,7 @@ set(core_files src/backend.cpp
     models/instella.cpp
     models/internlm.cpp
     models/jina.cpp
+    models/jiutian.cpp
     models/llama.cpp
     models/m_a_p.cpp
     models/megrez.cpp

@@ -3055,5 +3055,21 @@
                 }
             }
         }
+    },
+    "jiutian-coder": {
+        "brief": "A series of high-performance and energy-efficient code large language models (LLMs) developed by the JiuTian team.",
+        "default": "8b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8317413728,
+                        "url": "chatllm_quantized_jiutian/jt-coder-8b-it.bin"
+                    }
+                }
+            }
+        }
     }
 }

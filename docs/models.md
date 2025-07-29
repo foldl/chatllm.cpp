@@ -92,6 +92,12 @@
     * [x] v2.5: [Chat-1.8B](https://huggingface.co/internlm/internlm2_5-1_8b-chat), [Chat-7B](https://huggingface.co/internlm/internlm2_5-7b-chat), [Chat-7B-1M](https://huggingface.co/internlm/internlm2_5-7b-chat-1m), [Chat-20B](https://huggingface.co/internlm/internlm2_5-20b-chat)
     * [x] v3: [Instruct-8B](https://huggingface.co/internlm/internlm3-8b-instruct)
 
+* Jiutian (`JiutianForCausalLM`)
+    * [x] [Math-8B](https://huggingface.co/JT-LM/JT-Math-8B-Instruct/tree/00a347fdae86ddd9e616aa0771492c6aff735697),
+    [Math-8B-Thinking](https://huggingface.co/JT-LM/JT-Math-8B-Thinking/tree/87d8db3e39c65fa123c59a97266a3ec02ebf6bd6),
+    [Coder-8B-Instruct](https://huggingface.co/JT-LM/JT-Coder-8B-Instruct/tree/9160d51e9acaae266cfef8493ea25d15e7ed6904),
+    [DA-8B](https://huggingface.co/JT-LM/JT-DA-8B/commit/8bd5bb1a76305dcc777786b65c239b362cee808e)
+
 * Ling (`BailingMoeForCausalLM`)
     * [x] [Lite](https://huggingface.co/inclusionAI/Ling-lite/tree/a80ae6c479251f1ae33dda517ab83cdc6a312f99), [Coder-Lite](https://huggingface.co/inclusionAI/Ling-Coder-lite/tree/4a8647acf9d3855d599adaaaf4bf6ca14239d2ab)
 

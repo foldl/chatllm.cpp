@@ -205,6 +205,8 @@ class ModelType(Enum):
 
     Exaone4         = 0x2800
 
+    JiuTian         = 0x2900
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -7171,6 +7173,26 @@ class OuteTTSConverter(BaseConverter):
 
         return weights + dac_weights
 
+
+class JiuTianConverter(BaseConverter):
+    MODEL_TYPE = ModelType.JiuTian
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.qkv_bias
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            1 if config.tie_word_embeddings else 0,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        return QWen2Converter.get_weight_names(config)
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -7758,6 +7780,8 @@ def main():
         ERNIEMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'PanguProMoEForCausalLM':
         PanguMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'JiutianForCausalLM':
+        JiuTianConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

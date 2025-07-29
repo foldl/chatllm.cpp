@@ -1385,7 +1385,7 @@ namespace chatllm
                 n_dims = 2;
 
             CHATLLM_CHECK(ndim == n_dims)
-                << "tensor " << name << " ndim mismatch: expect " << n_dims << " but got " << ndim;
+                << "tensor " << name << " ndim mismatch: expect " << n_dims << " but got " << ndim << ". expected shape: " << shape_to_string(tensor);
 
             if (partial)
             {

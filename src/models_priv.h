@@ -165,6 +165,8 @@ namespace chatllm
 
         MODEL_TYPE_EXAONE4          = 0x2800,
 
+        MODEL_TYPE_JIUTIAN          = 0x2900,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
