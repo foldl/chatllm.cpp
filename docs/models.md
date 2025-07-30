@@ -238,7 +238,8 @@
         [8B](https://huggingface.co/Qwen/Qwen3-8B/tree/2069b3fae1114555f3c020c81410e51fa0f656f2),
         [4B](https://huggingface.co/Qwen/Qwen3-4B/tree/82d62bb073771e7a1ea59435f548908540217d1f),
         [1.7B](https://huggingface.co/Qwen/Qwen3-1.7B/tree/d3e258980a49b060055ea9038dad99d75923f7c4),
-        [0.6B](https://huggingface.co/Qwen/Qwen3-0.6B/tree/6130ef31402718485ca4d80a6234f70d9a4cf362)
+        [0.6B](https://huggingface.co/Qwen/Qwen3-0.6B/tree/6130ef31402718485ca4d80a6234f70d9a4cf362),
+        [30B-A3B-2507](https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-2507/tree/01ee60ece4bb0c7a758003e9f45e4a9059b20594)
     * [x] MiMo: [7B-RL](https://huggingface.co/XiaomiMiMo/MiMo-7B-RL/tree/8c8a4968100fd7a4f0319c54438184bbeb767c82)
     * [x] Confucius3-Math: [14B](https://huggingface.co/netease-youdao/Confucius3-Math/tree/62621490d5dccf5fea997be9df62dd8dc017f777) (`-a DeepSeek-R1-Distill-QWen`)
     * [x] Jan-Nano: [4B](https://huggingface.co/Menlo/Jan-nano/tree/5f4e450c127322db9477400890a0dd951c9f6ab7)
