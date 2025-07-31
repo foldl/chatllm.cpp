@@ -2807,6 +2807,15 @@
                     }
                 }
             },
+            "30b-moe-thinking-2507": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 19089033008,
+                        "url": "chatllm_quantized_qwen3/qwen3-30b-a3b-thinking-2507-q4_1.bin"
+                    }
+                }
+            },
             "32b": {
                 "default": "q4_0",
                 "quantized": {
