@@ -2434,6 +2434,33 @@
         "default": "7b",
         "license": "Tencent License",
         "variants": {
+            "0.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 576757664,
+                        "url": "chatllm_quantized_hunyuan/hunyuan-dense-v1-0.5b.bin"
+                    }
+                }
+            },
+            "1.8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1907337760,
+                        "url": "chatllm_quantized_hunyuan/hunyuan-dense-v1-1.8b.bin"
+                    }
+                }
+            },
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4490205600,
+                        "url": "chatllm_quantized_hunyuan/hunyuan-dense-v1-4b.bin"
+                    }
+                }
+            },
             "7b": {
                 "default": "q8",
                 "quantized": {

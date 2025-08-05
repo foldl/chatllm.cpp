@@ -186,6 +186,7 @@ class ModelType(Enum):
 
     HunYuanDense    = 0x1f00
     HunYuanMoEV1    = 0x1f01
+    HunYuanDenseV1  = 0x1f02
 
     MoonLight       = 0x2000
 
@@ -6789,6 +6790,28 @@ class HunYuanDenseConverter(BaseConverter):
 
         return weight_names
 
+class HunYuanDenseV1Converter(BaseConverter):
+    MODEL_TYPE = ModelType.HunYuanDenseV1
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        if config.attention_head_dim is not None:
+            assert config.head_dim == config.attention_head_dim
+        else:
+            config.attention_head_dim = config.head_dim
+
+        HunYuanDenseConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.head_dim,
+        ]
+        f.write(struct.pack("<i", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = HunYuanDenseConverter.get_weight_names(config)
+        return weight_names
+
 class HunYuanMoEV1Converter(BaseConverter):
     MODEL_TYPE = ModelType.HunYuanMoEV1
 
@@ -7758,6 +7781,10 @@ def main():
             (isinstance(config.num_experts, list) and max(config.num_experts) > 1)):
             raise Exception('HunYuanForCausalLM: only dense model is supported')
         HunYuanDenseConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'HunYuanDenseV1ForCausalLM':
+        assert config.use_mla is None
+        config.use_mla = False
+        HunYuanDenseV1Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'HunYuanMoEV1ForCausalLM':
         HunYuanMoEV1Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InstellaForCausalLM':

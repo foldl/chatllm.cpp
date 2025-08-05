@@ -80,7 +80,11 @@
     * [x] v3.2: [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.2-2b-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.2-8b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.2-8b-instruct/tree/0276d996f60d5eb0b376b6d06622042d4ef3eb4b)
 
 * HunYuan (`HunYuanForCausalLM`)
-    * [x] Dense: [Instruct-7B](https://huggingface.co/tencent/Hunyuan-7B-Instruct)
+    * [x] ~~Dense: [Instruct-7B](https://huggingface.co/tencent/Hunyuan-7B-Instruct)~~ (lost)
+    * [x] Dense: [0.5B-Instruct](https://huggingface.co/tencent/Hunyuan-0.5B-Instruct/tree/9ec1774c379d7dde3f2d7ddd3286cde88949e181),
+    [1.8B-Instruct](https://huggingface.co/tencent/Hunyuan-1.8B-Instruct/tree/21ab9fd367ee99ba8001d34a182252ddb2ed255c),
+    [4B-Instruct](https://huggingface.co/tencent/Hunyuan-4B-Instruct/tree/3a419720cb283ece18dc6baac1b2484418cf525f),
+    [7B-Instruct](https://huggingface.co/tencent/Hunyuan-7B-Instruct/tree/e256110382dc42f4e2f4d97afc9f8bea5a907a4a)
     * [x] MoE: [A13B-Instruct](https://huggingface.co/tencent/Hunyuan-A13B-Instruct/tree/202c9758065873e0ac7c80211e6275593f165442)
 
 * Instella (`InstellaForCausalLM`)

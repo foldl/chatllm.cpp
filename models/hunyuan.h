@@ -43,17 +43,19 @@ namespace chatllm::hunyuan::dense
     class HunyuanBlock : public LMBlock1<RMSNorm, HunyuanSelfAttention, RMSNorm, SiLUMLP>
     {
     public:
-        HunyuanBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int max_length)
-            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length)
+        HunyuanBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
+            : LMBlock1(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
         {}
     };
 
     class ConditionalGeneration : public BaseModelForConditionalGeneration
     {
     public:
-        typedef Model<Config, Embedding, RMSNorm, HunyuanBlock, int, int, int, int, int> ModelClass;
+        typedef Model<Config, Embedding, RMSNorm, HunyuanBlock, int, int, int, int, int, int> ModelClass;
     public:
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_HUNYUAN_DENSE);
+
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int head_dim);
 
         void load(ModelLoader &loader) override;
 
