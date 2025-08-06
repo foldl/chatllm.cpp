@@ -204,7 +204,8 @@
     * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
 
 * Pangu (`PanguProMoEForCausalLM`)
-    * [x] [Pro-MoE](https://gitcode.com/ascend-tribe/pangu-pro-moe-model/tree/15e45a97fa314d86804f93f7faba107b43f8d25c)
+    * [x] MoE: [Pro-MoE](https://gitcode.com/ascend-tribe/pangu-pro-moe-model/tree/15e45a97fa314d86804f93f7faba107b43f8d25c)
+    * [x] Embedded: [7B](https://ai.gitcode.com/ascend-tribe/openpangu-embedded-7b-model/tree/754817a9fc1cc4df2687709b758448f80c2dd64c), [1B](https://ai.gitcode.com/ascend-tribe/openpangu-embedded-1b-model/tree/75dd659167a45d6577555d405edb75e0b88215c2)
 
 * Phi (`PhiForCausalLM`, `Phi3ForCausalLM`)
     * [x] [Phi-2](https://huggingface.co/microsoft/phi-2/tree/eb8bbd1d37d258ea74fb082c53346d33056a83d4)

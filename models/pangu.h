@@ -18,7 +18,7 @@ namespace chatllm::pangu::moe
     class Tokenizer : public BaseTokenizer
     {
     public:
-        Tokenizer(const Config &config);
+        Tokenizer(const BaseConfig &config);
         Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder);
 
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;

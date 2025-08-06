@@ -200,7 +200,8 @@ class ModelType(Enum):
 
     ERNIE_MoE       = 0x2500
 
-    PenguMoE        = 0x2600
+    PanguMoE        = 0x2600
+    PanguEmbedded   = 0x2601
 
     SmolLM3         = 0x2700
 
@@ -4335,7 +4336,7 @@ class QWen2Converter(BaseConverter):
                 f"model.layers.{i}.self_attn.o_proj.weight",
                 f"model.layers.{i}.input_layernorm.weight",
                 f"model.layers.{i}.post_attention_layernorm.weight",
-                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.down _roj.weight",
                 f"model.layers.{i}.mlp.up_proj.weight",
                 f"model.layers.{i}.mlp.gate_proj.weight",
             ]
@@ -4862,7 +4863,7 @@ class QWen2MoEConverter(BaseConverter):
         return weight_names
 
 class PanguMoEConverter(BaseConverter):
-    MODEL_TYPE = ModelType.PenguMoE
+    MODEL_TYPE = ModelType.PanguMoE
 
     @staticmethod
     def dump_config(f, config, ggml_type):
@@ -4919,6 +4920,51 @@ class PanguMoEConverter(BaseConverter):
             "model.norm.weight",
             "lm_head.weight"
         ]
+
+        return weight_names
+
+class PanguEmbeddedConverter(BaseConverter):
+    MODEL_TYPE = ModelType.PanguEmbedded
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            1 if config.tie_word_embeddings else 0,
+            config.rope_theta,
+        ]
+        f.write(struct.pack("iif", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.k_proj.bias",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.bias",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.bias",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.bias",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        if config.tie_word_embeddings:
+            weight_names = weight_names[:-1]
 
         return weight_names
 
@@ -7807,6 +7853,8 @@ def main():
         ERNIEMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'PanguProMoEForCausalLM':
         PanguMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'PanguEmbeddedForCausalLM':
+        PanguEmbeddedConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'JiutianForCausalLM':
         JiuTianConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':

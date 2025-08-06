@@ -161,6 +161,7 @@ namespace chatllm
         MODEL_TYPE_ERNIE_MOE        = 0x2500,
 
         MODEL_TYPE_PANGU_MOE        = 0x2600,
+        MODEL_TYPE_PANGU_EMBEDDED   = 0x2601,
 
         MODEL_TYPE_SMOLLM3          = 0x2700,
 

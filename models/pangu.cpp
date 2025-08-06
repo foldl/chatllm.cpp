@@ -13,7 +13,7 @@ namespace chatllm::pangu::moe
     };
     static ChatHistoryEncoder _chat_encoder;
 
-    Tokenizer::Tokenizer(const Config &config)
+    Tokenizer::Tokenizer(const BaseConfig &config)
         : Tokenizer(config, &_chat_encoder)
     {}
 
@@ -175,4 +175,51 @@ namespace chatllm::pangu::moe
     }
 
     REGISTER_MODEL_LOADER(PANGU_MOE,             pangu::moe, 1);
+}
+
+namespace chatllm::pangu::embedded
+{
+    struct Config : public BaseConfig
+    {
+        int num_key_value_heads;
+        int tie_word_embeddings;
+
+        float rope_theta;
+    };
+
+    typedef moe::Tokenizer Tokenizer;
+
+    class ConditionalGeneration : public BaseModelForConditionalGeneration
+    {
+    public:
+        typedef LMBlock1<RMSNorm, FullBiasedSelfAttention, RMSNorm, SiLUMLP> PanguDenseBlock;
+        typedef Model<Config, Embedding, RMSNorm, PanguDenseBlock, int, int, int, int, int> ModelClass;
+
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : BaseModelForConditionalGeneration(MODEL_TYPE_PANGU_EMBEDDED, config, runtime_config)
+        {
+            const size_t tensor_ovhd = ggml_tensor_overhead();
+            const size_t num_tensors = 3 + config.num_hidden_layers * 16 + (config.tie_word_embeddings ? -1 : 0);
+            const size_t ctx_size = num_tensors * tensor_ovhd;
+
+            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+            w_ctx_.dtype = config.dtype;
+
+            transformer = new ModelClass(&w_ctx_, config,
+                (0 == config.tie_word_embeddings) ? create_embedding<Embedding>(&w_ctx_, config) : nullptr,
+                config.hidden_size, config.num_attention_heads,
+                config.intermediate_size, config.num_key_value_heads,
+                config.max_length);
+
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto &layer = get_typed_transformer<ModelClass>()->layers[i];
+                layer.attention.freq_base = config.rope_theta;
+            }
+
+            w_ctx_.check_used_mem_size(true);
+        }
+    };
+
+    REGISTER_MODEL_LOADER(PANGU_EMBEDDED,             pangu::embedded, 1);
 }

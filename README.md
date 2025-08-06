@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-08-05: Pangu-Embedded
 * 2025-07-29: Jiutian
 * 2025-07-10: SmolLM-3
 * 2025-07-05: Pangu-Pro-MoE
