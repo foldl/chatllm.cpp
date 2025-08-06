@@ -3102,7 +3102,7 @@
         }
     },
     "pangu": {
-        "brief": "Pangu Pro MoE models are released by Huawei.",
+        "brief": "Pangu models are released by Huawei.",
         "default": "a16b",
         "license": "Pangu Model License Agreement",
         "variants": {
@@ -3112,6 +3112,15 @@
                     "q4_0": {
                         "size": 40500401920,
                         "url": "chatllm_quantized_pangu/pangu-pro-moe-a16b-q4_0.bin"
+                    }
+                }
+            },
+            "1b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1230978064,
+                        "url": "chatllm_quantized_pangu/pangu-embedded-1b.bin"
                     }
                 }
             }
