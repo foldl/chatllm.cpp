@@ -246,6 +246,7 @@
         [0.6B](https://huggingface.co/Qwen/Qwen3-0.6B/tree/6130ef31402718485ca4d80a6234f70d9a4cf362),
         [30B-A3B-2507](https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-2507/tree/01ee60ece4bb0c7a758003e9f45e4a9059b20594),
         [30B-A3B-Thinking-2507](https://huggingface.co/Qwen/Qwen3-30B-A3B-Thinking-2507/tree/4a8a1645504d39f8c2b9eacfd6d72dac693d3488),
+        [4B-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/tree/eb25fbe4f35f7147763bc24445679d1c00588d89),
         [4B-Thinking-2507](https://huggingface.co/Qwen/Qwen3-4B-Thinking-2507/tree/768f209d9ea81521153ed38c47d515654e938aea)
     * [x] v3-Coder: [30B-A3B](https://huggingface.co/Qwen/Qwen3-Coder-30B-A3B-Instruct/tree/d4add6db775e2ab1471d0dfcd5cd80cc4c541ad7)
     * [x] MiMo: [7B-RL](https://huggingface.co/XiaomiMiMo/MiMo-7B-RL/tree/8c8a4968100fd7a4f0319c54438184bbeb767c82)

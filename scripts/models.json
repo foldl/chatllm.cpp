@@ -2807,6 +2807,15 @@
                     }
                 }
             },
+            "4b-2507": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4278737776,
+                        "url": "chatllm_quantized_qwen3/qwen3-4b-2507.bin"
+                    }
+                }
+            },
             "8b": {
                 "default": "q4_1",
                 "quantized": {
