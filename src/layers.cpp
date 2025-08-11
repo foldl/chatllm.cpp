@@ -468,6 +468,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::add_id(ComputeContext *ctx, ggml::tensor *as, ggml::tensor *b, ggml::tensor  *ids)
+    {
+        ggml::tensor *tensor = ggml_add_id(ctx->get_ctx(), as, b, ids);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::add_inplace(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b)
     {
         ggml::tensor *tensor = ggml_add_inplace(ctx->get_ctx(), a, b);
@@ -756,6 +763,12 @@ namespace chatllm
         return tensor;
     }
 
+    void ggml::soft_max_attach_sinks(ggml::tensor *soft_max_result, ggml::tensor *sinks)
+    {
+        if (sinks)
+            ggml_soft_max_add_sinks(soft_max_result, sinks);
+    }
+
     ggml::tensor *ggml::sigmoid(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_sigmoid(ctx->get_ctx(), a);
@@ -972,6 +985,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::swiglu_oai(ComputeContext *ctx, ggml::tensor *gate, ggml::tensor *up, float alpha, float limit)
+    {
+        ggml::tensor *tensor = ggml_swiglu_oai(ctx->get_ctx(), gate, up, alpha, limit);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata)
     {
         ggml::tensor *tensor = ggml_map_custom1(ctx->get_ctx(), a, fun, n_tasks, userdata);
@@ -1068,6 +1088,7 @@ namespace chatllm
     int  BlockParams::num_padding_embeddings = 0;
     bool BlockParams::OverrideKProjBiased::active = false;
     bool BlockParams::OverrideKProjBiased::biased = false;
+    int  BlockParams::CoreAttentionUseSinks::size = 0;
 
     BlockParams::OverrideKProjBiased::OverrideKProjBiased(bool biased)
     {
@@ -1082,6 +1103,21 @@ namespace chatllm
     bool BlockParams::OverrideKProjBiased::get(bool biased)
     {
         return OverrideKProjBiased::active ? OverrideKProjBiased::biased : biased;
+    }
+
+    BlockParams::CoreAttentionUseSinks::CoreAttentionUseSinks(int size)
+    {
+        BlockParams::CoreAttentionUseSinks::size = size;
+    }
+
+    BlockParams::CoreAttentionUseSinks::~CoreAttentionUseSinks()
+    {
+        size = 0;
+    }
+
+    int BlockParams::CoreAttentionUseSinks::get()
+    {
+        return size;
     }
 
     ggml::tensor *Sequential::forward(ComputeContext *ctx, ggml::tensor *input)
@@ -1431,7 +1467,10 @@ namespace chatllm
 
     ggml::tensor *MultiLinear::forward(ComputeContext *ctx, ggml::tensor *input, ggml::tensor *selected)
     {
-        return ggml::mul_mat_id(ctx, weight, input, selected);
+        ggml::tensor *r = ggml::mul_mat_id(ctx, weight, input, selected);
+        if (bias)
+            r = ggml::add_id(ctx, r, bias, selected);
+        return r;
     }
 
     ggml::tensor *LayerNorm::forward(ComputeContext *ctx, ggml::tensor *input)
@@ -1718,6 +1757,12 @@ namespace chatllm
         gate_proj.load(path + "gate_proj.", loader);
     }
 
+    void CoreAttention::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        if (sinks) loader->read_tensor(path + "sinks", sinks);
+    }
+
     ggml::tensor *CoreAttention::attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
         ggml::tensor *attn_scores)
     {
@@ -1742,6 +1787,8 @@ namespace chatllm
 
         // attn_probs = soft_max(attn_masked)
         ggml::tensor * attn_probs = ggml::soft_max_inplace(ctx, attn_masked);
+
+        ggml::soft_max_attach_sinks(attn_probs, sinks);
 
         return attn_probs;
     }
@@ -2264,15 +2311,15 @@ namespace chatllm
     }
 
     BaseSparseMLP::BaseSparseMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
-                  ActFunc act, bool gate_use_bias, bool grouped_max, bool router_scale)
+                  ActFunc act, bool gate_score_use_bias, bool grouped_max, bool router_scale, bool experts_use_bias, bool gate_use_bias)
         :
             num_local_experts(num_local_experts), num_experts_per_tok(num_experts_per_tok),
-            gate(ctx, hidden_size, num_local_experts, false),
+            gate(ctx, hidden_size, num_local_experts, gate_use_bias),
             mover(new CPUMover(ctx, ctx->user_options.moe_on_cpu)),
-            experts_gate(ctx, hidden_size, intermediate_size, num_local_experts),
-            experts_down(ctx, intermediate_size, hidden_size, num_local_experts),
-            experts_up  (ctx, hidden_size, intermediate_size, num_local_experts),
-            gate_score_correction_bias(gate_use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, num_local_experts) : nullptr),
+            experts_gate(ctx, hidden_size, intermediate_size, num_local_experts, experts_use_bias),
+            experts_down(ctx, intermediate_size, hidden_size, num_local_experts, experts_use_bias),
+            experts_up  (ctx, hidden_size, intermediate_size, num_local_experts, experts_use_bias),
+            gate_score_correction_bias(gate_score_use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, num_local_experts) : nullptr),
             group_indices(grouped_max ? ggml::new_tensor_2d(ctx, GGML_TYPE_I32, 1, num_experts_per_tok) : nullptr),
             router_scale(router_scale ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, num_local_experts) : nullptr),
             act(act),
@@ -2391,13 +2438,8 @@ namespace chatllm
         {
             hidden_states = ggml::mul(ctx, hidden_states, weights);
         }
-        ggml::tensor *gated = experts_gate.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
-        ggml::tensor *act = ggml::inplace_act(ctx, this->act, gated);
-        ggml::tensor *up = experts_up.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
 
-        ggml::tensor *par = ggml::mul_inplace(ctx, up, act); // [n_ff, num_experts_per_tok, qlen]
-
-        ggml::tensor * experts = experts_down.forward(ctx, par, selected_experts); // [hidden_size, num_experts_per_tok, qlen]
+        ggml::tensor * experts = calc_experts_outputs(ctx, hidden_states, selected_experts);
 
         if (!pre_weighting)
         {
@@ -2419,6 +2461,19 @@ namespace chatllm
         }
 
         return moe_out;
+    }
+
+    ggml::tensor *BaseSparseMLP::calc_experts_outputs(ComputeContext *ctx, ggml::tensor *hidden_states,
+            ggml::tensor *selected_experts)
+    {
+        ggml::tensor *gated = experts_gate.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
+        ggml::tensor *act = ggml::inplace_act(ctx, this->act, gated);
+        ggml::tensor *up = experts_up.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
+
+        ggml::tensor *par = ggml::mul_inplace(ctx, up, act); // [n_ff, num_experts_per_tok, qlen]
+
+        ggml::tensor * experts = experts_down.forward(ctx, par, selected_experts); // [hidden_size, num_experts_per_tok, qlen]
+        return experts;
     }
 
     int64_t BaseSparseMLP::get_param_num(bool effective_only) const
@@ -2448,6 +2503,12 @@ namespace chatllm
         loader->read_tensor(path + "experts_down.weight", path + "experts.", num_local_experts, ".down_proj.weight", experts_down.weight);
         loader->read_tensor(path + "experts_gate.weight", path + "experts.", num_local_experts, ".gate_proj.weight", experts_gate.weight);
         loader->read_tensor(path + "experts_up.weight",   path + "experts.", num_local_experts, ".up_proj.weight",   experts_up.weight);
+        if (experts_down.bias)
+        {
+            loader->read_tensor(path + "experts_down.bias", path + "experts.", num_local_experts, ".down_proj.bias", experts_down.bias);
+            loader->read_tensor(path + "experts_gate.bias", path + "experts.", num_local_experts, ".gate_proj.bias", experts_gate.bias);
+            loader->read_tensor(path + "experts_up.bias",   path + "experts.", num_local_experts, ".up_proj.bias",   experts_up.bias);
+        }
 
         if (gate_score_correction_bias)
         {

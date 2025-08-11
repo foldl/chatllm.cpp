@@ -74,6 +74,11 @@
 
     Note: Only download `tokenizer.model` and DO NOT download `tokenizer.json` when converting.
 
+* GPT (`GptOssForCausalLM`)
+    * [x] OSS: [20B](https://huggingface.co/openai/gpt-oss-20b/tree/cbf31f62664d4b1360b3a78427f7b3c3ed8f0fa8), [120B](https://huggingface.co/openai/gpt-oss-120b/tree/bc75b44b8a2a116a0e4c6659bcd1b7969885f423)
+
+    Note: Q4_1/Q4_0 quantization won't work. Use Q8 instead.
+
 * Granite (`GraniteForCausalLM`, `GraniteMoeForCausalLM`)
     * [x] v3.0: [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.0-1b-a400m-instruct), [Instruct-3B-A800M](https://huggingface.co/ibm-granite/granite-3.0-3b-a800m-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.0-2b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.0-8b-instruct)
     * [x] v3.1: [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.1-1b-a400m-instruct), [Instruct-3B-A800M](https://huggingface.co/ibm-granite/granite-3.1-3b-a800m-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.1-2b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.1-8b-instruct)

@@ -209,6 +209,8 @@ class ModelType(Enum):
 
     JiuTian         = 0x2900
 
+    GPTOSS          = 0x2A00
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -7242,7 +7244,6 @@ class OuteTTSConverter(BaseConverter):
 
         return weights + dac_weights
 
-
 class JiuTianConverter(BaseConverter):
     MODEL_TYPE = ModelType.JiuTian
 
@@ -7261,6 +7262,166 @@ class JiuTianConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         return QWen2Converter.get_weight_names(config)
+
+class GptOssConverter(BaseConverter):
+    MODEL_TYPE = ModelType.GPTOSS
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        def convert_moe_packed_tensors(
+            blocks,
+            scales,
+            *,
+            dtype: torch.dtype = torch.bfloat16,
+            rows_per_chunk: int = 32768 * 1024,
+        ) -> torch.Tensor:
+            FP4_VALUES = [ +0.0, +0.5, +1.0, +1.5, +2.0, +3.0, +4.0, +6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0, ]
+            scales = scales.to(torch.int32) - 127
+            assert blocks.shape[:-1] == scales.shape, f"{blocks.shape=} does not match {scales.shape=}"
+
+            lut = torch.tensor(FP4_VALUES, dtype=dtype, device=blocks.device)
+
+            *prefix_shape, G, B = blocks.shape
+            rows_total = math.prod(prefix_shape) * G
+
+            blocks = blocks.reshape(rows_total, B)
+            scales = scales.reshape(rows_total, 1)
+
+            out = torch.empty(rows_total, B * 2, dtype=dtype, device=blocks.device)
+
+            for r0 in range(0, rows_total, rows_per_chunk):
+                r1 = min(r0 + rows_per_chunk, rows_total)
+
+                blk = blocks[r0:r1]
+                exp = scales[r0:r1]
+
+                # nibble indices -> int64
+                idx_lo = (blk & 0x0F).to(torch.long)
+                idx_hi = (blk >> 4).to(torch.long)
+
+                sub = out[r0:r1]
+                sub[:, 0::2] = lut[idx_lo]
+                sub[:, 1::2] = lut[idx_hi]
+
+                torch.ldexp(sub, exp, out=sub)
+                del idx_lo, idx_hi, blk, exp
+
+            out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
+            # to match for now existing implementation
+            return out.to(torch.float8_e5m2)
+
+        r = {}
+
+        for name in state_dict:
+            t = state_dict[name]
+            if name.endswith('mlp.experts.gate_up_proj_blocks'):
+                unpacked = convert_moe_packed_tensors(t, state_dict[name.replace('gate_up_proj_blocks', 'gate_up_proj_scales')])
+                for j in range(config.num_local_experts):
+                    gate_up = unpacked[j]
+                    new_name = name.replace('experts.gate_up_proj_blocks', f'experts.{j}.gate_proj.weight')
+                    r[new_name] = gate_up[0::2, ...]
+                    new_name = name.replace('experts.gate_up_proj_blocks', f'experts.{j}.up_proj.weight')
+                    r[new_name] = gate_up[1::2, ...]
+
+            elif name.endswith('mlp.experts.gate_up_proj_bias'):
+                for j in range(config.num_local_experts):
+                    gate_up = t[j]
+                    new_name = name.replace('experts.gate_up_proj_bias', f'experts.{j}.gate_proj.bias')
+                    r[new_name] = gate_up[0::2]
+                    new_name = name.replace('experts.gate_up_proj_bias', f'experts.{j}.up_proj.bias')
+                    r[new_name] = gate_up[1::2]
+            elif name.endswith('mlp.experts.down_proj_blocks'):
+                unpacked = convert_moe_packed_tensors(t, state_dict[name.replace('down_proj_blocks', 'down_proj_scales')])
+                for j in range(config.num_local_experts):
+                    new_name = name.replace('experts.down_proj_blocks', f'experts.{j}.down_proj.weight')
+                    r[new_name] = unpacked[j]
+            elif name.endswith('mlp.experts.down_proj_bias'):
+                for j in range(config.num_local_experts):
+                    new_name = name.replace('experts.down_proj_bias', f'experts.{j}.down_proj.bias')
+                    r[new_name] = t[j]
+            elif name.endswith('mlp.experts.gate_up_proj_scales') or name.endswith('mlp.experts.down_proj_scales'):
+                pass
+            else:
+                r[name] = t
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MAX_LAYERS = 128
+        assert not config.tie_word_embeddings
+        assert len(config.layer_types) <= MAX_LAYERS
+        assert config.num_hidden_layers <= MAX_LAYERS
+        assert config.rope_scaling['rope_type'] == 'yarn'
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        layer_types = [0] * MAX_LAYERS
+        for i in range(len(config.layer_types)):
+            layer_types[i] = 1 if config.layer_types[i] == 'sliding_attention' else 0
+
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+            config.experts_per_token,
+            config.num_experts_per_tok,
+            config.num_local_experts,
+            config.sliding_window,
+        ] + layer_types
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [
+            config.router_aux_loss_coef,
+            config.swiglu_limit,
+            config.rope_theta,
+            config.rope_scaling['original_max_position_embeddings'],
+            config.rope_scaling['beta_fast'],
+            config.rope_scaling['beta_slow'],
+            config.rope_scaling['factor'],
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+            ]
+
+            for j in range(config.num_local_experts):
+                weight_names += [
+                    f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                    f"model.layers.{i}.mlp.experts.{j}.down_proj.bias",
+                    f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                    f"model.layers.{i}.mlp.experts.{j}.gate_proj.bias",
+                    f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                    f"model.layers.{i}.mlp.experts.{j}.up_proj.bias",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.mlp.router.weight",
+                f"model.layers.{i}.mlp.router.bias",
+
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.k_proj.bias",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.bias",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.bias",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.bias",
+                f"model.layers.{i}.self_attn.sinks",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
 
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
@@ -7857,6 +8018,8 @@ def main():
         PanguEmbeddedConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'JiutianForCausalLM':
         JiuTianConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'GptOssForCausalLM':
+        GptOssConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

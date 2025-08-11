@@ -18,6 +18,7 @@ if (MSVC)
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/D_CRT_SECURE_NO_WARNINGS>")
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/wd4996>")
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/wd4722>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/MP>")
 endif ()
 
 if (NOT MSVC)
@@ -79,6 +80,7 @@ set(core_files src/backend.cpp
     models/falcon.cpp
     models/gemma.cpp
     models/gigachat.cpp
+    models/gpt.cpp
     models/granite.cpp
     models/groq.cpp
     models/grok.cpp
