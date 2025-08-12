@@ -1763,6 +1763,35 @@
             }
         }
     },
+    "exaone4": {
+        "brief": "EXAONE 4.0, which integrates a Non-reasoning mode and Reasoning mode to achieve both the excellent usability of EXAONE 3.5 and the advanced reasoning abilities of EXAONE Deep.",
+        "default": "1.2b",
+        "license": "EXAONE AI Model License Agreement 1.2 - NC",
+        "variants": {
+            "1.2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1362869568,
+                        "url": "chatllm_quantized_exaone/exaone-4.0-1.2b.bin"
+                    }
+                }
+            },
+            "32b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 18007298320,
+                        "url": "chatllm_quantized_exaone/exaone-4.0-32b-q4_0.bin"
+                    },
+                    "q4_1": {
+                        "size": 20007457040,
+                        "url": "chatllm_quantized_exaone/exaone-4.0-32b-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
     "telechat2": {
         "brief": "TeleChat2 is a large language model trained by the Artificial Intelligence Research Institute of China Telecom.",
         "default": "3b",
@@ -3155,6 +3184,22 @@
                     "q8": {
                         "size": 8317413728,
                         "url": "chatllm_quantized_jiutian/jt-coder-8b-it.bin"
+                    }
+                }
+            }
+        }
+    },
+    "gpt-oss": {
+        "brief": "OpenAI’s open-weight models designed for powerful reasoning, agentic tasks, and versatile developer use cases.",
+        "default": "20b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "20b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 22252508416,
+                        "url": "chatllm_quantized_gpt/gpt-oss-20b.bin"
                     }
                 }
             }
