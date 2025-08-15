@@ -2066,6 +2066,22 @@
             }
         }
     },
+    "baichuan-m2": {
+        "brief": "Baichuan-M2-32B is Baichuan AI's medical-enhanced reasoning model, the second medical model released by Baichuan.",
+        "default": "32b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "32b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 20485513536,
+                        "url": "chatllm_quantized_baichuan/baichuan-m2-32b-q_1.bin"
+                    }
+                }
+            }
+        }
+    },
     "dolphin2.6": {
         "brief": "This model is based on Phi-2 and is governed by MIT licence.",
         "default": "phi2",
