@@ -94,6 +94,7 @@ struct Args
     int batch_size = 4096;
     bool detect_thoughts = false;
     int penalty_window = 256;
+    int max_new_tokens = -1;
 };
 
 #define MULTI_LINE_END_MARKER_W  L"\\."
@@ -165,6 +166,7 @@ void usage(const std::string &prog)
               << "  --multi                 enabled multiple lines of input                                                         [*]\n"
               << "                          when enabled,  `" << MULTI_LINE_END_MARKER << "` marks the end of your input.\n"
               << "  --format FMT            conversion format (model specific, FMT = chat | completion | qa) (default: chat)\n"
+              << "  --max_new_tokens N      max number of new tokens in a round of generation (default: -1, i.e. unlimited)\n"
               << "Performance options:\n"
               << "  -n, --threads N         number of threads for inference (default: number of cores)\n"
               << "  -ngl, --n_gpu_layers N  number of the main model layers to offload to a backend device (GPU) (default: GPU not used)\n"
@@ -485,6 +487,7 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--batch_size",                  batch_size,           std::stoi)
             handle_para0("--tts_export",                  tts_export,           std::string)
             handle_para0("--re_quantize",                 re_quantize,          std::string)
+            handle_para0("--max_new_tokens",              max_new_tokens,       std::stoi)
             else
                 break;
 
@@ -897,6 +900,8 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 
         pipeline.tokenizer->set_chat_format(args.format);
     }
+
+    pipeline.gen_max_tokens = args.max_new_tokens;
 
     if (args.tokenize)
     {
