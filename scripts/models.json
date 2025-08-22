@@ -1347,6 +1347,15 @@
                     }
                 }
             },
+            "14b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 15699928448,
+                        "url": "chatllm_quantized_qwen2.5/qwen2.5-14b.bin"
+                    }
+                }
+            },
             "3b": {
                 "default": "q8",
                 "quantized": {
@@ -3216,6 +3225,22 @@
                     "q8": {
                         "size": 22252508416,
                         "url": "chatllm_quantized_gpt/gpt-oss-20b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "seed-oss": {
+        "brief": "Seed-OSS is a series of open-source large language models developed by ByteDance's Seed Team.",
+        "default": "36b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "36b": {
+                "default": "q4_0",
+                "quantized": {
+                    "q4_0": {
+                        "size": 20344573712,
+                        "url": "chatllm_quantized_gpt/seed-oss-36b-q4_0.bin"
                     }
                 }
             }
