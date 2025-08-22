@@ -211,6 +211,8 @@ class ModelType(Enum):
 
     GPTOSS          = 0x2A00
 
+    SeedOSS         = 0x2B00
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -4338,7 +4340,7 @@ class QWen2Converter(BaseConverter):
                 f"model.layers.{i}.self_attn.o_proj.weight",
                 f"model.layers.{i}.input_layernorm.weight",
                 f"model.layers.{i}.post_attention_layernorm.weight",
-                f"model.layers.{i}.mlp.down _roj.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
                 f"model.layers.{i}.mlp.up_proj.weight",
                 f"model.layers.{i}.mlp.gate_proj.weight",
             ]
@@ -4353,6 +4355,28 @@ class QWen2Converter(BaseConverter):
             ]
 
         return weight_names
+
+class SeedOSSConverter(BaseConverter):
+    MODEL_TYPE = ModelType.SeedOSS
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.attention_bias
+        assert not config.attention_out_bias
+        assert config.rope_scaling['rope_type'] == 'default'
+        assert not config.tie_word_embeddings
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        return QWen2Converter.get_weight_names(config)
 
 class QWen2AudioConverter(BaseConverter):
     MODEL_TYPE = ModelType.Qwen2Audio
@@ -8020,6 +8044,8 @@ def main():
         JiuTianConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'GptOssForCausalLM':
         GptOssConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'SeedOssForCausalLM':
+        SeedOSSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

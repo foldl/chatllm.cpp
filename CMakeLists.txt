@@ -107,6 +107,7 @@ set(core_files src/backend.cpp
     models/phi.cpp
     models/qwen.cpp
     models/reka.cpp
+    models/seed.cpp
     models/smol.cpp
     models/solar.cpp
     models/stablelm.cpp

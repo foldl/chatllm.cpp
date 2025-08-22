@@ -13,6 +13,7 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 **What's New:**
 
+* 2025-08-22: Seed-OSS
 * 2025-08-11: GPT-OSS
 * 2025-08-05: Pangu-Embedded
 * 2025-07-29: Jiutian

@@ -171,6 +171,8 @@ namespace chatllm
 
         MODEL_TYPE_OPENAI           = 0x2A00,
 
+        MODEL_TYPE_SEED             = 0x2B00,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
