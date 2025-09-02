@@ -11,6 +11,22 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 
 | [Supported Models](./docs/models.md) | [Download Quantized Models](./docs/quick_start.md#download-quantized-models) |
 
+```mermaid
+graph TD;
+ggml --> chatllm.cpp
+chatllm.cpp --> coding
+subgraph coding[Apps]
+    AlphaGeometryRE
+    WritingTools
+    LittleAcademia
+end
+ggml[<a href="https://github.com/ggml-org/ggml"                     style="text-decoration:none;">ggml</a>            <br><span style="font-size:10px;">Machine learning library</span>];
+chatllm.cpp[<a href="https://github.com/foldl/chatllm.cpp"          style="text-decoration:none;">chatllm.cpp</a>     <br><span style="font-size:10px;">LLM inference</span>];
+AlphaGeometryRE[<a href="https://github.com/foldl/alphageometryre"  style="text-decoration:none;">AlphaGeometryRE</a> <br><span style="font-size:10px;">AlphaGeometry Re-engineered</span>];
+WritingTools[<a href="https://github.com/foldl/WritingTools"        style="text-decoration:none;">Writing Tools</a>   <br><span style="font-size:10px;">AI aided writing</span>];
+LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-decoration:none;">Little Academia</a> <br><span style="font-size:10px;">Learn programming</span>];
+```
+
 **What's New:**
 
 * 2025-08-22: Seed-OSS
