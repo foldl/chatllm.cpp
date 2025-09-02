@@ -14,8 +14,10 @@ pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [g
 ```mermaid
 graph TD;
 ggml --> chatllm.cpp
-chatllm.cpp --> coding
-subgraph coding[Apps]
+chatllm.cpp --> AlphaGeometryRE
+chatllm.cpp --> WritingTools
+chatllm.cpp --> LittleAcademia
+subgraph coding[ ]
     AlphaGeometryRE
     WritingTools
     LittleAcademia
