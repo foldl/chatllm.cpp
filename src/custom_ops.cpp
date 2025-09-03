@@ -1198,3 +1198,66 @@ static void ggml_custom_merge_patch(struct ggml_tensor * dst, int ith, int nth, 
 
     ggml_custom_merge_patch(dst, a, ith, nth, param);
 }
+
+struct xielu_param
+{
+    float alpha_p;
+    float alpha_n;
+    float beta;
+    float eps;
+};
+
+static void ggml_custom_xielu_f32(struct ggml_tensor * dst , const struct ggml_tensor * src0, int ith, int nth, const xielu_param *param)
+{
+    const float alpha_p = param->alpha_p;
+    const float alpha_n = param->alpha_n;
+    const float beta    = param->beta;
+    const float eps     = param->eps;
+
+    const int64_t nr  = ggml::nrows(dst);
+    const int64_t dr  = (nr + nth - 1)/nth;
+    const int64_t ir0 = dr*ith;
+    const int64_t ir1 = MIN(ir0 + dr, nr);
+
+    // row index used to determine which thread to use
+    int ir = 0;
+
+    GGML_TENSOR_UNARY_OP_LOCALS
+
+    for (int64_t i3 = 0; i3 < ne3; i3++) {
+        for (int64_t i2 = 0; i2 < ne2; i2++) {
+            for (int64_t i1 = 0; i1 < ne1; i1++) {
+                if (ir++ < ir0) continue;
+                if (ir   > ir1) break;
+                for (int64_t i0 = 0; i0 < ne0; i0++) {
+                    const float * const src = (float *)((char *) src0->data + i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
+                          float * dst_data  = (float *)((char *)  dst->data + i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0);
+
+                    const float x = *src;
+                    if (x > 0.0f)
+                    {
+                        *dst_data = alpha_p * x * x + beta * x;
+                    }
+                    else
+                    {
+                        *dst_data = (std::expm1f(MIN(x, eps)) - x) * alpha_n + beta * x;
+                    }
+                }
+            }
+        }
+    }
+}
+
+static void ggml_custom_xielu(struct ggml_tensor * dst , const struct ggml_tensor * a, int ith, int nth, void * userdata)
+{
+    switch (dst->type)
+    {
+    case GGML_TYPE_F32:
+        CHATLLM_CHECK(ggml::type_of(a) == ggml::type::GGML_TYPE_F32);
+        ggml_custom_xielu_f32(dst, a, ith, nth, (xielu_param *)userdata);
+        break;
+    default:
+        GGML_ASSERT(false);
+        break;
+    }
+}

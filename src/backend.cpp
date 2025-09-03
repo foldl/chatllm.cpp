@@ -924,9 +924,16 @@ namespace chatllm
         return dynamic_cast<LayerBufAllocator *>(get_allocator())->get_backend();
     }
 
+    void *ComputeContext::alloc_temp_param(int size)
+    {
+        temp_params.emplace_back(std::vector<uint8_t>(size));
+        return temp_params.back().data();
+    }
+
     void ComputeContext::compute(void)
     {
         backend_context->compute_graph(get_cgraph());
+        temp_params.clear();
     }
 
     void ComputeContext::synchronize(void)

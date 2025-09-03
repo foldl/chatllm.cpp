@@ -5,6 +5,11 @@
 * Adept Persimmon (`PersimmonForCausalLM`)
     * [x] [Chat-8B](https://huggingface.co/adept/persimmon-8b-chat)
 
+* Apertus (`ApertusForCausalLM`)
+    * [x] [8B-Instruct-2509](https://huggingface.co/swiss-ai/Apertus-8B-Instruct-2509/tree/9579a2de0fd74118ba3f3714cdc13585607762a8), [70B-Instruct-2509](https://huggingface.co/swiss-ai/Apertus-70B-Instruct-2509/tree/69eeb773ba2dadf22ab9d2dbebd5771bdfdcc1e8)
+
+        Note: Use `--set enable-thinking 1` to enable thinking.
+
 * Apriel (`AprielForCausalLM`)
     * [x] [Instruct-5B](https://huggingface.co/ServiceNow-AI/Apriel-5B-Instruct/tree/a9a4831718a2fad437f25ace0d0259953fcaaa26)
 

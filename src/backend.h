@@ -73,6 +73,7 @@ namespace chatllm
         virtual void read_tensor(const std::string &name,
                         const std::string &layer_prefix, int num, const std::string &suffix,
                         ggml::tensor *tensor) = 0;
+        virtual void read_scaler(const std::string &name, float *value) = 0;
         virtual bool has_tensor(const std::string &name) const = 0;
     };
 
@@ -425,6 +426,8 @@ namespace chatllm
 
         virtual bool is_using_gpu(void) const { return backend_context->is_using_gpu(); }
 
+        virtual void *alloc_temp_param(int size);
+
         BackendContext *get_backend_context(void) const { return backend_context; }
 
     public:
@@ -434,6 +437,7 @@ namespace chatllm
         virtual ggml_backend_sched_t get_sched(void);
 
         BackendContext *backend_context;
+        std::vector<std::vector<uint8_t>> temp_params;
     private:
         void set_backend_context(BackendContext *backend_context);
     };

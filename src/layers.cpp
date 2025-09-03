@@ -424,6 +424,34 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::neg(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_neg(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::sign(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_sgn(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::step(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_step(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::exp(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_exp(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max)
     {
         ggml::tensor *tensor = ggml_clamp(ctx->get_ctx(), a, min, max);
@@ -990,6 +1018,16 @@ namespace chatllm
         ggml::tensor *tensor = ggml_swiglu_oai(ctx->get_ctx(), gate, up, alpha, limit);
         ctx->cb_op_tensor(tensor);
         return tensor;
+    }
+
+    ggml::tensor *ggml::xielu(ComputeContext *ctx, ggml::tensor *input, float alpha_n, float alpha_p, float beta, float eps)
+    {
+        xielu_param *p = (xielu_param *)ctx->alloc_temp_param(sizeof(xielu_param));
+        p->alpha_n = alpha_n;
+        p->alpha_p = alpha_p;
+        p->beta    = beta;
+        p->eps     = eps;
+        return ggml::map_custom1(ctx, input, ggml_custom_xielu, GGML_N_TASKS_MAX, p);
     }
 
     ggml::tensor *ggml::map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata)

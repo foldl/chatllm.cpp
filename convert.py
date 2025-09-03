@@ -213,6 +213,8 @@ class ModelType(Enum):
 
     SeedOSS         = 0x2B00
 
+    Apertus         = 0x2C00
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -620,7 +622,7 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
                     tensor_ggml_type = GGMLType.F16
             else:
                 # 1d weight: convert it to float32
-                assert tensor.ndim == 1, f'shape of {name} = {tensor.shape}'
+                assert tensor.ndim <= 1, f'shape of {name} = {tensor.shape}'
                 tensor_ggml_type = GGMLType.F32
 
             dump_tensor(f, name, tensor, tensor_ggml_type)
@@ -803,6 +805,14 @@ class FastTokenizerVocab:
         for tok in model['model']['vocab'].keys():
             tokidx = model['model']['vocab'][tok]
             all_tokens[tok] = tokidx
+
+        id_to_tok = {}
+        for tok in all_tokens:
+            i = all_tokens[tok]
+            if i in id_to_tok:
+                raise Exception(f"{i} dup: `{id_to_tok[i]}` and `{tok}`")
+            else:
+                id_to_tok[i] = tok
 
         all_ids = sorted(list(all_tokens.values()))
 
@@ -7447,6 +7457,76 @@ class GptOssConverter(BaseConverter):
 
         return weight_names
 
+class ApertusConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Apertus
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for k in state_dict:
+            t: torch.Tensor = state_dict[k]
+            new_k: str = k
+            if 'attention_layernorm' in new_k:
+                new_k = new_k.replace('.attention_layernorm.', '.input_layernorm.')
+            elif 'feedforward_layernorm' in new_k:
+                new_k = new_k.replace('.feedforward_layernorm.', '.post_attention_layernorm.')
+            r[new_k] = t
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert not config.tie_word_embeddings
+        assert config.rope_scaling['rope_type'] == 'llama3'
+        assert not config.attention_bias, "attention_bias must be False"
+        assert config.hidden_act == 'xielu'
+        assert not config.mlp_bias
+        assert config.qk_norm
+
+        config.hidden_act = 'silu'
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_theta,
+            config.rope_scaling['original_max_position_embeddings'],
+            config.rope_scaling['factor'],
+            config.rope_scaling['low_freq_factor'],
+            config.rope_scaling['high_freq_factor'],
+        ]
+        f.write(struct.pack("<fifff", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.mlp.act_fn.alpha_n",
+                f"model.layers.{i}.mlp.act_fn.alpha_p",
+                f"model.layers.{i}.mlp.act_fn.beta",
+                f"model.layers.{i}.mlp.act_fn.eps",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.k_norm.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.q_norm.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -8046,6 +8126,8 @@ def main():
         GptOssConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'SeedOssForCausalLM':
         SeedOSSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'ApertusForCausalLM':
+        ApertusConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

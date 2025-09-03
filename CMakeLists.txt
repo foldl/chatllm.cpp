@@ -59,6 +59,7 @@ set(core_files src/backend.cpp
     models/adept.cpp
     models/allenai.cpp
     models/alphageo.cpp
+    models/apertus.cpp
     models/apriel.cpp
     models/aquila.cpp
     models/baichuan.cpp

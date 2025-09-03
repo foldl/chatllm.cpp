@@ -1139,6 +1139,13 @@ namespace chatllm
         return true;
     }
 
+    size_t TensorInfo::read_raw_tensor_data(tokenizer::DataReader *reader, size_t data_size, void *p)
+    {
+        reader->seek(aligned_data_start(_offset), SEEK_SET);
+        reader->read_buffer((uint8_t *)p, data_size);
+        return data_size;
+    }
+
     size_t TensorInfo::read_tensor_data(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size,
                                         ggml::type target_type)
     {
@@ -1364,6 +1371,33 @@ namespace chatllm
         auto translated = translate_tensor_name(name);
         auto search = tensor_dict.find(translated);
         return search != tensor_dict.end();
+    }
+
+    void  ModelLoader::read_scaler(const std::string &name, float *value)
+    {
+        auto translated = translate_tensor_name(name);
+        auto search = tensor_dict.find(translated);
+        CHATLLM_CHECK(search != tensor_dict.end()) << "tensor not exist: " << translated;
+
+        TensorInfo &t = search->second;
+
+        // read and check tensor shape
+        {
+            int ndim = ggml::n_dims(&t.tensor);
+
+            if (ndim == 1)
+            {
+                CHATLLM_CHECK(t.tensor.ne[0] == 1)
+                    << "scaler " << name << " ndim mismatch: got shape: " << shape_to_string(&t.tensor);
+            }
+            else
+            {
+                CHATLLM_CHECK(ndim == 0)
+                    << "scaler " << name << " expected, but find dim = " << ndim;
+            }
+            CHATLLM_CHECK(t.tensor.type == ggml::type::GGML_TYPE_F32);
+            t.read_raw_tensor_data(_file.get(), sizeof(float), value);
+        }
     }
 
     void ModelLoader::read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator, bool partial)

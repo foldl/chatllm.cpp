@@ -160,10 +160,15 @@ namespace chatllm
         ggml::tensor *scale(ComputeContext *ctx, ggml::tensor *a, float  s);
         ggml::tensor *scale_inplace(ComputeContext *ctx, ggml::tensor *a, float  s);
 
-        ggml::tensor *abs(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max);
         ggml::tensor *avg_pool_2d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride, float padding = 0.0f);
         ggml::tensor *avg_pool_1d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride,   int padding = 0);
+
+        ggml::tensor *abs(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *neg(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *sign(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *step(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *exp(ComputeContext *ctx, ggml::tensor *a);
 
         ggml::tensor *conv_1d(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding = 0, int dilation = 1);
         ggml::tensor *conv_1d_depthwise(ComputeContext *ctx, ggml::tensor *kernel, ggml::tensor *data, int stride, int padding, int dilation);
@@ -180,6 +185,8 @@ namespace chatllm
         // glu  = gate * torch.sigmoid(gate * self.alpha)
         // result: ((up + 1) * glu)
         ggml::tensor *swiglu_oai(ComputeContext *ctx, ggml::tensor *gate, ggml::tensor *up, float alpha, float limit);
+
+        ggml::tensor *xielu(ComputeContext *ctx, ggml::tensor *input, float alpha_n, float alpha_p, float beta, float eps);
 
         ggml::tensor *map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom2(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);

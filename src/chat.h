@@ -669,6 +669,7 @@ namespace chatllm
         bool load(tokenizer::DataReader *reader, LayerBufAllocator *alloc, ggml::type target_type, size_t override_buffer_size = 0);
 
         size_t read_tensor_data(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size, ggml::type target_type);
+        size_t read_raw_tensor_data(tokenizer::DataReader *reader, size_t data_size, void *p);
 
         size_t aligned_data_start(size_t offset);
         size_t aligned_size(void);
@@ -728,6 +729,7 @@ namespace chatllm
         void read_tensor(const std::string &name,
                         const std::string &layer_prefix, int num, const std::string &suffix,
                         ggml::tensor *tensor) override;
+        void read_scaler(const std::string &name, float *value) override;
 
         bool has_tensor(const std::string &name) const override;
 
