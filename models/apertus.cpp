@@ -124,7 +124,7 @@ namespace chatllm::apertus
         }
         else
         {
-            if (!s._Starts_with("<|system_start|>"))
+            if (!s.starts_with("<|system_start|>"))
                 ids.push_back(tok->system_token_id);
             tokenizer->encode(s, ids);
             if (s.find("<|system_end|>") == std::string::npos)
@@ -213,7 +213,7 @@ namespace chatllm::apertus
     static float softplus(float input, float beta=1.0f, float threshold=20.0f)
     {
         if (input * beta > threshold) return input;
-        return (1/beta) * std::logf(1 + std::expf(beta * input));
+        return (1/beta) * logf(1 + expf(beta * input));
     }
 
     void XIEMLP::load(const std::string &path, TensorLoader *loader)
