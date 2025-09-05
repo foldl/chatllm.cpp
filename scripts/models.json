@@ -3245,5 +3245,21 @@
                 }
             }
         }
+    },
+    "apertus": {
+        "brief": "Apertus is a 70B and 8B parameter language model designed to push the boundaries of fully-open multilingual and transparent models.",
+        "default": "8b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8563501248,
+                        "url": "chatllm_quantized_gpt/apertus-8b.bin"
+                    }
+                }
+            }
+        }
     }
 }
