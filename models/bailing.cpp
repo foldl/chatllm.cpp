@@ -23,7 +23,7 @@ namespace chatllm::bailing::moe
         Tokenizer(const Config &config)
             : BaseTokenizer(config, &_chat_encoder)
         {
-            sys_prompt = "";
+            sys_prompt = "You are Ling, an assistant created by inclusionAI";
         }
 
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override
@@ -46,6 +46,16 @@ namespace chatllm::bailing::moe
 
             if (role_open_token_id >= 0)
                 terminate_ids.insert(role_open_token_id);
+
+            int t = tp->PieceToId("<think>");
+            if (t >= 0)
+            {
+                tp->OverrideTokenDecoding(t, "<think>");
+                sys_prompt = "You are Ring, an assistant created by inclusionAI";
+            }
+            t = tp->PieceToId("</think>");
+            if (t >= 0)
+                tp->OverrideTokenDecoding(t, "</think>");
 
             return size;
         }

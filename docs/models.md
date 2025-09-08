@@ -112,8 +112,9 @@
     [Coder-8B-Instruct](https://huggingface.co/JT-LM/JT-Coder-8B-Instruct/tree/9160d51e9acaae266cfef8493ea25d15e7ed6904),
     [DA-8B](https://huggingface.co/JT-LM/JT-DA-8B/commit/8bd5bb1a76305dcc777786b65c239b362cee808e)
 
-* Ling (`BailingMoeForCausalLM`)
+* Ling/Ring (`BailingMoeForCausalLM`)
     * [x] [Lite](https://huggingface.co/inclusionAI/Ling-lite/tree/a80ae6c479251f1ae33dda517ab83cdc6a312f99), [Coder-Lite](https://huggingface.co/inclusionAI/Ling-Coder-lite/tree/4a8647acf9d3855d599adaaaf4bf6ca14239d2ab)
+    * [x] v1.5: [Ling-lite-1.5-2507](https://huggingface.co/inclusionAI/Ling-lite-1.5-2507/tree/6656efdc763a77102207fc66b176e4c5d07a316b), [Ring-lite2507](https://huggingface.co/inclusionAI/Ring-lite-2507/commit/8cf0ec244871c90102b353cef3568e061fd2504f)
 
 * LlaMA-like (`LlamaForCausalLM`, `Llama4ForConditionalGeneration`):
     * [x] All LlaMA-1 models

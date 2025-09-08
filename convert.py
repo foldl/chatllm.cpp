@@ -6325,7 +6325,8 @@ class BailingMoeConverter(BaseConverter):
             if name == 'model.word_embeddings.weight':
                 r['model.embed_tokens.weight'] = tensor
             elif name == "lm_head.weight":
-                tensor = tensor / (torch.norm(tensor, p=2, dim=0, keepdim=True) + 1e-7)
+                if config.norm_head:
+                    tensor = tensor / (torch.norm(tensor, p=2, dim=0, keepdim=True) + 1e-7)
                 r[name] = tensor
             elif name.endswith('query_key_value.weight'):
                 head_dim = config.head_dim
@@ -6346,7 +6347,6 @@ class BailingMoeConverter(BaseConverter):
 
     @staticmethod
     def dump_config(f, config, ggml_type):
-        assert config.norm_head
         if config.moe_layer_freq is None: config.moe_layer_freq = 1
         if config.attention_bias is None: config.attention_bias = False
         if config.scoring_func is None: config.scoring_func = 'softmax'
