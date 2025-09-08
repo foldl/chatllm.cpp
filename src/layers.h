@@ -84,6 +84,7 @@ namespace chatllm
         ggml::tensor *mul_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
 
         ggml::tensor *div(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
+        ggml::tensor *int_div(ComputeContext *ctx, ggml::tensor *a, int b);
 
         ggml::tensor *sum_rows(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *mean(ComputeContext *ctx, ggml::tensor *a);
@@ -111,6 +112,7 @@ namespace chatllm
         ggml::tensor *reshape(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);
 
         ggml::tensor *repeat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
+        ggml::tensor *repeat(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1 = 0, int64_t ne2 = 0, int64_t ne3 = 0);
         ggml::tensor *repeat_interleave(ComputeContext *ctx, ggml::tensor *a, int repeat, int dim = 0);
 
         ggml::tensor *permute(ComputeContext *ctx, ggml::tensor *a, int axis0, int axis1, int axis2, int axis3);
@@ -2224,6 +2226,28 @@ namespace chatllm
         MLP2 mlp2;
     };
 
+    class MultiMLP : public Block
+    {
+    public:
+        MultiMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
+                  ActFunc act, bool use_bias, int group_size = 1);
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states,
+            ggml::tensor *selected_experts) override;
+
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+
+    public:
+        MultiLinear gate;
+        MultiLinear down;
+        MultiLinear up;
+        const ActFunc act;
+        const int num_local_experts;
+        const int num_experts_per_tok;
+        const int group_size;
+    };
+
     class BaseSparseMLP : public Block
     {
     public:
@@ -2252,19 +2276,22 @@ namespace chatllm
         const int num_experts_per_tok;
         Linear gate;
         CPUMover *mover;        // when `+moe_on_cpu` is set, all things are done on CPU except for `gate`
-        MultiLinear experts_gate;
-        MultiLinear experts_down;
-        MultiLinear experts_up;
         ggml::tensor *gate_score_correction_bias;
         ggml::tensor *group_indices;
         ggml::tensor *router_scale;
-        const ActFunc act;
+        MultiMLP experts;
         bool norm_topk_prob;
         ScoreFunc score_func;
         float routed_scaling_factor;
         bool always_scaling;
         bool pre_weighting;
     protected:
+        virtual ggml::tensor *forward_with_experts(ComputeContext *ctx, ggml::tensor *hidden_states,
+            ggml::tensor *selected_experts,
+            ggml::tensor *weights,
+            std::function<ggml::tensor *(ComputeContext *ctx, ggml::tensor *hidden_states,
+                ggml::tensor *selected_experts)> experts_forward);
+
         virtual ggml::tensor *forward_with_experts(ComputeContext *ctx, ggml::tensor *hidden_states,
             ggml::tensor *selected_experts,
             ggml::tensor *weights);

@@ -142,9 +142,9 @@ namespace chatllm::grok::v1
         {
             std::string layer_prefix = "model.layers." + std::to_string(layer_ids[i]) + '.';
 
-            loader.read_tensor(layer_prefix + "mlp.experts_down.weight", layer_prefix + "experts.", config.num_experts, ".w2.weight", transformer->layers[i].mlp.experts_down.weight);
-            loader.read_tensor(layer_prefix + "mlp.experts_gate.weight", layer_prefix + "experts.", config.num_experts, ".w1.weight", transformer->layers[i].mlp.experts_gate.weight);
-            loader.read_tensor(layer_prefix + "mlp.experts_up.weight",   layer_prefix + "experts.", config.num_experts, ".w3.weight", transformer->layers[i].mlp.experts_up.weight);
+            loader.read_tensor(layer_prefix + "mlp.experts_down.weight", layer_prefix + "experts.", config.num_experts, ".w2.weight", transformer->layers[i].mlp.experts.down.weight);
+            loader.read_tensor(layer_prefix + "mlp.experts_gate.weight", layer_prefix + "experts.", config.num_experts, ".w1.weight", transformer->layers[i].mlp.experts.gate.weight);
+            loader.read_tensor(layer_prefix + "mlp.experts_up.weight",   layer_prefix + "experts.", config.num_experts, ".w3.weight", transformer->layers[i].mlp.experts.up.weight);
 
             loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", transformer->layers[i].attention.k_proj.weight);
             loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", transformer->layers[i].attention.o_proj.weight);

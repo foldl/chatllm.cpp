@@ -3286,5 +3286,22 @@
                 }
             }
         }
+    },
+    "grove-moe":
+    {
+        "brief": "GroveMoE, a new sparse architecture using adjugate experts for dynamic computation allocation.",
+        "default": "33b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "33b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 20599719312,
+                        "url": "chatllm_quantized_bailing/grove-moe-33b-q4_1.bin"
+                    }
+                }
+            }
+        }
     }
 }

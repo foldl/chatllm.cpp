@@ -193,13 +193,13 @@ Reasoning: medium
         ggml::tensor *calc_experts_outputs(ComputeContext *ctx, ggml::tensor *hidden_states,
             ggml::tensor *selected_experts) override
         {
-            ggml::tensor *gated = experts_gate.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
-            ggml::tensor *up = experts_up.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
+            ggml::tensor *gated = experts.gate.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
+            ggml::tensor *up = experts.up.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
 
             ggml::tensor *par = ggml::swiglu_oai(ctx, gated, up, alpha, limit); // [n_ff, num_experts_per_tok, qlen]
 
-            ggml::tensor * experts = experts_down.forward(ctx, par, selected_experts); // [hidden_size, num_experts_per_tok, qlen]
-            return experts;
+            ggml::tensor * experts_out = experts.down.forward(ctx, par, selected_experts); // [hidden_size, num_experts_per_tok, qlen]
+            return experts_out;
         }
     private:
         const float limit;

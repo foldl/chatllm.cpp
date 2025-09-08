@@ -200,9 +200,9 @@ namespace chatllm::granite::moe
             {
                 std::string layer_prefix = "model.layers." + std::to_string(Base::layer_ids[i]) + '.';
 
-                loader.read_tensor(layer_prefix + "mlp.experts_down.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".down_proj.weight", transformer->layers[i].mlp.experts_down.weight);
-                loader.read_tensor(layer_prefix + "mlp.experts_gate.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".gate_proj.weight", transformer->layers[i].mlp.experts_gate.weight);
-                loader.read_tensor(layer_prefix + "mlp.experts_up.weight",   layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".up_proj.weight", transformer->layers[i].mlp.experts_up.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_down.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".down_proj.weight", transformer->layers[i].mlp.experts.down.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_gate.weight", layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".gate_proj.weight", transformer->layers[i].mlp.experts.gate.weight);
+                loader.read_tensor(layer_prefix + "mlp.experts_up.weight",   layer_prefix + "block_sparse_moe.experts.", _NUM_EXPERTS, ".up_proj.weight",   transformer->layers[i].mlp.experts.up.weight);
 
                 loader.read_tensor(layer_prefix + "block_sparse_moe.router.layer.weight",
                                 transformer->layers[i].mlp.gate.weight);

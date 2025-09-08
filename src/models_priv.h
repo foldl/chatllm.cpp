@@ -175,6 +175,8 @@ namespace chatllm
 
         MODEL_TYPE_APERTUS          = 0x2C00,
 
+        MODEL_TYPE_GROVE_MOE       = 0x2D00,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,

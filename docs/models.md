@@ -89,6 +89,9 @@
     * [x] v3.1: [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.1-1b-a400m-instruct), [Instruct-3B-A800M](https://huggingface.co/ibm-granite/granite-3.1-3b-a800m-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.1-2b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.1-8b-instruct)
     * [x] v3.2: [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.2-2b-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.2-8b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.2-8b-instruct/tree/0276d996f60d5eb0b376b6d06622042d4ef3eb4b)
 
+* GroveMoE (`GroveMoeForCausalLM`)
+    * [x] [Inst](https://huggingface.co/inclusionAI/GroveMoE-Inst/tree/b3441abf1f3ed166e58c005ef2c528c584b55764)
+
 * HunYuan (`HunYuanForCausalLM`)
     * [x] ~~Dense: [Instruct-7B](https://huggingface.co/tencent/Hunyuan-7B-Instruct)~~ (lost)
     * [x] Dense: [0.5B-Instruct](https://huggingface.co/tencent/Hunyuan-0.5B-Instruct/tree/9ec1774c379d7dde3f2d7ddd3286cde88949e181),

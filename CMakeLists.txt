@@ -85,6 +85,7 @@ set(core_files src/backend.cpp
     models/granite.cpp
     models/groq.cpp
     models/grok.cpp
+    models/grove.cpp
     models/hermes.cpp
     models/hunyuan.cpp
     models/index.cpp

@@ -1261,3 +1261,47 @@ static void ggml_custom_xielu(struct ggml_tensor * dst , const struct ggml_tenso
         break;
     }
 }
+
+static void ggml_custom_int_div(struct ggml_tensor * dst , const struct ggml_tensor * src0, int ith, int nth, const int *param)
+{
+    const int b = *param;
+
+    const int64_t nr  = ggml::nrows(dst);
+    const int64_t dr  = (nr + nth - 1)/nth;
+    const int64_t ir0 = dr*ith;
+    const int64_t ir1 = MIN(ir0 + dr, nr);
+
+    // row index used to determine which thread to use
+    int ir = 0;
+
+    GGML_TENSOR_UNARY_OP_LOCALS
+
+    for (int64_t i3 = 0; i3 < ne3; i3++) {
+        for (int64_t i2 = 0; i2 < ne2; i2++) {
+            for (int64_t i1 = 0; i1 < ne1; i1++) {
+                if (ir++ < ir0) continue;
+                if (ir   > ir1) break;
+                for (int64_t i0 = 0; i0 < ne0; i0++) {
+                    const int * const src = (int *)((char *) src0->data + i3*nb03 + i2*nb02 + i1*nb01 + i0*nb00);
+                          int * dst_data  = (int *)((char *)  dst->data + i3*nb3  + i2*nb2  + i1*nb1  + i0*nb0);
+
+                    *dst_data = *src / b;
+                }
+            }
+        }
+    }
+}
+
+static void ggml_custom_int_div(struct ggml_tensor * dst , const struct ggml_tensor * a, int ith, int nth, void * userdata)
+{
+    switch (dst->type)
+    {
+    case GGML_TYPE_I32:
+        CHATLLM_CHECK(ggml::type_of(a) == ggml::type::GGML_TYPE_I32);
+        ggml_custom_int_div(dst, a, ith, nth, (int *)userdata);
+        break;
+    default:
+        GGML_ASSERT(false);
+        break;
+    }
+}

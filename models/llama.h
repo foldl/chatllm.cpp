@@ -520,9 +520,9 @@ namespace chatllm::llama::v4
                     auto *layer = dynamic_cast<LlamaMoEBlock *>(transformer->get_layer(i));
                     attention = &layer->attention;
 
-                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_down.weight", layer_prefix + "mlp.experts.", config.n_routed_experts, ".down_proj.weight", layer->mlp.mlp1.experts_down.weight);
-                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_gate.weight", layer_prefix + "mlp.experts.", config.n_routed_experts, ".gate_proj.weight", layer->mlp.mlp1.experts_gate.weight);
-                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_up.weight",   layer_prefix + "mlp.experts.", config.n_routed_experts, ".up_proj.weight",   layer->mlp.mlp1.experts_up.weight);
+                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_down.weight", layer_prefix + "mlp.experts.", config.n_routed_experts, ".down_proj.weight", layer->mlp.mlp1.experts.down.weight);
+                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_gate.weight", layer_prefix + "mlp.experts.", config.n_routed_experts, ".gate_proj.weight", layer->mlp.mlp1.experts.gate.weight);
+                    loader.read_tensor(layer_prefix + "mlp.mlp1.experts_up.weight",   layer_prefix + "mlp.experts.", config.n_routed_experts, ".up_proj.weight",   layer->mlp.mlp1.experts.up.weight);
 
                     loader.read_tensor(layer_prefix + "mlp.gate.weight", layer->mlp.mlp1.gate.weight);
 

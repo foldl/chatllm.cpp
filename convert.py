@@ -215,6 +215,8 @@ class ModelType(Enum):
 
     Apertus         = 0x2C00
 
+    GroveMoE        = 0x2D00
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -7527,6 +7529,57 @@ class ApertusConverter(BaseConverter):
 
         return weight_names
 
+class GroveMoEConverter(BaseConverter):
+    MODEL_TYPE = ModelType.GroveMoE
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.use_sliding_window == False, "use_sliding_window must be False"
+        assert not config.attention_bias
+        assert (config.output_router_logits is None) or (not config.output_router_logits)
+        assert config.rope_scaling is None
+        assert config.norm_topk_prob
+        assert not config.tie_word_embeddings
+        assert config.mlp_only_layers == []
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config.num_experts_per_group             = 2
+        config.parallel_expert_intermediate_size = 128
+        config.small_experts_weight              = 0.05
+
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+            config.rope_theta,
+            config.moe_intermediate_size,
+            config.num_experts_per_tok,
+            config.num_experts,
+            config.num_experts_per_group,
+            config.parallel_expert_intermediate_size,
+            config.small_experts_weight,
+        ]
+        f.write(struct.pack("<iifiiiiif", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        QWen3Converter.layer_is_sparse = [True] * config.num_hidden_layers
+        weight_names = QWen3Converter.get_weight_names(config)
+
+        #Note:  `expert_bias` is not used
+        #https://huggingface.co/inclusionAI/GroveMoE-Inst/blob/main/modeling_grove_moe.py#L303
+
+        for i in range(config.num_hidden_layers):
+            for j in range(config.num_experts // config.num_experts_per_group):
+                weight_names += [
+                    f"model.layers.{i}.mlp.chunk_experts.{j}.down_proj.weight",
+                    f"model.layers.{i}.mlp.chunk_experts.{j}.gate_proj.weight",
+                    f"model.layers.{i}.mlp.chunk_experts.{j}.up_proj.weight",
+                ]
+
+        weight_names.sort()
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -8128,6 +8181,8 @@ def main():
         SeedOSSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'ApertusForCausalLM':
         ApertusConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch.endswith('GroveMoeForCausalLM'):
+        GroveMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

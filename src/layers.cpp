@@ -605,6 +605,16 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::repeat(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
+    {
+        ggml::tensor *tensor = ggml_repeat_4d(ctx->get_ctx(), a, ne0,
+            ne1 > 0 ? ne1 : ggml::get_dim(a, 1),
+            ne2 > 0 ? ne2 : ggml::get_dim(a, 2),
+            ne3 > 0 ? ne3 : ggml::get_dim(a, 3));
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::repeat_interleave(ComputeContext *ctx, ggml::tensor *a, int repeat, int dim)
     {
         CHATLLM_CHECK(dim == 0) << "only works for dim=0 now";
@@ -830,6 +840,13 @@ namespace chatllm
         ggml::tensor *tensor = ggml_div(ctx->get_ctx(), a, b);
         ctx->cb_op_tensor(tensor);
         return tensor;
+    }
+
+    ggml::tensor *ggml::int_div(ComputeContext *ctx, ggml::tensor *a, int b)
+    {
+        int *p = (int *)ctx->alloc_temp_param(sizeof(int));
+        *p = b;
+        return ggml::map_custom1(ctx, a, ggml_custom_int_div, GGML_N_TASKS_MAX, p);
     }
 
     ggml::tensor *ggml::sin(ComputeContext *ctx, ggml::tensor *a)
@@ -2348,19 +2365,69 @@ namespace chatllm
         Backend::write_tensor_data(freq_factors, factors);
     }
 
+    MultiMLP::MultiMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
+                ActFunc act, bool use_bias, int group_size)
+        :
+        gate(ctx, hidden_size, intermediate_size, num_local_experts, use_bias),
+        down(ctx, intermediate_size, hidden_size, num_local_experts, use_bias),
+        up  (ctx, hidden_size, intermediate_size, num_local_experts, use_bias),
+        act(act), num_local_experts(num_local_experts), num_experts_per_tok(num_experts_per_tok), group_size(group_size)
+    {
+    }
+
+    ggml::tensor *MultiMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states,
+        ggml::tensor *selected_experts)
+    {
+        if (group_size > 1)
+            selected_experts = ggml::int_div(ctx, selected_experts, group_size);
+
+        ggml::tensor *gated = gate.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
+        ggml::tensor *act = ggml::inplace_act(ctx, this->act, gated);
+        ggml::tensor *upped = up.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
+
+        ggml::tensor *par = ggml::mul_inplace(ctx, upped, act); // [n_ff, num_experts_per_tok, qlen]
+
+        ggml::tensor * experts = down.forward(ctx, par, selected_experts); // [hidden_size, num_experts_per_tok, qlen]
+        return experts;
+    }
+
+    int64_t MultiMLP::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += gate.get_param_num(effective_only);
+        r += down.get_param_num(effective_only);
+        r += up.get_param_num(effective_only);
+        if (effective_only)
+        {
+            r /= num_local_experts;
+            r *= num_experts_per_tok;
+        }
+        return r;
+    }
+
+    void MultiMLP::load(const std::string &path, TensorLoader *loader)
+    {
+        loader->read_tensor(path + "experts_down.weight", path, num_local_experts, ".down_proj.weight", down.weight);
+        loader->read_tensor(path + "experts_gate.weight", path, num_local_experts, ".gate_proj.weight", gate.weight);
+        loader->read_tensor(path + "experts_up.weight",   path, num_local_experts, ".up_proj.weight",   up.weight);
+        if (down.bias)
+        {
+            loader->read_tensor(path + "experts_down.bias", path, num_local_experts, ".down_proj.bias", down.bias);
+            loader->read_tensor(path + "experts_gate.bias", path, num_local_experts, ".gate_proj.bias", gate.bias);
+            loader->read_tensor(path + "experts_up.bias",   path, num_local_experts, ".up_proj.bias",   up.bias);
+        }
+    }
+
     BaseSparseMLP::BaseSparseMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
                   ActFunc act, bool gate_score_use_bias, bool grouped_max, bool router_scale, bool experts_use_bias, bool gate_use_bias)
         :
             num_local_experts(num_local_experts), num_experts_per_tok(num_experts_per_tok),
             gate(ctx, hidden_size, num_local_experts, gate_use_bias),
             mover(new CPUMover(ctx, ctx->user_options.moe_on_cpu)),
-            experts_gate(ctx, hidden_size, intermediate_size, num_local_experts, experts_use_bias),
-            experts_down(ctx, intermediate_size, hidden_size, num_local_experts, experts_use_bias),
-            experts_up  (ctx, hidden_size, intermediate_size, num_local_experts, experts_use_bias),
+            experts(ctx, hidden_size, intermediate_size, num_local_experts, num_experts_per_tok, act, experts_use_bias),
             gate_score_correction_bias(gate_score_use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, num_local_experts) : nullptr),
             group_indices(grouped_max ? ggml::new_tensor_2d(ctx, GGML_TYPE_I32, 1, num_experts_per_tok) : nullptr),
             router_scale(router_scale ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, num_local_experts) : nullptr),
-            act(act),
             norm_topk_prob(true),
             score_func(ScoreFunc::Softmax),
             routed_scaling_factor(-1.0f),
@@ -2466,7 +2533,9 @@ namespace chatllm
     // weights:          [1, num_experts_per_tok, qlen]
     ggml::tensor *BaseSparseMLP::forward_with_experts(ComputeContext *ctx, ggml::tensor *hidden_states,
             ggml::tensor *selected_experts,
-            ggml::tensor *weights)
+            ggml::tensor *weights,
+            std::function<ggml::tensor *(ComputeContext *ctx, ggml::tensor *hidden_states,
+                ggml::tensor *selected_experts)> experts_forward)
     {
         const int64_t hidden_size = hidden_states->ne[0];
         const int64_t qlen        = hidden_states->ne[1];
@@ -2477,7 +2546,7 @@ namespace chatllm
             hidden_states = ggml::mul(ctx, hidden_states, weights);
         }
 
-        ggml::tensor * experts = calc_experts_outputs(ctx, hidden_states, selected_experts);
+        ggml::tensor * experts = experts_forward(ctx, hidden_states, selected_experts);
 
         if (!pre_weighting)
         {
@@ -2501,32 +2570,28 @@ namespace chatllm
         return moe_out;
     }
 
+    ggml::tensor *BaseSparseMLP::forward_with_experts(ComputeContext *ctx, ggml::tensor *hidden_states,
+            ggml::tensor *selected_experts,
+            ggml::tensor *weights)
+    {
+        return forward_with_experts(ctx, hidden_states, selected_experts, weights,
+            [this](ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *selected_experts)
+            {
+                return calc_experts_outputs(ctx, hidden_states, selected_experts);
+            });
+    }
+
     ggml::tensor *BaseSparseMLP::calc_experts_outputs(ComputeContext *ctx, ggml::tensor *hidden_states,
             ggml::tensor *selected_experts)
     {
-        ggml::tensor *gated = experts_gate.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
-        ggml::tensor *act = ggml::inplace_act(ctx, this->act, gated);
-        ggml::tensor *up = experts_up.forward(ctx, hidden_states, selected_experts); // [n_ff, num_experts_per_tok, qlen]
-
-        ggml::tensor *par = ggml::mul_inplace(ctx, up, act); // [n_ff, num_experts_per_tok, qlen]
-
-        ggml::tensor * experts = experts_down.forward(ctx, par, selected_experts); // [hidden_size, num_experts_per_tok, qlen]
-        return experts;
+        return experts.forward(ctx, hidden_states, selected_experts);
     }
 
     int64_t BaseSparseMLP::get_param_num(bool effective_only) const
     {
         int64_t r = 0;
-        r += experts_gate.get_param_num(effective_only);
-        r += experts_down.get_param_num(effective_only);
-        r += experts_up.get_param_num(effective_only);
-        if (effective_only)
-        {
-            r /= num_local_experts;
-            r *= num_experts_per_tok;
-        }
+        r += experts.get_param_num(effective_only);
         r += gate.get_param_num(effective_only);
-
         r += ggml::nelements(gate_score_correction_bias);
         r += ggml::nelements(router_scale);
 
@@ -2538,15 +2603,7 @@ namespace chatllm
         Block::load(path, loader);
         gate.load(path + "gate.", loader);
 
-        loader->read_tensor(path + "experts_down.weight", path + "experts.", num_local_experts, ".down_proj.weight", experts_down.weight);
-        loader->read_tensor(path + "experts_gate.weight", path + "experts.", num_local_experts, ".gate_proj.weight", experts_gate.weight);
-        loader->read_tensor(path + "experts_up.weight",   path + "experts.", num_local_experts, ".up_proj.weight",   experts_up.weight);
-        if (experts_down.bias)
-        {
-            loader->read_tensor(path + "experts_down.bias", path + "experts.", num_local_experts, ".down_proj.bias", experts_down.bias);
-            loader->read_tensor(path + "experts_gate.bias", path + "experts.", num_local_experts, ".gate_proj.bias", experts_gate.bias);
-            loader->read_tensor(path + "experts_up.bias",   path + "experts.", num_local_experts, ".up_proj.bias",   experts_up.bias);
-        }
+        experts.load(path + "experts.", loader);
 
         if (gate_score_correction_bias)
         {
