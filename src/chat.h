@@ -1298,7 +1298,7 @@ namespace chatllm
                   cache_type(ggml::str_to_type(cache_type, ggml::type::GGML_TYPE_F16)),
                   re_quantize(ggml::str_to_type(re_quantize))
             {}
-            extra_args() : extra_args(-1, "", "", false, 1, 0, "") {}
+            extra_args() : extra_args(-1, "", false, 1, 0, "") {}
         };
 
         ModelObject(const std::string &path);

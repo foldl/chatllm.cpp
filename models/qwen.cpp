@@ -1496,6 +1496,11 @@ namespace chatllm::qwen::v3_emb
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         tok->task = utils::get_opt(args, "task", tok->task);
     }
+
+    int ConditionalGeneration::get_text_embedding_dim(void) const
+    {
+        return config.hidden_size;
+    }
 }
 
 namespace chatllm::qwen::v3_ranker

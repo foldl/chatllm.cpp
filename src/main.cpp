@@ -1157,7 +1157,8 @@ chatllm::BaseStreamer *get_streamer_for_log(void)
 
 static int init_vector_store(Args &args)
 {
-    chatllm::Pipeline pipeline(args.embedding_model_path);
+    DEF_ExtraArgs(pipe_args, args);
+    chatllm::Pipeline pipeline(args.embedding_model_path, pipe_args);
     args.max_length = pipeline.model->get_max_length();
 
     DEF_GenerationConfig(gen_config, args);

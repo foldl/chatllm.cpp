@@ -605,6 +605,7 @@ namespace chatllm::qwen
                 ModelType type = ModelType::MODEL_TYPE_QWEN3_Embedding, const bool skip_lm_head = true, int extra_tensors = 0);
 
             void set_additional_args(const std::map<std::string, std::string> &args) override;
+            int get_text_embedding_dim(void) const override;
         };
     }
 
