@@ -19,6 +19,16 @@ namespace chatllm::ernie::dense
     {
     public:
         Tokenizer(const BaseConfig &config);
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
+        void encode_role(const std::string &role, const std::string &text, std::vector<int> &ids) const;
+        void encode_role(const std::string &role, std::vector<int> &ids) const;
+        bool load_config(const json::JSON &config) override;
+    public:
+        int im_start_token_id;
+        int im_end_token_id;
+        int nl_token_id;
+        int think_start_token_id;
+        int think_end_token_id;
     };
 
     class ConditionalGeneration : public chatllm::llama::v2::GenericConditionalGeneration<LlamaBlock>
@@ -55,10 +65,4 @@ namespace chatllm::ernie::moe
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
         void load(ModelLoader &loader);
     };
-}
-
-namespace chatllm
-{
-    REGISTER_MODEL_LOADER(ERNIE_DENSE,           ernie::dense, 1);
-    REGISTER_MODEL_LOADER(ERNIE_MOE,             ernie::moe, 1);
 }

@@ -273,8 +273,9 @@ int Processor::PieceToId(std::string_view piece) const
 
 const std::string Processor::IdToPiece(int id) const
 {
-    if (token_override.contains(id))
-        return token_override.find(id)->second;
+    auto iter = token_override.find(id);
+    if (iter != token_override.end())
+        return iter->second;
 
     if (id < 0) return token_unk_id;
     return id < (int)vocab_.id_to_token.size() ? vocab_.id_to_token[id].tok : token_unk_id;

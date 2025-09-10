@@ -11,11 +11,72 @@ namespace chatllm::ernie::dense
         void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
-    static ChatHistoryEncoder _chat_encoder;
+    class ChatHistoryThinkingEncoder : public BaseHistoryEncoder
+    {
+    public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+        void append_user_opening(int round_idx, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder           _chat_encoder;
+    static ChatHistoryThinkingEncoder   _chat_thinking_encoder;
 
     Tokenizer::Tokenizer(const BaseConfig &config)
-        : chatllm::llama::v2::Tokenizer(config, &_chat_encoder)
-    {}
+        : chatllm::llama::v2::Tokenizer(config, &_chat_encoder),
+          im_start_token_id(-1), im_end_token_id(-1),
+          nl_token_id(-1), think_start_token_id(-1),
+          think_end_token_id(-1)
+    {
+        sys_prompt = "";
+    }
+
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
+    {
+        size_t size = chatllm::llama::v2::Tokenizer::load(buffer, n_vocab);
+        im_start_token_id = tp->PieceToId("<|im_start|>");
+        im_end_token_id   = tp->PieceToId("<|im_end|>");
+        std::vector<int> ids;
+        tp->Encode("\n", &ids);
+        nl_token_id = ids[0];
+
+        think_start_token_id = tp->PieceToId("<think>");
+        think_end_token_id   = tp->PieceToId("</think>");
+        if (im_end_token_id >= 0)
+            terminate_ids.emplace(im_end_token_id);
+        return size;
+    }
+
+    void Tokenizer::encode_role(const std::string &role, const std::string &text, std::vector<int> &ids) const
+    {
+        ids.push_back(im_start_token_id);
+        BaseTokenizer::encode(role, ids);
+        ids.push_back(nl_token_id);
+        BaseTokenizer::encode(text, ids);
+        ids.push_back(im_end_token_id);
+        ids.push_back(nl_token_id);
+        ids.push_back(nl_token_id);
+    }
+
+    void Tokenizer::encode_role(const std::string &role, std::vector<int> &ids) const
+    {
+        ids.push_back(im_start_token_id);
+        BaseTokenizer::encode(role, ids);
+    }
+
+    bool Tokenizer::load_config(const json::JSON &config)
+    {
+        auto cfg = config["tokenizer_config.json"];
+        std::string s = cfg["chat_template"].ToString();
+        if (s.find("think_mode=True") != std::string::npos)
+        {
+            set_chat_encoder(&_chat_thinking_encoder);
+        }
+
+        return true;
+    }
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
@@ -52,6 +113,46 @@ namespace chatllm::ernie::dense
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         tok->encode("Assistant:  ", ids);
+    }
+
+    void ChatHistoryThinkingEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode_role("assistant", ai, ids);
+    }
+
+    void ChatHistoryThinkingEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::ostringstream oss_prompt;
+
+        ids.push_back(tok->bos_token_id);
+        if (tok->get_system_prompt().size() > 0)
+        {
+            oss_prompt << "<system_setting>\n" << tok->get_system_prompt() << "\n</system_setting>\n\n";
+        }
+        oss_prompt << "<global_setting>\n"
+                    << "think_mode=True\n"
+                    << "</global_setting>";
+        tok->encode_role("system", oss_prompt.str(), ids);
+    }
+
+    void ChatHistoryThinkingEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode_role("user", user, ids);
+    }
+
+    void ChatHistoryThinkingEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode_role("assistant", ids);
+    }
+
+    void ChatHistoryThinkingEncoder::append_user_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode_role("user", ids);
     }
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
@@ -196,4 +297,10 @@ namespace chatllm::ernie::moe
 
         ModelProxy::load(loader);
     }
+}
+
+namespace chatllm
+{
+    REGISTER_MODEL_LOADER(ERNIE_DENSE,           ernie::dense, 1);
+    REGISTER_MODEL_LOADER(ERNIE_MOE,             ernie::moe, 1);
 }
