@@ -3195,6 +3195,15 @@
                         "url": "chatllm_quantized_ernie/ernie-4.5-21b-a3b-q4_1.bin"
                     }
                 }
+            },
+            "a3b-thinking": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 13643231552,
+                        "url": "chatllm_quantized_ernie/ernie-4.5-21b-thinking-a3b-q4_1.bin"
+                    }
+                }
             }
         }
     },
