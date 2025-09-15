@@ -551,6 +551,12 @@ namespace chatllm::qwen
             QWen3SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length);
         };
 
+        class QWen3Block : public LMBlock1<RMSNorm, QWen3SelfAttention, RMSNorm, SiLUMLP>
+        {
+        public:
+            QWen3Block(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length);
+        };
+
         class ConditionalGeneration : public BaseModelForConditionalGeneration
         {
         public:

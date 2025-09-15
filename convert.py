@@ -217,6 +217,8 @@ class ModelType(Enum):
 
     GroveMoE        = 0x2D00
 
+    BailingMoE2     = 0x2E00
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -6374,6 +6376,78 @@ class BailingMoeConverter(BaseConverter):
     def get_weight_names(config):
         return DeepSeekV1Converter.get_weight_names(config)
 
+class BailingMoe2Converter(BaseConverter):
+    MODEL_TYPE = ModelType.BailingMoE2
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            if name == 'model.word_embeddings.weight':
+                r['model.embed_tokens.weight'] = tensor
+            elif name == "lm_head.weight":
+                if config.norm_head:
+                    tensor = tensor / (torch.norm(tensor, p=2, dim=0, keepdim=True) + 1e-7)
+                r[name] = tensor
+            elif name.endswith('query_key_value.weight'):
+                head_dim = config.head_dim
+                num_heads = config.num_attention_heads
+                num_key_value_heads = config.num_key_value_heads
+
+                q, k, v = tensor.split([num_heads * head_dim, num_key_value_heads * head_dim, num_key_value_heads * head_dim], dim=-2)
+
+                r[name.replace('attention.query_key_value', 'self_attn.q_proj')] = q
+                r[name.replace('attention.query_key_value', 'self_attn.k_proj')] = k
+                r[name.replace('attention.query_key_value', 'self_attn.v_proj')] = v
+
+            elif name.endswith('attention.dense.weight'):
+                r[name.replace('attention.dense', 'self_attn.o_proj')] = tensor
+            elif name.endswith('attention.query_layernorm.weight'):
+                r[name.replace('attention.query_layernorm', 'self_attn.q_norm')] = tensor
+            elif name.endswith('attention.key_layernorm.weight'):
+                r[name.replace('attention.key_layernorm', 'self_attn.k_norm')] = tensor
+            else:
+                r[name] = tensor
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+
+        assert config.rope_scaling is None
+        assert config.use_qk_norm
+        assert config.moe_router_enable_expert_bias
+        assert (config.num_nextn_predict_layers is None) or (config.num_nextn_predict_layers == 0)
+        assert config.moe_shared_expert_intermediate_size == config.moe_intermediate_size
+
+        BailingMoeConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            int(config.head_dim * config.partial_rotary_factor),
+            config.n_group,
+            config.topk_group,
+            config.routed_scaling_factor,
+        ]
+        f.write(struct.pack("<iiif", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = BailingMoeConverter.get_weight_names(config)
+        for i in range(config.num_hidden_layers):
+
+            weight_names += [
+                f"model.layers.{i}.self_attn.k_norm.weight",
+                f"model.layers.{i}.self_attn.q_norm.weight",
+            ]
+
+            if (config.n_routed_experts is not None
+                and (i >= config.first_k_dense_replace)
+                and (i % config.moe_layer_freq == 0)):
+                weight_names += [
+                    f"model.layers.{i}.mlp.gate.expert_bias",
+                ]
+        return weight_names
+
 class DeepSeekV2Converter(BaseConverter):
     MODEL_TYPE = ModelType.DeepSeekV2Light
 
@@ -8161,6 +8235,8 @@ def main():
         AquilaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'BailingMoeForCausalLM':
         BailingMoeConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'BailingMoeV2ForCausalLM':
+        BailingMoe2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'AprielForCausalLM':
         AprielConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch in ['Qwen3MoeForCausalLM', 'Qwen3ForCausalLM']:

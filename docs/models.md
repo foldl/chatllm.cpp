@@ -119,6 +119,7 @@
 * Ling/Ring (`BailingMoeForCausalLM`)
     * [x] [Lite](https://huggingface.co/inclusionAI/Ling-lite/tree/a80ae6c479251f1ae33dda517ab83cdc6a312f99), [Coder-Lite](https://huggingface.co/inclusionAI/Ling-Coder-lite/tree/4a8647acf9d3855d599adaaaf4bf6ca14239d2ab)
     * [x] v1.5: [Ling-lite-1.5-2507](https://huggingface.co/inclusionAI/Ling-lite-1.5-2507/tree/6656efdc763a77102207fc66b176e4c5d07a316b), [Ring-lite2507](https://huggingface.co/inclusionAI/Ring-lite-2507/commit/8cf0ec244871c90102b353cef3568e061fd2504f)
+    * [x] v2: [Ling-mini-2.0](https://huggingface.co/inclusionAI/Ling-mini-2.0/tree/56c261e07b78d95dad61336fcbdb21ef4fdbcabe), [Ring-mini-2.0](https://huggingface.co/inclusionAI/Ring-mini-2.0/tree/d4eac003b34b59b733f05039a876616d840a37d6)
 
 * LlaMA-like (`LlamaForCausalLM`, `Llama4ForConditionalGeneration`):
     * [x] All LlaMA-1 models

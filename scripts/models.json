@@ -2706,6 +2706,22 @@
             }
         }
     },
+    "ling2": {
+        "brief": "Ling 2.0 — a family of MoE-based large language models that combine SOTA performance with high efficiency.",
+        "default": "mini",
+        "license": "MIT",
+        "variants": {
+            "mini": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 17277819184,
+                        "url": "chatllm_quantized_bailing/ling-mini-2.bin"
+                    }
+                }
+            }
+        }
+    },
     "ring": {
         "brief": "Ring-lite is a lightweight, fully open-sourced MoE (Mixture of Experts) LLM designed for complex reasoning tasks.",
         "default": "lite-2507",
@@ -2717,6 +2733,22 @@
                     "q8": {
                         "size": 17856684480,
                         "url": "chatllm_quantized_bailing/ring-lite-2507.bin"
+                    }
+                }
+            }
+        }
+    },
+    "ring2": {
+        "brief": "Ring-mini-2.0 — a high-performance inference-oriented MoE model deeply optimized based on the Ling 2.0 architecture.",
+        "default": "mini",
+        "license": "MIT",
+        "variants": {
+            "mini": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 17277815376,
+                        "url": "chatllm_quantized_bailing/ring-mini-2.bin"
                     }
                 }
             }

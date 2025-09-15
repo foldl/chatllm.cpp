@@ -482,6 +482,15 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::set_rows(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *indices, ggml::tensor *source)
+    {
+        // CAUTION: result is a view of source
+        build_forward_expand(ctx, a);
+        ggml::tensor *tensor = ggml_set_rows(ctx->get_ctx(), a, source, indices);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::mul_mat(ComputeContext *ctx, ggml::tensor  * a, ggml::tensor  * b)
     {
         ggml::tensor *tensor = ggml_mul_mat(ctx->get_ctx(), a, b);
@@ -1087,6 +1096,16 @@ namespace chatllm
         ggml::tensor *tensor = ggml_map_custom3_inplace(ctx->get_ctx(), a, b, c, fun, n_tasks, userdata);
         ctx->cb_op_tensor(tensor);
         return tensor;
+    }
+
+    ggml::tensor *ggml::cast_int_to_i64(ComputeContext *ctx, ggml::tensor *a)
+    {
+        CHATLLM_CHECK((ggml::type_of(a) == ggml::type::GGML_TYPE_I32) || (ggml::type_of(a) == ggml::type::GGML_TYPE_I16));
+        std::vector<ggml::tensor *> inputs;
+        inputs.push_back(a);
+
+        return custom(ctx, ggml_custom_int_to_i64, GGML_MAX_N_THREADS, nullptr, inputs, ggml::type::GGML_TYPE_I64,
+            ggml::get_dim(a, 0), ggml::get_dim(a, 1), ggml::get_dim(a, 2), ggml::get_dim(a, 3));
     }
 
     ggml::tensor *ggml::custom(ComputeContext *ctx, ggml_custom_op_t fun, int n_tasks, void *userdata, std::vector<ggml::tensor *>inputs, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
@@ -2481,23 +2500,7 @@ namespace chatllm
         }
 
         // select experts
-        ggml::tensor * selected_experts = nullptr;
-        if (group_indices)
-        {
-            const int experts_per_group = n_expert / num_experts_per_tok;
-            ggml::tensor *grouped_scores = ggml::reshape_4d(ctx, corrected_score, experts_per_group, num_experts_per_tok,
-                                                            ggml::get_dim(corrected_score, 1), ggml::get_dim(corrected_score, 2));
-            selected_experts = ggml::top_k(ctx, grouped_scores, 1);
-
-            selected_experts = ggml::map_custom1(ctx, selected_experts, ggml_custom_group_index_boost, GGML_N_TASKS_MAX, (void *)(intptr_t)experts_per_group);
-
-            selected_experts = ggml::reshape_3d(ctx, selected_experts, ggml::get_dim(selected_experts, 0) * ggml::get_dim(selected_experts, 1),
-                ggml::get_dim(corrected_score, 1), ggml::get_dim(corrected_score, 2));
-        }
-        else
-        {
-            selected_experts = ggml::top_k(ctx, corrected_score, num_experts_per_tok); // [qlen, num_experts_per_tok]
-        }
+        ggml::tensor * selected_experts = select_experts(ctx, corrected_score);
 
         if (router_scale)
         {
@@ -2527,6 +2530,30 @@ namespace chatllm
         }
 
         return forward_with_experts(ctx, hidden_states, selected_experts, weights);
+    }
+
+    ggml::tensor *BaseSparseMLP::select_experts(ComputeContext *ctx, ggml::tensor *corrected_score)
+    {
+        const int n_expert = num_local_experts;
+        ggml::tensor * selected_experts = nullptr;
+        if (group_indices)
+        {
+            const int experts_per_group = n_expert / num_experts_per_tok;
+            ggml::tensor *grouped_scores = ggml::reshape_4d(ctx, corrected_score, experts_per_group, num_experts_per_tok,
+                                                            ggml::get_dim(corrected_score, 1), ggml::get_dim(corrected_score, 2));
+            selected_experts = ggml::top_k(ctx, grouped_scores, 1);
+
+            selected_experts = ggml::map_custom1(ctx, selected_experts, ggml_custom_group_index_boost, GGML_N_TASKS_MAX, (void *)(intptr_t)experts_per_group);
+
+            selected_experts = ggml::reshape_3d(ctx, selected_experts, ggml::get_dim(selected_experts, 0) * ggml::get_dim(selected_experts, 1),
+                ggml::get_dim(corrected_score, 1), ggml::get_dim(corrected_score, 2));
+        }
+        else
+        {
+            selected_experts = ggml::top_k(ctx, corrected_score, num_experts_per_tok); // [qlen, num_experts_per_tok]
+        }
+
+        return selected_experts;
     }
 
     // selected_experts: [qlen, num_experts_per_tok]

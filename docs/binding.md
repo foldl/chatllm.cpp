@@ -157,6 +157,8 @@ Examples:
 
     ![](code_highlight.png)
 
+    Note [a bug](https://github.com/nim-lang/Nim/pull/25105) in Nim library.
+
 ### Others
 
 * [V-lang/VB.net/C#](https://github.com/foldl/chatllm.cpp/issues/41)

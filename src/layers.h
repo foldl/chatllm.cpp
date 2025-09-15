@@ -69,6 +69,7 @@ namespace chatllm
 
         // operators
         ggml::tensor *get_rows(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
+        ggml::tensor *set_rows(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *indices, ggml::tensor *source);
 
         ggml::tensor *add(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b);
         ggml::tensor *add_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor * b);
@@ -198,6 +199,9 @@ namespace chatllm
         ggml::tensor *map_custom1_inplace(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom2_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom3_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c, const ggml_custom3_op_t fun, int n_tasks, void *userdata);
+
+        // a quick helper since such casts is missing from ggml
+        ggml::tensor *cast_int_to_i64(ComputeContext *ctx, ggml::tensor *a);
 
         ggml::tensor *custom(ComputeContext *ctx, ggml_custom_op_t fun, int n_tasks, void *userdata, std::vector<ggml::tensor *>inputs, ggml::type type, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);
 
@@ -2291,6 +2295,8 @@ namespace chatllm
             ggml::tensor *weights,
             std::function<ggml::tensor *(ComputeContext *ctx, ggml::tensor *hidden_states,
                 ggml::tensor *selected_experts)> experts_forward);
+
+        virtual ggml::tensor *select_experts(ComputeContext *ctx, ggml::tensor *corrected_score);
 
         virtual ggml::tensor *forward_with_experts(ComputeContext *ctx, ggml::tensor *hidden_states,
             ggml::tensor *selected_experts,
