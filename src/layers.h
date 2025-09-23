@@ -1272,10 +1272,10 @@ namespace chatllm
               attn_scaling(true),
               causal(true),
               last_attn_scores(nullptr),
-              pos_helper(helper ? helper : &def_pos_helper),
               sinks(BlockParams::CoreAttentionUseSinks::get() > 0 ?
                     ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, BlockParams::CoreAttentionUseSinks::get())
-                    : nullptr)
+                    : nullptr),
+              pos_helper(helper ? helper : &def_pos_helper)
         {
             allocate_pos_tensor(ctx);
         }

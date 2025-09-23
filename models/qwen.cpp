@@ -1259,7 +1259,7 @@ namespace chatllm::qwen::vit
         :
         GRAPH_SIZE(GRAPH_SIZE), _ctx(&backend_context),
         n_threads(runtime_config.n_threads),
-        vis_config(0),
+        vis_config(),
         max_patches(max_patches)
     {
         _ctx.cache_dtype = runtime_config.cache_type;
@@ -1425,8 +1425,6 @@ namespace chatllm::qwen::v2_5_vl
         ids.push_back(vision_end_token_id);
     }
 
-    static BlockParams::PadEmbedding *pad_arg = nullptr;
-
     struct ImageGridSize
     {
         int w, h;
@@ -1440,8 +1438,8 @@ namespace chatllm::qwen::v2_5_vl
     {
     public:
         TensorPosHelper3D(int max_length, int image_id_start, ConditionalGeneration *gen)
-            : original_length(max_length), image_id_start(image_id_start),
-              BaseTensorPosHelper(max_length * 4),
+            : BaseTensorPosHelper(max_length * 4),
+              original_length(max_length), image_id_start(image_id_start),
               gen(gen)
         {
         }
@@ -1598,7 +1596,7 @@ namespace chatllm::qwen::v2_5_vl
                 continue;
             }
 
-            CHATLLM_CHECK(mm_index < images_grid.size());
+            CHATLLM_CHECK(mm_index < (int)images_grid.size());
 
             auto &dim = images_grid[mm_index++];
             for (int f = 0; f < dim.frame_num; f++, t += token_n_inc)
