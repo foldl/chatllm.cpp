@@ -347,6 +347,8 @@ namespace chatllm::qwen
 
     namespace vit
     {
+        const int VIT_MAX_LAYERS   = 128;
+
         struct Config
         {
             ggml::type dtype;
@@ -360,10 +362,11 @@ namespace chatllm::qwen
             int window_size;
             int tokens_per_second;
             int temporal_patch_size;
-            int fullatt_block_indices_num;
-            int fullatt_block_indices[20];
+            bool fullatt_block_indices[VIT_MAX_LAYERS];
             int min_pixels;
             int max_pixels;
+            int max_patches;
+            int merge_size;
 
             float image_mean[3];
             float image_std[3];
@@ -374,27 +377,55 @@ namespace chatllm::qwen
         public:
             PatchEmbedding(InitContext *ctx, const Config &config);
 
-            ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w);
+            ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input0, ggml::tensor *input1, int grid_h, int grid_w);
+
             int64_t get_param_num(bool effective_only) const override;
             void load(const std::string &path, TensorLoader *loader) override;
         public:
-            Conv3D                  proj;
+            Conv2D                  proj0;
+            Conv2D                  proj1;
         };
 
-        class ViTSelfAttention : public RoPESelfAttention<BaseCachelessAttention>
+        class TensorPosHelper
+        {
+        public:
+            TensorPosHelper(int max_length, int window_size, int patch_size, int spatial_merge_size);
+            ggml::tensor *allocate_pos_tensor(InitContext *ctx);
+            void write_mapping_tensors(ComputeContext *ctx, ggml::tensor *window_id, ggml::tensor *reverse_id);
+            void write_mask_tensor(ComputeContext *ctx, ggml::tensor *mask);
+            void prepare_pos_tensor(ComputeContext *ctx, ggml::tensor *pos, const int n_past, const int qlen);
+            void prepare(int grid_h, int grid_w);
+        public:
+            const int max_length;
+            const int original_length;
+            const int window_size;
+            const int patch_size;
+            const int spatial_merge_size;
+            int length;
+            std::vector<int> v_pos;
+            std::vector<int> v_patch_id;
+            std::vector<int> v_reverse_window_id;
+            std::vector<int> v_window_seqlen;
+            std::vector<float> v_mask;
+        };
+
+        class ViTSelfAttention : public TensorPosHelperPrelude, public RoPESelfAttention<BaseCachelessAttention>
         {
         public:
             ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length);
+            void set_pos_helper(TensorPosHelper *helper);
         protected:
-            void before_forward(ComputeContext *ctx, const int n_past, const int qlen) override;
-
-            ggml::tensor *apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size, ggml::tensor *pos_w, ggml::tensor *pos_h) const;
+            ggml::tensor *apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size) const;
             ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override;
             ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override;
+
+            ggml::tensor *attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
+                                            ggml::tensor *attn_scores) override;
         public:
-            ggml::tensor *pos_h;
             int grid_w = 0;
             int grid_h = 0;
+            const bool full_attention;
+            ggml::tensor *mask;
         };
 
         class MLP : public TheMLP
@@ -417,10 +448,18 @@ namespace chatllm::qwen
             MLP       mlp;
         };
 
+        class VitSiLUMLP : public BaseMLP
+        {
+        public:
+            VitSiLUMLP(InitContext *ctx, int hidden_size, int intermediate_size)
+            :  BaseMLP(ctx, hidden_size, intermediate_size, ActFunc::SILU, true, true, true)
+            {}
+        };
+
         class VisionTransformer : public Block
         {
         public:
-            typedef LMBlock1<RMSNorm, ViTSelfAttention, RMSNorm, GELUMLP> LayerBlock;
+            typedef LMBlock1<RMSNorm, ViTSelfAttention, RMSNorm, VitSiLUMLP> LayerBlock;
             VisionTransformer(InitContext *ctx, const Config &config, int lm_hidden_size);
 
             int64_t get_param_num(bool effective_only) const override;
@@ -431,6 +470,9 @@ namespace chatllm::qwen
             PatchEmbedding embeddings;
             std::vector<std::unique_ptr<LayerBlock>> layers;
             MultiModalProjector multi_modal_projector;
+            std::unique_ptr<TensorPosHelper> pos_helper;
+            ggml::tensor *window_id;
+            ggml::tensor *reverse_id;
         protected:
             bool loaded;
         };
@@ -438,7 +480,7 @@ namespace chatllm::qwen
         class VisualEmbeddingGeneration
         {
         public:
-            VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 4096);
+            VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, int max_patches, size_t GRAPH_SIZE = 4096);
             bool load(ModelLoader &loader);
             bool load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config);
             void generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf);
@@ -454,6 +496,7 @@ namespace chatllm::qwen
             const int n_threads;
         public:
             Config vis_config;
+            const int max_patches;
         };
     }
 
@@ -499,27 +542,7 @@ namespace chatllm::qwen
             int video_pad_token_id;
 
             int video_max_frames = 20;
-            float fps = 2.0f;
-        };
-
-        class ExtendEmbedding
-        {
-        public:
-            ExtendEmbedding() : pad_arg(new BlockParams::PadEmbedding(4096, 4096)) {}
-        public:
-            BlockParams::PadEmbedding *pad_arg = nullptr;
-        };
-
-        class ConditionalGeneration :public ExtendEmbedding,  public v2::ConditionalGeneration
-        {
-        public:
-            ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
-            bool load_more(const json::JSON &config) override;
-            void load(ModelLoader &loader) override;
-            void set_additional_args(const std::map<std::string, std::string> &args) override;
-            void before_generate(const GenerationConfig &gen_config) override;
-        public:
-            vit::VisualEmbeddingGeneration visual;
+            double fps = 2.0f;
         };
     }
 

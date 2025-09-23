@@ -380,11 +380,11 @@ namespace chatllm::llama::v4
         }
     };
 
-    class LlamaNormedSelfAttention : public QKNormedAttention<L2Norm, BaseAttention>
+    class LlamaNormedSelfAttention : public QKNormedAttention<L2NormInplace, BaseAttention>
     {
     public:
         LlamaNormedSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
-            : QKNormedAttention<L2Norm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false)
+            : QKNormedAttention<L2NormInplace, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false)
         {
             post_norm = true;
         }

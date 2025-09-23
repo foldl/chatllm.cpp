@@ -336,7 +336,7 @@ void CVectorStore::Query(const text_vector &vec, std::vector<int64_t> &indices, 
         scores.push_back(vector_measure(vec_cmp, vec.data(), emb, emb_len));
 
     std::vector<size_t> order;
-    chatllm::ordering(scores, order, is_dist_strategy_max_best(vec_cmp));
+    utils::ordering(scores, order, is_dist_strategy_max_best(vec_cmp));
 
     if (top_n > (int)order.size()) top_n = (int)order.size();
 

@@ -347,6 +347,7 @@ namespace chatllm
         ForwardContext(BackendContext *backend_context) : ComputeContext(backend_context)
         {
         }
+        ~ForwardContext() override;
 
         struct ggml_context *get_ctx() override { return gctx.get(); }
         ggml_cgraph *get_cgraph(void) override { return gf; }
@@ -357,6 +358,7 @@ namespace chatllm
     };
 
     void set_dbg_ctx(ForwardContext *c);
+    void unset_dbg_ctx(ForwardContext *c);
 
     class BaseModelForConditionalGeneration : public BaseModel
     {

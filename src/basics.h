@@ -28,7 +28,18 @@ namespace chatllm
 #define CHATLLM_CHECK(cond) \
     if (!(cond))            \
     CHATLLM_THROW << "check failed (" #cond ") "
+}
 
+namespace base64
+{
+    std::string encode(const void *raw_data, int data_len, bool for_url);
+    std::vector<uint8_t> decode(const char *encoded_string);
+    void decode_to_utf8(const char *encoded_string, std::string &s);
+    std::string encode_utf8(const std::string &s);
+}
+
+namespace utils
+{
     template <class T> void ordering(const std::vector<T> &lst, std::vector<size_t> &order, bool descending = false)
     {
         order.resize(lst.size());
@@ -48,18 +59,7 @@ namespace chatllm
             return descending ? by(lst[a]) > by(lst[b]) : by(lst[a]) < by(lst[b]);
         });
     }
-}
 
-namespace base64
-{
-    std::string encode(const void *raw_data, int data_len, bool for_url);
-    std::vector<uint8_t> decode(const char *encoded_string);
-    void decode_to_utf8(const char *encoded_string, std::string &s);
-    std::string encode_utf8(const std::string &s);
-}
-
-namespace utils
-{
     std::string trim(const std::string& str);
 
     std::string join(const std::vector<std::string>& vec, const std::string& sep);

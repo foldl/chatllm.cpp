@@ -4486,7 +4486,9 @@ class QWen2_5VLConverter(BaseConverter):
             if name == 'visual.patch_embed.proj.weight':
                 shape = tensor.shape
                 assert len(shape) == 5
-                r[name] = tensor.view(shape[0], shape[1] * shape[2] * shape[3] * shape[4])
+                assert shape[2] == 2
+                r[name.replace('proj.weight', 'proj.0.weight')] = tensor[:, :, 0, :, :]
+                r[name.replace('proj.weight', 'proj.1.weight')] = tensor[:, :, 1, :, :]
             elif name.endswith('.attn.qkv.bias') or name.endswith('.attn.qkv.weight'):
                 #print(f'shape: {name} = {tensor.shape}')
                 num_heads = config.vision_config['hidden_size']
@@ -4543,7 +4545,8 @@ class QWen2_5VLConverter(BaseConverter):
             "visual.merger.mlp.0.weight",
             "visual.merger.mlp.2.bias",
             "visual.merger.mlp.2.weight",
-            "visual.patch_embed.proj.weight",
+            "visual.patch_embed.proj.0.weight",
+            "visual.patch_embed.proj.1.weight",
         ]
 
         return weight_names

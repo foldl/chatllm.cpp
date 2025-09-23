@@ -31,6 +31,7 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
+* 2025-09-23: Qwen2.5-VL
 * 2025-09-15: Ling/Ring-mini-2.0
 * 2025-09-08: GroveMoE
 * 2025-09-03: Apertus

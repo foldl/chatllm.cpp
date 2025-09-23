@@ -37,6 +37,17 @@ namespace chatllm
         dbg_ctx = c;
     }
 
+    void unset_dbg_ctx(ForwardContext *c)
+    {
+        if (c == dbg_ctx)
+            dbg_ctx = nullptr;
+    }
+
+    ForwardContext::~ForwardContext()
+    {
+        unset_dbg_ctx(this);
+    }
+
     void print_tensor_shape(const char *info, ggml::tensor *tensor)
     {
         printf("%s: shape of %s (%p): [%zd, %zd, %zd, %zd] [%zd, %zd, %zd, %zd]\n",

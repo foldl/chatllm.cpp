@@ -251,6 +251,7 @@ namespace chatllm::kimi::vit
         void before_forward(ComputeContext *ctx, const int n_past, const int qlen) override
         {
             const int len = grid_h * grid_w;
+            std::vector<int> v_pos_w;
             std::vector<int> v_pos_h;
 
             CHATLLM_CHECK(len <= max_length);
@@ -258,19 +259,20 @@ namespace chatllm::kimi::vit
             ggml::set_dim(pos,   0, len);
             ggml::set_dim(pos_h, 0, len);
 
+            v_pos_w.resize(len);
             v_pos_h.resize(len);
 
             for (int i = 0; i < grid_h; i++)
             {
                 for (int j = 0; j < grid_w; j++)
                 {
-                    v_pos  [i * grid_w + j] = j;
+                    v_pos_w[i * grid_w + j] = j;
                     v_pos_h[i * grid_w + j] = i;
                 }
             }
 
-            Backend::write_tensor_data(pos,     v_pos.data(), 0, len * sizeof(v_pos[0]));
-            Backend::write_tensor_data(pos_h, v_pos_h.data(), 0, len * sizeof(v_pos[0]));
+            Backend::write_tensor_data(pos,   v_pos_w.data(), 0, len * sizeof(v_pos_w[0]));
+            Backend::write_tensor_data(pos_h, v_pos_h.data(), 0, len * sizeof(v_pos_h[0]));
         }
 
         ggml::tensor *apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size, ggml::tensor *pos_w, ggml::tensor *pos_h) const

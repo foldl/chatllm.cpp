@@ -361,8 +361,10 @@ Please use `--format completion` for these models.
     * `native_resolution`: use native resolution or not, default: `false` (This seems sensitive to quantization, so defaults to `false`).
     * `fps`: Default 1.0.
 
-* Qwen (`Qwen2AudioForConditionalGeneration`)
+* Qwen (`Qwen2AudioForConditionalGeneration`, `Qwen2_5_VLForConditionalGeneration`)
     * [x] Qwen2-Audio: [7B-Instruct](https://huggingface.co/Qwen/Qwen2-Audio-7B-Instruct/tree/0a095220c30b7b31434169c3086508ef3ea5bf0a)
+    * [x] Qwen2.5-VL: [3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/tree/66285546d2b821cf421d4f5eb2576359d3770cd3), [7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/tree/cc594898137f460bfe9f0759e9844b3ce807cfb5)
+    * [x] MiMo-VL: [7B-RL](https://huggingface.co/XiaomiMiMo/MiMo-VL-7B-RL/tree/460c34be0c6cfe79b6b311647ae9112784f80b73), [7B-RL-2508](https://huggingface.co/XiaomiMiMo/MiMo-VL-7B-RL-2508/tree/4bfb270765825d2fa059011deb4c96fdd579be6f)
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
     * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)

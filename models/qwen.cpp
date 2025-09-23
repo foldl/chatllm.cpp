@@ -843,106 +843,305 @@ namespace chatllm::qwen::ds_r1_distill
 namespace chatllm::qwen::vit
 {
     PatchEmbedding::PatchEmbedding(InitContext *ctx, const Config &config)
-        : proj(ctx, 3, config.hidden_size,
-            config.patch_size, config.patch_size, config.temporal_patch_size,
-            config.patch_size, config.patch_size, config.temporal_patch_size,
-            0, 0, 0,
-            1, 1, 1,
-            1, false)
+        : proj0(ctx, 3, config.hidden_size, config.patch_size, config.patch_size, 0, 1, 1, false),
+          proj1(ctx, 3, config.hidden_size, config.patch_size, config.patch_size, 0, 1, 1, false)
+
     {
+        CHATLLM_CHECK(config.temporal_patch_size == 2);
     }
 
-    ggml::tensor *PatchEmbedding::forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
+    ggml::tensor *PatchEmbedding::forward(ComputeContext *ctx, ggml::tensor *input0, ggml::tensor *input1, int grid_h, int grid_w)
     {
-        ggml::tensor *x = proj.forward(ctx, input);
+        ggml::tensor *x0 = proj0.forward(ctx, input0);
+        ggml::tensor *x1 = proj1.forward(ctx, input1);
+        ggml::tensor *x  = ggml::add(ctx, x0, x1);
+        x = ggml::reshape_2d(ctx, x, ggml::get_dim(x, 2), grid_h * grid_w);
         return x;
     }
 
     int64_t PatchEmbedding::get_param_num(bool effective_only) const
     {
         int64_t r = 0;
-        r += proj.get_param_num(effective_only);
+        r += proj0.get_param_num(effective_only);
+        r += proj1.get_param_num(effective_only);
         return r;
     }
 
     void PatchEmbedding::load(const std::string &path, TensorLoader *loader)
     {
-        proj.load(path + "proj.", loader);
+        proj0.load(path + "proj.0.", loader);
+        proj1.load(path + "proj.1.", loader);
     }
 
-    ViTSelfAttention::ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
-        : RoPESelfAttention<BaseCachelessAttention>(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, true, true),
-            pos_h(ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length))
+    TensorPosHelper::TensorPosHelper(int max_length, int window_size, int patch_size, int spatial_merge_size)
+        : max_length(max_length * 4), original_length(max_length), window_size(window_size), patch_size(patch_size),
+            spatial_merge_size(spatial_merge_size)
     {
-        ctx->get_allocator()->alloc(pos_h);
-        causal = false;
-
-        CHATLLM_CHECK(rope_dim % 4 == 0);
+        v_pos.resize(this->max_length);
     }
 
-    void ViTSelfAttention::before_forward(ComputeContext *ctx, const int n_past, const int qlen)
+    ggml::tensor *TensorPosHelper::allocate_pos_tensor(InitContext *ctx)
     {
-        const int len = grid_h * grid_w;
-        std::vector<int> v_pos_h;
+        ggml::tensor *r = ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length);
+        ctx->get_allocator()->alloc(r);
+        return r;
+    }
 
-        CHATLLM_CHECK(len <= max_length);
+    void TensorPosHelper::write_mapping_tensors(ComputeContext *ctx, ggml::tensor *window_id, ggml::tensor *reverse_id)
+    {
+        ggml::set_dim(window_id, 0, v_patch_id.size());
+        ggml::set_dim(reverse_id, 0, v_reverse_window_id.size());
+        Backend::write_tensor_data(window_id,  v_patch_id.data(),  0, v_patch_id.size()  * sizeof(v_patch_id[0]));
+        Backend::write_tensor_data(reverse_id, v_reverse_window_id.data(), 0, v_reverse_window_id.size() * sizeof(v_reverse_window_id[0]));
+    }
 
-        ggml::set_dim(pos,   0, len);
-        ggml::set_dim(pos_h, 0, len);
+    void TensorPosHelper::write_mask_tensor(ComputeContext *ctx, ggml::tensor *mask)
+    {
+        Backend::write_tensor_data(mask, v_mask.data(),  0, v_mask.size()  * sizeof(v_mask[0]));
+    }
 
-        v_pos_h.resize(len);
+    void TensorPosHelper::prepare_pos_tensor(ComputeContext *ctx, ggml::tensor *pos, const int n_past, const int qlen)
+    {
+        pos->ne[0] = length * 4;
+        Backend::write_tensor_data(pos, v_pos.data(), 0, length * 2 * sizeof(v_pos[0]));
+    }
 
-        for (int i = 0; i < grid_h; i++)
+    void TensorPosHelper::prepare(int grid_h, int grid_w)
+    {
+        CHATLLM_CHECK(grid_h % spatial_merge_size == 0);
+        CHATLLM_CHECK(grid_w % spatial_merge_size == 0);
+
+        const int vit_merger_window_size = window_size / patch_size / spatial_merge_size;
+        const int num_windows_h = (grid_h / spatial_merge_size + vit_merger_window_size - 1) / vit_merger_window_size;
+        const int num_windows_w = (grid_w / spatial_merge_size + vit_merger_window_size - 1) / vit_merger_window_size;
+        length = grid_h * grid_w;
+
+        struct coord_t
         {
-            for (int j = 0; j < grid_w; j++)
+            int id; // row 0: left->right; row 1: left->right; ...
+            int x;  // horizon
+            int y;  // vertical
+        };
+
+        struct patch_group_t
+        {
+            coord_t coord;
+            std::vector<coord_t> patches;
+        };
+
+
+        typedef std::vector<patch_group_t> patch_window_t;
+
+        std::vector<std::vector<coord_t>> original_patches;
+        original_patches.resize(grid_h);
+        int idx = 0;
+        for (int h = 0; h < grid_h; h++)
+        {
+            auto &row = original_patches[h];
+            row.resize(grid_w);
+            for (int i = 0; i < grid_w; i++)
             {
-                v_pos  [i * grid_w + j] = j;
-                v_pos_h[i * grid_w + j] = i;
+                row[i].id = idx++;
+                row[i].x  = i;
+                row[i].y  = h;
             }
         }
 
-        Backend::write_tensor_data(pos,     v_pos.data(), 0, len * sizeof(v_pos[0]));
-        Backend::write_tensor_data(pos_h, v_pos_h.data(), 0, len * sizeof(v_pos[0]));
+        // input is already grouped by `spatial_merge_size`
+        std::vector<std::vector<patch_group_t>> input_patches;
+        input_patches.resize(grid_h / spatial_merge_size);
+        idx = 0;
+        int merge_idx = 0;
+        for (int h = 0; h < grid_h / spatial_merge_size; h++)
+        {
+            auto &row = input_patches[h];
+            row.resize(grid_w / spatial_merge_size);
+
+            for (int r = 0; r < grid_w / spatial_merge_size; r++)
+            {
+                row[r].coord.id = merge_idx++;
+                row[r].coord.x  = r * spatial_merge_size;
+                row[r].coord.y  = h * spatial_merge_size;
+
+                for (int i = 0; i < spatial_merge_size; i++)
+                {
+                    for (int j = 0; j < spatial_merge_size; j++)
+                    {
+                        auto &patch = original_patches[row[r].coord.y + i][row[r].coord.x + j];
+                        patch.id = idx++;   // // input is already grouped by `spatial_merge_size`
+                        row[r].patches.push_back(patch);
+                    }
+                }
+            }
+        }
+
+        std::vector<std::vector<patch_window_t>> windowed_patches;
+        windowed_patches.resize(num_windows_h);
+        for (int h = 0; h < (int)input_patches.size(); h += vit_merger_window_size)
+        {
+            auto &row = windowed_patches[h / vit_merger_window_size];
+            row.resize(num_windows_w);
+            for (int w = 0; w < (int)input_patches[0].size(); w += vit_merger_window_size)
+            {
+                auto &window = row[w / vit_merger_window_size];
+                for (int i = h; (i < (int)input_patches.size()) && (i < h + vit_merger_window_size); i++)
+                {
+                    for (int j = w; (j < (int)input_patches[0].size()) && (j < w + vit_merger_window_size); j++)
+                    {
+                        window.push_back(input_patches[i][j]);
+                    }
+                }
+            }
+        }
+
+        v_pos.clear();
+        v_pos.resize(length * 2, 0);
+        int *p_h = &v_pos[length * 0];
+        int *p_w = &v_pos[length * 1];
+
+        v_window_seqlen.clear();
+        v_patch_id.clear();
+        v_reverse_window_id.clear();
+        std::vector<int> v_window_id;
+
+        idx = 0;
+        for (const auto &row : windowed_patches)
+        {
+            for (const auto &window : row)
+            {
+                v_window_seqlen.push_back((int)window.size() * spatial_merge_size * spatial_merge_size);
+
+                for (const auto &group : window)
+                {
+                    v_window_id.push_back(group.coord.id);
+                    for (const auto &patch : group.patches)
+                    {
+                        p_w[idx] = patch.x;
+                        p_h[idx] = patch.y;
+                        v_patch_id.push_back(patch.id);
+                        idx++;
+                    }
+                }
+            }
+        }
+
+        std::vector<size_t> t;
+        utils::ordering(v_window_id, t);
+        for (auto i : t)
+            v_reverse_window_id.push_back((int)i);
+
+        v_mask.resize(length * length, -INFINITY);
+        int i0 = 0;
+        int j0 = 0;
+        for (auto len : v_window_seqlen)
+        {
+            for (int i = 0; i < len; i++)
+            {
+                for (int j = 0; j < len; j++)
+                {
+                    v_mask[(i0 + i) * length + (j0 + j)] = 0.0f;
+                }
+            }
+            i0 += len;
+            j0 += len;
+        }
     }
 
-    ggml::tensor *ViTSelfAttention::apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size, ggml::tensor *pos_w, ggml::tensor *pos_h) const
+    class TensorPosHelper2D : public BaseTensorPosHelper
+    {
+    public:
+        TensorPosHelper2D(int max_length)
+            : BaseTensorPosHelper(max_length * 4)
+        {
+        }
+
+        void prepare_pos_tensor(ComputeContext *ctx, ggml::tensor *pos, const int n_past, const int qlen) override
+        {
+            pos->ne[0] = helper->length * 4;
+            Backend::write_tensor_data(pos, helper->v_pos.data(), 0, pos->ne[0] * sizeof(v_pos[0]));
+        }
+    public:
+        TensorPosHelper *helper;
+    };
+
+    class ViTParams
+    {
+    public:
+        static bool is_full_attention();
+        static void set_full_attention(bool flag);
+    protected:
+        static bool _is_full_attention;
+    };
+
+    bool ViTParams::_is_full_attention = false;
+
+    bool ViTParams::is_full_attention()
+    {
+        return _is_full_attention;
+    }
+
+    void ViTParams::set_full_attention(bool flag)
+    {
+        _is_full_attention = flag;
+    }
+
+    ViTSelfAttention::ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+        : TensorPosHelperPrelude(new TensorPosHelper2D(max_length)),
+          RoPESelfAttention<BaseCachelessAttention>(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, true, true),
+          full_attention(ViTParams::is_full_attention()),
+          mask(full_attention ? nullptr : ggml::new_tensor_2d(ctx, GGML_TYPE_F32, max_length, max_length))
+    {
+        TensorPosHelperPrelude::done();
+
+        causal = false;
+
+        CHATLLM_CHECK(rope_dim % 4 == 0);
+
+        if (mask)
+            ctx->get_allocator()->alloc(mask);
+    }
+
+    void ViTSelfAttention::set_pos_helper(TensorPosHelper *helper)
+    {
+        TensorPosHelper2D *h = (TensorPosHelper2D *)pos_helper.get();
+        h->helper = helper;
+    }
+
+    ggml::tensor *ViTSelfAttention::apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size) const
     {
         // ggml shape of hidden: [head_size, heads, qlen]
-        CHATLLM_CHECK(ggml::get_dim(hidden, 3) == 1);
+        int sections[4] = {rope_dim / 4, rope_dim / 4, 0, 0};
 
-        ggml::tensor *part = ggml::view_4d(ctx, hidden, 2, ggml::get_dim(hidden, 0) / 4, ggml::get_dim(hidden, 1), ggml::get_dim(hidden, 2),
-                                            4 * ggml::element_size(hidden), ggml::row_size(hidden), ggml::row_size(hidden) * ggml::get_dim(hidden, 1), 0);
-        ggml::tensor *copy = ggml::cont(ctx, part);
-        copy = ggml::reshape_3d(ctx, copy, ggml::get_dim(copy, 0) * ggml::get_dim(copy, 1), ggml::get_dim(copy, 2), ggml::get_dim(copy, 3));
-        copy = ggml::rope_ext_inplace(ctx, copy, pos_w, freq_factors, rope_dim / 2, RoPEMode::Interleaved, n_original_ctx,
-                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);
-        copy = ggml::cpy(ctx, copy, part);
-        ggml::build_forward_expand(ctx, copy);
-
-        part = ggml::view_4d(ctx, hidden, 2, ggml::get_dim(hidden, 0) / 4, ggml::get_dim(hidden, 1), ggml::get_dim(hidden, 2),
-                            4 * ggml::element_size(hidden), ggml::row_size(hidden), ggml::row_size(hidden) * ggml::get_dim(hidden, 1), 2 * ggml::element_size(hidden));
-        copy = ggml::cont(ctx, part);
-        copy = ggml::reshape_3d(ctx, copy, ggml::get_dim(copy, 0) * ggml::get_dim(copy, 1), ggml::get_dim(copy, 2), ggml::get_dim(copy, 3));
-        copy = ggml::rope_ext_inplace(ctx, copy, pos_h, freq_factors, rope_dim / 2, RoPEMode::Interleaved, n_original_ctx,
-                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);
-        copy = ggml::cpy(ctx, copy, part);
-        ggml::build_forward_expand(ctx, copy);
-
-        hidden = ggml::reshape_4d(ctx, hidden, ggml::get_dim(hidden, 0), ggml::get_dim(hidden, 1), ggml::get_dim(hidden, 2), ggml::get_dim(hidden, 3));
+        hidden = ggml::rope_ext_inplace(ctx, hidden, pos, freq_factors, rope_dim / 2, GGML_ROPE_TYPE_VISION, n_original_ctx,
+                            freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow,
+                            sections);
 
         return hidden;
     }
 
     ggml::tensor *ViTSelfAttention::apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const
     {
-        k = apply_2d_rope(ctx, k, hidden_size, pos, pos_h);
+        k = apply_2d_rope(ctx, k, hidden_size);
         return k;
     }
 
     ggml::tensor *ViTSelfAttention::apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const
     {
-        q = apply_2d_rope(ctx, q, hidden_size, pos, pos_h);
+        q = apply_2d_rope(ctx, q, hidden_size);
         return q;
+    }
+
+    // TODO: OPTIMIZATION: use window attention, but not mask
+    ggml::tensor *ViTSelfAttention::attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
+                                            ggml::tensor *attn_scores)
+    {
+        const int head_size = hidden_size / num_attention_heads;
+
+        ggml::tensor* sub_mask = mask ? ggml::view_2d(ctx, mask, qlen, qlen,
+            qlen * ggml::element_size(mask), 0) : nullptr;
+
+        ggml::tensor * attn_probs = ggml::soft_max_ext(ctx, attn_scores, sub_mask, 1.f / sqrtf((float)head_size), 0.0f);
+        return attn_probs;
     }
 
     MLP::MLP(InitContext *ctx, int hidden_size, int intermediate_size, int output_size)
@@ -983,14 +1182,24 @@ namespace chatllm::qwen::vit
     VisionTransformer::VisionTransformer(InitContext *ctx, const Config &config, int lm_hidden_size)
         : embeddings(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), config),
         multi_modal_projector(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config, lm_hidden_size),
+        window_id(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_I32, config.max_pixels / config.patch_size / config.patch_size)),
+        reverse_id(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_I32, config.max_pixels / config.patch_size / config.patch_size)),
         loaded(false)
     {
         const int max_length = config.max_pixels / config.patch_size / config.patch_size;
+        pos_helper.reset(new TensorPosHelper(max_length,
+            config.window_size, config.patch_size, config.spatial_merge_size));
+
+        ctx->get_allocator()->alloc(window_id);
+        ctx->get_allocator()->alloc(reverse_id);
+
         for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
         {
+            ViTParams::set_full_attention(config.fullatt_block_indices[layer_id]);
             ctx->move_to_layer(layer_id);
             auto layer = new LayerBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size, max_length);
             layer->set_id(layer_id);
+            layer->attention.set_pos_helper(pos_helper.get());
             layers.emplace_back(layer);
         }
     }
@@ -1007,7 +1216,7 @@ namespace chatllm::qwen::vit
 
     void VisionTransformer::load(const std::string &path, TensorLoader *loader)
     {
-        if (!loader->has_tensor(path + "patch_embed.proj.weight")) return;
+        if (!loader->has_tensor(path + "patch_embed.proj.0.weight")) return;
 
         embeddings.load(path + "patch_embed.", loader);
         multi_modal_projector.load(path + "merger.", loader);
@@ -1021,15 +1230,23 @@ namespace chatllm::qwen::vit
 
     ggml::tensor *VisionTransformer::forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
     {
-        auto output = embeddings.forward(ctx, input, grid_h, grid_w);
+        pos_helper->prepare(grid_h, grid_w);
+        pos_helper->write_mapping_tensors(ctx, window_id, reverse_id);
+
+        auto output = embeddings.forward(ctx, input, input, grid_h, grid_w);
+        output = ggml::get_rows(ctx, output, window_id);
 
         for (size_t i = 0; i < layers.size(); i++)
         {
+            if (layers[i]->attention.mask)
+                pos_helper->write_mask_tensor(ctx, layers[i]->attention.mask);
             layers[i]->attention.grid_h = grid_h;
             layers[i]->attention.grid_w = grid_w;
             output = layers[i]->forward(ctx, output, 0);
         }
+
         output = multi_modal_projector.forward(ctx, output, grid_h, grid_w);
+        output = ggml::get_rows(ctx, output, reverse_id);
         return output;
     }
 
@@ -1038,11 +1255,12 @@ namespace chatllm::qwen::vit
         return loaded;
     }
 
-
-    VisualEmbeddingGeneration::VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE)
+    VisualEmbeddingGeneration::VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, int max_patches, size_t GRAPH_SIZE)
         :
         GRAPH_SIZE(GRAPH_SIZE), _ctx(&backend_context),
-        n_threads(runtime_config.n_threads)
+        n_threads(runtime_config.n_threads),
+        vis_config(0),
+        max_patches(max_patches)
     {
         _ctx.cache_dtype = runtime_config.cache_type;
         model_gpu_layers = BackendContext::get_ngl_of_model(runtime_config.model_gpu_layers, "vis");
@@ -1078,14 +1296,11 @@ namespace chatllm::qwen::vit
         vis_config.window_size          = (int)vis_cfg["window_size"].ToInt();
         vis_config.tokens_per_second    = (int)vis_cfg["tokens_per_second"].ToInt();
         vis_config.temporal_patch_size  = (int)vis_cfg["temporal_patch_size"].ToInt();
-        vis_config.min_pixels           = (int)vis_cfg["intermediate_size"].ToInt();
-        vis_config.max_pixels           = (int)vis_cfg["intermediate_size"].ToInt();
 
-        auto indexes = vis_cfg["fullatt_block_indexes"];
-        vis_config.fullatt_block_indices_num    = (int)indexes.length();
-        CHATLLM_CHECK(vis_config.fullatt_block_indices_num <= sizeof(vis_config.fullatt_block_indices) / sizeof(vis_config.fullatt_block_indices[0]));
-        for (int i = 0; i < vis_config.fullatt_block_indices_num; i++)
-            vis_config.fullatt_block_indices[i] = (int)indexes[i].ToInt();
+        auto indices = vis_cfg["fullatt_block_indexes"];
+        CHATLLM_CHECK((int)indices.length() <= VIT_MAX_LAYERS);
+        for (int i = 0; i < (int)indices.length(); i++)
+            vis_config.fullatt_block_indices[indices[i].ToInt()] = true;
 
         auto pp_cfg = config["preprocessor_config.json"];
         if (pp_cfg.IsObject())
@@ -1101,10 +1316,15 @@ namespace chatllm::qwen::vit
             vis_config.image_std[0]     = (float)image_std[0].ToFloat();
             vis_config.image_std[1]     = (float)image_std[1].ToFloat();
             vis_config.image_std[2]     = (float)image_std[2].ToFloat();
+
+            vis_config.merge_size       = (int)pp_cfg["merge_size"].ToInt();
+            vis_config.min_pixels       = (int)pp_cfg["min_pixels"].ToInt();
+            vis_config.max_patches      = max_patches;
+            vis_config.max_pixels       = max_patches * vis_config.patch_size * vis_config.patch_size;
         }
 
         const size_t tensor_ovhd = ggml_tensor_overhead();
-        const size_t num_tensors = 6 + vis_config.num_hidden_layers * 15;
+        const size_t num_tensors = 5 + vis_config.num_hidden_layers * 18;
         const size_t ctx_size = num_tensors * tensor_ovhd;
         _ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         _ctx.dtype = dtype;
@@ -1175,27 +1395,111 @@ namespace chatllm::qwen::v2_5_vl
 {
     static ChatHistoryEncoder _chat_encoder;
 
-    Tokenizer::Tokenizer(const BaseConfig &config) : v2::Tokenizer(config)
+    Tokenizer::Tokenizer(const BaseConfig &config) : v2::Tokenizer(config, &_chat_encoder)
     {}
 
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
         size_t r = v2::Tokenizer::load(buffer, n_vocab);
 
+        object_ref_start_token_id   = tp->PieceToId("<|object_ref_start|>");
+        object_ref_end_token_id     = tp->PieceToId("<|object_ref_end|>");
+        box_start_token_id          = tp->PieceToId("<|box_start|>");
+        box_end_token_id            = tp->PieceToId("<|box_end|>");
+        quad_start_token_id         = tp->PieceToId("<|quad_start|>");
+        quad_end_token_id           = tp->PieceToId("<|quad_end|>");
+        vision_start_token_id       = tp->PieceToId("<|vision_start|>");
+        vision_end_token_id         = tp->PieceToId("<|vision_end|>");
+        vision_pad_token_id         = tp->PieceToId("<|vision_pad|>");
+        image_pad_token_id          = tp->PieceToId("<|image_pad|>");
+        video_pad_token_id          = tp->PieceToId("<|video_pad|>");
+
         return r;
     }
 
     void Tokenizer::inject_media(const std::string &media_type, std::vector<int> &ids, const int ids_to_inject_start, const int ids_to_inject_count)
     {
-
+        ids.push_back(vision_start_token_id);
+        for (int i = 0; i < ids_to_inject_count; i++)
+            ids.push_back(i + ids_to_inject_start);
+        ids.push_back(vision_end_token_id);
     }
 
     static BlockParams::PadEmbedding *pad_arg = nullptr;
 
+    struct ImageGridSize
+    {
+        int w, h;
+        int frame_num;
+        ImageGridSize(int w, int h, int frame_num = 1) : w(w), h(h), frame_num(frame_num) {}
+    };
+
+    class ConditionalGeneration;
+
+    class TensorPosHelper3D : public BaseTensorPosHelper
+    {
+    public:
+        TensorPosHelper3D(int max_length, int image_id_start, ConditionalGeneration *gen)
+            : original_length(max_length), image_id_start(image_id_start),
+              BaseTensorPosHelper(max_length * 4),
+              gen(gen)
+        {
+        }
+
+        ggml::tensor *allocate_pos_tensor(InitContext *ctx) override
+        {
+            ggml::tensor *r = ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length);
+            ctx->get_allocator()->alloc(r);
+            return r;
+        }
+
+        void prepare_pos_tensor(ComputeContext *ctx, ggml::tensor *pos, const int n_past, const int qlen) override;
+    protected:
+        const int original_length;
+        const int image_id_start;
+        ConditionalGeneration *gen;
+    };
+
+    class ExtendEmbedding
+    {
+    public:
+        ExtendEmbedding() : pad_arg(new BlockParams::PadEmbedding(4096, 4096)) {}
+    public:
+        BlockParams::PadEmbedding *pad_arg = nullptr;
+    };
+
+    class ConditionalGeneration : public TensorPosHelperPrelude, public ExtendEmbedding, public v2::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
+        bool load_more(const json::JSON &config) override;
+        void load(ModelLoader &loader) override;
+        void set_additional_args(const std::map<std::string, std::string> &args) override;
+        void before_generate(const GenerationConfig &gen_config) override;
+    protected:
+        bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override;
+    public:
+        vit::VisualEmbeddingGeneration visual;
+        std::vector<int> v_pos;
+        const Config config;
+    protected:
+        std::vector<ImageGridSize> images_grid;
+        int token_time;
+    };
+
+    void TensorPosHelper3D::prepare_pos_tensor(ComputeContext *ctx, ggml::tensor *pos, const int n_past, const int qlen)
+    {
+        pos->ne[0] = (int)(gen->v_pos.size());
+        Backend::write_tensor_data(pos, gen->v_pos.data(), 0, gen->v_pos.size() * sizeof(gen->v_pos[0]));
+    }
+
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-        : ExtendEmbedding(),
+        : TensorPosHelperPrelude(new TensorPosHelper3D(config.max_length, config.vocab_size, this)),
+          ExtendEmbedding(),
           v2::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_QWEN2_5_VL, config.tie_word_embeddings != 0),
-          visual(runtime_config)
+          visual(runtime_config, pad_arg->get()),
+          config(config),
+          token_time(0)
     {
         delete pad_arg;
         pad_arg = nullptr;
@@ -1203,6 +1507,8 @@ namespace chatllm::qwen::v2_5_vl
         for (int i = 0; i < config.num_hidden_layers; i++)
         {
             auto &layer = get_typed_transformer<ModelClass>()->layers[i];
+            layer.attention.mrope_sections = this->config.mrope_section;
+            layer.attention.rope_mode = RoPEMode::MROPE;
         }
     }
 
@@ -1237,11 +1543,19 @@ namespace chatllm::qwen::v2_5_vl
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         tok->video_max_frames       = utils::get_opt(args, "video_max_frames", tok->video_max_frames);
+        tok->fps                    = utils::get_opt(args, "fps", tok->fps);
     }
 
     void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
     {
         std::vector<uint8_t> buf;
+        images_grid.clear();
+        for (auto &mm : tokenizer->media_emb)
+        {
+            images_grid.emplace_back(mm.grid_width / visual.vis_config.merge_size,
+                                     mm.grid_height / visual.vis_config.merge_size);
+        }
+
         auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
         visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
         if (buf.size() < 1) return;
@@ -1250,39 +1564,78 @@ namespace chatllm::qwen::v2_5_vl
         Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
     }
 
+    bool ConditionalGeneration::generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits)
+    {
+        const int image_id_start = config.vocab_size;
+        const int length = (int)input_ids.size();
+
+        // TODO:
+        int token_n_inc = int(1 / ((dynamic_cast<Tokenizer *>(tokenizer))->fps / visual.vis_config.temporal_patch_size) * visual.vis_config.tokens_per_second);
+        if (token_n_inc < 1) token_n_inc = 1;
+
+        v_pos.clear();
+        v_pos.resize(length * 4, 0);
+        int *p_t = &v_pos[length * 0];
+        int *p_h = &v_pos[length * 1];
+        int *p_w = &v_pos[length * 2];
+
+        if ((n_past == 0) && (n_past_offset == 0))
+            token_time = 0;
+
+        int t = token_time;
+        int mm_index = 0;
+
+        int i = 0;
+        while (i < length)
+        {
+            if (input_ids[i] < image_id_start)
+            {
+                p_t[i] = t;
+                p_h[i] = t;
+                p_w[i] = t;
+                i++;
+                t++;
+                continue;
+            }
+
+            CHATLLM_CHECK(mm_index < images_grid.size());
+
+            auto &dim = images_grid[mm_index++];
+            for (int f = 0; f < dim.frame_num; f++, t += token_n_inc)
+            {
+                for (int h = 0; h < dim.h; h++)
+                {
+                    for (int w = 0; w < dim.w; w++)
+                    {
+                        CHATLLM_CHECK(input_ids[i] >= image_id_start);
+                        p_t[i] = t;
+                        p_h[i] = t + h;
+                        p_w[i] = t + w;
+                        i++;
+                    }
+                }
+            }
+            t = std::max(p_h[i - 1], p_w[i - 1]) + 1;
+        }
+
+        token_time = t;
+        auto r = v2::ConditionalGeneration::generate_next_token(input_ids, gen_config, lm_logits);
+
+        return r;
+    }
+
     void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         append_user_opening(round_idx, ids);
 
+        tok->media_emb.clear();
+
         std::vector<std::unique_ptr<vision::VideoLoader>> videos;
 
         std::unique_ptr<vision::Resize> resize;
-        std::unique_ptr<vision::PreMaxImageSize> max_size;
 
-        // expand video into images
-        std::vector<ContentPiece> pieces;
         for (auto &piece : user.pieces)
-        {
-            if (piece.type != ContentPiece::Type::Video)
-            {
-                pieces.push_back(piece);
-                continue;
-            }
-
-            auto video = new vision::VideoLoader(piece.content.c_str(), (float)tok->fps, tok->video_max_frames);
-            videos.emplace_back(video);
-            if (video->frames.size() < 1)
-                continue;
-
-            for (size_t i = 0; i < video->frames.size() - 1; i += 2)
-            {
-                //pieces.emplace_back(utils::sec2hms(i / tok->fps, true));
-                //pieces.emplace_back(video->frames[i], ContentPiece::Type::Image);
-            }
-        }
-
-        for (auto &piece : pieces)
         {
             if (piece.type == ContentPiece::Type::Text)
             {
@@ -1296,9 +1649,11 @@ namespace chatllm::qwen::v2_5_vl
                 std::vector<uint8_t> pixels;
                 const int patch_size = vis_config->patch_size;
 
-                vision::MaxPatchNum     param2(vis_config->max_pixels / (vis_config->patch_size * vis_config->patch_size));
+                vision::MinMaxPixels    param1(vis_config->min_pixels, 256 * 28 * 28); // vis_config->max_pixels);
+                vision::MergeKernel     param2(vis_config->merge_size, vis_config->merge_size);
 
                 vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, vision::PaddingMode::Black);
+                if ((w <= 0) || (h <= 0)) continue;
 
                 std::vector<float> scaled;
                 vision::image_rescale(pixels, scaled);
@@ -1309,13 +1664,35 @@ namespace chatllm::qwen::v2_5_vl
 
                 auto &image = tok->media_emb.back();
 
-                vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::PatchesLeftRightDown_ChannelsRGB_PixelsLeftRightDown);
+                // Qwen2.5 image data format:
+                // PatchesLeftRightDown_ChannelsRGB_PixelsLeftRightDown
+                // Pixels of a patch is repeated once (spatial dim)
+                // # Reorder dimensions to group grid and patch information for subsequent flattening.
+                // # (batch, grid_t, grid_h, grid_w, merge_h, merge_w, channel, temp_patch_size, patch_h, patch_w)
 
-                const int merge_length = vis_config->temporal_patch_size * vis_config->temporal_patch_size;
+                vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::PatchesLeftRightDown_MergeN_ChannelsRGB_PixelsLeftRightDown);
+
+                const int merge_length = vis_config->merge_size * vis_config->merge_size;
                 image.emb_vec_number = image.grid_width * image.grid_height / merge_length;
 
                 const int id_start = tok->get_image_total_emb_vectors() - image.emb_vec_number + tok->vocab_size;
                 tok->inject_media("image", ids, id_start, image.emb_vec_number);
+            }
+            else if (piece.type == ContentPiece::Type::Video)
+            {
+                // TODO: expand video into images
+                continue;
+
+                auto video = new vision::VideoLoader(piece.content.c_str(), (float)tok->fps, tok->video_max_frames);
+                videos.emplace_back(video);
+                if (video->frames.size() < 1)
+                    continue;
+
+                for (size_t i = 0; i < video->frames.size() - 1; i += 2)
+                {
+                    //pieces.emplace_back(utils::sec2hms(i / tok->fps, true));
+                    //pieces.emplace_back(video->frames[i], ContentPiece::Type::Image);
+                }
             }
             else
             {
@@ -1323,6 +1700,7 @@ namespace chatllm::qwen::v2_5_vl
             }
         }
         ids.push_back(tok->im_end_token_id);
+        ids.push_back(tok->nl_token_id);
     }
 }
 
@@ -1570,17 +1948,17 @@ namespace chatllm::qwen::v3_ranker
 
 namespace chatllm
 {
-    REGISTER_MODEL_LOADER(QWEN,                  qwen::v1, 2);
-    REGISTER_MODEL_LOADER(QWEN2,                 qwen::v2, 1);
-    REGISTER_MODEL_LOADER(QWEN2MoE,              qwen::v2_moe, 1);
-    REGISTER_MODEL_LOADER(QWEN2TIE,              qwen::v2_tie, 1);
-    REGISTER_MODEL_LOADER(MARCO_O1,              qwen::marco_o1, 1);
-    REGISTER_MODEL_LOADER(QWQ,                   qwen::qwq, 1);
-    REGISTER_MODEL_LOADER(DEEPSEEK_R1_DISTILL_QWEN, qwen::ds_r1_distill, 1);
-    REGISTER_MODEL_LOADER(DEEPSEEK_R1_DISTILL_QWEN3,qwen::ds_r1_distill_v3, 1);
-    REGISTER_MODEL_LOADER(QWEN2_AUDIO,           qwen::v2_audio, 1);
-    REGISTER_MODEL_LOADER(QWEN2_5_VL,            qwen::v2_5_vl, 1);
-    REGISTER_MODEL_LOADER(QWEN3,                 qwen::v3, 1);
-    REGISTER_MODEL_LOADER(QWEN3_Embedding,           qwen::v3_emb, 1);
-    REGISTER_MODEL_LOADER(QWEN3_ReRanker,            qwen::v3_ranker, 1);
+    REGISTER_MODEL_LOADER(QWEN,                         qwen::v1, 2);
+    REGISTER_MODEL_LOADER(QWEN2,                        qwen::v2, 1);
+    REGISTER_MODEL_LOADER(QWEN2MoE,                     qwen::v2_moe, 1);
+    REGISTER_MODEL_LOADER(QWEN2TIE,                     qwen::v2_tie, 1);
+    REGISTER_MODEL_LOADER(MARCO_O1,                     qwen::marco_o1, 1);
+    REGISTER_MODEL_LOADER(QWQ,                          qwen::qwq, 1);
+    REGISTER_MODEL_LOADER(DEEPSEEK_R1_DISTILL_QWEN,     qwen::ds_r1_distill, 1);
+    REGISTER_MODEL_LOADER(DEEPSEEK_R1_DISTILL_QWEN3,    qwen::ds_r1_distill_v3, 1);
+    REGISTER_MODEL_LOADER(QWEN2_AUDIO,                  qwen::v2_audio, 1);
+    REGISTER_MODEL_LOADER(QWEN2_5_VL,                   qwen::v2_5_vl, 1);
+    REGISTER_MODEL_LOADER(QWEN3,                        qwen::v3, 1);
+    REGISTER_MODEL_LOADER(QWEN3_Embedding,              qwen::v3_emb, 1);
+    REGISTER_MODEL_LOADER(QWEN3_ReRanker,               qwen::v3_ranker, 1);
 }
