@@ -338,7 +338,7 @@ namespace vision
         }
     }
 
-    void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, PaddingMode pad)
+    void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, const std::string &pad)
     {
         // magick -depth 8 demo.jpeg -resize 100x100 rgb:"aaa.raw"
         rgb_pixels.clear();
@@ -401,30 +401,30 @@ namespace vision
             }
         }
 
-        oss << " -resize " << width << "x" << height << "!";
+        oss << " -resize \"" << width << "x" << height << "\\>\"";
 
         int aligned_width  = 0;
         int aligned_height = 0;
         const int patch_size_w = params.merge_kernel_size[0] > 0 ? patch_size * params.merge_kernel_size[0] : patch_size;
         const int patch_size_h = params.merge_kernel_size[1] > 0 ? patch_size * params.merge_kernel_size[1] : patch_size;
 
-        if (pad != PaddingMode::No)
+        if (params.do_resize)
+        {
+            aligned_width  = width;
+            aligned_height = height;
+
+            oss << " -compose Copy -gravity northwest";
+            oss << " -background " << (pad != PaddingMode::No ? pad : "white");
+            oss << " -extent " << aligned_width << "x" << aligned_height;
+        }
+        else if (pad != PaddingMode::No)
         {
             aligned_width  = ((width  + patch_size_w - 1) / patch_size_w) * patch_size_w;
             aligned_height = ((height + patch_size_h - 1) / patch_size_h) * patch_size_h;
 
-            oss << " -background ";
-            switch (pad)
-            {
-            case PaddingMode::Black:
-                oss << "black";
-                break;
-
-            default:
-                oss << "white";
-                break;
-            }
-            oss << " -compose Copy -gravity northwest -extent " << aligned_width << "x" << aligned_height;
+            oss << " -compose Copy -gravity northwest";
+            oss << " -background " << pad;
+            oss << " -extent " << aligned_width << "x" << aligned_height;
         }
         else
         {

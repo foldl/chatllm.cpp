@@ -6,11 +6,12 @@
 
 namespace vision
 {
-    enum PaddingMode
+    namespace PaddingMode
     {
-        No,
-        Black,
-        White,
+        const std::string No = "no";
+        const std::string Black = "black";
+        const std::string White = "white";
+        const std::string Gray  = "#7f7f7f";
     };
 
     enum PatchesFormat
@@ -111,7 +112,7 @@ namespace vision
     typedef std::vector<uint8_t> image_pixels_t; // natural sequence of RGB pixels
 
     void image_dimension(const char *fn, int &width, int &height);
-    void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, PaddingMode pad = PaddingMode::No);
+    void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, const std::string &pad = PaddingMode::No);
     void image_load_split(const char *fn, std::vector<image_pixels_t> &splits, bool do_split, const int split_width, const int split_height, int &splits_cols_num, int &splits_rows_num); // splits are in natural order
     void image_load_pan_and_scan(const char *fn, std::vector<image_pixels_t> &crops, bool do_pas,
         const int min_crop_size, const int max_num_crops, float min_ratio_to_activate,
