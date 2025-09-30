@@ -17,6 +17,7 @@ namespace chatllm::deepseek::v1
         void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
         void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
         void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+        void append_user_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
     class Tokenizer : public llama::v2::Tokenizer

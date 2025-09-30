@@ -10,6 +10,7 @@ namespace chatllm
     #define MODEL_TYPE_TAG_ChatAudioIn                              MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::AudioInput)
     #define MODEL_TYPE_TAG_ChatImageInVideoIn                       MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::VideoInput)
     #define MODEL_TYPE_TAG_ChatImageInVideoInAudioInAudioOut        MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::VideoInput + ChatModelAccessPoint::AudioInput + ChatModelAccessPoint::AudioOutput)
+    #define MODEL_TYPE_TAG_ChatImageInImageOut                      MAKE_TYPE_TAG(ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::ImageOutput)
 
     enum ModelType
     {
@@ -201,6 +202,8 @@ namespace chatllm
         MODEL_TYPE_QWEN2_5_VL       = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000001,
         MODEL_TYPE_KIMI_VL          = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000100,
         MODEL_TYPE_SMOL_VLM         = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x0000200,
+
+        MODEL_TYPE_JANUS_PRO        = MODEL_TYPE_TAG_ChatImageInImageOut + 0x0000001,
     };
 
     struct RuntimeConfig
@@ -514,4 +517,35 @@ namespace chatllm
     }
 
     Block *create_lm_head(InitContext *ctx, const BaseConfig &config, bool bias = false);
+
+    class DynamicBlock: public Block
+    {
+    public:
+        DynamicBlock();
+        virtual bool is_loaded(void) const;
+    protected:
+        bool _loaded;
+    };
+
+    class BaseMediaProjectedEmbeddingGeneration
+    {
+    public:
+        BaseMediaProjectedEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 4096);
+        virtual bool load(ModelLoader &loader);
+        virtual bool load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config);
+        virtual void generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf);
+    protected:
+        virtual bool run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &media, std::vector<uint8_t> &buf);
+        virtual ggml::tensor *make_media_tensor(ComputeContext *ctx, const BaseTokenizer::MediaAsEmbeddingVector &media) = 0;
+        virtual void write_media_tensor(ggml::tensor *media_emb, const BaseTokenizer::MediaAsEmbeddingVector &media);
+    protected:
+        std::unique_ptr<DynamicBlock> model;
+        BackendContext backend_context;
+        const size_t GRAPH_SIZE;
+        InitContext _ctx; // weight context
+        std::string model_gpu_layers;
+        const int n_threads;
+    protected:
+        int max_embedding_num;
+    };
 }

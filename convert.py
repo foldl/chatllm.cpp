@@ -52,6 +52,7 @@ ModelTypeTagChatImageIn = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.valu
 ModelTypeTagChatAudioIn = ((ChatModelAP.Text.value + ChatModelAP.AudioInput.value) >> 1) << 24
 ModelTypeTagChatImageVideoIn = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value) >> 1) << 24
 ModelTypeTagChatImageVideoAudioInAudioOut = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value + ChatModelAP.AudioInput.value + ChatModelAP.AudioOutput.value) >> 1) << 24
+ModelTypeTagChatImageInImageOut = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.ImageOutput.value) >> 1) << 24
 
 class ModelType(Enum):
     CHATGLM = 1
@@ -243,6 +244,8 @@ class ModelType(Enum):
     SmolVLM                 = ModelTypeTagChatImageVideoIn + 0x0000200
 
     MiniCPM_O               = ModelTypeTagChatImageVideoAudioInAudioOut + 0x0000001
+
+    JanusPro                = ModelTypeTagChatImageInImageOut + 0x0000001
 
 class TokenType(Enum):
     UNDEFINED    = 0
@@ -7657,6 +7660,283 @@ class GroveMoEConverter(BaseConverter):
         weight_names.sort()
         return weight_names
 
+class JanusConverter(BaseConverter):
+    MODEL_TYPE = ModelType.JanusPro
+    lang_config = {}
+
+    @staticmethod
+    def is_proper_config(config):
+        try:
+            return  config.aligner_config['cls'] == 'MlpProjector' and \
+                    config.gen_aligner_config['cls'] == 'MlpProjector' and \
+                    config.gen_head_config['cls'] == 'vision_head' and \
+                    config.gen_vision_config['cls'] == 'VQ-16' and \
+                    config.language_config['model_type'] == 'llama' and \
+                    config.model_type == 'multi_modality' and \
+                    config.vision_config['cls'] == 'CLIPVisionTower'
+        except:
+            return False
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for k in state_dict:
+            name: str = k
+            t: torch.Tensor = state_dict[k]
+
+            if name.startswith('language_model.'):
+                name = name.replace('language_model.', '')
+                r[name] = DeepSeekConverter.pp(JanusConverter.lang_config, name, t)
+            elif name.startswith('gen_vision_model'):
+                name = name.replace('.k.', '.k_proj.')
+                name = name.replace('.q.', '.q_proj.')
+                name = name.replace('.v.', '.v_proj.')
+                name = name.replace('.proj_out.', '.o_proj.')
+                r[name] = t
+            elif name.startswith('vision_model'):
+                name = name.replace('.vision_tower.blocks.', '.layers.')
+                name = name.replace('.vision_tower.', '.')
+                if '.attn.' in name:
+                    name = name.replace('.proj.', '.o_proj.')
+                    if '.qkv.' in name:
+                        n = t.shape[0] // 3
+                        q, k, v = t.split([n, n, n])
+                        r[name.replace('.qkv.', '.q_proj.')] = q
+                        r[name.replace('.qkv.', '.k_proj.')] = k
+                        r[name.replace('.qkv.', '.v_proj.')] = v
+                    else:
+                        r[name] = t
+                else:
+                    if 'mlp.fc1.' in name:
+                        name = name.replace('.fc1.', '.fc0.')
+                    elif 'mlp.fc2.' in name:
+                        name = name.replace('.fc2.', '.fc1.')
+
+                    if name == 'vision_model.pos_embed':
+                        assert t.shape[0] == 1
+                        t = t[0]
+                    r[name] = t
+            elif name.startswith('aligner.') or name.startswith('gen_aligner.'):
+                name = name.replace('.layers.0.', '.fc0.')
+                name = name.replace('.layers.2.', '.fc1.')
+                r[name] = t
+            else:
+                r[name] = t
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.vision_config['params']['model_name'] == 'siglip_large_patch16_384'
+        JanusConverter.lang_config = AttributeDict(config.language_config)
+
+        JanusConverter.lang_config.hidden_act = 'silu'
+
+        DeepSeekConverter.dump_config(f, JanusConverter.lang_config, ggml_type)
+
+    @staticmethod
+    def get_aligner_weight_names(config, prefix):
+        weight_names = [
+            prefix + 'fc0.bias',
+            prefix + 'fc0.weight',
+            prefix + 'fc1.bias',
+            prefix + 'fc1.weight',
+        ]
+        return weight_names
+
+    @staticmethod
+    def get_vis_model_weight_names(prefix, config):
+        class ModelArgs:
+            codebook_size: int = 16384
+            codebook_embed_dim: int = 8
+            codebook_l2_norm: bool = True
+            codebook_show_usage: bool = True
+            commit_loss_beta: float = 0.25
+            entropy_loss_ratio: float = 0.0
+
+            encoder_ch_mult: List[int] = [1, 1, 2, 2, 4]
+            decoder_ch_mult: List[int] = [1, 1, 2, 2, 4]
+            z_channels: int = 256
+            dropout_p: float = 0.0
+
+        args = ModelArgs()
+        weight_names = []
+
+        def get_res_names(name_prefix: str, in_channels, out_channels):
+            weight_names = [
+                f"{name_prefix}.conv1.bias",
+                f"{name_prefix}.conv1.weight",
+                f"{name_prefix}.conv2.bias",
+                f"{name_prefix}.conv2.weight",
+                f"{name_prefix}.norm1.bias",
+                f"{name_prefix}.norm1.weight",
+                f"{name_prefix}.norm2.bias",
+                f"{name_prefix}.norm2.weight",
+            ]
+            if in_channels != out_channels:
+                weight_names += [
+                    f"{name_prefix}.nin_shortcut.weight",
+                    f"{name_prefix}.nin_shortcut.bias",
+                ]
+            return weight_names
+
+        def get_attn_names(name_prefix: str):
+            weight_names = [
+                    f"{name_prefix}.q_proj.weight",
+                    f"{name_prefix}.q_proj.bias",
+                    f"{name_prefix}.k_proj.weight",
+                    f"{name_prefix}.k_proj.bias",
+                    f"{name_prefix}.v_proj.weight",
+                    f"{name_prefix}.v_proj.bias",
+                    f"{name_prefix}.o_proj.weight",
+                    f"{name_prefix}.o_proj.bias",
+                    f"{name_prefix}.norm.weight",
+                    f"{name_prefix}.norm.bias",
+                ]
+            return weight_names
+
+        def get_decoder_names(num_res_blocks = 2):
+            nonlocal args, weight_names
+            num_resolutions = len(args.decoder_ch_mult)
+
+            weight_names += [
+                f"{prefix}decoder.conv_in.bias",
+                f"{prefix}decoder.conv_in.weight",
+                f"{prefix}decoder.conv_out.bias",
+                f"{prefix}decoder.conv_out.weight",
+                f"{prefix}decoder.norm_out.bias",
+                f"{prefix}decoder.norm_out.weight",
+            ]
+
+            ch_mult = args.decoder_ch_mult
+            block_in = ch_mult[num_resolutions - 1]
+
+            weight_names += get_res_names(prefix + f"decoder.mid.0", 1, 1)
+            weight_names += get_attn_names(prefix + f"decoder.mid.1")
+            weight_names += get_res_names(prefix + f"decoder.mid.2", 1, 1)
+
+            for i_level in range(num_resolutions):
+                name_prefix = f"{prefix}decoder.conv_blocks.{i_level}"
+                block_out = ch_mult[num_resolutions - i_level - 1]
+
+                for j in range(num_res_blocks + 1):
+                    weight_names += get_res_names(name_prefix + f".res.{j}", block_in, block_out)
+                    block_in = block_out
+                    if i_level == 0:
+                        weight_names += get_attn_names(name_prefix + f'.attn.{j}')
+                if i_level != num_resolutions - 1:
+                    weight_names += [
+                        f"{name_prefix}.upsample.conv.bias",
+                        f"{name_prefix}.upsample.conv.weight",
+                    ]
+
+        def get_encoder_names(num_res_blocks = 2):
+            nonlocal args, weight_names
+            num_resolutions = len(args.decoder_ch_mult)
+
+            weight_names += [
+                f"{prefix}encoder.conv_in.bias",
+                f"{prefix}encoder.conv_in.weight",
+                f"{prefix}encoder.conv_out.bias",
+                f"{prefix}encoder.conv_out.weight",
+                f"{prefix}encoder.norm_out.bias",
+                f"{prefix}encoder.norm_out.weight",
+            ]
+
+            weight_names += get_res_names(prefix + f"encoder.mid.0", 1, 1)
+            weight_names += get_attn_names(prefix + f"encoder.mid.1")
+            weight_names += get_res_names(prefix + f"encoder.mid.2", 1, 1)
+
+            ch_mult = args.encoder_ch_mult
+            in_ch_mult = (1,) + tuple(ch_mult)
+
+            for i_level in range(num_resolutions):
+                name_prefix = f"{prefix}encoder.conv_blocks.{i_level}"
+
+                block_in = in_ch_mult[i_level]
+                block_out = ch_mult[i_level]
+
+                for j in range(num_res_blocks):
+                    weight_names += get_res_names(name_prefix + f".res.{j}", block_in, block_out)
+                    block_in = block_out
+                    if i_level == num_resolutions - 1:
+                        weight_names += get_attn_names(name_prefix + f'.attn.{j}')
+
+                if i_level != num_resolutions - 1:
+                    weight_names += [
+                        f"{name_prefix}.downsample.conv.bias",
+                        f"{name_prefix}.downsample.conv.weight",
+                    ]
+
+        get_decoder_names()
+        get_encoder_names()
+        return weight_names
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = DeepSeekConverter.get_weight_names(JanusConverter.lang_config)
+        weight_names += JanusConverter.get_aligner_weight_names(config.aligner_config, 'aligner.')
+        weight_names += JanusConverter.get_aligner_weight_names(config.gen_aligner_config, 'gen_aligner.')
+        weight_names += ["gen_embed.weight",
+                         "gen_head.output_mlp_projector.bias",
+                         "gen_head.output_mlp_projector.weight",
+                         "gen_head.vision_head.bias",
+                         "gen_head.vision_head.weight",
+                         "gen_vision_model.post_quant_conv.bias",
+                         "gen_vision_model.post_quant_conv.weight",
+                         "gen_vision_model.quant_conv.bias",
+                         "gen_vision_model.quant_conv.weight",
+                         "gen_vision_model.quantize.codebook_used",
+                         "gen_vision_model.quantize.embedding.weight",
+                         "vision_model.norm.bias",
+                         "vision_model.norm.weight",
+                         "vision_model.patch_embed.proj.bias",
+                         "vision_model.patch_embed.proj.weight",
+                         "vision_model.pos_embed",
+                         # attn_pool is not used, see
+                         # https://github.com/deepseek-ai/Janus/blob/1daa72fa409002d40931bd7b36a9280362469ead/janus/models/siglip_vit.py#L667
+        ]
+
+        vision_cfg = AttributeDict({
+                "image_size": 384,
+                "patch_size": 16,
+                "width": 1024,
+                "layers": 24,
+                "heads": 16,
+                "mlp_ratio": 4,
+                "global_pool": "map",
+                "use_checkpoint": False,
+        })
+        select_layer = config.vision_config['params']['select_layer']
+        if select_layer <= 0:
+            layers = min(vision_cfg.layers, vision_cfg.layers + select_layer + 1)
+        else:
+            layers = min(vision_cfg.layers, select_layer)
+
+        for i in range(layers):
+            weight_names += [
+                f"vision_model.layers.{i}.attn.q_proj.bias",
+                f"vision_model.layers.{i}.attn.q_proj.weight",
+                f"vision_model.layers.{i}.attn.k_proj.bias",
+                f"vision_model.layers.{i}.attn.k_proj.weight",
+                f"vision_model.layers.{i}.attn.v_proj.bias",
+                f"vision_model.layers.{i}.attn.v_proj.weight",
+                f"vision_model.layers.{i}.attn.o_proj.bias",
+                f"vision_model.layers.{i}.attn.o_proj.weight",
+                f"vision_model.layers.{i}.mlp.fc0.bias",
+                f"vision_model.layers.{i}.mlp.fc0.weight",
+                f"vision_model.layers.{i}.mlp.fc1.bias",
+                f"vision_model.layers.{i}.mlp.fc1.weight",
+                f"vision_model.layers.{i}.norm1.bias",
+                f"vision_model.layers.{i}.norm1.weight",
+                f"vision_model.layers.{i}.norm2.bias",
+                f"vision_model.layers.{i}.norm2.weight",
+            ]
+
+        weight_names += JanusConverter.get_vis_model_weight_names('gen_vision_model.', config.gen_vision_config)
+
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -8262,6 +8542,9 @@ def main():
         ApertusConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch.endswith('GroveMoeForCausalLM'):
         GroveMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'MultiModalityCausalLM':
+        assert JanusConverter.is_proper_config(config)
+        JanusConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

@@ -91,6 +91,7 @@ set(core_files src/backend.cpp
     models/index.cpp
     models/instella.cpp
     models/internlm.cpp
+    models/janus.cpp
     models/jina.cpp
     models/jiutian.cpp
     models/llama.cpp
@@ -110,6 +111,7 @@ set(core_files src/backend.cpp
     models/qwen.cpp
     models/reka.cpp
     models/seed.cpp
+    models/siglip.cpp
     models/smol.cpp
     models/solar.cpp
     models/stablelm.cpp

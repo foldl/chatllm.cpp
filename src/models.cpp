@@ -1491,6 +1491,91 @@ namespace chatllm
         return new Linear(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, config.vocab_size, bias);
     }
 
+    DynamicBlock::DynamicBlock() : Block(), _loaded(false)
+    {
+    }
+
+    bool DynamicBlock::is_loaded(void) const
+    {
+        return _loaded;
+    }
+
+    BaseMediaProjectedEmbeddingGeneration::BaseMediaProjectedEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE)
+        : GRAPH_SIZE(GRAPH_SIZE), _ctx(&backend_context),
+        n_threads(runtime_config.n_threads),
+        max_embedding_num(-1)
+    {
+    }
+
+    bool BaseMediaProjectedEmbeddingGeneration::load(ModelLoader &loader)
+    {
+        if (model.get()) model->load("vision_model.", &loader);
+        return true;
+    }
+
+    bool BaseMediaProjectedEmbeddingGeneration::load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config)
+    {
+        return true;
+    }
+
+    void BaseMediaProjectedEmbeddingGeneration::generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf)
+    {
+        if ((model.get() == nullptr) || (tok->media_emb.size() < 1)) return;
+        if (!model->is_loaded()) return;
+
+        for (auto &media : tok->media_emb)
+        {
+            run_model(gen_config, tok, dtype, media, buf);
+        }
+    }
+
+    void BaseMediaProjectedEmbeddingGeneration::write_media_tensor(ggml::tensor *media_emb, const BaseTokenizer::MediaAsEmbeddingVector &media)
+    {
+        Backend::write_tensor_data(media_emb, media.data.data(), 0, media.data.size() * sizeof(media.data[0]));
+    }
+
+    bool BaseMediaProjectedEmbeddingGeneration::run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &media, std::vector<uint8_t> &buf)
+    {
+        ForwardContext ctx(&backend_context);
+        ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
+        ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
+
+        ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
+        ggml::tensor *media_emb = make_media_tensor(&ctx, media);
+
+        set_dbg_ctx(&ctx);
+
+        auto r = model->forward(&ctx, media_emb);
+
+        if (ggml::type_of(r) != dtype)
+        {
+            ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
+            ggml::tensor *t = ggml::new_tensor_like(&ctx, dtype, r);
+            r = ggml::cpy(&ctx, r, t);
+        }
+
+        ggml::build_forward_expand(&ctx, r);
+
+        CHATLLM_CHECK(ctx.allocate()) << "failed to allocate memory";
+
+        if (gen_config.dump_dot.size() > 0)
+        {
+            backend_context.dump_graph(ctx.get_cgraph(), gen_config.dump_dot.c_str());
+            exit(-1);
+        }
+
+        write_media_tensor(media_emb, media);
+
+        ctx.compute();
+
+        size_t offset = buf.size();
+        buf.resize(offset + ggml::nbytes(r));
+        Backend::read_tensor_data(r, buf.data() + offset);
+        ctx.reset();
+
+        return true;
+    }
+
     static void load_file_header(ModelLoader &loader)
     {
         // load magic

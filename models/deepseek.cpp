@@ -60,8 +60,9 @@ namespace chatllm::deepseek::v1
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         std::ostringstream oss_prompt;
 
-        oss_prompt << "User: " << user << "\n\n";
+        append_ai_opening(round_idx, ids);
 
+        oss_prompt << user << "\n\n";
         auto text = oss_prompt.str();
         tok->encode(text, ids, false, false);
     }
@@ -69,11 +70,13 @@ namespace chatllm::deepseek::v1
     void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        std::ostringstream oss_prompt;
+        tok->encode("Assistant: ", ids, false, false);
+    }
 
-        oss_prompt << "Assistant: ";
-        auto text = oss_prompt.str();
-        tok->encode(text, ids, false, false);
+    void ChatHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode("User: ", ids, false, false);
     }
 
     bool Tokenizer::is_special_id(int id) const

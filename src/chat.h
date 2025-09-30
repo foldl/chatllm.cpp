@@ -753,6 +753,11 @@ namespace chatllm
             }
         }
 
+        void clear_tensor_name_translations(void)
+        {
+            name_translation.clear();
+        }
+
     protected:
         void read_tensor(const std::string &name, ggml::tensor *tensor, LayerBufAllocator *allocator, bool partial);
         void read_tensor(const std::string &name,
