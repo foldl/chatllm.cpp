@@ -99,7 +99,7 @@ namespace chatllm::janus::pro
         {
             if (piece.type == ContentPiece::Type::Text)
             {
-                if (last_is_image && !piece.content._Starts_with("\n"))
+                if (last_is_image && !piece.content.starts_with("\n"))
                     tok->encode("\n", ids);
                 tok->encode(piece.content, ids);
                 last_is_image = false;
