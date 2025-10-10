@@ -60,6 +60,8 @@ namespace utils
         });
     }
 
+    void multinomial(const float *dist, int *indices, const int dist_dim, int num_samples = 1, const int multi = 1, const bool replacement = false);
+
     std::string trim(const std::string& str);
 
     std::string join(const std::vector<std::string>& vec, const std::string& sep);
@@ -73,6 +75,7 @@ namespace utils
     void parallel_for(int64_t start, int64_t end, std::function<void(int64_t)> func, int num_threads = 0);
 
     std::string load_file(const char *fn);
+    bool save_as_bin_file(const void *data, size_t size, const char *filename);
 
     std::string num2words(int value);
 

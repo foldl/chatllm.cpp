@@ -11,6 +11,7 @@
 #include <string.h>
 #include <thread>
 #include <regex>
+#include <random>
 
 #include "basics.h"
 
@@ -470,6 +471,14 @@ namespace utils
         return buffer.str();
     }
 
+    bool save_as_bin_file(const void *data, size_t size, const char *filename)
+    {
+        std::ofstream file(filename, std::ios::binary);
+        if (!file.is_open()) return false;
+        file.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
+        return file.good();
+    }
+
     std::string num2words(int value)
     {
         if (value < 0)
@@ -711,5 +720,84 @@ namespace utils
             t = t.substr(pos + 1);
         }
         return 0;
+    }
+
+    static int nomial1(const std::vector<float> &cdf, const float v)
+    {
+        for (int i = 1; i < (int)cdf.size(); i++)
+            if (cdf[i] >= v) return i - 1;
+
+        return (int)cdf.size() - 2;
+    }
+
+    static int nomial(const std::vector<float> &cdf, const float v)
+    {
+        int start = 1;
+        int end = (int)cdf.size() - 1;
+        while (start <= end)
+        {
+            int middle = (start + end) / 2;
+            if (cdf[middle] > v)
+            {
+                end = middle - 1;
+            }
+            else if (cdf[middle] < v)
+            {
+                start = middle + 1;
+            }
+            else
+                return middle - 1;
+        }
+
+        if (start >= (int)cdf.size() - 1) start = (int)cdf.size() - 1;
+        int r = cdf[end] >= v ? end : start;
+        return r - 1;
+    }
+
+    static bool has_index(const int *indices, int v, int num)
+    {
+        if (num < 1) return false;
+        for (int i = 0; i < num; i++) if (indices[i] == v) return true;
+        return false;
+    }
+
+    static void nomial(const float *dist, int *indices, const int dist_dim, int num_samples, bool replacement,
+        std::function<float(void)> sampler)
+    {
+        std::vector<float> cdf;
+        cdf.resize(dist_dim + 1);
+        float sum = 0.0f;
+        cdf[0] = 0.0f;
+        for (int i = 0; i < dist_dim; i++)
+        {
+            cdf[i + 1] = cdf[i] + dist[i];
+        }
+
+        int i = 0;
+        while (i < num_samples)
+        {
+            int n = nomial(cdf, sampler());
+            if (!replacement && has_index(indices, n, i))
+                continue;
+
+            indices[i++] = n;
+        }
+    }
+
+    void multinomial(const float *dist, int *indices, const int dist_dim, int num_samples, const int multi, const bool replacement)
+    {
+        thread_local static std::random_device rd;
+        thread_local static std::mt19937 gen(rd());
+        thread_local static std::uniform_real_distribution<float> a(0.0f, 1.0f);
+        auto rand = [](void) {
+            float r = a(gen);
+            return r;
+        };
+
+        const float *p_dist = dist;
+        for (int n = 0; n < multi; n++, p_dist += dist_dim, indices += num_samples)
+        {
+            nomial(p_dist, indices, dist_dim, num_samples, replacement, rand);
+        }
     }
 }

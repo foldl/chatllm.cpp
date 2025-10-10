@@ -26,6 +26,8 @@ namespace chatllm
         virtual int load_session(ModelSessionMemory &session) = 0;
 
         virtual void load(const std::string &path, TensorLoader *loader, const std::vector<int> &layer_ids) = 0;
+    public:
+        bool skip_lm_head = false;
     };
 
     class HeterogeneousModel;
@@ -67,6 +69,10 @@ namespace chatllm
         int save_session(ModelSessionMemory &session) const override;
         int load_session(ModelSessionMemory &session) override;
         void load(const std::string &path, TensorLoader *loader, const std::vector<int> &layer_ids) override;
+
+        ggml::tensor get_last_hiddle_state(void);
+
+        void reserve_batch_size(int size) override;
     private:
         struct state
         {
@@ -84,6 +90,8 @@ namespace chatllm
         Block *final_layernorm;
         Block *lm_head;
         Block *logits_pp;
+        ggml::tensor *last_hidden_state = nullptr;
+        std::function<ggml::tensor *(ComputeContext *ctx, ggml::tensor *input_ids)> custom_embedding;
     protected:
         // std::vector<std::unique_ptr<Block>> layers;
         std::vector<Block *> layers;

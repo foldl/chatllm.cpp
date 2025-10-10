@@ -635,8 +635,8 @@ public:
 static void print_timing(char *str, const char *prefix, size_t tok_number, double duration_sec)
 {
     sprintf(str, "%s = %12.2f ms / %5zd tokens ( %8.2f ms per token, %8.2f tokens per second)", prefix, duration_sec, tok_number,
-            duration_sec / tok_number,
-            tok_number / duration_sec * 1000);
+            tok_number > 0 ? duration_sec / tok_number : 0.0,
+            duration_sec > 0.0 ? tok_number / duration_sec * 1000 : 0.0);
 }
 
 static void show_stat(chatllm::Pipeline &pipeline, chatllm::BaseStreamer &streamer)
@@ -736,15 +736,9 @@ static void print_embedding(const std::vector<float> &data, std::ostream &cout)
     cout << std::endl;
 }
 
-static std::string get_temp_file_name() {
-    std::filesystem::path temp_dir = std::filesystem::temp_directory_path();
-    std::filesystem::path temp_file = temp_dir / std::tmpnam(nullptr);
-    return temp_file.string();
-}
-
 static void play_audio(const std::vector<int16_t> &data, const int sample_rate, const int channels, TextStreamer &streamer, std::string export_fn)
 {
-    auto fn = export_fn.size() > 0 ? export_fn : get_temp_file_name();
+    auto fn = export_fn.size() > 0 ? export_fn : utils::tmpname();
     std::ofstream file(fn, std::ios::binary);
     file.write((const char *)data.data(), data.size() * sizeof(data[0]));
     file.close();

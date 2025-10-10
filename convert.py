@@ -7730,6 +7730,17 @@ class JanusConverter(BaseConverter):
         assert config.vision_config['params']['model_name'] == 'siglip_large_patch16_384'
         JanusConverter.lang_config = AttributeDict(config.language_config)
 
+        DEF = {
+            "hidden_size": 4096,
+            "intermediate_size": 11008,
+            "num_attention_heads": 32,
+            "num_hidden_layers": 32,
+        }
+
+        for k in DEF:
+            if k not in JanusConverter.lang_config:
+                JanusConverter.lang_config[k] = DEF[k]
+
         JanusConverter.lang_config.hidden_act = 'silu'
 
         DeepSeekConverter.dump_config(f, JanusConverter.lang_config, ggml_type)
@@ -8138,6 +8149,11 @@ def main():
         config = AttributeDict({})
 
     if arch == '':
+        if config.architectures is None:
+            if "model_type" in config:
+                if config.model_type == "multi_modality":
+                    config.architectures = ['MultiModalityCausalLM']
+
         if len(config.architectures) != 1:
             raise Exception(f'unknown architectures: {config.architectures}')
         arch = config.architectures[0]

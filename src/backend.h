@@ -35,8 +35,12 @@ namespace chatllm
         int64_t row_size(ggml::type type, int64_t ne0);
         int64_t align_nelements(ggml::type type, int64_t ne0);
 
+        int max_dims(void);
         int n_dims(const ggml::tensor * tensor);
         int get_dim(const ggml::tensor * tensor, int dim);
+        void get_shape(const ggml::tensor * tensor, std::vector<int> &shape);
+        void get_shape(const ggml::tensor * tensor, std::vector<int64_t> &shape);
+        std::vector<int64_t> shape_of(const ggml::tensor * tensor);
         void set_dim(ggml::tensor * tensor, int dim, int64_t n);
 
         void from_float(ggml::type type, const float *src, void  *dst, int64_t ne0, int64_t n_rows);

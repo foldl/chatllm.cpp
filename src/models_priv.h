@@ -409,9 +409,11 @@ namespace chatllm
             std::vector<float> &output);
 
         virtual bool run_model(const int *input_ids, const int ids_count,
-                                const GenerationConfig &gen_config,
-                                int past,
-                                std::vector<float> &output);
+                               const GenerationConfig &gen_config,
+                               int past,
+                               std::vector<float> &output,
+                               const int batch_size = 1,
+                               std::function<ggml::tensor *(ComputeContext *, ggml::tensor *)> func_epilog = nullptr);
 
         virtual bool is_output_terminated(const std::vector<int> &output_ids, int &keep_idx, int &pop_output);
 
@@ -423,7 +425,7 @@ namespace chatllm
         }
 
     protected:
-        ModelBlock *transformer;
+        HeterogeneousModel *transformer;
         const size_t GRAPH_SIZE;
         int batch_input;
         float logit_scale;
@@ -525,6 +527,24 @@ namespace chatllm
         virtual bool is_loaded(void) const;
     protected:
         bool _loaded;
+    };
+
+    class TensorGraphEvaluator
+    {
+    public:
+        TensorGraphEvaluator(const RuntimeConfig &runtime_config, const std::string model_id = "main", size_t GRAPH_SIZE = 4096);
+        virtual bool evaluate(const GenerationConfig &gen_config,
+             std::function<ggml::tensor *(ComputeContext *ctx)> make_graph,
+             std::function<void(ComputeContext *ctx)> write_input_data,
+             ggml::type expected_result_dtype,
+             std::vector<int64_t> &result_shape,
+             std::vector<uint8_t> &result_buf); // result is appended
+    protected:
+        BackendContext backend_context;
+        const size_t GRAPH_SIZE;
+        InitContext _ctx; // weight context
+        std::string model_gpu_layers;
+        const int n_threads;
     };
 
     class BaseMediaProjectedEmbeddingGeneration

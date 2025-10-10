@@ -706,4 +706,61 @@ namespace vision
 
         print_data(arranged, patch_size, patch_size * patch_size * 4);
     }
+
+    void image_view(const float *data, size_t data_len, const int image_width, const ImageDataFormat fmt)
+    {
+        std::vector<uint8_t> data_int;
+        data_int.resize(data_len);
+        for (size_t i = 0; i < data_len; i++)
+        {
+            float f = std::roundf(data[i] * 255);
+            int v = (int)f;
+            if (v < 0) v = 0;
+            if (v > 255) v = 255;
+            data_int[i] = (uint8_t)v;
+        }
+        image_view(data_int, image_width, fmt);
+    }
+
+    void image_view(const std::vector<uint8_t> data, const int image_width, const ImageDataFormat fmt)
+    {
+        std::ostringstream oss;
+        int64_t data_cnt = 0;
+        oss << "magick";
+#if defined(_WIN64)
+        const std::string fn = "\"" + utils::tmpname() + ".png\"";
+#else
+        oss << " display";
+#endif
+
+        switch (fmt)
+        {
+        case ImageDataFormat::PixelsLeftRightDown_ChannelRGB:
+            {
+                const int height = (int)(data.size() / 3 / image_width);
+                data_cnt = (int64_t)height * image_width * 3;
+
+                oss << " -size " << image_width << "x" << height;
+                oss << " -depth 8 rgb:-";
+            }
+            break;
+
+        default:
+            CHATLLM_CHECK(false);
+            break;
+        }
+
+#if defined(_WIN64)
+        oss << " " << fn;
+#endif
+
+        FILE* pp = popen(oss.str().c_str(), "wb");
+        fwrite(data.data(), 1, data_cnt, pp);
+        pclose(pp);
+
+#if defined(_WIN64)
+        std::string cmd = std::string("start \"\" ") + fn;
+        system(cmd.c_str());
+#endif
+    }
 }

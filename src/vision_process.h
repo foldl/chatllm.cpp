@@ -137,5 +137,13 @@ namespace vision
     void image_arrange(const std::vector<float> &rgb_pixels, const int width, const int patch_size,
         std::vector<float> &arranged, const PatchesFormat fmt);
 
-    void test(const char *fn);
+    enum ImageDataFormat
+    {
+        // 1) uint8_t for each component;
+        // 2) float: [0, 1] for each component;
+        PixelsLeftRightDown_ChannelRGB,
+    };
+
+    void image_view(const float *data, size_t data_len, const int image_width, const ImageDataFormat fmt);
+    void image_view(const std::vector<uint8_t> data, const int image_width, const ImageDataFormat fmt);
 }

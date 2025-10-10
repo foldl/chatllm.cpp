@@ -17,6 +17,7 @@ namespace chatllm
     void print_tensor(ggml::tensor *tensor, int offset = 0, bool full = false);
     void print_tensor_shape(const char *info, ggml::tensor *tensor);
     void inspect_tensor(ggml::tensor *tensor, const char *format, ...);
+    void clear_inspected_tensors(void);
 
     struct alibi_ctx
     {
@@ -32,6 +33,7 @@ namespace chatllm
         Tanh,
         RELU,
         RELU2,  // square . relu
+        SWISH,
     };
 
     namespace ggml
@@ -78,6 +80,7 @@ namespace chatllm
         ggml::tensor *sub(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b);
         ggml::tensor *sub_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor * b);
 
+        // result = B * A^T
         ggml::tensor *mul_mat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor  *b);
         ggml::tensor *mul_mat_id(ComputeContext *ctx, ggml::tensor *as, ggml::tensor *b, ggml::tensor *ids);
 
@@ -111,12 +114,14 @@ namespace chatllm
         ggml::tensor *reshape_3d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2);
         ggml::tensor *reshape_4d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
         ggml::tensor *reshape(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);
+        ggml::tensor *flatten(ComputeContext *ctx, ggml::tensor *a);
 
         ggml::tensor *repeat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
         ggml::tensor *repeat(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1 = 0, int64_t ne2 = 0, int64_t ne3 = 0);
         ggml::tensor *repeat_interleave(ComputeContext *ctx, ggml::tensor *a, int repeat, int dim = 0);
 
-        ggml::tensor *permute(ComputeContext *ctx, ggml::tensor *a, int axis0, int axis1, int axis2, int axis3);
+        // axis0: target axis of axis 0 (differs from PyTorch)
+        ggml::tensor *permute(ComputeContext *ctx, ggml::tensor *a, int axis0, int axis1, int axis2 = 2, int axis3 = 3);
         ggml::tensor *flip(ComputeContext *ctx, ggml::tensor *a, int dim = 0);
 
         enum InterpolateMode
@@ -130,6 +135,8 @@ namespace chatllm
 
         ggml::tensor *norm(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
+        ggml::tensor *norm_p2(ComputeContext *ctx, ggml::tensor *a, float eps);
+        ggml::tensor *group_norm(ComputeContext *ctx, ggml::tensor *a, int n_groups, float eps);
         ggml::tensor *rms_norm_inplace(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *rms_norm(ComputeContext *ctx, ggml::tensor *a, float eps);
         ggml::tensor *simple_norm(ComputeContext *ctx, ggml::tensor *a, float eps); // p=2 normalization
@@ -162,6 +169,8 @@ namespace chatllm
 
         ggml::tensor *scale(ComputeContext *ctx, ggml::tensor *a, float  s);
         ggml::tensor *scale_inplace(ComputeContext *ctx, ggml::tensor *a, float  s);
+        // r = s * a + b
+        ggml::tensor *scale(ComputeContext *ctx, ggml::tensor *a, float  s, float b);
 
         ggml::tensor *clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max);
         ggml::tensor *avg_pool_2d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride, float padding = 0.0f);
@@ -259,7 +268,7 @@ namespace chatllm
     class Block
     {
     public:
-        Block(): prec(ggml::prec::GGML_PREC_DEFAULT), id(0), debug(false) {}
+        Block(): prec(ggml::prec::GGML_PREC_DEFAULT), id(0), reserved_batch_size(1), debug(false) {}
         virtual ~Block() {}
         virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input)
         {
@@ -304,6 +313,16 @@ namespace chatllm
             return 0;
         }
 
+        virtual void reserve_batch_size(int size)
+        {
+            reserved_batch_size = size;
+        }
+
+        virtual int get_reserved_batch_size(void) const
+        {
+            return reserved_batch_size;
+        }
+
         virtual size_t get_cache_size(void) const { return 0; }
         virtual void   set_cache_buffer(BackendBuffer *buf) { }
         virtual size_t read_cache_data(void *buffer, size_t buffer_size) const { return 0; }
@@ -314,6 +333,7 @@ namespace chatllm
     protected:
         ggml::prec prec;
         int id;
+        int reserved_batch_size;
     public:
         bool debug;
     };
@@ -365,7 +385,7 @@ namespace chatllm
             int64_t bias_dim);
         int64_t get_param_num(bool effective_only) const override;
         void load(const std::string &path, TensorLoader *loader) override;
-    protected:
+    public:
         ggml::tensor *weight;
         ggml::tensor *bias;
     };
@@ -586,19 +606,22 @@ namespace chatllm
         ggml::tensor *bias;   // [out_features, multi]
     };
 
-    class LayerNorm : public Block
+    class GroupNorm : public Block
     {
     public:
-        LayerNorm() : weight(nullptr), bias(nullptr) {}
-        LayerNorm(InitContext *ctx, int normalized_shape)
-            : LayerNorm(ctx, normalized_shape, true)
+        GroupNorm() : weight(nullptr), bias(nullptr), eps(1e-5f), num_groups(1) {}
+        GroupNorm(InitContext *ctx, int num_groups, int normalized_shape)
+            : GroupNorm(ctx, num_groups, normalized_shape, true)
         {
         }
 
-        LayerNorm(InitContext *ctx, int normalized_shape, bool use_bias)
+        GroupNorm(InitContext *ctx, int num_groups, int normalized_shape, bool use_bias, float eps = 1e-5f)
             : weight(ggml::new_tensor_1d(ctx, GGML_TYPE_F32, normalized_shape)),
               bias(use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, normalized_shape) : nullptr),
-              eps(1e-5f) {}
+              eps(eps), num_groups(num_groups)
+        {
+            CHATLLM_CHECK((normalized_shape % num_groups) == 0);
+        }
 
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
@@ -615,7 +638,21 @@ namespace chatllm
     public:
         ggml::tensor *weight; // [normalized_shape]
         ggml::tensor *bias;   // [normalized_shape]
-        float eps;
+        const float eps;
+        const int num_groups;
+    };
+
+    class LayerNorm : public GroupNorm
+    {
+    public:
+        LayerNorm() : GroupNorm() {}
+        LayerNorm(InitContext *ctx, int normalized_shape)
+            : LayerNorm(ctx, normalized_shape, true)
+        {
+        }
+
+        LayerNorm(InitContext *ctx, int normalized_shape, bool use_bias)
+            : GroupNorm(ctx, normalized_shape, normalized_shape, use_bias) {}
     };
 
     class LayerNormNoBias : public LayerNorm
@@ -795,6 +832,11 @@ namespace chatllm
             : TheMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU, true)
         {
         }
+
+        TheBiasedGELUMLP(InitContext *ctx, int hidden_size, int intermediate_size, int out_size)
+            : TheMLP(ctx, hidden_size, intermediate_size, out_size, ActFunc::GELU, true)
+        {
+        }
     };
 
     class GLMMLP : public TheMLP
@@ -889,8 +931,13 @@ namespace chatllm
         void set_id(int id) override
         {
             Block::set_id(id);
-
             attention.set_id(id);
+        }
+
+        void reserve_batch_size(int size) override
+        {
+            Block::reserve_batch_size(size);
+            attention.reserve_batch_size(size);
         }
 
         size_t get_cache_size(void) const override
@@ -1047,6 +1094,14 @@ namespace chatllm
             input_layernorm.set_id(id);
             post_attention_layernorm.set_id(id);
             mlp.set_id(id);
+        }
+
+        void reserve_batch_size(int size) override
+        {
+            Base::reserve_batch_size(size);
+            post_attention_layernorm.reserve_batch_size(size);
+            input_layernorm.reserve_batch_size(size);
+            mlp.reserve_batch_size(size);
         }
 
         void load(const std::string &path, TensorLoader *loader) override
@@ -1416,14 +1471,14 @@ namespace chatllm
     protected:
         virtual void before_forward(ComputeContext *ctx, const int n_past, const int qlen);
 
-        // k: [qlen, heads, head_size]
-        // v: [qlen, hidden_size]
+        // k: [batch, qlen, heads, head_size]
+        // v: [batch, qlen, hidden_size]
         void save_to_cache(ComputeContext *ctx, const int n_past, const int qlen, ggml::tensor *k, ggml::tensor *v) override;
 
-        // output: [heads, qlen, head_size]
+        // output: [batch, heads, qlen, head_size]
         ggml::tensor *get_k_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) override;
 
-        // output: [heads, head_size, klen]
+        // output: [batch, heads, head_size, klen]
         ggml::tensor *get_v_from_cache(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen) override;
 
     public:
@@ -1432,6 +1487,7 @@ namespace chatllm
         const int cache_length;
         ggml::tensor *k_cache;
         ggml::tensor *v_cache;
+        int batch_size = 1;
     };
 
     class BaseConsolidatedQKVAttention : public KVCacheAttention
