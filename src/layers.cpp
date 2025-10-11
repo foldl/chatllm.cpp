@@ -1545,14 +1545,26 @@ namespace chatllm
     ggml::tensor *Embedding::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         ggml::tensor *output;
-        CHATLLM_CHECK(ggml::type::GGML_TYPE_I32 == ggml::type_of(input));
-        CHATLLM_CHECK(ggml::n_dims(input) <= 3);
 
-        ggml::tensor *flattend = ggml::flatten(ctx, input);
-        output = ggml::get_rows(ctx, weight, flattend);
-        output = ggml::reshape(ctx, output, ggml::get_dim(output, 0),
-            ggml::get_dim(input, 0), ggml::get_dim(input, 1), ggml::get_dim(input, 2));
+        if (ggml::type::GGML_TYPE_I32 == ggml::type_of(input))
+        {
+            CHATLLM_CHECK(ggml::n_dims(input) <= 3);
 
+            ggml::tensor *flattend = ggml::flatten(ctx, input);
+            output = ggml::get_rows(ctx, weight, flattend);
+            output = ggml::reshape(ctx, output, ggml::get_dim(output, 0),
+                ggml::get_dim(input, 0), ggml::get_dim(input, 1), ggml::get_dim(input, 2));
+        }
+        else
+        {
+            // fot tie lm head
+            ggml::tensor *w = weight;
+            if (num_padded_embeddings > 0)
+            {
+                w = ggml::view_2d(ctx, weight, ggml::get_dim(weight, 0), num_embeddings, ggml::row_size(ggml::type_of(weight), ggml::get_dim(weight, 0)), 0);
+            }
+            output = ggml::mul_mat(ctx, w, input);
+        }
         return output;
     }
 
