@@ -540,6 +540,7 @@ namespace chatllm::janus::pro
         bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override;
         void before_generate(const GenerationConfig &gen_config) override;
         void set_additional_args(const std::map<std::string, std::string> &args) override;
+        int64_t get_param_num(bool effective_only) const override;
     protected:
         void decode_images(const GenerationConfig &gen_config, const std::vector<std::vector<int>> &generated_tokens);
     public:
@@ -749,6 +750,15 @@ namespace chatllm::janus::pro
         if (gen_head) gen_head->load("gen_head.", &loader);
         if (gen_image_emb) gen_image_emb->load("", &loader);
         if (gen_vision) gen_vision->load("gen_vision_model.", &loader);
+    }
+
+    int64_t ConditionalGeneration::get_param_num(bool effective_only) const
+    {
+        int64_t r = Base::get_param_num(effective_only);
+        if (gen_head)       r += gen_head->get_param_num(effective_only);
+        if (gen_image_emb)  r += gen_image_emb->get_param_num(effective_only);
+        if (gen_vision)     r += gen_vision->get_param_num(effective_only);
+        return r;
     }
 
     void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
