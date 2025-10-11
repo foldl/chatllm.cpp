@@ -1484,6 +1484,31 @@
             }
         }
     },
+    "qwen2.5-vl" : {
+        "brief": "Flagship vision-language model of Qwen and also a significant leap from the previous Qwen2-VL.",
+        "default": "3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4128566736,
+                        "url": "chatllm_quantized_qwen2.5/qwen2.5-vl-3b.bin"
+                    }
+                }
+            },
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8949973008,
+                        "url": "chatllm_quantized_qwen2.5/qwen2.5-vl-7b.bin"
+                    }
+                }
+            }
+        }
+    },
     "starling-lm": {
         "brief": "Starling is a large language model trained by reinforcement learning from AI feedback focused on improving chatbot helpfulness.",
         "default": "7b",
@@ -3047,6 +3072,22 @@
             }
         }
     },
+    "mimo-vl": {
+        "brief": "MiMo-VL, featuring enhanced performance across multiple benchmarks, improved thinking control capabilities, and better user experience.",
+        "default": "7b-rl",
+        "license": "MIT",
+        "variants": {
+            "7b-rl": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8834139216,
+                        "url": "chatllm_quantized_mimo/mimo-vl-7b-rl-2508.bin"
+                    }
+                }
+            }
+        }
+    },
     "seed-coder": {
         "brief": "Seed-Coder, a powerful, transparent, and parameter-efficient family of open-source code models at the 8B scale, featuring base, instruct, and reasoning variants.",
         "default": "8b-it",
@@ -3340,6 +3381,32 @@
                     "q4_1": {
                         "size": 20599719312,
                         "url": "chatllm_quantized_bailing/grove-moe-33b-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "janus-pro":
+    {
+        "brief": "Janus-Pro is a novel autoregressive framework that unifies multimodal understanding and generation.",
+        "default": "1b",
+        "license": "MIT",
+        "variants": {
+            "1b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2279324768,
+                        "url": "chatllm_quantized_janus/janus-pro-1b.bin"
+                    }
+                }
+            },
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7944145328,
+                        "url": "chatllm_quantized_janus/janus-pro-7b.bin"
                     }
                 }
             }
