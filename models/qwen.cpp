@@ -1149,34 +1149,9 @@ namespace chatllm::qwen::vit
     {
     }
 
-    MultiModalProjector::MultiModalProjector(InitContext *ctx, const Config &config, int lm_hidden_size)
-        :
-        hidden_size(config.hidden_size * config.spatial_merge_size * config.spatial_merge_size),
-        pre_norm(ctx, config.hidden_size),
-        mlp(ctx, hidden_size, hidden_size, lm_hidden_size)
+    MultiModalProjector::MultiModalProjector(InitContext *ctx, const Config &config, int lm_hidden_size):
+        GenMultiModalProjector<RMSNorm, MLP>(ctx, config.hidden_size, config.spatial_merge_size, lm_hidden_size)
     {
-    }
-
-    ggml::tensor *MultiModalProjector::forward(ComputeContext *ctx, ggml::tensor *image_features, int grid_h, int grid_w)
-    {
-        auto output = pre_norm.forward(ctx, image_features);
-        output = ggml::reshape(ctx, output, hidden_size, -1);
-        output = mlp.forward(ctx, output);
-        return output;
-    }
-
-    int64_t MultiModalProjector::get_param_num(bool effective_only) const
-    {
-        int64_t r = 0;
-        r += pre_norm.get_param_num(effective_only);
-        r +=      mlp.get_param_num(effective_only);
-        return r;
-    }
-
-    void MultiModalProjector::load(const std::string &path, TensorLoader *loader)
-    {
-        pre_norm.load(path + "ln_q.", loader);
-        mlp.     load(path + "mlp.",  loader);
     }
 
     VisionTransformer::VisionTransformer(InitContext *ctx, const Config &config, int lm_hidden_size)
@@ -1647,7 +1622,7 @@ namespace chatllm::qwen::v2_5_vl
                 std::vector<uint8_t> pixels;
                 const int patch_size = vis_config->patch_size;
 
-                vision::MinMaxPixels    param1(vis_config->min_pixels, 256 * 28 * 28); // vis_config->max_pixels);
+                vision::MinMaxPixels    param1(vis_config->min_pixels, vis_config->max_pixels);
                 vision::MergeKernel     param2(vis_config->merge_size, vis_config->merge_size);
 
                 vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, vision::PaddingMode::Black);

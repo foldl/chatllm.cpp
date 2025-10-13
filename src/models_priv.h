@@ -196,6 +196,7 @@ namespace chatllm
 
         MODEL_TYPE_LLAMA4           = MODEL_TYPE_TAG_ChatImageIn + 0x0000001,
         MODEL_TYPE_GEMMA3Vis        = MODEL_TYPE_TAG_ChatImageIn + 0x0000011,
+        MODEL_TYPE_DOTS_OCR         = MODEL_TYPE_TAG_ChatImageIn + 0x0000020,
 
         MODEL_TYPE_QWEN2_AUDIO      = MODEL_TYPE_TAG_ChatAudioIn + 0x0000001,
 
@@ -542,7 +543,6 @@ namespace chatllm
     protected:
         BackendContext backend_context;
         const size_t GRAPH_SIZE;
-        InitContext _ctx; // weight context
         std::string model_gpu_layers;
         const int n_threads;
     };

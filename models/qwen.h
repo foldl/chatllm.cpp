@@ -434,18 +434,48 @@ namespace chatllm::qwen
             MLP(InitContext *ctx, int hidden_size, int intermediate_size, int output_size);
         };
 
-        class MultiModalProjector : public Block
+        template <class Norm, class MLP> class GenMultiModalProjector : public Block
+        {
+        public:
+            GenMultiModalProjector(InitContext *ctx, int hidden_size, int spatial_merge_size, int lm_hidden_size):
+                hidden_size(hidden_size * spatial_merge_size * spatial_merge_size),
+                pre_norm(ctx, hidden_size),
+                mlp(ctx, this->hidden_size, this->hidden_size, lm_hidden_size)
+            {
+            }
+
+            ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *image_features, int grid_h, int grid_w)
+            {
+                auto output = pre_norm.forward(ctx, image_features);
+                output = ggml::reshape(ctx, output, hidden_size, -1);
+                output = mlp.forward(ctx, output);
+                return output;
+            }
+
+            int64_t get_param_num(bool effective_only) const override
+            {
+                int64_t r = 0;
+                r += pre_norm.get_param_num(effective_only);
+                r +=      mlp.get_param_num(effective_only);
+                return r;
+            }
+
+            void load(const std::string &path, TensorLoader *loader) override
+            {
+                pre_norm.load(path + "ln_q.", loader);
+                mlp.     load(path + "mlp.",  loader);
+            }
+
+        public:
+            const int hidden_size;
+            Norm   pre_norm;
+            MLP    mlp;
+        };
+
+        class MultiModalProjector : public GenMultiModalProjector<RMSNorm, MLP>
         {
         public:
             MultiModalProjector(InitContext *ctx, const Config &config, int lm_hidden_size);
-
-            ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *image_features, int grid_h, int grid_w);
-            int64_t get_param_num(bool effective_only) const override;
-            void load(const std::string &path, TensorLoader *loader) override;
-        public:
-            const int hidden_size;
-            RMSNorm   pre_norm;
-            MLP       mlp;
         };
 
         class VitSiLUMLP : public BaseMLP

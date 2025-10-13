@@ -236,6 +236,7 @@ class ModelType(Enum):
 
     LlaMA4                  = ModelTypeTagChatImageIn + 0x0000001
     Gemma3Vis               = ModelTypeTagChatImageIn + 0x0000011
+    DotsOCR                 = ModelTypeTagChatImageIn + 0x0000020
 
     Qwen2Audio              = ModelTypeTagChatAudioIn + 0x0000001
 
@@ -7948,6 +7949,96 @@ class JanusConverter(BaseConverter):
 
         return weight_names
 
+class DotsOCRConverter(BaseConverter):
+    MODEL_TYPE = ModelType.DotsOCR
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            if not name.startswith('vision_tower'):
+                r[name] = tensor
+                continue
+
+            if name.startswith('vision_tower.blocks.'):
+                name = name.replace('vision_tower.blocks.', 'vision_model.layers.')
+                if '.attn.proj.' in name:
+                    name = name.replace('.proj.', '.o_proj.')
+                    r[name] = tensor
+                elif '.qkv.' in name:
+                    num_heads = config.vision_config['hidden_size']
+                    q, k, v = tensor.split([num_heads, num_heads, num_heads], dim=0)
+                    r[name.replace('.qkv.', '.q_proj.')] = q
+                    r[name.replace('.qkv.', '.k_proj.')] = k
+                    r[name.replace('.qkv.', '.v_proj.')] = v
+                elif '.fc3' in name:
+                    r[name.replace('.fc3.', '.up_proj.')] = tensor
+                elif '.fc2' in name:
+                    r[name.replace('.fc2.', '.down_proj.')] = tensor
+                elif '.fc1' in name:
+                    r[name.replace('.fc1.', '.gate_proj.')] = tensor
+                else:
+                    r[name] = tensor
+            elif name.startswith('vision_tower.merger'):
+                name = name.replace('vision_tower.merger.', 'vision_model.merger.')
+
+                if '.mlp.0.' in name:
+                    name = name.replace('.mlp.0.', '.mlp.fc0.')
+                elif '.mlp.2.' in name:
+                    name = name.replace('.mlp.2.', '.mlp.fc1.')
+
+                r[name] = tensor
+            elif name.startswith('vision_tower.patch_embed.patchifier.'):
+                name = name.replace('vision_tower.patch_embed.patchifier.', 'vision_model.patch_embed.')
+                r[name] = tensor
+            else:
+                name = name.replace('vision_tower.', 'vision_model.')
+                r[name] = tensor
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        vis_config = AttributeDict(config.vision_config)
+        assert vis_config.post_norm
+        assert not vis_config.use_bias
+        QWen2Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = QWen2Converter.get_weight_names(config)
+
+        vis_config = AttributeDict(config.vision_config)
+
+        for i in range(vis_config.num_hidden_layers):
+            weight_names += [
+                f"vision_model.layers.{i}.attn.q_proj.weight",
+                f"vision_model.layers.{i}.attn.k_proj.weight",
+                f"vision_model.layers.{i}.attn.v_proj.weight",
+                f"vision_model.layers.{i}.attn.o_proj.weight",
+                f"vision_model.layers.{i}.mlp.up_proj.weight",
+                f"vision_model.layers.{i}.mlp.down_proj.weight",
+                f"vision_model.layers.{i}.mlp.gate_proj.weight",
+                f"vision_model.layers.{i}.norm1.weight",
+                f"vision_model.layers.{i}.norm2.weight",
+            ]
+
+        weight_names += [
+            "vision_model.merger.ln_q.bias",
+            "vision_model.merger.ln_q.weight",
+            "vision_model.merger.mlp.fc0.bias",
+            "vision_model.merger.mlp.fc0.weight",
+            "vision_model.merger.mlp.fc1.bias",
+            "vision_model.merger.mlp.fc1.weight",
+            "vision_model.patch_embed.norm.weight",
+            "vision_model.patch_embed.proj.bias",
+            "vision_model.patch_embed.proj.weight",
+            "vision_model.post_trunk_norm.weight",
+        ]
+
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -8561,6 +8652,8 @@ def main():
     elif arch == 'MultiModalityCausalLM':
         assert JanusConverter.is_proper_config(config)
         JanusConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch.endswith('DotsOCRForCausalLM'):
+        DotsOCRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

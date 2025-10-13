@@ -376,6 +376,14 @@ Please use `--format completion` for these models.
 
     Note: Use `--set do-split 1` to enable _Split_.
 
+## OCR Models
+
+* dots.ocr (`DotsOCRForCausalLM`)
+    * [x] [3B](https://huggingface.co/rednote-hilab/dots.ocr/tree/ba670c5dcf03ff4e02015558c95b4042f5dce069)
+
+    Note: Prompt for OCR: _{{image:...}}Extract the text content from this image_. [Here](https://github.com/rednote-hilab/dots.ocr/blob/master/dots_ocr/utils/prompts.py)
+    are other prompts for OCR. Use `+single-turn` to discard history automatically.
+
 ## RAG Models
 
 * Text Embedding (`XLMRobertaModel`)

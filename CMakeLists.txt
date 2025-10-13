@@ -76,6 +76,7 @@ set(core_files src/backend.cpp
     models/decilm.cpp
     models/deepseek.cpp
     models/dolphinphi2.cpp
+    models/dots.cpp
     models/ernie.cpp
     models/exaone.cpp
     models/falcon.cpp

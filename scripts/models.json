@@ -3369,8 +3369,7 @@
             }
         }
     },
-    "grove-moe":
-    {
+    "grove-moe": {
         "brief": "GroveMoE, a new sparse architecture using adjugate experts for dynamic computation allocation.",
         "default": "33b",
         "license": "Apache License 2.0",
@@ -3386,8 +3385,7 @@
             }
         }
     },
-    "janus-pro":
-    {
+    "janus-pro": {
         "brief": "Janus-Pro is a novel autoregressive framework that unifies multimodal understanding and generation.",
         "default": "1b",
         "license": "MIT",
@@ -3407,6 +3405,22 @@
                     "q8": {
                         "size": 7944145328,
                         "url": "chatllm_quantized_janus/janus-pro-7b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "dots.ocr": {
+        "brief": "dots.ocr is a powerful, multilingual document parser that unifies layout detection and content recognition within a single vision-language model while maintaining good reading order.",
+        "default": "3b",
+        "license": "MIT",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3235134784,
+                        "url": "chatllm_quantized_dots/dots.ocr-3b.bin"
                     }
                 }
             }
