@@ -1639,15 +1639,28 @@ namespace chatllm
 
     ggml::tensor *GroupNorm::forward(ComputeContext *ctx, ggml::tensor *input)
     {
+        ggml::tensor *output = nullptr;
+
         // input: [seqlen, normalized_shape]
-        ggml::tensor *output = num_groups == ggml::get_dim(weight, 0) ?
-                ggml::norm(ctx, input, eps) : ggml::group_norm(ctx, input, num_groups, eps);
-        auto weight_view = ggml::reshape(ctx, weight, 1, 1, ggml::get_dim(weight, 0));
-        output = ggml::mul(ctx, output, weight_view);
-        if (bias)
+        if (num_groups == ggml::get_dim(weight, 0))
         {
-            auto bias_view = ggml::reshape(ctx, bias, 1, 1, ggml::get_dim(bias, 0));
-            output = ggml::add(ctx, output, bias_view);
+            output = ggml::norm(ctx, input, eps);
+            output = ggml::mul(ctx, output, weight);
+            if (bias)
+            {
+                output = ggml::add(ctx, output, bias);
+            }
+        }
+        else
+        {
+            output = ggml::group_norm(ctx, input, num_groups, eps);
+            auto weight_view = ggml::reshape(ctx, weight, 1, 1, ggml::get_dim(weight, 0));
+            output = ggml::mul(ctx, output, weight_view);
+            if (bias)
+            {
+                auto bias_view = ggml::reshape(ctx, bias, 1, 1, ggml::get_dim(bias, 0));
+                output = ggml::add(ctx, output, bias_view);
+            }
         }
         return output;
     }
