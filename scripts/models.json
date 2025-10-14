@@ -3425,5 +3425,30 @@
                 }
             }
         }
+    },
+    "nanonets-ocr2": {
+        "brief": "Nanonets-OCR2 by Nanonets is a family of powerful, state-of-the-art image-to-markdown OCR models that go far beyond traditional text extraction.",
+        "default": "1.5b",
+        "license": "MIT",
+        "variants": {
+            "1.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1757924512,
+                        "url": "chatllm_quantized_nanonets/nanonets-ocr2-1.5b.bin"
+                    }
+                }
+            },
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4128566704,
+                        "url": "chatllm_quantized_nanonets/nanonets-ocr2-3b.bin"
+                    }
+                }
+            }
+        }
     }
 }

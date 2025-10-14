@@ -162,7 +162,7 @@ namespace chatllm::kimi::vit
             return ggml::nelements(pos_emb);
         }
 
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w) override
         {
             CHATLLM_CHECK(ggml::get_dim(input, 3) == 1);
 
@@ -204,7 +204,7 @@ namespace chatllm::kimi::vit
         {
         }
 
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w) override
         {
             ggml::tensor *x = proj.forward(ctx, input);
             x = ggml::reshape_3d(ctx, x, ggml::get_dim(x, 2), grid_h, grid_w);
@@ -422,7 +422,7 @@ namespace chatllm::kimi::vit
             loaded = true;
         }
 
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w) override
         {
             multi_modal_projector.merge_param.grid_h = grid_h;
             multi_modal_projector.merge_param.grid_w = grid_w;

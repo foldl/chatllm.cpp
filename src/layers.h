@@ -280,14 +280,14 @@ namespace chatllm
             CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *input, int n_past): not implemented";
             return NULL;
         }
+        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *image_features, int grid_h, int grid_w)
+        {
+            CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *image_features, int grid_h, int grid_w): not implemented";
+            return NULL;
+        }
         virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *_)
         {
             CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *_): not implemented";
-            return NULL;
-        }
-        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *patches, int patches_per_row, ggml::tensor *text_input)
-        {
-            CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *patches, int patches_per_row, ggml::tensor *text_input): not implemented";
             return NULL;
         }
         virtual void set_ctx(int n_ctx) { }

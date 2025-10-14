@@ -241,6 +241,7 @@ class ModelType(Enum):
     Qwen2Audio              = ModelTypeTagChatAudioIn + 0x0000001
 
     Qwen2_5VL               = ModelTypeTagChatImageVideoIn + 0x0000001
+    Qwen2_VL                = ModelTypeTagChatImageVideoIn + 0x0000002
     KimiVL                  = ModelTypeTagChatImageVideoIn + 0x0000100
     SmolVLM                 = ModelTypeTagChatImageVideoIn + 0x0000200
 
@@ -4479,6 +4480,58 @@ class QWen2AudioConverter(BaseConverter):
 
         return weight_names
 
+class QWen2_VLConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Qwen2_VL
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = QWen2_5VLConverter.state_dict_pp(config, state_dict)
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.vision_config['hidden_act'] == 'quick_gelu'
+        config.vision_config['hidden_act'] = 'silu'
+        config.vision_config['hidden_size'] = config.vision_config['embed_dim']
+        QWen2_5VLConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = QWen2Converter.get_weight_names(config if config.text_config is None else AttributeDict(config.text_config))
+
+        for i in range(config.vision_config['depth']):
+            weight_names += [
+                f"visual.blocks.{i}.attn.proj.bias",
+                f"visual.blocks.{i}.attn.proj.weight",
+                f"visual.blocks.{i}.attn.q_proj.bias",
+                f"visual.blocks.{i}.attn.q_proj.weight",
+                f"visual.blocks.{i}.attn.k_proj.bias",
+                f"visual.blocks.{i}.attn.k_proj.weight",
+                f"visual.blocks.{i}.attn.v_proj.bias",
+                f"visual.blocks.{i}.attn.v_proj.weight",
+                f"visual.blocks.{i}.mlp.fc1.bias",
+                f"visual.blocks.{i}.mlp.fc1.weight",
+                f"visual.blocks.{i}.mlp.fc2.bias",
+                f"visual.blocks.{i}.mlp.fc2.weight",
+                f"visual.blocks.{i}.norm1.bias",
+                f"visual.blocks.{i}.norm1.weight",
+                f"visual.blocks.{i}.norm2.bias",
+                f"visual.blocks.{i}.norm2.weight",
+            ]
+
+        weight_names += [
+            "visual.merger.ln_q.bias",
+            "visual.merger.ln_q.weight",
+            "visual.merger.mlp.0.bias",
+            "visual.merger.mlp.0.weight",
+            "visual.merger.mlp.2.bias",
+            "visual.merger.mlp.2.weight",
+            "visual.patch_embed.proj.0.weight",
+            "visual.patch_embed.proj.1.weight",
+        ]
+
+        return weight_names
+
 class QWen2_5VLConverter(BaseConverter):
     MODEL_TYPE = ModelType.Qwen2_5VL
 
@@ -4507,21 +4560,23 @@ class QWen2_5VLConverter(BaseConverter):
 
     @staticmethod
     def dump_config(f, config, ggml_type):
-        assert config.rope_scaling['type'] == 'mrope', 'rope_scaling must be mrope'
+        #assert config.rope_scaling['type'] == 'mrope', 'rope_scaling must be mrope'
         assert config.vision_config['hidden_act'] == 'silu'
 
         QWen2Converter.dump_config(f, config, ggml_type)
 
         MROPE_SECTION_MAX = 4
 
+        text_config = config if config.text_config is None else AttributeDict(config.text_config)
+
         config_values = [
-            config.tie_word_embeddings if config.tie_word_embeddings is not None else 0
+            text_config.tie_word_embeddings if text_config.tie_word_embeddings is not None else 0
         ] + pad_to_len(config.rope_scaling['mrope_section'], MROPE_SECTION_MAX)
         f.write(struct.pack("<" + "i" * len(config_values), *config_values))
 
     @staticmethod
     def get_weight_names(config):
-        weight_names = QWen2Converter.get_weight_names(config)
+        weight_names = QWen2Converter.get_weight_names(config if config.text_config is None else AttributeDict(config.text_config))
 
         for i in range(config.vision_config['depth']):
             weight_names += [
@@ -8501,6 +8556,8 @@ def main():
         QWen2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2AudioForConditionalGeneration':
         QWen2AudioConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Qwen2VLForConditionalGeneration':
+        QWen2_VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2_5_VLForConditionalGeneration':
         QWen2_5VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'KimiVLForConditionalGeneration':

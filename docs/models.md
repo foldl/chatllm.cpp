@@ -384,6 +384,9 @@ Please use `--format completion` for these models.
     Note: Prompt for OCR: _{{image:...}}Extract the text content from this image_. [Here](https://github.com/rednote-hilab/dots.ocr/blob/master/dots_ocr/utils/prompts.py)
     are other prompts for OCR. Use `+single-turn` to discard history automatically.
 
+* Nanonets-OCR2 (`Qwen2VLForConditionalGeneration`, `Qwen2_5_VLForConditionalGeneration`)
+    * [x] OCR2: [3B](https://huggingface.co/nanonets/Nanonets-OCR2-3B/tree/d0368059ad151ce9e38f526890cfd4f27b28be65), [1.5B](https://huggingface.co/nanonets/Nanonets-OCR2-1.5B-exp/tree/306a9b2a65672a3dbebd9bce9a9373a9a18674a2)
+
 ## RAG Models
 
 * Text Embedding (`XLMRobertaModel`)

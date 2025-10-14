@@ -29,7 +29,7 @@ namespace chatllm::dots::vit
               norm(ctx, config.hidden_size)
         {}
 
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w) override
         {
             ggml::tensor *x = nullptr;
             x = proj.forward(ctx, input);
@@ -234,7 +234,7 @@ namespace chatllm::dots::vit
             loaded = true;
         }
 
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w) override
         {
             pos_helper->prepare(grid_h, grid_w);
 
