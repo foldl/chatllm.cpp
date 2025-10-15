@@ -154,6 +154,14 @@ namespace vision
         return r;
     }
 
+#if defined(_WIN64)
+    #define MAGICK_CONVERT_CMD      "magick"
+    #define MAGICK_IDENTIFY_CMD     "magick identify"
+#else
+    #define MAGICK_CONVERT_CMD      "convert"
+    #define MAGICK_IDENTIFY_CMD     "identify"
+#endif
+
     void image_dimension(const char *fn, int &width, int &height)
     {
         width  = -1;
@@ -161,7 +169,7 @@ namespace vision
         const static std::regex rgx(R""( ([0-9]+)x([0-9]+) )"");
         std::smatch matches;
 
-        std::string cmd = "magick identify \"" + std::string(fn) + "\"";
+        std::string cmd = MAGICK_IDENTIFY_CMD " \"" + std::string(fn) + "\"";
 
         FILE* pp = popen(cmd.c_str(), "r");
 
@@ -215,7 +223,7 @@ namespace vision
         if (width <= 0) return;
 
         std::ostringstream base;
-        base << "magick -depth 8 \"" << std::string(fn) << "\"";
+        base << MAGICK_CONVERT_CMD << " -depth 8 \"" << std::string(fn) << "\"";
         if (PreMaxImageSize::PreScale(width, height))
             base << " -resize " << width << "x" << height << "!";
 
@@ -253,7 +261,7 @@ namespace vision
 
         // resize the global one
         std::ostringstream oss;
-        oss << "magick -depth 8 \"" << std::string(fn) << "\"";
+        oss << MAGICK_CONVERT_CMD << " -depth 8 \"" << std::string(fn) << "\"";
         oss << " -resize " << split_width << "x" << split_height << "!";
         splits.emplace_back(image_pixels_t());
         auto &image = splits.back();
@@ -275,7 +283,7 @@ namespace vision
         // whole image
         {
             std::ostringstream oss;
-            oss << "magick -depth 8 \"" << std::string(fn) << "\"";
+            oss << MAGICK_CONVERT_CMD << " -depth 8 \"" << std::string(fn) << "\"";
             oss << " -resize " << crop_width << "x" << crop_height << "!";
             crops.emplace_back(image_pixels_t());
             auto &image = crops.back();
@@ -327,7 +335,7 @@ namespace vision
                 const int start_x = c * crop_size_w;
 
                 std::ostringstream oss;
-                oss << "magick -depth 8 \"" << std::string(fn) << "\"";
+                oss << MAGICK_CONVERT_CMD << " -depth 8 \"" << std::string(fn) << "\"";
                 oss << " -crop " << crop_size_w << "x" << crop_size_h << "+" << start_x << "+" << start_y;
                 oss << " -resize " << crop_width << "x" << crop_height << "!";
 
@@ -348,7 +356,7 @@ namespace vision
         if (width <= 0) return;
 
         std::ostringstream oss;
-        oss << "magick -depth 8 \"" << std::string(fn) << "\"";
+        oss << MAGICK_CONVERT_CMD << " -depth 8 \"" << std::string(fn) << "\"";
 
         if (params.do_resize)
         {
@@ -401,7 +409,7 @@ namespace vision
             }
         }
 
-        oss << " -resize \"" << width << "x" << height << "\\>\"";
+        oss << " -resize \"" << width << "x" << height << ">\"";
 
         int aligned_width  = 0;
         int aligned_height = 0;
@@ -726,11 +734,12 @@ namespace vision
     {
         std::ostringstream oss;
         int64_t data_cnt = 0;
-        oss << "magick";
+
 #if defined(_WIN64)
+        oss << "magick";
         const std::string fn = "\"" + utils::tmpname() + ".png\"";
 #else
-        oss << " display";
+        oss << "display";
 #endif
 
         switch (fmt)
