@@ -4,6 +4,28 @@ import packages/docutils/highlite, terminal
 
 var all_models: JsonNode = nil
 
+proc show_help() =
+    echo """
+Usage: ./program [OPTIONS]
+
+A command-line interface for interacting with language models using libchatllm.
+
+Options:
+  -m, --model <model_id>          Specify the model to use (e.g., :qwen:1.5b)
+  --embedding_model <model_id>    Specify the embedding model to use
+  --reranker_model <model_id>     Specify the reranker model to use
+  -p, --prompt <prompt>           Set the initial prompt for the model
+  -i, --interactive                Enable interactive mode
+  --reversed_role                  Reverse the role of user and AI in interactive mode
+  --multi                          Allow multi-line input in interactive mode
+  -h, --help                       Show this help message
+
+Examples:
+  ./program -m :qwen:1.5b -p "Hello, world!"
+  ./program --interactive --model :qwen:1.5b
+  ./program --help
+"""
+
 proc get_model_url_on_modelscope(url: seq[string]): string =
     let proj = url[0]
     let fn = url[1]
@@ -190,6 +212,10 @@ var reversed_role = false
 var use_multiple_lines = false
 
 for i in 1 .. paramCount():
+    if paramStr(i) in ["-h", "--help"]:
+        show_help()
+        quit(0)
+
     if paramStr(i) in ["-i", "--interactive"]:
         interactive = true
 
