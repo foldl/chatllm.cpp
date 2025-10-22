@@ -15,10 +15,10 @@ Options:
   --embedding_model <model_id>    Specify the embedding model to use
   --reranker_model <model_id>     Specify the reranker model to use
   -p, --prompt <prompt>           Set the initial prompt for the model
-  -i, --interactive                Enable interactive mode
-  --reversed_role                  Reverse the role of user and AI in interactive mode
-  --multi                          Allow multi-line input in interactive mode
-  -h, --help                       Show this help message
+  -i, --interactive               Enable interactive mode
+  --reversed_role                 Reverse the role of user and AI in interactive mode
+  --multi                         Allow multi-line input in interactive mode
+  -h, --help                      Show this help message
 
 Examples:
   ./program -m :qwen:1.5b -p "Hello, world!"
