@@ -103,6 +103,7 @@ namespace chatllm
         ggml::tensor *randn(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);
 
         ggml::tensor *top_k(ComputeContext *ctx, ggml::tensor *a, int k);
+        ggml::tensor *ordering(ComputeContext *ctx, ggml::tensor *a, bool descending = false);
 
         ggml::tensor *view_1d(ComputeContext *ctx, ggml::tensor  *a, int64_t ne0, size_t offset);
         ggml::tensor *view_2d(ComputeContext *ctx, ggml::tensor  *a, int64_t ne0, int64_t ne1, size_t nb1, size_t offset);
@@ -1323,9 +1324,9 @@ namespace chatllm
               max_length(max_length),
               attn_scaling_factor(-1.0f),
               attn_scores_pp(nullptr),
+              causal(true),
               shift_pending(),
               attn_scaling(true),
-              causal(true),
               last_attn_scores(nullptr),
               sinks(BlockParams::CoreAttentionUseSinks::get() > 0 ?
                     ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, BlockParams::CoreAttentionUseSinks::get())
@@ -1405,11 +1406,11 @@ namespace chatllm
         const int max_length;
         float attn_scaling_factor;
         Block *attn_scores_pp;
+        bool causal;
 
     protected:
         ShiftPending shift_pending;
         bool attn_scaling;
-        bool causal;
         ggml::tensor *last_attn_scores;
         ggml::tensor *sinks;
         std::unique_ptr<BaseTensorPosHelper> pos_helper;

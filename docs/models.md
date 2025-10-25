@@ -121,6 +121,9 @@
     * [x] v1.5: [Ling-lite-1.5-2507](https://huggingface.co/inclusionAI/Ling-lite-1.5-2507/tree/6656efdc763a77102207fc66b176e4c5d07a316b), [Ring-lite2507](https://huggingface.co/inclusionAI/Ring-lite-2507/commit/8cf0ec244871c90102b353cef3568e061fd2504f)
     * [x] v2: [Ling-mini-2.0](https://huggingface.co/inclusionAI/Ling-mini-2.0/tree/56c261e07b78d95dad61336fcbdb21ef4fdbcabe), [Ring-mini-2.0](https://huggingface.co/inclusionAI/Ring-mini-2.0/tree/d4eac003b34b59b733f05039a876616d840a37d6)
 
+* LLaDA (`LLaDA2MoeModelLM`)
+    * [x] [mini-preview](https://huggingface.co/inclusionAI/LLaDA2.0-mini-preview/tree/d25d3b2ac0b966b64da11d6c791f8bf4bc31e90c)
+
 * LlaMA-like (`LlamaForCausalLM`, `Llama4ForConditionalGeneration`):
     * [x] All LlaMA-1 models
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc

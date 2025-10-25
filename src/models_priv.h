@@ -374,7 +374,7 @@ namespace chatllm
         int get_max_length(void) override;
         void shift_memory(int keep) override;
         int64_t get_param_num(bool effective_only) const override;
-        std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+        virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                   const bool continuous,
                                   bool &completed,
                                   ModelPerfInfo *performance,
@@ -433,7 +433,6 @@ namespace chatllm
         std::vector<int> layer_ids;
         BackendContext backend_context;
         InitContext w_ctx_; // weight context
-    private:
         BaseConfig config_;
         bool initial_run = false;
     };
@@ -567,5 +566,66 @@ namespace chatllm
         const int n_threads;
     protected:
         int max_embedding_num;
+    };
+
+    class LogitsPenalty
+    {
+    public:
+        LogitsPenalty();
+        LogitsPenalty(const GenerationConfig &gen_config);
+
+        virtual void skip_this(int token_id);
+
+        virtual void reset();
+
+        virtual void accept_choice(int token_id);
+
+        virtual void process(float *logits, const int vocab_size);
+
+    protected:
+        const bool repeat_penalty_en;
+        const bool freq_penalty_en;
+        const float inv_repeat_penalty;
+        const float repeat_penalty;
+        const float freq_penalty;
+        const float presence_penalty;
+        std::vector<int> token_history;
+        std::vector<int> token_count;
+        size_t hist_write;
+        std::set<int> skip_tokens;
+    };
+
+    class Sampler
+    {
+    public:
+        static const int ABORT = -1;
+        Sampler() : penalty() {}
+        virtual ~Sampler() = default;
+
+        Sampler(const GenerationConfig &gen_config)
+            : penalty(gen_config)
+        {}
+    public:
+        virtual void seed(int x)
+        {
+            gen.seed((unsigned int)x);
+        }
+
+        virtual void reset()
+        {
+            penalty.reset();
+        }
+
+        virtual int sampling(float *logits, const int vocab_size) = 0;
+    public:
+        LogitsPenalty penalty;
+    protected:
+        std::mt19937 gen;
+    };
+
+    class SamplerFactory
+    {
+    public:
+        static Sampler *Create(const GenerationConfig &gen_config, int seed);
     };
 }

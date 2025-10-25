@@ -219,6 +219,7 @@ class ModelType(Enum):
     GroveMoE        = 0x2D00
 
     BailingMoE2     = 0x2E00
+    LlaDA2          = 0x2E01
 
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
@@ -242,6 +243,7 @@ class ModelType(Enum):
 
     Qwen2_5VL               = ModelTypeTagChatImageVideoIn + 0x0000001
     Qwen2_VL                = ModelTypeTagChatImageVideoIn + 0x0000002
+    Qwen3_VL                = ModelTypeTagChatImageVideoIn + 0x0000003
     KimiVL                  = ModelTypeTagChatImageVideoIn + 0x0000100
     SmolVLM                 = ModelTypeTagChatImageVideoIn + 0x0000200
 
@@ -5079,7 +5081,7 @@ class QWen3Converter(BaseConverter):
     @staticmethod
     def dump_config(f, config, ggml_type):
         MAX_LAYERS = 128
-        assert config.use_sliding_window == False, "use_sliding_window must be False"
+        assert (config.use_sliding_window is None) or (config.use_sliding_window == False), "use_sliding_window must be False"
         assert not config.attention_bias
         assert (config.output_router_logits is None) or (not config.output_router_logits)
 
@@ -5183,6 +5185,9 @@ class QWen3Converter(BaseConverter):
             ]
 
         return weight_names
+
+class Qwen3VLConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Qwen3_VL
 
 class QWen3EmbConverter(BaseConverter):
     MODEL_TYPE = ModelType.QWen3_Embedding
@@ -6477,10 +6482,10 @@ class BailingMoe2Converter(BaseConverter):
     def dump_config(f, config, ggml_type):
 
         assert config.rope_scaling is None
-        assert config.use_qk_norm
+        assert (config.use_qk_norm is None) or config.use_qk_norm
         assert config.moe_router_enable_expert_bias
         assert (config.num_nextn_predict_layers is None) or (config.num_nextn_predict_layers == 0)
-        assert config.moe_shared_expert_intermediate_size == config.moe_intermediate_size
+        assert (config.moe_shared_expert_intermediate_size is None) or (config.moe_shared_expert_intermediate_size == config.moe_intermediate_size)
 
         BailingMoeConverter.dump_config(f, config, ggml_type)
 
@@ -8683,6 +8688,9 @@ def main():
     elif arch == 'BailingMoeForCausalLM':
         BailingMoeConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'BailingMoeV2ForCausalLM':
+        BailingMoe2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'LLaDA2MoeModelLM':
+        BailingMoe2Converter.MODEL_TYPE = ModelType.LlaDA2
         BailingMoe2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'AprielForCausalLM':
         AprielConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

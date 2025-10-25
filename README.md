@@ -31,6 +31,7 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
+* 2025-10-25: LLaDA2.0-mini
 * 2025-10-14: Nanonets-OCR2
 * 2025-10-13: dots.ocr
 * 2025-10-10: [I can draw](./docs/multimodal.md): Janus-Pro

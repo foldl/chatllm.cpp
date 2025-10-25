@@ -1017,6 +1017,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::ordering(ComputeContext *ctx, ggml::tensor *a, bool descending)
+    {
+        ggml::tensor *tensor = ggml_argsort(ctx->get_ctx(), a, descending ? GGML_SORT_ORDER_DESC : GGML_SORT_ORDER_ASC);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::mul_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b)
     {
         ggml::tensor *tensor = ggml_mul_inplace(ctx->get_ctx(), a, b);

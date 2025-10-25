@@ -574,117 +574,74 @@ namespace chatllm
         }
     }
 
-    class LogitsPenalty
+    LogitsPenalty::LogitsPenalty()
+        : repeat_penalty_en(false),
+            freq_penalty_en(false),
+            inv_repeat_penalty(0.0f), repeat_penalty(0.0f), freq_penalty(0.0f), presence_penalty(0.0f)
+    {}
+
+    LogitsPenalty::LogitsPenalty(const GenerationConfig &gen_config)
+        : repeat_penalty_en((gen_config.penalty_window > 0) && (gen_config.repeat_penalty != 1.0f) && (gen_config.repeat_penalty > 0.0f)),
+            freq_penalty_en((gen_config.penalty_window > 0) && ((gen_config.frequency_penalty != 0.0f) || (gen_config.presence_penalty != 0.0f))),
+            inv_repeat_penalty(repeat_penalty_en ? 1 / gen_config.repeat_penalty : 0.0f),
+            repeat_penalty(gen_config.repeat_penalty),
+            freq_penalty(freq_penalty_en ? gen_config.frequency_penalty / gen_config.penalty_window : 0.0f),
+            presence_penalty(gen_config.presence_penalty)
     {
-    public:
-        LogitsPenalty()
-            : repeat_penalty_en(false),
-              freq_penalty_en(false),
-              inv_repeat_penalty(0.0f), repeat_penalty(0.0f), freq_penalty(0.0f), presence_penalty(0.0f)
-        {}
-
-        LogitsPenalty(const GenerationConfig &gen_config)
-            : repeat_penalty_en((gen_config.penalty_window > 0) && (gen_config.repeat_penalty != 1.0f) && (gen_config.repeat_penalty > 0.0f)),
-              freq_penalty_en((gen_config.penalty_window > 0) && ((gen_config.frequency_penalty != 0.0f) || (gen_config.presence_penalty != 0.0f))),
-              inv_repeat_penalty(repeat_penalty_en ? 1 / gen_config.repeat_penalty : 0.0f),
-              repeat_penalty(gen_config.repeat_penalty),
-              freq_penalty(freq_penalty_en ? gen_config.frequency_penalty / gen_config.penalty_window : 0.0f),
-              presence_penalty(gen_config.presence_penalty)
+        if (gen_config.penalty_window > 0)
         {
-            if (gen_config.penalty_window > 0)
-            {
-                token_history.resize(gen_config.penalty_window);
-            }
-            reset();
+            token_history.resize(gen_config.penalty_window);
         }
+        reset();
+    }
 
-        virtual void skip_this(int token_id)
-        {
-            skip_tokens.emplace(token_id);
-        }
-
-        virtual void reset()
-        {
-            for (size_t i = 0; i < token_history.size(); i++)
-                token_history[i] = -1;
-            hist_write = 0;
-            memset(token_count.data(), 0, token_count.size() * sizeof(token_count[0]));
-        }
-
-        virtual void accept_choice(int token_id)
-        {
-            if (token_history.size() < 1) return;
-            int id = token_history[hist_write];
-            if ((0 <= id) && (id < (int)token_count.size()))
-                token_count[id]--;
-            token_history[hist_write++] = token_id;
-            if (hist_write >= token_history.size()) hist_write = 0;
-            if ((0 <= token_id) && (token_id < (int)token_count.size()))
-                token_count[token_id]++;
-        }
-
-        virtual void process(float *logits, const int vocab_size)
-        {
-            if (token_history.size() < 1) return;
-
-            if (vocab_size != (int)token_count.size())
-            {
-                token_count.resize(vocab_size);
-            }
-
-            for (int i = 0; i < vocab_size; i++)
-            {
-                if (repeat_penalty_en)
-                {
-                    if (token_count[i] > 0)
-                        logits[i] *= logits[i] > 0 ? inv_repeat_penalty : repeat_penalty;
-                }
-
-                if (freq_penalty_en)
-                    logits[i] -= float(token_count[i]) * freq_penalty + float(token_count[i] > 0) * presence_penalty;
-            }
-        }
-
-    protected:
-        const bool repeat_penalty_en;
-        const bool freq_penalty_en;
-        const float inv_repeat_penalty;
-        const float repeat_penalty;
-        const float freq_penalty;
-        const float presence_penalty;
-        std::vector<int> token_history;
-        std::vector<int> token_count;
-        size_t hist_write;
-        std::set<int> skip_tokens;
-    };
-
-    class Sampler
+    void LogitsPenalty::skip_this(int token_id)
     {
-    public:
-        static const int ABORT = -1;
-        Sampler() : penalty() {}
-        virtual ~Sampler() = default;
+        skip_tokens.emplace(token_id);
+    }
 
-        Sampler(const GenerationConfig &gen_config)
-            : penalty(gen_config)
-        {}
-    public:
-        virtual void seed(int x)
+    void LogitsPenalty::reset()
+    {
+        for (size_t i = 0; i < token_history.size(); i++)
+            token_history[i] = -1;
+        hist_write = 0;
+        memset(token_count.data(), 0, token_count.size() * sizeof(token_count[0]));
+    }
+
+    void LogitsPenalty::accept_choice(int token_id)
+    {
+        if (token_history.size() < 1) return;
+        int id = token_history[hist_write];
+        if ((0 <= id) && (id < (int)token_count.size()))
+            token_count[id]--;
+        token_history[hist_write++] = token_id;
+        if (hist_write >= token_history.size()) hist_write = 0;
+        if ((0 <= token_id) && (token_id < (int)token_count.size()))
+            token_count[token_id]++;
+    }
+
+    void LogitsPenalty::process(float *logits, const int vocab_size)
+    {
+        if (token_history.size() < 1) return;
+
+        if (vocab_size != (int)token_count.size())
         {
-            gen.seed((unsigned int)x);
+            token_count.resize(vocab_size);
         }
 
-        virtual void reset()
+        for (int i = 0; i < vocab_size; i++)
         {
-            penalty.reset();
-        }
+            if (repeat_penalty_en)
+            {
+                if (token_count[i] > 0)
+                    logits[i] *= logits[i] > 0 ? inv_repeat_penalty : repeat_penalty;
+            }
 
-        virtual int sampling(float *logits, const int vocab_size) = 0;
-    public:
-        LogitsPenalty penalty;
-    protected:
-        std::mt19937 gen;
-    };
+            if (freq_penalty_en)
+                logits[i] -= float(token_count[i]) * freq_penalty + float(token_count[i] > 0) * presence_penalty;
+        }
+    }
+
 
     class GreedySampler : public Sampler
     {
@@ -702,7 +659,7 @@ namespace chatllm
             : Sampler(gen_config),
               inv_temp(0.0f), top_k(top_k)
         {
-            temp_en = fabs(temperature - 1.0f) > 1e-5f;
+            temp_en = (fabs(temperature - 1.0f) > 1e-5f) && (fabs(temperature) > 1e-5f);
             if (temp_en) inv_temp = 1.f / temperature;
         }
 
@@ -738,12 +695,14 @@ namespace chatllm
                 return ABORT;
 
             // sample next token
+            std::vector<float> logits_candidates;
+            logits_candidates.resize(token_scores.size());
             for (size_t i = 0; i < token_scores.size(); i++)
             {
-                logits[i] = token_scores[i].score;
+                logits_candidates[i] = token_scores[i].score;
             }
 
-            std::discrete_distribution<> dist(logits, logits + token_scores.size());
+            std::discrete_distribution<> dist(logits_candidates.data(), logits_candidates.data() + token_scores.size());
             int next_token_id = token_scores[dist(gen)].id;
 
             penalty.accept_choice(next_token_id);
@@ -793,7 +752,7 @@ namespace chatllm
         {}
 
     protected:
-        void do_sampling (float *next_token_logits, const int vocab_size) override
+        void do_sampling(float *next_token_logits, const int vocab_size) override
         {
             // top_p sampling
             if (0.f < top_p && top_p < 1.f)
@@ -814,6 +773,12 @@ namespace chatllm
             }
 
             sampling_softmax_inplace(token_scores.data(), token_scores.data() + token_scores.size());
+
+            // write back final scores
+            for (size_t i = 0; i < token_scores.size(); i++)
+            {
+                next_token_logits[token_scores[i].id] = token_scores[i].score;
+            }
         }
 
     protected:
@@ -873,29 +838,25 @@ namespace chatllm
         std::vector<float> snd_d;
     };
 
-    class SamplerFactory
+    Sampler *SamplerFactory::Create(const GenerationConfig &gen_config, int seed)
     {
-    public:
-        static Sampler *Create(const GenerationConfig &gen_config, int seed)
+        Sampler *r = nullptr;
+        if (gen_config.do_sample)
         {
-            Sampler *r = nullptr;
-            if (gen_config.do_sample)
-            {
-                if (gen_config.sampling == "top_p")
-                    r = new TopPSampler(gen_config, gen_config.temperature, gen_config.top_k, gen_config.top_p);
-                else if (gen_config.sampling == "tfs")
-                    r = new FreeTailSampler(gen_config, gen_config.temperature, gen_config.top_k, gen_config.tfs_z);
-                else if (gen_config.sampling != "greedy")
-                    CHATLLM_CHECK(false) << "unknown sampling algorithm: " << gen_config.sampling;
-            }
-
-            if (nullptr == r)
-                r = new GreedySampler();
-
-            r->seed(seed);
-            return r;
+            if (gen_config.sampling == "top_p")
+                r = new TopPSampler(gen_config, gen_config.temperature, gen_config.top_k, gen_config.top_p);
+            else if (gen_config.sampling == "tfs")
+                r = new FreeTailSampler(gen_config, gen_config.temperature, gen_config.top_k, gen_config.tfs_z);
+            else if (gen_config.sampling != "greedy")
+                CHATLLM_CHECK(false) << "unknown sampling algorithm: " << gen_config.sampling;
         }
-    };
+
+        if (nullptr == r)
+            r = new GreedySampler();
+
+        r->seed(seed);
+        return r;
+    }
 
     BaseModelForConditionalGeneration::BaseModelForConditionalGeneration(ModelType model_type, BaseConfig config, const RuntimeConfig &runtime_config, size_t GRAPH_SIZE)
         : BaseModel(model_type, get_model_purpose(model_type)),
@@ -1513,15 +1474,18 @@ namespace chatllm
     {
         const int qlen  = ggml::get_dim(hidden_states, 1);
         const int batch = ggml::get_dim(hidden_states, 2);
-        hidden_states = ggml::view_3d(ctx, hidden_states, model->hidden_size, 1, batch,
+        CHATLLM_CHECK(qlen >= last_n);
+        order = nullptr;
+
+        hidden_states = ggml::view_3d(ctx, hidden_states, model->hidden_size, last_n, batch,
             ggml::row_size(hidden_states),
             ggml::row_size(hidden_states) * qlen,
-            (qlen - 1) * ggml::row_size(hidden_states));
+            (qlen - last_n) * ggml::row_size(hidden_states));
 
         ggml::tensor *transformer_outputs = model->final_layernorm->forward(ctx, hidden_states);
 
         // now, this is continous
-        transformer_outputs = ggml::reshape_2d(ctx, transformer_outputs, ggml::get_dim(transformer_outputs, 0), batch);
+        transformer_outputs = ggml::reshape_2d(ctx, transformer_outputs, ggml::get_dim(transformer_outputs, 0), last_n * batch);
 
         model->last_hidden_state = transformer_outputs;
         if (model->skip_lm_head)
@@ -1532,7 +1496,38 @@ namespace chatllm
 
         if (model->logits_pp)
             lm_logits = model->logits_pp->forward(ctx, lm_logits);
+
+        if (do_orderring)
+            order = ggml::ordering(ctx, lm_logits, true);
+
+        if ((last_n > 1) && (batch > 1))
+        {
+            lm_logits = ggml::reshape_3d(ctx, lm_logits, ggml::get_dim(lm_logits, 0), last_n, batch);
+            if (order)
+                order = ggml::reshape_3d(ctx, order, ggml::get_dim(order, 0), last_n, batch);
+        }
+
+        if (order)
+        {
+            ggml::build_forward_expand(ctx, order);
+            ggml::set_output(order);
+        }
+
         return lm_logits;
+    }
+
+    void LMFinalSteps::set_read_last_n(int n)
+    {
+        last_n = n >= 1 ? n : 1;
+    }
+
+    void LMFinalSteps::set_do_orderring(bool flag)
+    {
+        do_orderring = flag;
+    }
+    ggml::tensor *LMFinalSteps::get_orderring_result(void)
+    {
+        return order;
     }
 
     ggml::tensor *EmbeddingPoolingFinalSteps::forward(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
