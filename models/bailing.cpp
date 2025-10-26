@@ -22,7 +22,6 @@ namespace chatllm::bailing::moe
     class ChatHistoryEncoder : public BaseHistoryEncoder
     {
     public:
-        void append_sys_prompt(std::vector<int> &ids) const override;
         void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
         void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
         void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
@@ -33,8 +32,8 @@ namespace chatllm::bailing::moe
     class Tokenizer : public BaseTokenizer
     {
     public:
-        Tokenizer(const Config &config)
-            : BaseTokenizer(config, &_chat_encoder)
+        Tokenizer(const Config &config, BaseHistoryEncoder *chat_encoder = &_chat_encoder)
+            : BaseTokenizer(config, chat_encoder)
         {
             sys_prompt = "You are Ling, an assistant created by inclusionAI";
         }
@@ -56,12 +55,9 @@ namespace chatllm::bailing::moe
             size_t size = tp->Load(buffer, n_vocab);
 
             role_open_token_id = tp->PieceToId("<role>");
-            eos_token_id  = tp->PieceToId("<|role_end|>");
-            mask_token_id = tp->PieceToId("<|mask|>");
 
-            // LlaDA might generate lots of PAD
-            if (mask_token_id >= 0)
-                terminate_ids.insert(pad_token_id);
+            if (role_open_token_id >= 0)
+                terminate_ids.insert(role_open_token_id);
 
             int t = tp->PieceToId("<think>");
             if (t >= 0)
@@ -78,32 +74,18 @@ namespace chatllm::bailing::moe
 
     protected:
         int role_open_token_id;
-    public:
-        int mask_token_id;
     };
-
-    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
-    {
-        if (tokenizer->get_system_prompt().size() > 0)
-        {
-            tokenizer->encode("<role>SYSTEM</role>", ids);
-            tokenizer->encode(tokenizer->get_system_prompt(), ids);
-            ids.push_back(tokenizer->eos_token_id);
-        }
-    }
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         append_ai_opening(round_idx, ids);
         tokenizer->encode(ai, ids);
-        ids.push_back(tokenizer->eos_token_id);
     }
 
     void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         tokenizer->encode("<role>HUMAN</role>", ids);
         tokenizer->encode(user, ids);
-        ids.push_back(tokenizer->eos_token_id);
     }
 
     void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
@@ -209,9 +191,14 @@ namespace chatllm::bailing::moe2
         ggml::tensor *attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
             ggml::tensor *attn_scores) override
         {
+            if (nullptr == mask)
+            {
+                return QKNormedAttention<RMSNorm, BaseAttention>::attn_scores_to_probs(ctx, hidden_size, n_past, qlen, attn_scores);
+            }
+
             const int head_size = hidden_size / num_attention_heads;
 
-            ggml::tensor * sub_mask = mask ? ggml::view_2d(ctx, mask, n_past + qlen, qlen, (n_past + qlen) * ggml::element_size(mask), 0) : nullptr;
+            ggml::tensor * sub_mask = ggml::view_2d(ctx, mask, n_past + qlen, qlen, (n_past + qlen) * ggml::element_size(mask), 0);
 
             // attn_probs = soft_max(attn_masked)
             ggml::tensor * attn_probs = ggml::soft_max_ext(ctx, attn_scores, sub_mask, 1.f / sqrtf((float)head_size), 0.0f);
@@ -341,7 +328,71 @@ namespace chatllm::bailing::moe2
 namespace chatllm::bailing::llada
 {
     typedef moe2::Config Config;
-    typedef moe2::Tokenizer Tokenizer;
+
+    class ChatHistoryEncoder : public BaseHistoryEncoder
+    {
+    public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public moe::Tokenizer
+    {
+    public:
+        Tokenizer(const Config &config)
+            : moe::Tokenizer(config, &_chat_encoder)
+        {
+        }
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            size_t r = moe::Tokenizer::load(buffer, n_vocab);
+
+            eos_token_id  = tp->PieceToId("<|role_end|>");
+            mask_token_id = tp->PieceToId("<|mask|>");
+
+            // LlaDA might generate lots of PAD
+            if (mask_token_id >= 0)
+                terminate_ids.insert(pad_token_id);
+
+            return r;
+        }
+    public:
+        int mask_token_id;
+    };
+
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+        if (tokenizer->get_system_prompt().size() > 0)
+        {
+            tokenizer->encode("<role>SYSTEM</role>", ids);
+            tokenizer->encode(tokenizer->get_system_prompt(), ids);
+            ids.push_back(tokenizer->eos_token_id);
+        }
+    }
+
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+    {
+        append_ai_opening(round_idx, ids);
+        tokenizer->encode(ai, ids);
+        ids.push_back(tokenizer->eos_token_id);
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        tokenizer->encode("<role>HUMAN</role>", ids);
+        tokenizer->encode(user, ids);
+        ids.push_back(tokenizer->eos_token_id);
+    }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        tokenizer->encode("<role>ASSISTANT</role>", ids);
+    }
 
     class Prelude
     {
@@ -535,7 +586,7 @@ namespace chatllm::bailing::llada
             << "requested max_length (" << gen_config.max_length << ") is larger than model's max_length ("
             << config_.max_length << ")";
 
-        const int mask_id = dynamic_cast<bailing::moe::Tokenizer *>(tokenizer)->mask_token_id;
+        const int mask_id = dynamic_cast<Tokenizer *>(tokenizer)->mask_token_id;
         std::vector<int> num_transfer_tokens_schedule;
         for (int i = 0; i < steps; i++) num_transfer_tokens_schedule.push_back(block_length / steps);
         const int remain = block_length % steps;
