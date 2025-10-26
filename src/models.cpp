@@ -1477,6 +1477,8 @@ namespace chatllm
         const int last_n = qlen >= this->last_n ? this->last_n : qlen;
         order = nullptr;
 
+        if (disable_head) return hidden_states;
+
         hidden_states = ggml::view_3d(ctx, hidden_states, model->hidden_size, last_n, batch,
             ggml::row_size(hidden_states),
             ggml::row_size(hidden_states) * qlen,

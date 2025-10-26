@@ -3,7 +3,6 @@
 #include <cstring>
 #include <functional>
 #include "deepseek.h"
-#include "qwen.h"
 
 namespace chatllm::bailing
 {
@@ -59,6 +58,10 @@ namespace chatllm::bailing::moe
             role_open_token_id = tp->PieceToId("<role>");
             eos_token_id  = tp->PieceToId("<|role_end|>");
             mask_token_id = tp->PieceToId("<|mask|>");
+
+            // LlaDA might generate lots of PAD
+            if (mask_token_id >= 0)
+                terminate_ids.insert(pad_token_id);
 
             int t = tp->PieceToId("<think>");
             if (t >= 0)
@@ -180,15 +183,55 @@ namespace chatllm::bailing::moe2
         return selected_experts;
     }
 
+    class AttnParams
+    {
+    public:
+        static int custom_mask;
+    };
+
+    int AttnParams::custom_mask = false;
+
+    class SelfAttention : public QKNormedAttention<RMSNorm, BaseAttention>
+    {
+    public:
+        SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length):
+            QKNormedAttention<RMSNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false),
+            mask(nullptr)
+        {
+            if (AttnParams::custom_mask)
+            {
+                // reverse some data
+                mask = ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F16, max_length, 32);
+                ctx->get_allocator()->alloc(mask);
+            }
+        }
+
+        ggml::tensor *attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
+            ggml::tensor *attn_scores) override
+        {
+            const int head_size = hidden_size / num_attention_heads;
+
+            ggml::tensor * sub_mask = mask ? ggml::view_2d(ctx, mask, n_past + qlen, qlen, (n_past + qlen) * ggml::element_size(mask), 0) : nullptr;
+
+            // attn_probs = soft_max(attn_masked)
+            ggml::tensor * attn_probs = ggml::soft_max_ext(ctx, attn_scores, sub_mask, 1.f / sqrtf((float)head_size), 0.0f);
+
+            return attn_probs;
+        }
+    public:
+        ggml_tensor *mask;
+    };
+
     class ConditionalGeneration : public BaseModelForConditionalGeneration
     {
     public:
         typedef CombinedMLP<BailingSparseMoE, SiLUMLP> BailingMoEMLP;
-        typedef LMBlock1<RMSNorm, qwen::v3::QWen3SelfAttention, RMSNorm, BailingMoEMLP> BailingMoEBlock;
+        typedef LMBlock1<RMSNorm, SelfAttention, RMSNorm, BailingMoEMLP> BailingMoEBlock;
+        typedef LMBlock1<RMSNorm, SelfAttention, RMSNorm, SiLUMLP> BailingDenseBlock;
         typedef BaseModelForConditionalGeneration Base;
         typedef HeterogeneousModel ModelClass;
     public:
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_BAILING_MOE2, bool causal = true)
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_BAILING_MOE2)
             : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
               config(config)
         {
@@ -197,7 +240,8 @@ namespace chatllm::bailing::moe2
             const int dense_layer_num = config.num_hidden_layers - moe_layer_num;
             const size_t num_tensors = 3
                                 + moe_layer_num * (12 + 7)
-                                + dense_layer_num * 14;
+                                + dense_layer_num * 14
+                                + (AttnParams::custom_mask ? config.num_hidden_layers : 0);
             const size_t ctx_size = num_tensors * tensor_ovhd;
             w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
             w_ctx_.dtype = config.dtype;
@@ -223,15 +267,13 @@ namespace chatllm::bailing::moe2
                     layer->mlp.mlp1.routed_scaling_factor   = config.routed_scaling_factor;
                     layer->mlp.mlp1.n_group                 = config.n_group;
                     layer->mlp.mlp1.topk_group              = config.topk_group;
-                    layer->attention.causal = causal;
                     config_rope(layer->attention);
                     return layer;
                 }
                 else
                 {
-                    auto layer = new qwen::v3::QWen3Block(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
+                    auto layer = new BailingDenseBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
                                                 config.num_key_value_heads, config.head_dim, config.max_length);
-                    layer->attention.causal = causal;
                     config_rope(layer->attention);
                     return layer;
                 }
@@ -247,6 +289,20 @@ namespace chatllm::bailing::moe2
             #undef config_rope
 
             w_ctx_.check_used_mem_size(true);
+        }
+
+        SelfAttention *get_attn_of_layer(int layer_index)
+        {
+            if (is_layer_moe(layer_index))
+            {
+                auto layer = dynamic_cast<BailingMoEBlock *>(transformer->get_layer(layer_index));
+                return &layer->attention;
+            }
+            else
+            {
+                auto layer = dynamic_cast<BailingDenseBlock *>(transformer->get_layer(layer_index));
+                return &layer->attention;
+            }
         }
 
         void load(ModelLoader &loader) override
@@ -287,11 +343,21 @@ namespace chatllm::bailing::llada
     typedef moe2::Config Config;
     typedef moe2::Tokenizer Tokenizer;
 
-    class ConditionalGeneration : public moe2::ConditionalGeneration
+    class Prelude
+    {
+    public:
+        Prelude()
+        {
+            moe2::AttnParams::custom_mask = true;
+        }
+    };
+
+    class ConditionalGeneration : public Prelude, public moe2::ConditionalGeneration
     {
     public:
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = (ModelType)MODEL_TYPE_LLADA2):
-            moe2::ConditionalGeneration(config, runtime_config, type, false)
+            Prelude(),
+            moe2::ConditionalGeneration(config, runtime_config, type)
         {
             final_steps = dynamic_cast<LMFinalSteps *>(transformer->get_final_steps());
         }
@@ -304,13 +370,13 @@ namespace chatllm::bailing::llada
                                   BaseStreamer *streamer = nullptr) override;
     protected:
         bool generate_next_block(const int *input_ids, const int ids_count, const GenerationConfig &gen_config,
-            std::vector<float> *logits_output,
-            std::vector<int>   *logits_orderring, const int batch_size = 1);
+            std::vector<float> *logits_output, const int batch_size = 1);
         bool run_model(const int *input_ids, const int ids_count,
                             const GenerationConfig &gen_config,
                             int past,
-                            std::vector<float> *logits_output,
-                            std::vector<int>   *logits_orderring, const int batch_size);
+                            std::vector<float> *logits_output, const int batch_size);
+
+        void update_mask(int past, int qlen);
     public:
         int block_length    = 32;
         int steps           = 32;
@@ -330,14 +396,57 @@ namespace chatllm::bailing::llada
         threshold    = (float)utils::get_opt(args, "threshold", threshold);
         final_steps->set_read_last_n(block_length);
         steps               = std::min(steps, block_length);
+
+
+    }
+
+    void ConditionalGeneration::update_mask(int past, int qlen)
+    {
+        CHATLLM_CHECK((past % block_length) == 0);
+        CHATLLM_CHECK((qlen % block_length) == 0);
+
+        std::vector<float> mask;
+        const int col_num = qlen + past;
+        mask.resize(qlen * col_num);
+        for (int i = 0; i < qlen / block_length; i++)
+        {
+            for (int j = 0; j < col_num / block_length; j++)
+            {
+                const float v = i + (past / block_length) >= j ? 0.0f : -INFINITY;
+                for (int ii = 0; ii < block_length; ii++)
+                {
+                    const int row_index = i * block_length + ii;
+                    for (int jj = 0; jj < block_length; jj++)
+                    {
+                        const int col_index = j * block_length + jj;
+                        const int index = row_index * col_num + col_index;
+                        mask[index] = v;
+                    }
+                }
+            }
+        }
+
+        std::vector<uint8_t> buf;
+        buf.resize(ggml::element_size(get_attn_of_layer(0)->mask) * mask.size());
+        ggml::from_float(ggml::type_of(get_attn_of_layer(0)->mask), mask.data(), buf.data(), mask.size(), 1);
+
+        for (int i = 0; i < config.num_hidden_layers; i++)
+        {
+            auto m = get_attn_of_layer(i)->mask;
+            ggml::set_dim(m, 0, col_num);
+            ggml::set_dim(m, 1, qlen);
+            Backend::write_tensor_data(m, buf.data(), 0, buf.size());
+        }
     }
 
     bool ConditionalGeneration::run_model(const int *input_ids, const int ids_count,
                             const GenerationConfig &gen_config,
                             int past,
-                            std::vector<float> *logits_output,
-                            std::vector<int>   *logits_orderring, const int batch_size)
+                            std::vector<float> *logits_output, const int batch_size)
     {
+        CHATLLM_CHECK(batch_size == 1);
+        CHATLLM_CHECK((ids_count % block_length) == 0);
+
         if (!initial_run)
         {
             initial_run = true;
@@ -349,16 +458,18 @@ namespace chatllm::bailing::llada
 
         ForwardContext ctx(&backend_context);
         ctx.user_options = w_ctx_.user_options;
+        LMFinalStepsDisabler disabler(final_steps, logits_output == nullptr);
 
         ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
         ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
         set_dbg_ctx(&ctx);
 
+        update_mask(past, ids_count);
+
         ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
         ggml::tensor *input_ids_tensor = ggml::new_tensor_2d(&ctx, GGML_TYPE_I32, ids_count, batch_size);
 
-        final_steps->set_do_orderring(logits_orderring != nullptr);
         ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, past);
 
         ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
@@ -372,8 +483,6 @@ namespace chatllm::bailing::llada
 
         if (logits_output)
             logits_output->resize(ggml::nelements(r));
-        if (logits_orderring)
-            logits_orderring->resize(ggml::nelements(final_steps->get_orderring_result()));
 
         if (!ctx.allocate()) return false;
 
@@ -389,8 +498,6 @@ namespace chatllm::bailing::llada
 
         if (logits_output)
             Backend::read_tensor_data(r, logits_output->data());
-        if (logits_orderring)
-            Backend::read_tensor_data(final_steps->get_orderring_result(), logits_orderring->data());
 
         ctx.reset();
 
@@ -398,8 +505,7 @@ namespace chatllm::bailing::llada
     }
 
     bool ConditionalGeneration::generate_next_block(const int *input_ids, const int ids_count, const GenerationConfig &gen_config,
-        std::vector<float> *logits_output,
-        std::vector<int>   *logits_orderring, const int batch_size)
+        std::vector<float> *logits_output, const int batch_size)
     {
         int batch = batch_input > 1 ? batch_input : 1;
         batch = (batch / block_length) * block_length;
@@ -411,11 +517,11 @@ namespace chatllm::bailing::llada
 
         for (; (remain > batch) && !aborted; p += batch, remain -= batch, past += batch)
         {
-            if (!run_model(p, batch, gen_config, past, nullptr, nullptr, 1))
+            if (!run_model(p, batch, gen_config, past, nullptr, batch_size))
                 return false;
         }
 
-        return run_model(p, remain, gen_config, past, logits_output, logits_orderring, 1);
+        return run_model(p, remain, gen_config, past, logits_output, batch_size);
     }
 
     std::vector<int> ConditionalGeneration::generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
@@ -506,7 +612,7 @@ namespace chatllm::bailing::llada
             const int prefill_len = prefill_block_num * block_length;
             if (prefill_len > 0)
             {
-                generate_next_block(curr_input_ids.data(), prefill_len, gen_config, nullptr, nullptr);
+                generate_next_block(curr_input_ids.data(), prefill_len, gen_config, nullptr);
                 n_past += prefill_len;
                 curr_input_ids.erase(curr_input_ids.begin(), curr_input_ids.begin() + prefill_len);
 
@@ -526,7 +632,7 @@ namespace chatllm::bailing::llada
             {
                 // Note: we have to run a whole block again and again.
                 std::vector<float> lm_logits;
-                generate_next_block(block_result.data(), block_length, gen_config, &lm_logits, nullptr);
+                generate_next_block(block_result.data(), block_length, gen_config, &lm_logits);
 
                 struct candidate
                 {
@@ -591,8 +697,10 @@ namespace chatllm::bailing::llada
 
             // block is now finalized
             if (next_pos_to_add == block_length)
-                generate_next_block(block_result.data(), next_pos_to_add, gen_config, nullptr, nullptr);
-            n_past += next_pos_to_add;
+            {
+                generate_next_block(block_result.data(), next_pos_to_add, gen_config, nullptr);
+                n_past += next_pos_to_add;
+            }
 
             if (performance)
                 performance->Accumulate(ModelPerfInfo::Type::Generation, block_length - block_prefilled_size);
