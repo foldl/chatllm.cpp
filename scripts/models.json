@@ -3450,5 +3450,21 @@
                 }
             }
         }
+    },
+    "llada2.0": {
+        "brief": "LLaDA2.0-mini-preview is a diffusion language model featuring a 16BA1B Mixture-of-Experts (MoE) architecture.",
+        "default": "mini-preview",
+        "license": "Apache License 2.0",
+        "variants": {
+            "mini-preview": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 17277819200,
+                        "url": "chatllm_quantized_bailing/llada2.0-mini-preview.bin"
+                    }
+                }
+            }
+        }
     }
 }

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <numeric>
+#include <cstring>
 #include <functional>
 #include "deepseek.h"
 #include "qwen.h"
@@ -464,8 +465,6 @@ namespace chatllm::bailing::llada
         if (gen_max_tokens > 0)
             gen_max_tokens = n_past + (int)curr_input_ids.size() + gen_max_tokens;
 
-        bool first_call = true;
-
         if (performance)
             performance->Reset();
 
@@ -516,7 +515,7 @@ namespace chatllm::bailing::llada
             }
         }
 
-        std::memcpy(block_result.data(), curr_input_ids.data(), curr_input_ids.size() * sizeof(curr_input_ids[0]));
+        memcpy(block_result.data(), curr_input_ids.data(), curr_input_ids.size() * sizeof(curr_input_ids[0]));
         int next_pos_to_add = (int)(curr_input_ids.size());
         int block_prefilled_size = next_pos_to_add;
         curr_input_ids.clear();
@@ -525,7 +524,7 @@ namespace chatllm::bailing::llada
         {
             for (int step = 0; !completed && (step < steps); step++)
             {
-                // TODO: don't re-run "known" tokens again and again.
+                // Note: we have to run a whole block again and again.
                 std::vector<float> lm_logits;
                 generate_next_block(block_result.data(), block_length, gen_config, &lm_logits, nullptr);
 

@@ -424,7 +424,6 @@ namespace chatllm::dots::ocr
 
                 vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::PatchesLeftRightDown_MergeN_ChannelsRGB_PixelsLeftRightDown);
 
-                const int merge_length = vis_config->spatial_merge_size * vis_config->spatial_merge_size;
                 image.emb_vec_number = image.grid_width * image.grid_height;
 
                 const int id_start = tok->get_image_total_emb_vectors() - image.emb_vec_number + tok->vocab_size;
@@ -556,7 +555,6 @@ namespace chatllm::dots::ocr
 
     void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
     {
-        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
     }
 
     int64_t ConditionalGeneration::get_param_num(bool effective_only) const

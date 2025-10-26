@@ -1474,7 +1474,7 @@ namespace chatllm
     {
         const int qlen  = ggml::get_dim(hidden_states, 1);
         const int batch = ggml::get_dim(hidden_states, 2);
-        CHATLLM_CHECK(qlen >= last_n);
+        const int last_n = qlen >= this->last_n ? this->last_n : qlen;
         order = nullptr;
 
         hidden_states = ggml::view_3d(ctx, hidden_states, model->hidden_size, last_n, batch,

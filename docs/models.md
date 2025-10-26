@@ -124,6 +124,12 @@
 * LLaDA (`LLaDA2MoeModelLM`)
     * [x] [mini-preview](https://huggingface.co/inclusionAI/LLaDA2.0-mini-preview/tree/d25d3b2ac0b966b64da11d6c791f8bf4bc31e90c)
 
+        Supported options (`--set OPTION VALUE`):
+        - `block_length`: default 32
+        - `steps`: default 32
+        - `minimal_topk`: default 1
+        - `threshold`: default 0.95
+
 * LlaMA-like (`LlamaForCausalLM`, `Llama4ForConditionalGeneration`):
     * [x] All LlaMA-1 models
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
