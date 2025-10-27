@@ -3462,6 +3462,10 @@
                     "q8": {
                         "size": 17277819200,
                         "url": "chatllm_quantized_bailing/llada2.0-mini-preview.bin"
+                    },
+                    "q4_1": {
+                        "size": 10166016368,
+                        "url": "chatllm_quantized_bailing/llada2.0-mini-preview-q4_1.bin"
                     }
                 }
             }

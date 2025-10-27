@@ -5,12 +5,12 @@ import packages/docutils/highlite, terminal
 var all_models: JsonNode = nil
 
 proc show_help() =
-    echo """
-Usage: ./program [OPTIONS]
+    echo fmt"""
+Usage: {paramStr(0)} [OPTIONS]
 
 A command-line interface for interacting with language models using libchatllm.
 
-Options:
+Options (run `main -h` to get a full list of options):
   -m, --model <model_id>          Specify the model to use (e.g., :qwen:1.5b)
   --embedding_model <model_id>    Specify the embedding model to use
   --reranker_model <model_id>     Specify the reranker model to use
@@ -21,9 +21,9 @@ Options:
   -h, --help                      Show this help message
 
 Examples:
-  ./program -m :qwen:1.5b -p "Hello, world!"
-  ./program --interactive --model :qwen:1.5b
-  ./program --help
+  {paramStr(0)} -m :qwen:1.5b -p "Hello, world!"
+  {paramStr(0)} --interactive --model :qwen:1.5b
+  {paramStr(0)} --help
 """
 
 proc get_model_url_on_modelscope(url: seq[string]): string =
@@ -210,6 +210,10 @@ var prompt: string = "hello"
 var interactive: bool = false
 var reversed_role = false
 var use_multiple_lines = false
+
+if paramCount() < 1:
+    show_help()
+    quit(0)
 
 for i in 1 .. paramCount():
     if paramStr(i) in ["-h", "--help"]:
