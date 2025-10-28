@@ -1388,7 +1388,8 @@ namespace chatllm::qwen::vit
             vis_config.merge_size       = (int)pp_cfg["merge_size"].ToInt();
             vis_config.min_pixels       = (int)pp_cfg["min_pixels"].ToInt();
             vis_config.max_patches      = max_patches;
-            vis_config.max_pixels       = max_patches * vis_config.patch_size * vis_config.patch_size;
+            vis_config.max_pixels       = max_patches * vis_config.patch_size * vis_config.patch_size * vis_config.merge_size * vis_config.merge_size;
+            vis_config.max_pixels       = std::min(vis_config.max_pixels, (int)pp_cfg["max_pixels"].ToInt());
         }
 
         const size_t tensor_ovhd = ggml_tensor_overhead();
@@ -1529,7 +1530,7 @@ namespace chatllm::qwen::v2_5_vl
     class ExtendEmbedding
     {
     public:
-        ExtendEmbedding() : pad_arg(new BlockParams::PadEmbedding(4096, 4096)) {}
+        ExtendEmbedding() : pad_arg(new BlockParams::PadEmbedding(2048, 2048)) {}
     public:
         BlockParams::PadEmbedding *pad_arg = nullptr;
     };
