@@ -9,6 +9,8 @@
 Inference of a bunch of models from less than 1B to more than 300B, for real-time [multimodal](./docs/multimodal.md) chat with [RAG](./docs/rag.md) on your computer (CPU & GPU),
 pure C++ implementation based on [@ggerganov](https://github.com/ggerganov)'s [ggml](https://github.com/ggerganov/ggml).
 
+Deliver accurate or better results than other implementations [o](https://github.com/ggml-org/llama.cpp/issues/15600#issuecomment-3400860774)-[c](https://github.com/ggml-org/llama.cpp/issues/13694#issuecomment-3454877635)-[c](https://github.com/ggml-org/llama.cpp/issues/3377#issuecomment-2198554173)-[a](https://github.com/ggml-org/llama.cpp/issues/8183#issuecomment-2198348578)-[s](https://github.com/ggml-org/llama.cpp/pull/13760#issuecomment-2998476325)-[i](https://github.com/lmstudio-ai/lmstudio-bug-tracker/issues/798#issue-3266514944)-onally.
+
 | [Supported Models](./docs/models.md) | [Download Quantized Models](./docs/quick_start.md#download-quantized-models) |
 
 ```mermaid
