@@ -119,51 +119,30 @@ namespace chatllm::bailing::moe2
     const int NUM_EXPERTS                   =  256;
     const int EXPERTS_PER_TOK               =  8;
 
-    class BailingSparseMoE : public BaseSparseMLP
+    class BailingSparseMoE : public GenericGroupedSparseMoE
     {
     public:
-        BailingSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size, int num_experts = NUM_EXPERTS, int experts_per_tok = EXPERTS_PER_TOK)
-            : BaseSparseMLP(ctx, hidden_size, intermediate_size, num_experts, experts_per_tok, ActFunc::SILU, true),
-              n_group(-1), topk_group(-1)
+        BailingSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size, int num_experts = NUM_EXPERTS, int experts_per_tok = EXPERTS_PER_TOK):
+            GenericGroupedSparseMoE(ctx, hidden_size, num_experts, experts_per_tok, true, false, false, false),
+            experts(ctx, hidden_size, intermediate_size, num_experts, experts_per_tok, ActFunc::SILU, false)
         {
-            score_func = ScoreFunc::Sigmoid;
-            always_scaling = true;
+            set_experts(&experts);
         }
-    protected:
-        ggml::tensor *select_experts(ComputeContext *ctx, ggml::tensor *corrected_score) override;
 
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = GenericSparseMLP::get_param_num(effective_only);
+            r += experts.get_param_num(effective_only);
+            return r;
+        }
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            GenericSparseMLP::load(path, loader);
+            experts.load(path + "experts.", loader);
+        }
     public:
-        int n_group;
-        int topk_group;
+        MultiMLP experts;
     };
-
-    ggml::tensor *BailingSparseMoE::select_experts(ComputeContext *ctx, ggml::tensor *corrected_score)
-    {
-        const int n_expert = num_local_experts;
-        const int experts_per_group = n_expert / n_group;
-        CHATLLM_CHECK(ggml::get_dim(corrected_score, 2) == 1);
-
-        ggml::tensor * selected_experts = nullptr;
-
-        ggml::tensor *grouped_scores = ggml::reshape_4d(ctx, corrected_score, experts_per_group, num_experts_per_tok,
-                                                        ggml::get_dim(corrected_score, 1), ggml::get_dim(corrected_score, 2));
-        selected_experts = ggml::top_k(ctx, grouped_scores, topk_group);
-
-        ggml::tensor *selected_experts_i64 = ggml::cast_int_to_i64(ctx, selected_experts);
-
-        CHATLLM_CHECK(ggml::get_dim(grouped_scores, 3) == 1);
-        grouped_scores                      = ggml::reshape_4d(ctx, grouped_scores, 1, ggml::get_dim(grouped_scores, 0), ggml::get_dim(grouped_scores, 1), ggml::get_dim(grouped_scores, 2));
-        ggml::tensor *selected_group_scores = ggml::scale(ctx, grouped_scores, 0.0f);
-        grouped_scores        = ggml::get_rows(ctx, grouped_scores, selected_experts);
-        selected_group_scores = ggml::set_rows(ctx, selected_group_scores, selected_experts_i64, grouped_scores);
-
-        selected_group_scores = ggml::reshape_3d(ctx, selected_group_scores,
-            ggml::get_dim(corrected_score, 0), ggml::get_dim(corrected_score, 1), ggml::get_dim(corrected_score, 2));
-
-        selected_experts = ggml::top_k(ctx, selected_group_scores, num_experts_per_tok);
-
-        return selected_experts;
-    }
 
     class AttnParams
     {

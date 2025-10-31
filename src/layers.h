@@ -264,6 +264,13 @@ namespace chatllm
         protected:
             static int size;
         };
+
+        class MoE
+        {
+        public:
+            static int num_experts;
+            static int experts_per_tok;
+        };
     };
 
     class Block
@@ -289,6 +296,11 @@ namespace chatllm
         virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *_)
         {
             CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *_): not implemented";
+            return NULL;
+        }
+        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input1, ggml::tensor *input2, int n_past)
+        {
+            CHATLLM_THROW << "forward(ComputeContext *ctx, ggml::tensor *input1, ggml::tensor *input2, int n_past): not implemented";
             return NULL;
         }
         virtual void set_ctx(int n_ctx) { }
@@ -1068,7 +1080,43 @@ namespace chatllm
             residual = hidden_states;
 
             hidden_states = post_attention_layernorm.forward(ctx, hidden_states);
+            last_result_post_attn_norm = hidden_states;
+
             hidden_states = mlp.forward(ctx, hidden_states);
+
+            if (scale_depth > 0.0f)
+            {
+                hidden_states = ggml::scale(ctx, hidden_states, scale_depth);
+            }
+
+            hidden_states = ggml::add(ctx, hidden_states, residual);
+
+            return hidden_states;
+        }
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *hidden_states2, int n_past) override
+        {
+            ggml::tensor *residual = hidden_states;
+
+            hidden_states = input_layernorm.forward(ctx, hidden_states);
+            hidden_states = Base::attention.forward(ctx, hidden_states, n_past);
+            if (Base::get_id() == 0)
+            {
+                //inspect_tensor(hidden_states, "attention");
+            }
+
+            if (scale_depth > 0.0f)
+            {
+                hidden_states = ggml::scale(ctx, hidden_states, scale_depth);
+            }
+
+            hidden_states = ggml::add(ctx, hidden_states, residual);
+            residual = hidden_states;
+
+            hidden_states = post_attention_layernorm.forward(ctx, hidden_states);
+            last_result_post_attn_norm = hidden_states;
+
+            hidden_states = mlp.forward(ctx, hidden_states, hidden_states2);
 
             if (scale_depth > 0.0f)
             {
@@ -1118,6 +1166,8 @@ namespace chatllm
         PostNormBlock post_attention_layernorm;
         MLPBlock mlp;
         float scale_depth = -1.0;
+    public:
+        ggml::tensor *last_result_post_attn_norm = nullptr;
     };
 
     template <class PostNormBlock,
@@ -2306,6 +2356,14 @@ namespace chatllm
             return r;
         }
 
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *hidden_states2) override
+        {
+            ggml::tensor *r1 = mlp1.forward(ctx, hidden_states, hidden_states2);
+            ggml::tensor *r2 = mlp2.forward(ctx, hidden_states);
+            ggml::tensor *r = ggml::add(ctx, r1, r2);
+            return r;
+        }
+
         int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = 0;
@@ -2355,7 +2413,7 @@ namespace chatllm
         const int group_size;
     };
 
-    class BaseSparseMLP : public Block
+    class GenericSparseMLP : public Block
     {
     public:
         enum ScoreFunc
@@ -2363,12 +2421,13 @@ namespace chatllm
             Softmax,
             Sigmoid,
         };
-        BaseSparseMLP() = default;
-        BaseSparseMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
-                  ActFunc act, bool gate_score_use_bias, bool grouped_max = false, bool router_scale = false, bool experts_use_bias = false, bool gate_use_bias = false);
+        GenericSparseMLP() = default;
+        GenericSparseMLP(InitContext *ctx, int hidden_size, int num_local_experts, int num_experts_per_tok,
+                  bool gate_score_use_bias, bool grouped_max, bool router_scale, bool gate_use_bias);
 
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *hidden_states_for_gating) override;
 
         void set_prec(ggml::prec prec) override
         {
@@ -2378,6 +2437,7 @@ namespace chatllm
         int64_t get_param_num(bool effective_only) const override;
         void load(const std::string &path, TensorLoader *loader) override;
 
+        void set_experts(MultiMLP *experts);
     public:
         const int num_local_experts;
         const int num_experts_per_tok;
@@ -2386,7 +2446,6 @@ namespace chatllm
         ggml::tensor *gate_score_correction_bias;
         ggml::tensor *group_indices;
         ggml::tensor *router_scale;
-        MultiMLP experts;
         bool norm_topk_prob;
         ScoreFunc score_func;
         float routed_scaling_factor;
@@ -2406,6 +2465,54 @@ namespace chatllm
             ggml::tensor *weights);
         virtual ggml::tensor *calc_experts_outputs(ComputeContext *ctx, ggml::tensor *hidden_states,
             ggml::tensor *selected_experts);
+    private:
+        MultiMLP *p_experts;    // shared pointer, not owned!
+    };
+
+    class GenericGroupedSparseMoE : public GenericSparseMLP
+    {
+    public:
+        GenericGroupedSparseMoE(InitContext *ctx, int hidden_size, int num_experts, int experts_per_tok,
+            bool gate_score_use_bias, bool grouped_max, bool router_scale, bool gate_use_bias)
+            : GenericSparseMLP(ctx, hidden_size, num_experts, experts_per_tok, gate_score_use_bias, grouped_max, router_scale, gate_use_bias),
+              n_group(-1), topk_group(-1)
+        {
+            score_func = ScoreFunc::Sigmoid;
+            always_scaling = true;
+        }
+    protected:
+        ggml::tensor *select_experts(ComputeContext *ctx, ggml::tensor *corrected_score) override;
+
+    public:
+        int n_group;
+        int topk_group;
+    };
+
+    class BaseSparseMLP : public GenericSparseMLP
+    {
+    public:
+        BaseSparseMLP() = default;
+        BaseSparseMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,
+                  ActFunc act, bool gate_score_use_bias, bool grouped_max = false, bool router_scale = false, bool experts_use_bias = false, bool gate_use_bias = false):
+            GenericSparseMLP(ctx, hidden_size, num_local_experts, num_experts_per_tok, gate_score_use_bias, grouped_max, router_scale, gate_use_bias),
+            experts(ctx, hidden_size, intermediate_size, num_local_experts, num_experts_per_tok, act, experts_use_bias)
+        {
+            set_experts(&experts);
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = GenericSparseMLP::get_param_num(effective_only);
+            r += experts.get_param_num(effective_only);
+            return r;
+        }
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            GenericSparseMLP::load(path, loader);
+            experts.load(path + "experts.", loader);
+        }
+    public:
+        MultiMLP experts;
     };
 
     template <bool bias> class InternLMBlock : public LMBlock1<RMSNorm, InternLMSelfAttention<bias>, RMSNorm, SiLUMLP>

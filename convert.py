@@ -221,6 +221,8 @@ class ModelType(Enum):
     BailingMoE2     = 0x2E00
     LlaDA2          = 0x2E01
 
+    MegrezMoE       = 0x2F00
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -8099,6 +8101,80 @@ class DotsOCRConverter(BaseConverter):
 
         return weight_names
 
+class MegrezMoEConverter(BaseConverter):
+    MODEL_TYPE = ModelType.MegrezMoE
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return DeepSeekV1Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        assert config.attention_bias == False, "attention_bias must be False"
+        assert config.ep_size == 1, "ep_size must be 1"
+        assert config.rope_scaling is None
+        assert config.scoring_func == 'sigmoid', "scoring_func must be 'sigmoid'"
+        assert config.topk_method == 'noaux_tc', "topk_method must be 'noaux_tc'"
+        assert config.n_routed_experts is not None, "n_routed_experts must not be null"
+        assert config.pre_gate
+
+        config.scoring_func = 'softmax'
+        DeepSeekV1Converter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            config.experts_shared_frequency,
+            config.n_group,
+            config.topk_group,
+            config.routed_scaling_factor,
+        ]
+        f.write(struct.pack("<iiif", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight",
+                        "model.norm.weight",
+                        "lm_head.weight"]
+        for i in range(config.num_hidden_layers):
+
+            weight_names += [
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+            ]
+
+            if (config.n_routed_experts is not None
+                and (i >= config.first_k_dense_replace)
+                and (i % config.moe_layer_freq == 0)):
+                weight_names += [
+                    f"model.layers.{i}.mlp.gate.e_score_correction_bias",
+                    f"model.layers.{i}.mlp.gate.weight",
+                    f"model.layers.{i}.mlp.shared_experts.gate_proj.weight",
+                    f"model.layers.{i}.mlp.shared_experts.up_proj.weight",
+                    f"model.layers.{i}.mlp.shared_experts.down_proj.weight",
+                ]
+                if (i - config.first_k_dense_replace) % config.experts_shared_frequency == 0:
+                    for j in range(config.n_routed_experts):
+                        weight_names += [
+                            f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                            f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                            f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                        ]
+            else:
+                weight_names += [
+                    f"model.layers.{i}.mlp.gate_proj.weight",
+                    f"model.layers.{i}.mlp.up_proj.weight",
+                    f"model.layers.{i}.mlp.down_proj.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+            ]
+
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -8719,6 +8795,8 @@ def main():
         JanusConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch.endswith('DotsOCRForCausalLM'):
         DotsOCRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch.endswith('MegrezMoeForCausalLM'):
+        MegrezMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

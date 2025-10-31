@@ -172,6 +172,9 @@
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
 
+* Megrez (`MegrezMoeForCausalLM`)
+    * [x] (3x7B-A3B)[https://huggingface.co/Infinigence/Megrez2-3x7B-A3B/tree/3ffc3b7c0ffc0f0b27d71fba2a97dcc14c797bb4]
+
 * MiniCPM (`MiniCPMForCausalLM`, `MiniCPM3ForCausalLM`)
     * [x] [DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16), [SFT-2B](https://huggingface.co/openbmb/MiniCPM-2B-sft-bf16),
           [SFT-1B](https://huggingface.co/openbmb/MiniCPM-1B-sft-bf16)🔥

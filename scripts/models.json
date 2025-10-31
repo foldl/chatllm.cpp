@@ -1722,6 +1722,22 @@
             }
         }
     },
+    "megrez2" : {
+        "brief": "Megrez2-3x7B-A3B is a device native large language model.",
+        "default": "a3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "a3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 794555812,
+                        "url": "chatllm_quantized_megrez/megrez2-3x7b-a3b.bin"
+                    }
+                }
+            }
+        }
+    },
     "falcon3" : {
         "brief": "Falcon3 family of Open Foundation Models is a set of pretrained and instruct LLMs ranging from 1B to 10B parameters.",
         "default": "1b",

@@ -164,7 +164,8 @@ Reasoning: medium
             norm_topk_prob = false;
         }
     public:
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states)
+        using Block::forward;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override
         {
             const int64_t qlen        = hidden_states->ne[1];
             const int n_expert = num_local_experts;
