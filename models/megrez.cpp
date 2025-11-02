@@ -187,6 +187,13 @@ namespace chatllm::megrez::moe
             GenericGroupedSparseMoE(ctx, hidden_size, BlockParams::MoE::num_experts, BlockParams::MoE::experts_per_tok, true, false, false, false)
         {
         }
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = GenericSparseMLP::get_param_num(effective_only);
+            if (effective_only)
+                r += p_experts->get_param_num(effective_only);
+            return r;
+        }
     };
 
     class Prelude

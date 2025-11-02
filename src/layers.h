@@ -2465,7 +2465,7 @@ namespace chatllm
             ggml::tensor *weights);
         virtual ggml::tensor *calc_experts_outputs(ComputeContext *ctx, ggml::tensor *hidden_states,
             ggml::tensor *selected_experts);
-    private:
+    protected:
         MultiMLP *p_experts;    // shared pointer, not owned!
     };
 
