@@ -1031,9 +1031,9 @@ namespace chatllm
         return tensor;
     }
 
-    ggml::tensor *ggml::cpy(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b)
+    ggml::tensor *ggml::cpy(ComputeContext *ctx, ggml::tensor *src, ggml::tensor *dst)
     {
-        ggml::tensor *tensor = ggml_cpy(ctx->get_ctx(), a, b);
+        ggml::tensor *tensor = ggml_cpy(ctx->get_ctx(), src, dst);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -1255,6 +1255,7 @@ namespace chatllm
     int  BlockParams::CoreAttentionUseSinks::size = 0;
     int  BlockParams::MoE::num_experts = 0;
     int  BlockParams::MoE::experts_per_tok = 0;
+    float BlockParams::Epsilon::rms_norm = 1e-5f;
 
     BlockParams::OverrideKProjBiased::OverrideKProjBiased(bool biased)
     {

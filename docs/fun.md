@@ -51,6 +51,10 @@ Before shuffling a model's layers, use `--show` to view basic information about 
     ...
     ```
 
+> [!CAUTION]
+> Not all models support this. For example, a ordinal dense model like LlaMA supports this, but a heterogeneous model might
+> not support this (special treatment is needed for mapping a layer to its type).
+
 ## Talk to Each Other
 
 [Here](../scripts/crosstask.py) is a simple program to let two LLMs talk to each other.

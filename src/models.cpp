@@ -35,6 +35,7 @@ namespace chatllm
     void set_dbg_ctx(ForwardContext *c)
     {
         dbg_ctx = c;
+        clear_inspected_tensors();
     }
 
     void unset_dbg_ctx(ForwardContext *c)
@@ -1209,8 +1210,8 @@ namespace chatllm
         }
         else
         {
-        if (logit_scale > 0)
-            r = ggml::scale(&ctx, r, logit_scale);
+            if (logit_scale > 0)
+                r = ggml::scale(&ctx, r, logit_scale);
         }
 
         ggml::build_forward_expand(&ctx, r);
@@ -1354,6 +1355,11 @@ namespace chatllm
     Block *HeterogeneousModel::get_layer(int index)
     {
         return layers[index];
+    }
+
+    int    HeterogeneousModel::get_layer_num(void) const
+    {
+        return (int)layers.size();
     }
 
     void HeterogeneousModel::set_final_steps(std::unique_ptr<ModelFinalSteps> final_steps)

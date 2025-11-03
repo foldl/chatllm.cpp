@@ -106,6 +106,7 @@ set(core_files src/backend.cpp
     models/orpheus.cpp
     models/openchat.cpp
     models/orion.cpp
+    models/ouro.cpp
     models/oute.cpp
     models/pangu.cpp
     models/phi.cpp

@@ -223,6 +223,8 @@ class ModelType(Enum):
 
     MegrezMoE       = 0x2F00
 
+    OURO            = 0x3000
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -8175,6 +8177,41 @@ class MegrezMoEConverter(BaseConverter):
 
         return weight_names
 
+class OuroConverter(BaseConverter):
+    MODEL_TYPE = ModelType.OURO
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return Llama3Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.rope_scaling is None
+        assert (config.layer_types.count('full_attention') == config.num_hidden_layers) or \
+               (config.use_sliding_window is None) or (not config.use_sliding_window)
+        assert not config.tie_word_embeddings is None
+
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            config.rope_theta,
+        ]
+        f.write(struct.pack("<if", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = Llama3Converter.get_weight_names(config)
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm_2.weight",
+                f"model.layers.{i}.post_attention_layernorm_2.weight",
+            ]
+        weight_names += [
+            f"model.early_exit_gate.bias",
+            f"model.early_exit_gate.weight",
+        ]
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -8793,10 +8830,12 @@ def main():
     elif arch == 'MultiModalityCausalLM':
         assert JanusConverter.is_proper_config(config)
         JanusConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
-    elif arch.endswith('DotsOCRForCausalLM'):
+    elif arch == 'DotsOCRForCausalLM':
         DotsOCRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
-    elif arch.endswith('MegrezMoeForCausalLM'):
+    elif arch == 'MegrezMoeForCausalLM':
         MegrezMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'OuroForCausalLM':
+        OuroConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

@@ -853,7 +853,8 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
 
 #define DEF_ExtraArgs(pipe_args, args)  \
     chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.moe_on_cpu, args.num_threads, args.batch_size, args.cache_dtype, args.re_quantize);\
-    pipe_args.model_n_gpu_layers = args.model_n_gpu_layers
+    pipe_args.model_n_gpu_layers = args.model_n_gpu_layers; \
+    pipe_args.additional = args.additional
 
 chatllm::BaseStreamer *get_streamer_for_log(void);
 

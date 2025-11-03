@@ -228,6 +228,13 @@
     * [x] OLMoE: [Instruct-7B](https://huggingface.co/allenai/OLMoE-1B-7B-0924-Instruct)
     * [x] OLM-2: [Instruct-7B](https://huggingface.co/allenai/OLMo-2-1124-7B-Instruct), [Instruct-13B](https://huggingface.co/allenai/OLMo-2-1124-13B-Instruct), [Instruct-32B](https://huggingface.co/allenai/OLMo-2-0325-32B-Instruct/tree/5942a2f5e0bc38c2a5f5200cec2ea236d5984547)
 
+* Ouro (`OuroForCausalLM`)
+    * [x] [2.6B-Thinking](https://huggingface.co/ByteDance/Ouro-2.6B-Thinking/tree/a2d3a54cea06168ba371ec3e089734f715824d5b)
+
+        Note: additional options supported (`--set ...`)
+        * `total_ut_steps`: default 4
+        * `exit_threshold`: default 1.0
+
 * Orion (`OrionForCausalLM`)
     * [x] [Chat-14B](https://huggingface.co/OrionStarAI/Orion-14B-Chat)
 

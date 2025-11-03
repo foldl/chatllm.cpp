@@ -3486,5 +3486,25 @@
                 }
             }
         }
+    },
+    "ouro": {
+        "brief": "Ouro-2.6B is a 2.6 billion parameter Looped Language Model (LoopLM) that achieves exceptional parameter efficiency through iterative shared-weight computation.",
+        "default": "2.6b-thinking",
+        "license": "Apache License 2.0",
+        "variants": {
+            "2.6b-thinking": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2837152928,
+                        "url": "chatllm_quantized_ouro/ouro-2.6b-thinking.bin"
+                    },
+                    "f16": {
+                        "size": 5338008608,
+                        "url": "chatllm_quantized_ouro/ouro-2.6b-thinking-f16.bin"
+                    }
+                }
+            }
+        }
     }
 }

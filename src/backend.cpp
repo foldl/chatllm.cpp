@@ -954,6 +954,10 @@ namespace chatllm
     void ComputeContext::reset(void)
     {
         backend_context->reset();
+        if (get_ctx())
+            ggml_reset(get_ctx());
+        if (get_cgraph())
+            ggml_graph_clear(get_cgraph());
     }
 
     size_t ComputeContext::get_used_mem(void)

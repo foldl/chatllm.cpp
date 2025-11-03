@@ -60,6 +60,7 @@ namespace chatllm
         int64_t get_param_num(bool effective_only) const override;
 
         Block *get_layer(int index);
+        int    get_layer_num(void) const;
 
         void set_final_steps(std::unique_ptr<ModelFinalSteps> final_steps);
         ModelFinalSteps *get_final_steps();
@@ -69,8 +70,6 @@ namespace chatllm
         int save_session(ModelSessionMemory &session) const override;
         int load_session(ModelSessionMemory &session) override;
         void load(const std::string &path, TensorLoader *loader, const std::vector<int> &layer_ids) override;
-
-        ggml::tensor get_last_hiddle_state(void);
 
         void reserve_batch_size(int size) override;
     private:

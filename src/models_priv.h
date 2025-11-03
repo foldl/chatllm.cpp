@@ -182,6 +182,8 @@ namespace chatllm
 
         MODEL_TYPE_MEGREZ_MOE       = 0x2F00,
 
+        MODEL_TYPE_OURO             = 0x3000,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,
@@ -216,6 +218,7 @@ namespace chatllm
         int batch_input_size;
         ggml::type cache_type;
         std::map<std::string, std::string> model_gpu_layers;
+        std::map<std::string, std::string> additional;
         RuntimeConfig(bool moe_on_cpu, int n_threads, int batch_input_size, ggml::type cache_type):
             moe_on_cpu(moe_on_cpu), n_threads(n_threads), batch_input_size(batch_input_size), cache_type(cache_type)
         {}
@@ -265,6 +268,7 @@ namespace chatllm
 
         RuntimeConfig rt_config(args.moe_on_cpu, args.n_threads, args.batch_size, (ggml::type)args.cache_type);
         rt_config.model_gpu_layers = args.model_n_gpu_layers;
+        rt_config.additional       = args.additional;
 
         // load model
         ConditionalGeneration *model = new ConditionalGeneration(config, rt_config);

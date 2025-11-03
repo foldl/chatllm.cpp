@@ -58,7 +58,7 @@ namespace chatllm
 
         ggml::type    type_of(const ggml::tensor *a);
 
-        ggml::tensor *cpy(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
+        ggml::tensor *cpy(ComputeContext *ctx, ggml::tensor *src, ggml::tensor *dst);
 
         ggml::tensor *dup(ComputeContext *ctx, ggml::tensor *a);
 
@@ -74,7 +74,7 @@ namespace chatllm
         ggml::tensor *set_rows(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *indices, ggml::tensor *source);
 
         ggml::tensor *add(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b);
-        ggml::tensor *add_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor * b);
+        ggml::tensor *add_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor * b);  // a = a + b
         ggml::tensor *add_id(ComputeContext *ctx, ggml::tensor *as, ggml::tensor *b, ggml::tensor *ids);
 
         ggml::tensor *sub(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b);
@@ -270,6 +270,12 @@ namespace chatllm
         public:
             static int num_experts;
             static int experts_per_tok;
+        };
+
+        class Epsilon
+        {
+        public:
+            static float rms_norm;
         };
     };
 
@@ -749,7 +755,7 @@ namespace chatllm
     protected:
         RMSNorm(InitContext *ctx, int normalized_shape, bool inplace)
             : weight(ggml::new_tensor_1d(ctx, GGML_TYPE_F32, normalized_shape)),
-              eps(1e-5f),
+              eps(BlockParams::Epsilon::rms_norm),
               inplace(inplace) {}
     public:
         using Block::forward;
@@ -1270,22 +1276,20 @@ namespace chatllm
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override
         {
-            ggml::tensor *residual = ggml::dup(ctx, hidden_states);
-            ggml::build_forward_expand(ctx, residual);
+            ggml::tensor *residual = hidden_states;
 
             hidden_states = pre_attention_layernorm.forward(ctx, hidden_states);
             hidden_states = Base::attention.forward(ctx, hidden_states, n_past);
             hidden_states = post_attention_layernorm.forward(ctx, hidden_states);
 
-            hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
-            residual = ggml::cpy(ctx, hidden_states, residual);
-            ggml::build_forward_expand(ctx, residual);
+            hidden_states = ggml::add(ctx, residual, hidden_states);
+            residual = hidden_states;
 
             hidden_states = pre_mlp_layernorm.forward(ctx, hidden_states);
             hidden_states = mlp.forward(ctx, hidden_states);
             hidden_states = post_mlp_layernorm.forward(ctx, hidden_states);
 
-            hidden_states = ggml::add_inplace(ctx, hidden_states, residual);
+            hidden_states = ggml::add(ctx, residual, hidden_states);
 
             return hidden_states;
         }
