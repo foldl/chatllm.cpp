@@ -142,11 +142,6 @@ namespace chatllm::ouro
         const float exit_threshold;
     };
 
-    float sigmoid(float v)
-    {
-        return 1.0f / (1.0f + std::expf(-v));
-    }
-
     class Prelude
     {
     public:
