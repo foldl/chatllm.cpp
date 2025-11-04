@@ -198,7 +198,7 @@ namespace vision
 
         //printf("%s\n", oss.str().c_str());
 
-        FILE* pp = popen(oss.str().c_str(), "rb");
+        FILE* pp = popen(oss.str().c_str(), "r");
 
         while (!feof(pp))
         {
