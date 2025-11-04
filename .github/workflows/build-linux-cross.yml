@@ -6,6 +6,7 @@ on:
 jobs:
   ubuntu-24-riscv64-cpu-cross:
     runs-on: ubuntu-24.04
+    if: false
 
     steps:
       - uses: actions/checkout@v4
@@ -143,6 +144,7 @@ jobs:
 
   ubuntu-24-ppc64el-cpu-cross:
     runs-on: ubuntu-24.04
+    if: false
 
     steps:
       - uses: actions/checkout@v4

@@ -3504,6 +3504,15 @@
                         "url": "chatllm_quantized_ouro/ouro-2.6b-thinking-f16.bin"
                     }
                 }
+            },
+            "1.4b-thinking": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1526153152,
+                        "url": "chatllm_quantized_ouro/ouro-1.4b-thinking.bin"
+                    }
+                }
             }
         }
     }
