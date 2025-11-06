@@ -832,6 +832,7 @@ namespace chatllm
     {
         int max_length;
         int max_context_length;
+        int max_new_tokens;
         bool do_sample;
         bool reversed_role;
         int top_k;
@@ -933,7 +934,6 @@ namespace chatllm
                                             const bool continuous,
                                             bool &completed,
                                             ModelPerfInfo *performance,
-                                            int gen_max_tokens,
                                             BaseStreamer *streamer = nullptr) = 0;
 
         virtual bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) { return true; };
@@ -1018,10 +1018,9 @@ namespace chatllm
                                             const bool continuous,
                                             bool &completed,
                                             ModelPerfInfo *performance,
-                                            int gen_max_tokens,
                                             BaseStreamer *streamer = nullptr) override
         {
-            return model->generate(input_ids, gen_config, continuous, completed, performance, gen_max_tokens, streamer);
+            return model->generate(input_ids, gen_config, continuous, completed, performance, streamer);
         }
 
         bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override
@@ -1144,7 +1143,6 @@ namespace chatllm
                                             const bool continuous,
                                             bool &completed,
                                             ModelPerfInfo *performance,
-                                            int gen_max_tokens,
                                             BaseStreamer *streamer = nullptr) override
         {
             std::vector<int> r;
@@ -1395,7 +1393,6 @@ namespace chatllm
         BaseTokenizer *tokenizer;
         AbstractModel *model;
         ModelPerfInfo performance;
-        int gen_max_tokens;
 
     protected:
         bool initializing;

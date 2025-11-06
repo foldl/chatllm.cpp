@@ -396,7 +396,6 @@ namespace chatllm::bailing::llada
                                   const bool continuous,
                                   bool &completed,
                                   ModelPerfInfo *performance,
-                                  int gen_max_tokens,
                                   BaseStreamer *streamer = nullptr) override;
     protected:
         bool generate_next_block(const int *input_ids, const int ids_count, const GenerationConfig &gen_config,
@@ -558,7 +557,6 @@ namespace chatllm::bailing::llada
                                   const bool continuous,
                                   bool &completed,
                                   ModelPerfInfo *performance,
-                                  int gen_max_tokens,
                                   BaseStreamer *streamer)
     {
         CHATLLM_CHECK(gen_config.max_length <= config_.max_length)
@@ -598,6 +596,7 @@ namespace chatllm::bailing::llada
         transformer->set_ctx((int)curr_input_ids.size());
         int next_output_idx = 0;
 
+        int gen_max_tokens = gen_config.max_new_tokens;
         if (gen_max_tokens > 0)
             gen_max_tokens = n_past + (int)curr_input_ids.size() + gen_max_tokens;
 

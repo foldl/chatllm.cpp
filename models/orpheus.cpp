@@ -403,10 +403,16 @@ namespace chatllm::orpheus::tts
     }
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-        : llama::v3_2::ConditionalGeneration(config, runtime_config, MODEL_TYPE_ORPHEUS_TTS),
-            snac_ctx(w_ctx_.get_backend_context())
+        : ConditionalGeneration(config, runtime_config, MODEL_TYPE_ORPHEUS_TTS, 128256, 156938)
     {
     }
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int custom_token_start, int custom_token_end) :
+        llama::v3_2::ConditionalGeneration(config, runtime_config, type),
+        snac_ctx(w_ctx_.get_backend_context()),
+        custom_token_start(custom_token_start), custom_token_end(custom_token_end)
+    {}
+
 
     void ConditionalGeneration::load(ModelLoader &loader)
     {
@@ -426,7 +432,7 @@ namespace chatllm::orpheus::tts
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         #if (1)
         bool completed = false;
-        auto tokens = generate(input_ids, gen_config, false, completed, nullptr, 0, nullptr);
+        auto tokens = generate(input_ids, gen_config, false, completed, nullptr, nullptr);
         ggml::log(GGML_LOG_LEVEL_INFO, "%zd vocoder tokens generated.", tokens.size());
         #else
         const int tokens[] = {
@@ -442,9 +448,9 @@ namespace chatllm::orpheus::tts
 
         for (auto id : tokens)
         {
-            if (id < tok->custom_token_start || id > tok->custom_token_end) continue;
+            if (id < custom_token_start || id > custom_token_end) continue;
 
-            decoder_push_llm_tok_id(gen_config, id - tok->custom_token_start, pcm_samples);
+            decoder_push_llm_tok_id(gen_config, id - custom_token_start, pcm_samples);
             if (pcm_samples.size() == 8192)
             {
                 for (int i = 2048; i < 4096; i++)

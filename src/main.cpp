@@ -849,7 +849,8 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
                                          gen_config.emb_rank_query_sep = args.emb_rank_query_sep; \
                                          gen_config.repeat_penalty = args.repeat_penalty; \
                                          gen_config.frequency_penalty = args.frequency_penalty; \
-                                         gen_config.penalty_window = args.penalty_window;
+                                         gen_config.penalty_window = args.penalty_window; \
+                                         gen_config.max_new_tokens = args.max_new_tokens;
 
 #define DEF_ExtraArgs(pipe_args, args)  \
     chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.moe_on_cpu, args.num_threads, args.batch_size, args.cache_dtype, args.re_quantize);\
@@ -898,8 +899,6 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 
         pipeline.tokenizer->set_chat_format(args.format);
     }
-
-    pipeline.gen_max_tokens = args.max_new_tokens;
 
     if (args.tokenize)
     {
@@ -2029,7 +2028,7 @@ void chatllm_abort_generation(struct chatllm_obj *obj)
 void chatllm_set_gen_max_tokens(struct chatllm_obj *obj, int gen_max_tokens)
 {
     Chat *chat = reinterpret_cast<Chat *>(obj);
-    chat->pipeline->gen_max_tokens = gen_max_tokens;
+    chat->gen_config.max_new_tokens = gen_max_tokens;
 }
 
 void chatllm_show_statistics(struct chatllm_obj *obj)

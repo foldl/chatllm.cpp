@@ -643,7 +643,7 @@ namespace chatllm::oute::tts_llama
             Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
             bool completed = false;
-            auto tokens = generate(input_ids, gen_config, false, completed, nullptr, 0, nullptr);
+            auto tokens = generate(input_ids, gen_config, false, completed, nullptr, nullptr);
             ggml::log(GGML_LOG_LEVEL_INFO, "%zd vocoder tokens generated.", tokens.size());
 
             generate_audio(gen_config, codec,
@@ -729,7 +729,7 @@ namespace chatllm::oute::tts_qwen3
             Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
             bool completed = false;
-            auto tokens = generate(input_ids, gen_config, false, completed, nullptr, 0, nullptr);
+            auto tokens = generate(input_ids, gen_config, false, completed, nullptr, nullptr);
             ggml::log(GGML_LOG_LEVEL_INFO, "%zd vocoder tokens generated.", tokens.size());
 
             tts_llama::ConditionalGeneration::generate_audio(gen_config, codec,

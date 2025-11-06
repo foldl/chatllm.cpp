@@ -3515,5 +3515,21 @@
                 }
             }
         }
+    },
+    "maya1": {
+        "brief": "Maya1 is a speech model built for expressive voice generation with rich human emotion and precise voice design.",
+        "default": "3.3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "3.3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3544675872,
+                        "url": "chatllm_quantized_maya/maya1-3.3b.bin"
+                    }
+                }
+            }
+        }
     }
 }

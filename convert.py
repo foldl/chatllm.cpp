@@ -236,6 +236,7 @@ class ModelType(Enum):
     OuteTTSQwen3            = 0x10000108
     QWen3_Embedding         = 0x10000109
     QWen3_ReRanker          = 0x1000010A
+    Maya1                   = 0x1000010B
 
     LlaMAMulti    = 0x20000001
 
@@ -8443,9 +8444,9 @@ def main():
     global g_model_meta
     load_some_info(g_model_meta, Path(args.model_name_or_path))
 
-    if arch == 'orpheus-tts':
+    if arch in ['orpheus-tts', 'maya1']:
         if args.snac_model == '':
-            raise Exception('snac_model (`--snac_model`) is required for Orpheus-TTS')
+            raise Exception(f'snac_model (`--snac_model`) is required for `{arch}`')
         load_some_info(g_model_meta, Path(args.snac_model), 'snac_')
         model_files += load_some_model(Path(args.snac_model))
         config.snac_model = g_model_meta['snac_config.json']
@@ -8853,6 +8854,9 @@ def main():
         Mistral2Converter.MODEL_TYPE = ModelType.DeepHermes3Mistral
         Mistral2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'orpheus-tts':
+        OrpheusTTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'maya1':
+        OrpheusTTSConverter.MODEL_TYPE = ModelType.Maya1
         OrpheusTTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'outetts':
         if config.architectures[0] == 'Qwen3ForCausalLM':

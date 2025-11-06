@@ -96,6 +96,7 @@ set(core_files src/backend.cpp
     models/jina.cpp
     models/jiutian.cpp
     models/llama.cpp
+    models/maya.cpp
     models/m_a_p.cpp
     models/megrez.cpp
     models/minicpm.cpp

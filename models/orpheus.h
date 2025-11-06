@@ -150,8 +150,6 @@ namespace chatllm::orpheus::tts
         void encode(const std::string &text, std::vector<int> &ids) const override;
     public:
         std::string voice;
-        const int custom_token_start = 128256;
-        const int custom_token_end = 156938;
     };
 
     class ConditionalGeneration : public llama::v3_2::ConditionalGeneration
@@ -168,6 +166,8 @@ namespace chatllm::orpheus::tts
 
         bool load_more(const json::JSON &config) override;
     protected:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int custom_token_start, int custom_token_end);
+
         void reset_decoder(void);
         void decoder_push_llm_tok_id(const GenerationConfig &gen_config, int id, std::vector<float> &pcm_samples);
     protected:
@@ -175,5 +175,7 @@ namespace chatllm::orpheus::tts
         snac::Config codec_config;
         std::unique_ptr<snac::Codec> codec;
         std::vector<int> vocoder_ids;
+        const int custom_token_start;
+        const int custom_token_end;
     };
 }
