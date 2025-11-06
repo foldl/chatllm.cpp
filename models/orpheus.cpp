@@ -519,6 +519,13 @@ namespace chatllm::orpheus::tts
     {
         id = id - 10 - ((vocoder_ids.size() % 7) * 4096);
         if (id < 0) return;
+        
+        // Ensure the SNAC code is within codebook bounds
+        if (id >= codec_config.codebook_size) {
+            ggml::log(GGML_LOG_LEVEL_WARN, "SNAC code %d exceeds codebook_size %d, clamping with modulo\n",
+                      id, codec_config.codebook_size);
+            id = id % codec_config.codebook_size;
+        }
 
         pcm_samples.clear();
 
