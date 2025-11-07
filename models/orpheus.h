@@ -7,6 +7,7 @@ namespace chatllm::orpheus::snac
 {
     const int MAX_VQ_STRIDES = 4;
     const int MAX_RATES = 4;
+    const int FRAME_SIZE = 7;
 
     struct Config
     {
@@ -169,7 +170,7 @@ namespace chatllm::orpheus::tts
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int custom_token_start, int custom_token_end);
 
         void reset_decoder(void);
-        void decoder_push_llm_tok_id(const GenerationConfig &gen_config, int id, std::vector<float> &pcm_samples);
+        virtual void decoder_push_llm_tok_id(const GenerationConfig &gen_config, int id, std::vector<float> &pcm_samples);
     protected:
         InitContext snac_ctx;
         snac::Config codec_config;

@@ -403,7 +403,7 @@ namespace chatllm::orpheus::tts
     }
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
-        : ConditionalGeneration(config, runtime_config, MODEL_TYPE_ORPHEUS_TTS, 128256, 156938)
+        : ConditionalGeneration(config, runtime_config, MODEL_TYPE_ORPHEUS_TTS, 128266, 156937)
     {
     }
 
@@ -517,21 +517,14 @@ namespace chatllm::orpheus::tts
 
     void ConditionalGeneration::decoder_push_llm_tok_id(const GenerationConfig &gen_config, int id, std::vector<float> &pcm_samples)
     {
-        id = id - 10 - ((vocoder_ids.size() % 7) * 4096);
+        id = id - ((vocoder_ids.size() % snac::FRAME_SIZE) * codec_config.codebook_size);
         if (id < 0) return;
-        
-        // Ensure the SNAC code is within codebook bounds
-        if (id >= codec_config.codebook_size) {
-            ggml::log(GGML_LOG_LEVEL_WARN, "SNAC code %d exceeds codebook_size %d, clamping with modulo\n",
-                      id, codec_config.codebook_size);
-            id = id % codec_config.codebook_size;
-        }
 
         pcm_samples.clear();
 
         vocoder_ids.push_back(id);
         auto count = vocoder_ids.size();
-        if (((count % 7) == 0) && (count >= 28))
+        if (((count % snac::FRAME_SIZE) == 0) && (count >= 28))
         {
             std::vector<int> multiframe(vocoder_ids.end() - 28, vocoder_ids.end());
             codec->decode_frame(gen_config, backend_context, multiframe, count, pcm_samples);

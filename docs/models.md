@@ -354,8 +354,6 @@ Please use `--format completion` for these models.
 
         Use `--set voice XX` to describe the voice. [More info](https://huggingface.co/maya-research/maya1/blob/fbd30e2b3ec92d2e227df20005a73e172bc5d2de/prompt.txt).
 
-        IMPORTANT: don't forget to use `--max-new-tokens N` to control the length of result.
-
 * Orpheus TTS
     * [x] 3B: [EN](https://huggingface.co/canopylabs/orpheus-3b-0.1-ft/tree/4206a56e5a68cf6cf96900a8a78acd3370c02eb6), [ZH](https://huggingface.co/canopylabs/3b-zh-ft-research_release/commit/29d016d6d0e5a2688267d3b3e432b7e23f043876), etc
 
