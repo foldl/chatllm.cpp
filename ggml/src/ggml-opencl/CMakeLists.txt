@@ -82,9 +82,20 @@ set(GGML_OPENCL_KERNELS
     mul_mv_q4_0_f32_1d_8x_flat
     mul_mv_q4_0_f32_1d_16x_flat
     mul_mv_q6_k
+    mul_mv_q8_0_f32
+    mul_mv_q8_0_f32_flat
+    mul_mv_mxfp4_f32
+    mul_mv_mxfp4_f32_flat
     mul_mv_id_q4_0_f32_8x_flat
+    mul_mv_id_q8_0_f32
+    mul_mv_id_q8_0_f32_flat
+    mul_mv_id_mxfp4_f32
+    mul_mv_id_mxfp4_f32_flat
+    gemm_moe_mxfp4_f32
+    gemv_moe_mxfp4_f32
     mul_mm_f32_f32_l4_lm
     mul_mm_f16_f32_l4_lm
+    mul_mm_q8_0_f32_l4_lm
     mul
     norm
     relu
@@ -110,6 +121,9 @@ set(GGML_OPENCL_KERNELS
     mul_mat_f16_f32
     conv2d
     conv2d_f16_f32
+    flash_attn_f32_f16
+    flash_attn_f16
+    flash_attn_f32
 )
 
 foreach (K ${GGML_OPENCL_KERNELS})
