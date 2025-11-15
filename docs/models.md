@@ -350,7 +350,7 @@ Please use `--format completion` for these models.
     * [maya1] (https://huggingface.co/maya-research/maya1/tree/fbd30e2b3ec92d2e227df20005a73e172bc5d2de)
 
         [SNAC-24kHz](https://huggingface.co/mlx-community/snac_24khz/tree/556af1cd3b1c5f2d294f6aa9bb886245d7b716ac) is used as codec.
-        Use these additional command line options when converting: `--name Orpheus-TTS -a Orpheus-TTS --snac_model /path/to/snac_24kHz`
+        Use these additional command line options when converting: `--name Maya1 -a Maya1 --snac_model /path/to/snac_24kHz`
 
         Use `--set voice XX` to describe the voice. [More info](https://huggingface.co/maya-research/maya1/blob/fbd30e2b3ec92d2e227df20005a73e172bc5d2de/prompt.txt).
 
