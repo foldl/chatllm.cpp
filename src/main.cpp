@@ -72,7 +72,7 @@ struct Args
     float frequency_penalty = 0.0f;
     int num_threads = 0;
     bool multi_line = false;
-    int seed;
+    int seed = -1;
     chatllm::ChatFormat format = chatllm::ChatFormat::CHAT;
     bool tokenize = false;
     DistanceStrategy vc = DistanceStrategy::MaxInnerProduct;
@@ -287,8 +287,6 @@ static std::string load_txt(const std::string &fn)
 
 static size_t parse_args(Args &args, const std::vector<std::string> &argv)
 {
-    std::random_device rd;
-    args.seed = rd();
     const size_t argc = argv.size();
 
     #define handle_para0(fmt1, field, f)        \

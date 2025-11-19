@@ -914,7 +914,7 @@ namespace chatllm
         //    printf("%d, ", input_ids[i]);
         //printf("\nn_past = %d, %d\n\n", n_past, continuous);
 
-        std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config, _seed));
+        std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config, get_seed()));
 
         aborted = false;
 

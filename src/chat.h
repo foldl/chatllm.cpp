@@ -977,6 +977,7 @@ namespace chatllm
         virtual void set_ctx(int n_ctx)= 0;
 
         virtual void seed(int x) = 0;
+        virtual int get_seed(void) const = 0;
 
         virtual int get_max_length(void) = 0;
 
@@ -1097,6 +1098,7 @@ namespace chatllm
         void set_ctx(int n_ctx) override { model->set_ctx(n_ctx); }
 
         void seed(int x) override { model->seed(x); }
+        int get_seed(void) const override { return model->get_seed(); }
 
         int get_max_length(void) override { return model->get_max_length(); }
 
@@ -1131,7 +1133,8 @@ namespace chatllm
         BaseModel(uint32_t type, ModelPurpose purpose) :
             type_(type), n_past(0),
             n_past_offset(0), tokenizer(nullptr),
-            purpose(purpose), aborted(false)
+            purpose(purpose), aborted(false),
+            _seed(-1)
         {}
 
         virtual ~BaseModel()
@@ -1234,6 +1237,13 @@ namespace chatllm
         void set_ctx(int n_ctx) override {}
 
         void seed(int x) override { _seed = x; }
+        int get_seed(void) const override
+        {
+            if (_seed > 0) return _seed;
+
+            std::random_device rd;
+            return rd();
+        }
 
         int get_n_past(void) override { return n_past; }
 
@@ -1273,12 +1283,13 @@ namespace chatllm
         uint32_t type_;
         std::string name_;
         std::string native_name_;
-        int _seed;
         int n_past;
         int n_past_offset;
         BaseTokenizer *tokenizer;
         ModelPurpose purpose;
         bool aborted;
+    private:
+        int _seed;
     };
 
     class ModelObject
