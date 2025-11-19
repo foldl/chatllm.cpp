@@ -56,9 +56,12 @@ streamlit run chatllm_st.py -- -i -m path/to/model
 
 Note: "STOP" function is not implemented yet.
 
-### OpenAI/Ollama Compatible API
+### OpenAI/Ollama/llama.cpp Compatible API
 
-[Here](../scripts/openai_api.py) is a server providing some OpenAI/Ollama Compatible API. Note that most of
+> [!IMPORTANT]
+> This is going to be re-written by Nim. Only basic functionalities are provided.
+
+[Here](../scripts/openai_api.py) is a server (default port: 11434) providing some OpenAI/Ollama/llama.cpp Compatible API. Note that most of
 the parameters are ignored.
 
 `openai_api.py` supports loading several types models for chatting, code completion (FIM), or text embedding etc.
@@ -84,6 +87,8 @@ Some base models that can be used for code completion:
 * CodeGemma v1.1: [Base-2B](https://huggingface.co/google/codegemma-1.1-2b), [Base-7B](https://huggingface.co/google/codegemma-1.1-7b)
 * StarCoder2: [Base-3B](https://huggingface.co/bigcode/starcoder2-7b), [Base-7B](https://huggingface.co/bigcode/starcoder2-7b), [Base-15B](https://huggingface.co/bigcode/starcoder2-15b) (not recommended)
 
+#### Ollama
+
 This module provides sufficient Ollama API so that it can be used to emulate Ollama model provider in Visual Studio Code Copilot.
 For example, starting the server with a model:
 
@@ -94,6 +99,15 @@ python openai_api.py ---chat :qwen2.5
 Select the model from Ollama provider:
 
 ![](vscode_ollama.png)
+
+#### WebUI
+
+`openai_api.py` provides a WebUI. WebUI of [llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) is also (partly) supported.
+Use `--ui` to select WebUI llama.cpp:
+
+```sh
+python openai_api.py --ui /path/to/index.html.gz ---chat :qwen2.5
+```
 
 ## JavaScript/TypeScript
 

@@ -182,6 +182,7 @@ emb_model_obj: ChatLLM = None
 http_server: HTTPServer = None
 
 model_info = {}
+ui_file_name = 'chat_ui.html'
 
 def get_streamer(model: str) -> ChatLLMStreamer | None:
     if model.endswith('fim') or model.startswith('fim'):
@@ -375,14 +376,71 @@ class HttpHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
     def handle_UI(self, obj: dict):
+        fn = ui_file_name
+        if not os.path.isfile(fn):
+            fn = 'scripts/' + fn
+        assert os.path.isfile(fn)
+
         self.send_response(200)
+        if fn.endswith('.gz'):
+            self.send_header("Content-Encoding", "gzip")
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
-        fn = 'chat_ui.html'
-        if not os.path.isfile('chat_ui.html'):
-            fn = 'scripts/' + fn
-        with open(fn, 'r', encoding='utf-8') as f:
-            self.wfile.write(f.read().encode())
+
+        with open(fn, 'rb') as f:
+            self.wfile.write(f.read())
+        self.wfile.flush()
+
+    def handle_llama_props(self, obj: dict):
+        global model_info
+        capabilities = model_info['chat']['capabilities']
+        modalities = {
+            "vision": "Image Input" in capabilities
+        }
+        rsp = {
+            "default_generation_settings":  "",
+            "total_slots":                  1,
+            "model_alias":                  model_info['chat']['name'],
+            "model_path":                   "",
+            "modalities":                   modalities,
+            "endpoint_slots":               0,
+            "endpoint_props":               {},
+            "endpoint_metrics":             0,
+            "webui":                        0,
+            "chat_template":                "",
+            "bos_token":                    [],
+            "eos_token":                    [],
+            "build_info":                   "Today",
+        }
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(rsp, indent=True).encode('utf-8'))
+        self.wfile.flush()
+
+    def handle_llama_slots(self, obj: dict):
+        global model_info
+        rsp = [
+                {
+                    "id": 0,
+                    "id_task": 1,
+                    "n_ctx": model_info['chat']['context_length'],
+                    "speculative": False,
+                    "is_processing": False,
+                    "params": {
+                        "n_predict": -1,
+                        "seed": 1,
+                        "temperature": 0.8,
+                        "dynatemp_range": 0.0,
+                        "dynatemp_exponent": 1.0,
+                        "top_k": 40,
+                    }
+                }
+        ]
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(rsp, indent=True).encode('utf-8'))
         self.wfile.flush()
 
     def do_GET(self):
@@ -393,8 +451,14 @@ class HttpHandler(BaseHTTPRequestHandler):
         elif self.path.endswith('/tags'):
             self.handle_TAGS({})
             return
-        elif self.path.endswith('/ui'):
+        elif self.path.endswith('/props'):
+            self.handle_llama_props({})
+            return
+        elif self.path.endswith('/ui') or self.path.startswith('/?') or (self.path in ['', '/']):
             self.handle_UI({})
+            return
+        elif self.path.startswith('/slots'):
+            self.handle_llama_slots({})
             return
         else:
             self.send_error(404, 'NOT FOUND')
@@ -419,12 +483,28 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, handler)
 
     ARG_SEP = '---'
+    port    = 11434
 
     args = sys.argv[1:]
     if len(args) < 1:
-        print(f"usage: python openai_api.py [{ARG_SEP}TYPE path/to/model [additional args]]")
+        print(f"usage: python openai_api.py [app_args] [{ARG_SEP}TYPE path/to/model [additional args]]")
+        print(f"where app_args :: --ui /path/to/ui --port PORT")
         print('where TYPE ::= chat | fim | emb')
         exit(-1)
+
+    while len(args) > 0:
+        if args[0] == '--ui':
+            args.pop(0)
+            assert len(args) > 0
+            ui_file_name = args[0]
+            args.pop(0)
+        if args[0] == '--port':
+            args.pop(0)
+            assert len(args) > 0
+            port = int(args[0])
+            args.pop(0)
+        else:
+            break
 
     chat_args = ['-m']
     fim_args = ['-m']
@@ -461,6 +541,7 @@ if __name__ == '__main__':
 
     print(model_info)
 
-    print("LLM Loaded. Starting server...")
-    http_server = HTTPServer(('0.0.0.0', 11434), HttpHandler)
+    print(f"LLM Loaded. Starting server on port {port}...")
+    print(f"http://localhost:{port}")
+    http_server = HTTPServer(('0.0.0.0', port), HttpHandler)
     http_server.serve_forever()
