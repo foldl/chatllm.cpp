@@ -157,9 +157,14 @@ namespace vision
 #if defined(_WIN64)
     #define MAGICK_CONVERT_CMD      "magick"
     #define MAGICK_IDENTIFY_CMD     "magick identify"
+    #define POPEN_MODE_READ         "rb"
+    #define POPEN_MODE_WRITE        "wb"
 #else
     #define MAGICK_CONVERT_CMD      "convert"
     #define MAGICK_IDENTIFY_CMD     "identify"
+    #define MAGICK_DISPLAY_CMD      "display"
+    #define POPEN_MODE_READ         "r"
+    #define POPEN_MODE_WRITE        "w"
 #endif
 
     void image_dimension(const char *fn, int &width, int &height)
@@ -198,7 +203,7 @@ namespace vision
 
         //printf("%s\n", oss.str().c_str());
 
-        FILE* pp = popen(oss.str().c_str(), "r");
+        FILE* pp = popen(oss.str().c_str(), POPEN_MODE_READ);
 
         while (!feof(pp))
         {
@@ -736,10 +741,10 @@ namespace vision
         int64_t data_cnt = 0;
 
 #if defined(_WIN64)
-        oss << "magick";
+        oss << MAGICK_CONVERT_CMD;
         const std::string fn = "\"" + utils::tmpname() + ".png\"";
 #else
-        oss << "display";
+        oss << MAGICK_DISPLAY_CMD;
 #endif
 
         switch (fmt)
@@ -763,7 +768,7 @@ namespace vision
         oss << " " << fn;
 #endif
 
-        FILE* pp = popen(oss.str().c_str(), "wb");
+        FILE* pp = popen(oss.str().c_str(), POPEN_MODE_WRITE);
         fwrite(data.data(), 1, data_cnt, pp);
         pclose(pp);
 
