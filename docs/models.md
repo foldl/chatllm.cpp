@@ -122,7 +122,7 @@
     * [x] v2: [Ling-mini-2.0](https://huggingface.co/inclusionAI/Ling-mini-2.0/tree/56c261e07b78d95dad61336fcbdb21ef4fdbcabe), [Ring-mini-2.0](https://huggingface.co/inclusionAI/Ring-mini-2.0/tree/d4eac003b34b59b733f05039a876616d840a37d6)
 
 * LLaDA (`LLaDA2MoeModelLM`)
-    * [x] [mini-preview](https://huggingface.co/inclusionAI/LLaDA2.0-mini-preview/tree/d25d3b2ac0b966b64da11d6c791f8bf4bc31e90c)
+    * [x] [mini-preview](https://huggingface.co/inclusionAI/LLaDA2.0-mini-preview/tree/d25d3b2ac0b966b64da11d6c791f8bf4bc31e90c), [mini](https://huggingface.co/inclusionAI/LLaDA2.0-mini/tree/d699e90dd1bd154d65128d9447f3570f4dac44f4)
 
         Supported options (`--set OPTION VALUE`):
         - `block_length`: default 32
