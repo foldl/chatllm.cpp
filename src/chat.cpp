@@ -359,6 +359,13 @@ namespace chatllm
         const_cast<Messages *>(this)->move_cursor_to_end();
     }
 
+    void Messages::shrink(int size)
+    {
+        while (history.size() > size)
+            history.pop_back();
+        move_cursor_to_end();
+    }
+
     void Messages::move_cursor_to_end(void)
     {
         cursor = (int)history.size();
@@ -688,7 +695,7 @@ namespace chatllm
     {
         std::vector<int> input_ids;
 
-        auto encode_start = history.cursor;
+        auto encode_start = history.get_cursor();
 
         if (!incremental)
         {
@@ -872,6 +879,7 @@ namespace chatllm
         }
 
         int round_idx = msg.round;
+        size_t num = ids.size();
 
         switch (msg.role)
         {
@@ -882,14 +890,15 @@ namespace chatllm
                 append_user(round_idx, msg.content, ids);
             break;
         case MsgRole::Assistant:
+            CHATLLM_CHECK(msg.content.is_simple_text());
             append_ai(round_idx, msg.content.to_string(), ids);
             break;
         case MsgRole::Tool:
+            CHATLLM_CHECK(msg.content.is_simple_text());
             append_tool(round_idx, msg.content.to_string(), ids);
             break;
-        case MsgRole::Auto:
-            break;
         default:
+            CHATLLM_CHECK(false) << "unexpected msg.role " << msg.role;
             break;
         }
     }
@@ -1957,6 +1966,19 @@ namespace chatllm
         if (!modelobj.loaded) return;
         if (model->get_n_past() > n_past)
             model->set_n_past(n_past);
+    }
+
+    int Pipeline::get_cursor(void)
+    {
+        if (!modelobj.loaded) return -1;
+        return model->get_n_past();
+    }
+
+    int Pipeline::set_cursor(int pos)
+    {
+        if (!modelobj.loaded) return -1;
+        rewind(pos);
+        return get_cursor();
     }
 
     int Pipeline::save_session(const Messages &history, const std::string &file_name)

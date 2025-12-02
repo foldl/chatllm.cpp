@@ -2016,6 +2016,57 @@ void chatllm_history_append(struct chatllm_obj *obj, int role_type, const char *
     chat->history.push_back(utf8_str, static_cast<chatllm::MsgRole>(role_type));
 }
 
+int chatllm_history_append_multimedia_msg(struct chatllm_obj *obj, int role_type)
+{
+    DEF_CHAT_STREAMER();
+
+    if (!streamer->is_prompt) return - 1;
+    if ((role_type < chatllm::MsgRole::User) || (role_type >= chatllm::MsgRole::LAST)) return -2;
+
+    chat->history.push_back(chat->content_scratch, static_cast<chatllm::MsgRole>(role_type));
+    return (int)chat->history.size();
+}
+
+int API_CALL chatllm_history_get_cursor(struct chatllm_obj *obj)
+{
+    DEF_CHAT_STREAMER();
+    return chat->history.get_cursor();
+}
+
+int API_CALL chatllm_history_set_cursor(struct chatllm_obj *obj, int pos)
+{
+    DEF_CHAT_STREAMER();
+    int old = chat->history.get_cursor();
+    if (pos >= old) return old;
+
+    if (pos <= 0)
+    {
+        chat->history.clear();
+        return chat->history.get_cursor();
+    }
+
+    int cnt = 0;
+    while (chat->history.size() > pos)
+    {
+        chat->history.history.pop_back();
+    }
+
+    chat->history.move_cursor_to_end();
+    return chat->history.get_cursor();
+}
+
+int API_CALL chatllm_get_cursor(struct chatllm_obj *obj)
+{
+    DEF_CHAT_STREAMER();
+    return chat->pipeline->get_cursor();
+}
+
+int API_CALL chatllm_set_cursor(struct chatllm_obj *obj, int pos)
+{
+    DEF_CHAT_STREAMER();
+    return chat->pipeline->set_cursor(pos);
+}
+
 void chatllm_abort_generation(struct chatllm_obj *obj)
 {
     Chat *chat = reinterpret_cast<Chat *>(obj);

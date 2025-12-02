@@ -197,6 +197,39 @@ enum RoleType
 DLL_DECL void API_CALL chatllm_history_append(struct chatllm_obj *obj, int role_type, const char *utf8_str);
 
 /**
+ * @brief push back current multimedia message to the end of chat history.
+ *
+ * see `chatllm_history_append`
+ *
+ * @param[in] obj               model object
+ * @param[in] role_type         message type (see `RoleType`)
+ * @return                      >= 0 if success else < 0
+ */
+DLL_DECL int chatllm_history_append_multimedia_msg(struct chatllm_obj *obj, int role_type);
+
+/**
+ * @brief get current position of "cursor": total number of processed/generated tokens
+ *
+ * Possible use case: token usage statistics.
+ *
+ * @param[in] obj               model object
+ * @return                      position of cursor
+ */
+DLL_DECL int API_CALL chatllm_get_cursor(struct chatllm_obj *obj);
+
+/**
+ * @brief set current position of "cursor"
+ *
+ * Possible use case: rewind and re-generate.
+ *
+ * Note: once used, the history in save session is not reliable any more.
+ *
+ * @param[in] obj               model object
+ * @return                      position of cursor
+ */
+DLL_DECL int API_CALL chatllm_set_cursor(struct chatllm_obj *obj, int pos);
+
+/**
  * @brief user input
  *
  * This function is synchronized, i.e. it returns after model generation ends and `f_end` is called.

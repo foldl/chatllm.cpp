@@ -191,6 +191,10 @@ class LibChatLLM:
     def callback_print(user_data: int, print_type: c_int, s: bytes) -> None:
         obj = LibChatLLM._id2obj[user_data]
 
+        if print_type == PrintType.PRINT_EVT_ASYNC_COMPLETED.value:
+            obj.callback_async_done()
+            return
+
         txt = s.decode()
         if print_type == PrintType.PRINT_CHAT_CHUNK.value:
             obj.callback_print(txt)
@@ -222,8 +226,6 @@ class LibChatLLM:
             obj.callback_print_beam_search(txt)
         elif print_type == PrintType.PRINT_EVT_ASYNC_COMPLETED.value:
             obj.callback_async_done()
-        elif print_type == PrintType.PRINT_EVT_THOUGHT_COMPLETED.value:
-            obj.callback_thought_done()
         elif print_type == PrintType.PRINTLN_MODEL_INFO.value:
             obj._model_info = json.loads(txt)
         else:

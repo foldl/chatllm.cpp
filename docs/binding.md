@@ -24,6 +24,36 @@ Assume MSVC is used.
     cmake --build build --target libchatllm
     ```
 
+## Nim
+
+### Command line
+
+[main.nim](../bindings/main.nim), which highlights code snippets.
+
+Build:
+
+```
+nim c main.nim
+```
+
+Run it with exactly the same command line options, for example: `main -i -m path/to/model`.
+
+![](code_highlight.png)
+
+### Web Demo
+
+[server.nim](../bindings/server.nim) provides some OpenAI/Ollama/llama.cpp compatible API, and is also a web chat demo.
+
+Command line options:
+
+```sh
+usage: server [app_args] [---TYPE path/to/model [additional args]]
+where app_args :: --ui /path/to/ui --port PORT
+where TYPE ::= chat | fim | emb
+```
+
+WebUI of [llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) is also (partly) supported. Use `--ui` to select the WebUI of llama.cpp.
+
 ## Python
 
 ### Command line
@@ -156,22 +186,6 @@ Examples:
 
 * [main.dpr](../bindings/main.dpr), which can be built by Delphi or FPC.
 * [Writing Tools](https://github.com/foldl/WritingTools).
-
-### Nim
-
-Examples:
-
-* [main.nim](../bindings/main.nim), which highlights code snippets.
-
-    Build:
-
-    ```
-    nim c -d:Release -d:ssl main.nim
-    ```
-
-    ![](code_highlight.png)
-
-    Note [a bug](https://github.com/nim-lang/Nim/pull/25105) in Nim library.
 
 ### Others
 
