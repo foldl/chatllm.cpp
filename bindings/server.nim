@@ -410,6 +410,9 @@ proc handle_completions(req: Request) {.async gcsafe.} =
     streamer.history[^1].messages.add (role: "assistant", content: @[(t: "text", content: streamer.acc)])
     streamer.history[^1].pos = streamer.get_cursor()
 
+    if streamer.tokens_start > streamer.history[^1].pos:
+        streamer.tokens_start = streamer.history[^1].pos
+
     let total_tokens = streamer.history[^1].pos - streamer.tokens_start
     let prompt_tokens = total_tokens div 2
 
@@ -492,6 +495,35 @@ proc handle_index(req: Request) {.async gcsafe.} =
             headers.add ("Content-Encoding", "gzip")
         await req.respond(Http200, readFile(fn_ui), headers.newHttpHeaders())
 
+proc handle_oai_models(req: Request) {.async gcsafe.} =
+    type
+        Meta = object
+            n_params: int
+            n_ctx_train: int
+
+        Info = object
+            id: string
+            `object`: string = "model"
+            created: int
+            owned_by: string = "You"
+            meta: Meta
+
+        Infos = object
+            `object`: string = "list"
+            data: seq[Info]
+
+    var infos = Infos()
+    let streamer = get_streamer(StreamerType.Chat)
+    if streamer != nil:
+        let info = parseJson(streamer.model_info)
+        var m = Info(id: info["name"].getStr(), created: now().toTime().toUnix())
+        m.meta.n_params     = info["param_num"].getInt()
+        m.meta.n_ctx_train  = info["context_length"].getInt()
+        infos.data.add(m)
+
+    let headers = {"Content-type": "application/json"}
+    await req.respond(Http200, $(%* infos), headers.newHttpHeaders())
+
 proc handle_ollama_tags(req: Request) {.async gcsafe.} =
     type
         Info = object
@@ -550,22 +582,23 @@ proc handle_ollama_show(req: Request) {.async gcsafe.} =
 
 proc handle_llama_props(req: Request) {.async gcsafe.} =
     type
+        Empty = object
         Modalities = object
             vision: bool = false
-        Empty = object
+            audio: bool = false
+        GenerationSettings = object
+            id: int = 0
+            id_task: int = -1
+            n_ctx: int = 0
+            speculative: bool = false
+            is_processing: bool
+            params: Empty
         Props = object
-            default_generation_settings: string =   ""
+            default_generation_settings: GenerationSettings
             total_slots: int =                      1
             model_alias: string =                   ""
-            model_path: string =                    ""
+            model_path: string =                    "/some/where"
             modalities: Modalities
-            endpoint_slots: int =                   0
-            endpoint_props: Empty
-            endpoint_metrics: int =                 0
-            webui: int =                            0
-            chat_template: string =                 ""
-            bos_token: seq[int] =                   @[]
-            eos_token: seq[int] =                   @[]
             build_info: string =                    "Today"
 
     var props = Props()
@@ -573,10 +606,14 @@ proc handle_llama_props(req: Request) {.async gcsafe.} =
     if streamer != nil:
         let info = parseJson(streamer.model_info)
         let capabilities = info.getOrDefault("capabilities")
+        props.default_generation_settings.n_ctx         = info["context_length"].getInt()
+        props.default_generation_settings.is_processing = streamer.busy()
         props.model_alias = info.getOrDefault("name").getStr()
         for c in capabilities.getElems():
             if c.getStr() == "Image Input":
                 props.modalities.vision = true
+            elif c.getStr() == "Audio Input":
+                props.modalities.audio = true
 
     let headers = {"Content-type": "application/json"}
     await req.respond(Http200, $(%* props), headers.newHttpHeaders())
@@ -618,6 +655,7 @@ proc run {.async.} =
     # OAI-compatible
     router.post "/v1/chat/completions",     handle_completions
     router.post "/v1/embeddings",           handle_embeddings
+    router.get  "/v1/models",               handle_oai_models
 
     # llama-compatible
     router.get  "/props",                   handle_llama_props
