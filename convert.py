@@ -112,14 +112,14 @@ class ModelType(Enum):
     Phi4                = 0x531
     Phi4_Mini           = 0x532
 
-    Mistral = 0x600
-    Mixtral = 0x601
-    OpenChat = 0x602
-    NeuralBeagle = 0x603
-    Starling = 0x604
-    WizardLMMoE = 0x605
-    Mistral2 = 0x606
-    DeepHermes3Mistral = 0x607
+    Mistral             = 0x600
+    Mixtral             = 0x601
+    OpenChat            = 0x602
+    NeuralBeagle        = 0x603
+    Starling            = 0x604
+    WizardLMMoE         = 0x605
+    Mistral2            = 0x606
+    DeepHermes3Mistral  = 0x607
 
     QWen    = 0x700
     QWen2   = 0x710
@@ -243,6 +243,7 @@ class ModelType(Enum):
     LlaMA4                  = ModelTypeTagChatImageIn + 0x0000001
     Gemma3Vis               = ModelTypeTagChatImageIn + 0x0000011
     DotsOCR                 = ModelTypeTagChatImageIn + 0x0000020
+    Mistral3                = ModelTypeTagChatImageIn + 0x0000030
 
     Qwen2Audio              = ModelTypeTagChatAudioIn + 0x0000001
 
@@ -8213,6 +8214,90 @@ class OuroConverter(BaseConverter):
         ]
         return weight_names
 
+class Mistral3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Mistral3
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            if name.startswith('language_model.'):
+                name = name.replace('language_model.', '')
+                r[name] = tensor
+                continue
+            else:
+                if name.startswith('vision_tower.transformer.'):
+                    name = name.replace('vision_tower.transformer.', 'vision_model.')
+                    name = name.replace('.attention.',      '.attn.')
+                    name = name.replace('.feed_forward.',   '.mlp.')
+                elif name.startswith('vision_tower.'):
+                    name = name.replace('vision_tower.', 'vision_model.')
+                r[name] = tensor
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        vis_config = AttributeDict(config.vision_config)
+        assert vis_config.hidden_act == 'silu'
+
+        txt_config = AttributeDict(config.text_config)
+        Mistral3Converter.txt_config = txt_config
+
+        assert isinstance(txt_config.rope_parameters, dict)
+        assert txt_config.rope_parameters['rope_type'] == 'yarn'
+
+        dump_llama_like_config(f, txt_config, ggml_type)
+        config_values = [
+            txt_config.num_key_value_heads,
+            txt_config.sliding_window if txt_config.sliding_window is not None else -1,
+            1 if (txt_config.tie_word_embeddings is not None) and txt_config.tie_word_embeddings else 0,
+            txt_config.head_dim or txt_config.hidden_size // txt_config.num_attention_heads
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        config_values = [
+            txt_config.rope_parameters['beta_fast'],
+            txt_config.rope_parameters['beta_slow'],
+            txt_config.rope_parameters['factor'],
+            txt_config.rope_parameters['llama_4_scaling_beta'],
+            txt_config.rope_parameters['mscale'],
+            txt_config.rope_parameters['mscale_all_dim'],
+            txt_config.rope_parameters['original_max_position_embeddings'],
+            txt_config.rope_parameters['rope_theta'],
+        ]
+        f.write(struct.pack("<ffffffif", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        txt_config = AttributeDict(config.text_config)
+        vis_config = AttributeDict(config.vision_config)
+
+        weight_names = Llama32Converter.get_weight_names(txt_config)
+
+        for i in range(vis_config.num_hidden_layers):
+            weight_names += [
+                f"vision_model.layers.{i}.attn.q_proj.weight",
+                f"vision_model.layers.{i}.attn.k_proj.weight",
+                f"vision_model.layers.{i}.attn.v_proj.weight",
+                f"vision_model.layers.{i}.attn.o_proj.weight",
+                f"vision_model.layers.{i}.mlp.up_proj.weight",
+                f"vision_model.layers.{i}.mlp.down_proj.weight",
+                f"vision_model.layers.{i}.mlp.gate_proj.weight",
+                f"vision_model.layers.{i}.attention_norm.weight",
+                f"vision_model.layers.{i}.ffn_norm.weight",
+            ]
+
+        weight_names += [
+            "multi_modal_projector.linear_1.weight",
+            "multi_modal_projector.linear_2.weight",
+            "multi_modal_projector.norm.weight",
+            "multi_modal_projector.patch_merger.merging_layer.weight",
+            "vision_model.ln_pre.weight",
+            "vision_model.patch_conv.weight",
+        ]
+
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -8352,7 +8437,7 @@ def load_config(path: Path, config_fn: str) -> Any:
 def load_some_info(r: dict, path: Path, prefix: str = '') -> None:
     if path.is_dir():
         globs = ["config.json", "configuration.json", "special_tokens_map.json",
-                 "tokenizer_config.json", "preprocessor_config.json"]
+                 "tokenizer_config.json", "preprocessor_config.json", "processor_config.json"]
         for glob in globs:
             files = list(path.glob(glob))
             for f in files:
@@ -8837,6 +8922,8 @@ def main():
         MegrezMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OuroForCausalLM':
         OuroConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Mistral3ForConditionalGeneration':
+        Mistral3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

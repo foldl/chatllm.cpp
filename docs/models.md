@@ -394,6 +394,12 @@ Please use `--format completion` for these models.
     * `native_resolution`: use native resolution or not, default: `false` (This seems sensitive to quantization, so defaults to `false`).
     * `fps`: Default 1.0.
 
+* Mistral (`Mistral3ForConditionalGeneration`)
+    * [x] Ministral-3: [3B-Instruct-2512](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-BF16/tree/e904b5a798e9397c0fd04e063a2aa90355653ffe),
+    [3B-Reasoning-2512](https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512/tree/039f888eb54340b5e9870721f3c249fbc809b8e8),
+    [8B-Instruct-2512](https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512-BF16/tree/bde2b3370dbf8ad77ceab25a5a43bc9013cda350),
+    [8B-Reasoning-2512](https://huggingface.co/mistralai/Ministral-3-8B-Reasoning-2512/tree/f511871f6402ba68dadfb42a94a7a7e13499fd65)
+
 * Qwen (`Qwen2AudioForConditionalGeneration`, `Qwen2_5_VLForConditionalGeneration`)
     * [x] Qwen2-Audio: [7B-Instruct](https://huggingface.co/Qwen/Qwen2-Audio-7B-Instruct/tree/0a095220c30b7b31434169c3086508ef3ea5bf0a)
     * [x] Qwen2.5-VL: [3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/tree/66285546d2b821cf421d4f5eb2576359d3770cd3), [7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/tree/cc594898137f460bfe9f0759e9844b3ce807cfb5)

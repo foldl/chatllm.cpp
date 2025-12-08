@@ -202,6 +202,7 @@ namespace chatllm
         MODEL_TYPE_LLAMA4           = MODEL_TYPE_TAG_ChatImageIn + 0x0000001,
         MODEL_TYPE_GEMMA3Vis        = MODEL_TYPE_TAG_ChatImageIn + 0x0000011,
         MODEL_TYPE_DOTS_OCR         = MODEL_TYPE_TAG_ChatImageIn + 0x0000020,
+        MODEL_TYPE_MISTRAL3         = MODEL_TYPE_TAG_ChatImageIn + 0x0000030,
 
         MODEL_TYPE_QWEN2_AUDIO      = MODEL_TYPE_TAG_ChatAudioIn + 0x0000001,
 
@@ -545,6 +546,15 @@ namespace chatllm
              ggml::type expected_result_dtype,
              std::vector<int64_t> &result_shape,
              std::vector<uint8_t> &result_buf); // result is appended
+
+        LayerAllocatorManager *get_layer_allocators(void)
+        {
+            return &backend_context.layer_allocators;
+        }
+        BackendContext *get_backend_context(void)
+        {
+            return &backend_context;
+        }
     protected:
         BackendContext backend_context;
         const size_t GRAPH_SIZE;

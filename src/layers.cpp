@@ -616,6 +616,8 @@ namespace chatllm
 
     ggml::tensor *ggml::reshape_4d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3)
     {
+        if (!ggml::is_contiguous(a))
+            a = ggml::cont(ctx, a);
         ggml::tensor *tensor = ggml_reshape_4d(ctx->get_ctx(), a, ne0, ne1, ne2, ne3);
         ctx->cb_op_tensor(tensor);
         return tensor;
@@ -1685,6 +1687,10 @@ namespace chatllm
 
     ggml::tensor *RMSNorm::forward(ComputeContext *ctx, ggml::tensor *input)
     {
+        if (!ggml::is_contiguous(input) && !inplace)
+        {
+            input = ggml::cont(ctx, input);
+        }
         ggml::tensor *output = inplace ? ggml::rms_norm_inplace(ctx, input, eps) : ggml::rms_norm(ctx, input, eps);
         output = inplace ? ggml::mul_inplace(ctx, output, weight) : ggml::mul(ctx, output, weight);
         return output;

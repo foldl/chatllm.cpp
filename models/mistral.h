@@ -14,8 +14,8 @@ namespace chatllm::mistral::mistral
     class Tokenizer : public llama::v2::Tokenizer
     {
     public:
-        Tokenizer(const llama::v2::Config &config);
-        Tokenizer(const llama::v2::Config &config, BaseHistoryEncoder *encoder);
+        Tokenizer(const BaseConfig &config);
+        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder);
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
     public:
         int start_inst_token_id;
@@ -25,6 +25,8 @@ namespace chatllm::mistral::mistral
         int end_avail_tools_token_id;
         int start_tool_results_token_id;
         int end_tool_results_token_id;
+        int start_system_prompt_token_id = -1;
+        int end_system_prompt_token_id = -1;
     };
 
     class ConditionalGeneration : public llama::v2::GenericConditionalGeneration<MistralBlock<SLIDING_WINDOW_LEN>>
@@ -159,7 +161,8 @@ namespace chatllm::mistral::mistral2
     class Tokenizer : public mistral::Tokenizer
     {
     public:
-        Tokenizer(const Config &config);
+        Tokenizer(const BaseConfig &config);
+        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder);
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
     };
 

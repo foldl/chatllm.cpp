@@ -12,6 +12,7 @@
 #include <thread>
 #include <regex>
 #include <random>
+#include <chrono>
 
 #include "basics.h"
 
@@ -655,13 +656,20 @@ namespace utils
         return def;
     }
 
-    std::string now(const char *fmt)
+    std::string now(int days_offset, const char *fmt)
     {
-        std::time_t now = std::time(nullptr);
-        std::tm* timeinfo = std::localtime(&now);
+        auto now = std::chrono::system_clock::now();
+        now -= std::chrono::hours(24 * days_offset);
+        std::time_t tt = std::chrono::system_clock::to_time_t(now);
+        std::tm* timeinfo = std::localtime(&tt);
         char buffer[200];
         std::strftime(buffer, sizeof(buffer), fmt, timeinfo);
         return std::move(std::string(buffer));
+    }
+
+    std::string now(const char *fmt)
+    {
+        return now(0, fmt);
     }
 
     static void parse_slice(std::vector<int> &values, const std::string &s, int num_elements)

@@ -95,6 +95,7 @@ namespace utils
     std::string get_opt(const std::map<std::string, std::string> &options, const char *key, const std::string &def);
 
     std::string now(const char *fmt = "%Y-%m-%d");
+    std::string now(int days_offset, const char *fmt = "%Y-%m-%d");
 
     int parse_int_lists(std::vector<int> &values, const std::string &s, int num_elements);
 

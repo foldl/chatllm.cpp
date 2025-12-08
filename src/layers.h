@@ -221,6 +221,8 @@ namespace chatllm
             int grid_w;
             int merge_kernel_size[2];
         };
+        // x ggml-shape: [hidden, all_patches]
+        // r ggml-shape: [hidden, merge_kernel_size[0], merge_kernel_size[1], new_width, new_height]
         ggml::tensor *merge_patch(ComputeContext *ctx, ggml::tensor *x, const merge_patch_param *param);
 
         void mul_mat_set_prec(ggml::tensor *a, ggml::prec prec);
