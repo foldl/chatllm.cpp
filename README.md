@@ -33,7 +33,7 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
-* 2025-12-08: Mistral-3 (a.k.a Ministral-3)
+* 2025-12-08: Ministral-3
 * 2025-11-06: Maya1
 * 2025-11-03: Ouro
 * 2025-10-31: Megrez2-3x7B-A3B

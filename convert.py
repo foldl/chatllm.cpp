@@ -8242,6 +8242,7 @@ class Mistral3Converter(BaseConverter):
         assert vis_config.hidden_act == 'silu'
 
         txt_config = AttributeDict(config.text_config)
+        assert txt_config.model_type == 'ministral3'
         Mistral3Converter.txt_config = txt_config
 
         assert isinstance(txt_config.rope_parameters, dict)
