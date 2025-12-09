@@ -3544,5 +3544,64 @@
                 }
             }
         }
+    },
+    "ministral-3": {
+        "brief": "The Ministral 3 family is designed for edge deployment, capable of running on a wide range of hardware.",
+        "default": "3b-it",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "3b-it": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4097001056,
+                        "url": "chatllm_quantized_ministral-3/ministral-3-3b-it-2512.bin"
+                    }
+                }
+            },
+            "3b-th": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4097001056,
+                        "url": "chatllm_quantized_ministral-3/ministral-3-3b-th-2512.bin"
+                    }
+                }
+            },
+            "8b-it": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 9483102352,
+                        "url": "chatllm_quantized_ministral-3/ministral-3-8b-it-2512.bin"
+                    }
+                }
+            },
+            "8b-th": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 9483102320,
+                        "url": "chatllm_quantized_ministral-3/ministral-3-8b-th-2512.bin"
+                    }
+                }
+            }
+        }
+    },
+    "vibethinker": {
+        "brief": "VibeThinker-1.5B is a 1.5-billion parameter dense language model.",
+        "default": "1.5b",
+        "license": "MIT",
+        "variants": {
+            "1.5b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1644903648,
+                        "url": "chatllm_quantized_vibethinker/vibethinker-1.5b.bin"
+                    }
+                }
+            }
+        }
     }
 }

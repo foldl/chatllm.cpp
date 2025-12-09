@@ -1,4 +1,4 @@
-import tables
+import std/[os, tables, json, strformat, strutils, sequtils, httpclient, asyncdispatch, algorithm]
 
 type
     PrintType* = enum
@@ -388,13 +388,131 @@ proc chatllm_async_text_embedding*(obj: ptr chatllm_obj; utf8_str: cstring; purp
 proc chatllm_async_qa_rank*(obj: ptr chatllm_obj; utf8_str_q: cstring;
                             utf8_str_a: cstring): cint {.stdcall, dynlib: libName, importc.}
 
+func is_same_command_option(a, b: string): bool =
+    if len(a) != len(b): return false
+    for i in 0 ..< len(a):
+        var c1 = a[i]
+        var c2 = b[i]
+        if c1 == '-': c1 = '_'
+        if c2 == '-': c2 = '_'
+        if c1 != c2: return false
+    return true
+
+func is_same_command_option(a: string, options: openArray[string]): bool =
+    for s in options:
+        if a.is_same_command_option(s): return true
+    return false
+
+var all_models: JsonNode = nil
+
+proc get_model(model_id: string; storage_dir: string): string =
+    if not os.dirExists(storage_dir):
+        os.createDir(storage_dir)
+
+    func calc_wer[T](ref_words, hyp_words: openArray[T]): float =
+        var d = newSeq[seq[int]](len(ref_words) + 1)
+        for i in 0 ..< len(d): d[i] = newSeq[int](len(hyp_words) + 1)
+
+        for i in 0..len(ref_words):
+            d[i][0] = i
+        for j in 0..len(hyp_words):
+            d[0][j] = j
+        for i in 1..len(ref_words):
+            for j in 1..len(hyp_words):
+                if ref_words[i - 1] == hyp_words[j - 1]:
+                    d[i][j] = d[i - 1][j - 1]
+                else:
+                    let substitution = d[i - 1][j - 1] + 1
+                    let insertion    = d[i    ][j - 1] + 1
+                    let deletion     = d[i - 1][j    ] + 1
+                    d[i][j] = min([substitution, insertion, deletion])
+        let wer = d[len(ref_words)][len(hyp_words)] / len(ref_words)
+        return wer
+
+    func calc_cer(ref_str, hyp: string): float = calc_wer(ref_str.toSeq(), hyp.toSeq())
+
+    func find_nearest_item(s: string; candidates: openArray[string]): seq[string] =
+        var l = candidates.sortedByIt(calc_cer(s, it))
+        return l[0 ..< min(3, len(l))]
+
+    proc get_model_url_on_modelscope(url: seq[string]): string =
+        let proj = url[0]
+        let fn = url[1]
+        let user = if len(url) >= 3: url[2] else: "judd2024"
+
+        return fmt"https://modelscope.cn/api/v1/models/{user}/{proj}/repo?Revision=master&FilePath={fn}"
+
+    proc print_progress_bar(iteration: BiggestInt, total: BiggestInt, prefix = "", suffix = "", decimals = 1, length = 60, fill = "█", printEnd = "\r", auto_nl = true) =
+        let percent = formatFloat(100.0 * (iteration.float / total.float), ffDecimal, decimals)
+        let filledLength = int(length.float * iteration.float / total.float)
+        let bar = fill.repeat(filledLength) & '-'.repeat(length - filledLength)
+        stdout.write(fmt"{printEnd}{prefix} |{bar}| {percent}% {suffix}")
+        if iteration == total and auto_nl:
+            echo ""
+
+    proc parse_model_id(model_id: string): JsonNode =
+        let parts = model_id.split(":")
+        if all_models == nil:
+            let fn = joinPath([parentDir(paramStr(0)), "../scripts/models.json"])
+            const compiled_file = readFile("../scripts/models.json")
+            all_models = if fileExists(fn): json.parseFile(fn) else: json.parseJson(compiled_file)
+
+        let id = parts[0]
+        if not all_models.contains(id):
+            let guess = find_nearest_item(id, all_models.keys().toSeq())
+            raise newException(ValueError, fmt"""`{id}` is recognized as a model id. Did you mean something like `{guess.join(", ")}`?""")
+            return nil
+        let model = all_models[id]
+        let variants = model["variants"]
+        let variant = variants[if len(parts) >= 2: parts[1] else: model["default"].getStr()]
+        let r = variant["quantized"][variant["default"].getStr()].copy()
+        let url = r["url"].getStr().split("/")
+        r["url"] = json.newJString(get_model_url_on_modelscope(url))
+        r["fn"] = json.newJString(url[1])
+        return r
+
+    proc download_file(url: string, fn: string, prefix: string) =
+        echo fmt"Downloading {prefix}"
+        let client = newAsyncHttpClient()
+        defer: client.close()
+
+        proc onProgressChanged(total, progress, speed: BiggestInt) {.async} =
+            print_progress_bar(progress, total, prefix)
+
+        client.onProgressChanged = onProgressChanged
+        client.downloadFile(url, fn).waitFor()
+
+    let info = parse_model_id(model_id)
+    assert info != nil, fmt"unknown model id {model_id}"
+
+    let fn = joinPath([storage_dir, info["fn"].getStr()])
+    if os.fileExists(fn):
+        if os.getFileSize(fn) == info["size"].getBiggestInt():
+            return fn
+        else:
+            echo(fmt"{fn} is incomplete, download again")
+
+    download_file(info["url"].getStr(), fn, model_id)
+    assert (os.fileExists(fn)) and (os.getFileSize(fn) == info["size"].getBiggestInt())
+    print_progress_bar(100, 100)
+
+    return fn
+
 ## Streamer in OOP style
 type
+    FrontendOptions* = object
+        help*: bool = false
+        interactive*: bool = false
+        reversed_role*: bool = false
+        use_multiple_lines*: bool = false
+        prompt*: string
+        sys_prompt*: string
+
     StreamerMessageType = enum
         Done = 0,
         Chunk = 1,
         ThoughtChunk = 2,
-        Meta = 3,
+        ThoughtDone = 3,
 
     StreamerMessage = tuple[t: StreamerMessageType, chunk: string]
 
@@ -419,6 +537,7 @@ type
         result_token_ids*: string
         result_beam_search: seq[string]
         model_info*: string
+        fe_options*: FrontendOptions
         chan_output: Channel[StreamerMessage]
 
 var streamer_dict = initTable[int, Streamer]()
@@ -438,8 +557,8 @@ method on_error(streamer: Streamer, text: string) {.base.} =
 method on_thought_completed(streamer: Streamer) {.base.} =
     discard
 
-method on_async_completed(streamer: Streamer) {.base.} =
-    streamer.chan_output.send((t: StreamerMessageType.Done, chunk: ""))
+method on_print_meta(streamer: Streamer, text: string) {.base.} =
+    discard
 
 proc streamer_on_print(user_data: pointer, print_type: cint, utf8_str: cstring) {.cdecl.} =
     var streamer = get_streamer(user_data)
@@ -447,7 +566,7 @@ proc streamer_on_print(user_data: pointer, print_type: cint, utf8_str: cstring) 
         of PrintType.PRINT_CHAT_CHUNK:
             streamer.chan_output.send((t: StreamerMessageType.Chunk, chunk: $utf8_str))
         of PrintType.PRINTLN_META:
-            streamer.chan_output.send((t: StreamerMessageType.Meta, chunk: $utf8_str))
+            streamer.on_print_meta $utf8_str
         of PrintType.PRINTLN_ERROR:
             on_error(streamer, $utf8_str)
         of PrintType.PRINTLN_REF:
@@ -475,18 +594,24 @@ proc streamer_on_print(user_data: pointer, print_type: cint, utf8_str: cstring) 
         of PrintType.PRINT_THOUGHT_CHUNK:
             streamer.chan_output.send((t: StreamerMessageType.ThoughtChunk, chunk: $utf8_str))
         of PrintType.PRINT_EVT_ASYNC_COMPLETED:
-            on_async_completed(streamer)
+            streamer.chan_output.send((t: StreamerMessageType.Done, chunk: ""))
         of PrintType.PRINT_EVT_THOUGHT_COMPLETED:
-            on_thought_completed(streamer)
+            streamer.chan_output.send((t: StreamerMessageType.ThoughtDone, chunk: ""))
 
 proc streamer_on_end(user_data: pointer) {.cdecl.} =
     var streamer = get_streamer(user_data)
     streamer.is_generating = false
 
 proc initStreamer*(streamer: Streamer; args: openArray[string], auto_restart: bool = false): bool =
+    const candidates = ["-m", "--model", "--embedding_model", "--reranker_model"]
+
+    var storage_dir = getEnv("CHATLLM_QUANTIZED_MODEL_PATH")
+    if storage_dir == "":
+        storage_dir = joinPath([parentDir(paramStr(0)), "../quantized"])
+
     let id = streamer_dict.len + 1
     streamer_dict[id] = streamer
-    streamer.llm = chatllm_create()
+
     streamer.chan_output.open()
     streamer.system_prompt = ""
     streamer.system_prompt_updating = false
@@ -499,7 +624,41 @@ proc initStreamer*(streamer: Streamer; args: openArray[string], auto_restart: bo
     streamer.result_ranking = ""
     streamer.result_token_ids = ""
     streamer.model_info = ""
-    for s in args:
+
+    var args_pp = newSeq[string]()
+    var i = 0
+    while i < len(args):
+        let s = args[i]
+        if s.is_same_command_option(["-h", "--help"]):
+            streamer.fe_options.help = true
+            break
+        elif s.is_same_command_option(["-i", "--interactive"]):
+            streamer.fe_options.interactive = true
+        elif s.is_same_command_option("--reversed_role"):
+            streamer.fe_options.reversed_role = true
+        elif s.is_same_command_option("--multi"):
+            streamer.fe_options.use_multiple_lines = true
+        elif s.is_same_command_option(["-p", "--prompt"]):
+            inc i
+            if i < len(args): streamer.fe_options.prompt = args[i]
+        elif s.is_same_command_option(["-s", "--system"]):
+            inc i
+            if i < len(args): streamer.fe_options.sys_prompt = args[i]
+        else:
+            args_pp.add s
+            if s.is_same_command_option(candidates):
+                inc i
+                if i >= len(args): break
+                if args[i][0] == ':':
+                    args_pp.add get_model(args[i][1..^1], storage_dir)
+                else:
+                    args_pp.add args[i]
+        inc i
+
+    if streamer.fe_options.help: return true
+
+    streamer.llm = chatllm_create()
+    for s in args_pp:
         chatllm_append_param(streamer.llm, s.cstring)
 
     let r = chatllm_start(streamer.llm, streamer_on_print, streamer_on_end, cast[pointer](id))
@@ -560,8 +719,8 @@ iterator chunks*(streamer: Streamer): tuple[t: ChunkType; chunk: string] =
                 yield (t: ChunkType.Thought, chunk: msg.chunk)
             of StreamerMessageType.Done:
                 break
-            of StreamerMessageType.Meta:
-                discard
+            of StreamerMessageType.ThoughtDone:
+                streamer.on_thought_completed()
 
 proc set_max_gen_tokens*(streamer: Streamer, max_new_tokens: int) =
     chatllm_set_gen_max_tokens(streamer.llm, cint(max_new_tokens))
