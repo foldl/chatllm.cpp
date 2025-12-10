@@ -273,6 +273,7 @@ class TokenizerType(Enum):
 g_tokenizer_type = TokenizerType.BPE1
 
 g_special_tokens: Dict = {}
+g_do_dequantization: bool = False
 
 def pad_to_len(l: list, to_len: int, v = 0) -> list:
     assert len(l) <= to_len
@@ -605,7 +606,22 @@ def tqdm(items, desc='') -> Iterable[any]:
         remain = (total - i - 1) * per_item
         print_progress_bar(i + 1, total, prefix=desc, suffix=f"({i}/{total}) {format_time(per_item)}/it rem: {format_time(remain)}")
 
+def dequantize(state_dict: dict) -> dict:
+    r = {}
+    for k in state_dict.keys():
+        t: torch.Tensor = state_dict[k]
+        if k.endswith('.weight_scale_inv'):
+            k = k.replace('.weight_scale_inv', '.weight')
+            assert k in state_dict
+            r[k] = state_dict[k].float() * t
+            continue
+        if k not in r:
+            r[k] = t
+    return r
+
 def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_pp, loader_fun = None):
+    global g_do_dequantization
+
     tensor_info = []
     converted_names = []
 
@@ -618,6 +634,10 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
 
     for state_dict in loader_fun(model_files):
         this_round = []
+
+        if g_do_dequantization:
+            state_dict = dequantize(state_dict)
+
         state_dict = state_dict_pp(config, state_dict)
 
         for x in state_dict:
@@ -8462,7 +8482,7 @@ def load_some_model(path: Path, fallback_files: list[Path] = []) -> List[Path]:
         return [path]
 
 def main():
-    global g_lora
+    global g_lora, g_do_dequantization
 
     parser = argparse.ArgumentParser("chatllm-convert")
     parser.add_argument("-i", "--model_name_or_path", type=str)
@@ -8498,6 +8518,8 @@ def main():
         config = AttributeDict(load_config(Path(args.model_name_or_path), config_fn))
     else:
         config = AttributeDict({})
+
+    g_do_dequantization = config.quantization_config is not None
 
     if arch == '':
         if config.architectures is None:

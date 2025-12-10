@@ -399,6 +399,7 @@ Please use `--format completion` for these models.
     [3B-Reasoning-2512](https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512/tree/039f888eb54340b5e9870721f3c249fbc809b8e8),
     [8B-Instruct-2512](https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512-BF16/tree/bde2b3370dbf8ad77ceab25a5a43bc9013cda350),
     [8B-Reasoning-2512](https://huggingface.co/mistralai/Ministral-3-8B-Reasoning-2512/tree/f511871f6402ba68dadfb42a94a7a7e13499fd65)
+    * [x] Devstral-Small-2: [24B-Instruct-2512](https://huggingface.co/mistralai/Devstral-Small-2-24B-Instruct-2512/tree/8d27a0d2120f1563c11dc91d494e99f9678ecf79)
 
 * Qwen (`Qwen2AudioForConditionalGeneration`, `Qwen2_5_VLForConditionalGeneration`)
     * [x] Qwen2-Audio: [7B-Instruct](https://huggingface.co/Qwen/Qwen2-Audio-7B-Instruct/tree/0a095220c30b7b31434169c3086508ef3ea5bf0a)

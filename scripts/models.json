@@ -285,6 +285,22 @@
             }
         }
     },
+    "devstral-small-2": {
+        "brief": "Devstral Small 2 excels at using tools to explore codebases, editing multiple files and power software engineering agents.",
+        "default": "24b-2512",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "24b-2512": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 15015421232,
+                        "url": "chatllm_quantized_ministral-3/devstral-small-2-24b-2512-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
     "mistral0.1": {
         "brief": "The Mistral-7B-Instruct-v0.1 Large Language Model (LLM) is a instruct fine-tuned version of the Mistral-7B-v0.1 generative text model using a variety of publicly available conversation datasets.",
         "default": "7b",
