@@ -3619,5 +3619,21 @@
                 }
             }
         }
+    },
+    "dolphin-v2": {
+        "brief": "Dolphin-v2 is an enhanced universal document parsing model that substantially improves upon the original Dolphin.",
+        "default": "1.5b",
+        "license": "Unknown",
+        "variants": {
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4128566736,
+                        "url": "chatllm_quantized_dolphin/dolphin-v2.bin"
+                    }
+                }
+            }
+        }
     }
 }
