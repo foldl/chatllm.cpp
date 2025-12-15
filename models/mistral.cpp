@@ -863,7 +863,7 @@ Always prioritize using tools to provide the most accurate and helpful response.
 
     static float get_llama_4_attn_scale(int pos, float beta, int max_position_embeddings)
     {
-        return 1.0f + beta * std::logf(1.0f + std::floorf((float)pos / max_position_embeddings));
+        return 1.0f + beta * logf(1.0f + floorf((float)pos / max_position_embeddings));
     }
 
     #define MAX_PROJECTED_TOKENS    2048
