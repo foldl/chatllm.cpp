@@ -135,9 +135,7 @@ namespace chatllm::llama::v3
         int end_header_id;
         int eot_id;
         int nl_token_id;
-
-    private:
-        bool is_seed_coder;
+        bool double_nl_token = true;
     };
 
     class ConditionalGeneration : public v2::GenericConditionalGeneration<LlamaBlock>

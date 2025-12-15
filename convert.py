@@ -150,6 +150,7 @@ class ModelType(Enum):
     Gemma       = 0x1300
     Gemma2      = 0x1301
     Gemma3      = 0x1302
+    RNJ_1       = 0x1303
 
     CohereCommand       = 0x1400
     CohereAya23         = 0x1401
@@ -5613,7 +5614,6 @@ class Gemma2Converter(BaseConverter):
 
 class Gemma3Converter(BaseConverter):
     MODEL_TYPE = ModelType.Gemma3
-    FILE_VERSION = 1
 
     @classmethod
     def pp(cls, config, name: str, tensor):
@@ -5785,6 +5785,40 @@ class Gemma3Converter(BaseConverter):
                 ]
 
         return weight_names
+
+class RNJ_1Converter(BaseConverter):
+    MODEL_TYPE = ModelType.RNJ_1
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        return Gemma3Converter.state_dict_pp(config, state_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        final_logit_softcapping = config.final_logit_softcapping
+        attn_logit_softcapping  = config.attn_logit_softcapping
+        rope_scaling = config.rope_scaling
+        config.rope_scaling = None
+        config.final_logit_softcapping = None
+        config.attn_logit_softcapping  = None
+
+        Gemma3Converter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            rope_scaling['attn_factor'],
+            rope_scaling['beta_fast'],
+            rope_scaling['beta_slow'],
+            rope_scaling['extrapolation_factor'],
+            rope_scaling['factor'],
+            rope_scaling['original_max_position_embeddings'],
+            final_logit_softcapping if final_logit_softcapping is not None else -1.0,
+            attn_logit_softcapping if attn_logit_softcapping is not None else -1.0,
+        ]
+        f.write(struct.pack("<" + "fffffiff", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        return Gemma3Converter.get_weight_names(config)
 
 class Grok1Converter(BaseConverter):
     MODEL_TYPE = ModelType.Grok1
@@ -8844,7 +8878,10 @@ def main():
     elif arch == 'Gemma2ForCausalLM':
         Gemma2Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Gemma3ForCausalLM':
-        Gemma3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        if config.rope_scaling and (config.rope_scaling['rope_type'] == 'yarn'):
+            RNJ_1Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+        else:
+            Gemma3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Gemma3ForConditionalGeneration':
         if config.vision_config is not None:
             Gemma3Converter.MODEL_TYPE = ModelType.Gemma3Vis

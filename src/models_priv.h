@@ -107,9 +107,10 @@ namespace chatllm
         MODEL_TYPE_PERSIMMON= 0x1200,
         MODEL_TYPE_FUYU     = 0x1201,
 
-        MODEL_TYPE_GEMMA    = 0x1300,
-        MODEL_TYPE_GEMMA2   = 0x1301,
-        MODEL_TYPE_GEMMA3   = 0x1302,
+        MODEL_TYPE_GEMMA            = 0x1300,
+        MODEL_TYPE_GEMMA2           = 0x1301,
+        MODEL_TYPE_GEMMA3           = 0x1302,
+        MODEL_TYPE_RNJ_1            = 0x1303,
 
         MODEL_TYPE_COHERE_COMMAND_R     = 0x1400,
         MODEL_TYPE_COHERE_AYA_23        = 0x1401,

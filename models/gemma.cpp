@@ -1,41 +1,19 @@
-#include "../src/models.h"
-#include "../src/models_priv.h"
-#include "../src/vision_process.h"
+#include "gemma.h"
 
 namespace chatllm::gemma::v1
 {
-struct Config : public BaseConfig
-{
-    int num_key_value_heads;
-    int head_dim;
-    float rope_theta;
-};
+    static ChatHistoryEncoder _chat_encoder;
 
-class ChatHistoryEncoder : public BaseHistoryEncoder
-{
-public:
-    void append_sys_prompt(std::vector<int> &ids) const override;
-    void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
-    void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
-    void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
-    void append_user_opening(int round_idx, std::vector<int> &ids) const override;
-};
-
-static ChatHistoryEncoder _chat_encoder;
-
-class Tokenizer : public BaseTokenizer
-{
-public:
-    Tokenizer(const BaseConfig &config)
+    Tokenizer::Tokenizer(const BaseConfig &config)
         : Tokenizer(config, &_chat_encoder)
     {}
-    Tokenizer(const BaseConfig &config, BaseHistoryEncoder *chat_encoder)
+    Tokenizer::Tokenizer(const BaseConfig &config, BaseHistoryEncoder *chat_encoder)
         : BaseTokenizer(config, chat_encoder)
     {
         sys_prompt = "";
     }
 
-    size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
         tp = new tokenizer::BPEProcessor1();
         size_t size = tp->Load(buffer, n_vocab);
@@ -59,8 +37,7 @@ public:
         return size;
     }
 
-public:
-    void encode(const std::string &text, std::vector<int> &ids, bool add_start, bool add_end)
+    void Tokenizer::encode(const std::string &text, std::vector<int> &ids, bool add_start, bool add_end)
     {
         if (add_start)
             ids.push_back(start_of_turn_token_id);
@@ -72,19 +49,7 @@ public:
         }
     }
 
-public:
-    int start_of_turn_token_id;
-    int end_of_turn_token_id;
-    int nl_token_id;
-};
-
-class ConditionalGeneration : public BaseModelForConditionalGeneration
-{
-public:
-    typedef Model<BaseConfig, Embedding, RMSNorm, GemmaBlock, int, int, int, int, int, int> ModelClass;
-
-public:
-    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA)
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
         : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
     {
         const size_t tensor_ovhd = ggml_tensor_overhead();
@@ -105,7 +70,7 @@ public:
         }
     }
 
-    void load(ModelLoader &loader) override
+    void ConditionalGeneration::load(ModelLoader &loader)
     {
         auto transformer = get_typed_transformer<ModelClass>();
 
@@ -130,143 +95,84 @@ public:
             << "corrupted model weights";
     }
 
-public:
-    BaseConfig config;
-};
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
-{
-    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        append_ai_opening(round_idx, ids);
 
-    append_ai_opening(round_idx, ids);
+        tok->encode(ai, ids, false, true);
+    }
 
-    tok->encode(ai, ids, false, true);
-}
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(tok->bos_token_id);
+    }
 
-void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
-{
-    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-    ids.push_back(tok->bos_token_id);
-}
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::ostringstream oss_prompt;
 
-void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
-{
-    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-    std::ostringstream oss_prompt;
+        oss_prompt << "user" << "\n" << user;
+        tok->encode(oss_prompt.str(), ids, true, true);
+    }
 
-    oss_prompt << "user" << "\n" << user;
-    tok->encode(oss_prompt.str(), ids, true, true);
-}
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode("model\n", ids, true, false);
+    }
 
-void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
-{
-    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-    tok->encode("model\n", ids, true, false);
-}
-
-void ChatHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &ids) const
-{
-    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-    tok->encode("user\n", ids, true, false);
-}
+    void ChatHistoryEncoder::append_user_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->encode("user\n", ids, true, false);
+    }
 }
 
 namespace chatllm::gemma::v2
 {
-struct Config : public BaseConfig
-{
-    int num_key_value_heads;
-    int head_dim;
-    int query_pre_attn_scalar;
-    int sliding_window;
-
-    float rope_theta;
-    float final_logit_soft_capping;
-    float attn_logit_soft_capping;
-};
-
-typedef v1::Tokenizer Tokenizer;
-
-template <int sliding_window_len> class Gemma2SWASelfAttention : public RoPESelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>
-{
-public:
-    Gemma2SWASelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
-        : RoPESelfAttention<SlidingWindowAttentionImpl<sliding_window_len>>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
-};
-
-template <int sliding_window_len> class Gemma2SWABlock : public LMBlock4<RMSNorm, Gemma2SWASelfAttention<sliding_window_len>, RMSNorm, RMSNorm, GELUMLP, RMSNorm>
-{
-public:
-    Gemma2SWABlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
-        : LMBlock4<RMSNorm, Gemma2SWASelfAttention<sliding_window_len>, RMSNorm, RMSNorm, GELUMLP, RMSNorm>
-                  (ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
-    {}
-};
-
-const int SLIDING_WINDOW_LEN = 4096;
-
-typedef Gemma2SWABlock<SLIDING_WINDOW_LEN> Gemma2SWABlock4k;
-
-class Gemma2FullBlock : public LMBlock4<RMSNorm, GemmaSelfAttention, RMSNorm, RMSNorm, GELUMLP, RMSNorm>
-{
-public:
-    Gemma2FullBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
-        : LMBlock4(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
-    {}
-};
-
-class TanhScaling: public Block
-{
-public:
-    TanhScaling(float scale_pre, float scale_post) : scale_pre(scale_pre), scale_post(scale_post) {}
-
-    ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override
+    ggml::tensor *TanhScaling::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         input = ggml::scale_inplace(ctx, input, scale_pre);
         input = ggml::inplace_act(ctx, ActFunc::Tanh, input);
         input = ggml::scale_inplace(ctx, input, scale_post);
         return input;
     }
-public:
-    const float scale_pre;
-    const float scale_post;
-};
 
-template <class Layer> static void setup_layer(Block *block, const Config &config, Block *attn_scores_pp)
-{
-    auto layer = dynamic_cast<Layer *>(block);
-    auto &attention = layer->attention;
-    attention.freq_base = config.rope_theta;
-    attention.attn_scaling_factor = powf((float)config.query_pre_attn_scalar, -0.5);
-    attention.attn_scores_pp = attn_scores_pp;
-}
+    template <class Layer> static void setup_layer(Block *block, const Config &config, Block *attn_scores_pp)
+    {
+        auto layer = dynamic_cast<Layer *>(block);
+        auto &attention = layer->attention;
+        attention.freq_base = config.rope_theta;
+        attention.attn_scaling_factor = powf((float)config.query_pre_attn_scalar, -0.5);
+        attention.attn_scores_pp = attn_scores_pp;
+    }
 
-template <class Layer> static void load_layer(ModelLoader &loader, const std::string &layer_prefix, Block *block)
-{
-    auto layer = dynamic_cast<Layer *>(block);
-    loader.read_tensor(layer_prefix + "input_layernorm.weight",             layer->pre_attention_layernorm.weight);
-    loader.read_tensor(layer_prefix + "mlp.down_proj.weight",               layer->mlp.down_proj.weight);
-    loader.read_tensor(layer_prefix + "mlp.gate_proj.weight",               layer->mlp.gate_proj.weight);
-    loader.read_tensor(layer_prefix + "mlp.up_proj.weight",                 layer->mlp.up_proj.weight);
-    loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",    layer->post_attention_layernorm.weight);
-    loader.read_tensor(layer_prefix + "pre_feedforward_layernorm.weight",   layer->pre_mlp_layernorm.weight);
-    loader.read_tensor(layer_prefix + "post_feedforward_layernorm.weight",  layer->post_mlp_layernorm.weight);
+    template <class Layer> static void load_layer(ModelLoader &loader, const std::string &layer_prefix, Block *block)
+    {
+        auto layer = dynamic_cast<Layer *>(block);
+        loader.read_tensor(layer_prefix + "input_layernorm.weight",             layer->pre_attention_layernorm.weight);
+        loader.read_tensor(layer_prefix + "mlp.down_proj.weight",               layer->mlp.down_proj.weight);
+        loader.read_tensor(layer_prefix + "mlp.gate_proj.weight",               layer->mlp.gate_proj.weight);
+        loader.read_tensor(layer_prefix + "mlp.up_proj.weight",                 layer->mlp.up_proj.weight);
+        loader.read_tensor(layer_prefix + "post_attention_layernorm.weight",    layer->post_attention_layernorm.weight);
+        loader.read_tensor(layer_prefix + "pre_feedforward_layernorm.weight",   layer->pre_mlp_layernorm.weight);
+        loader.read_tensor(layer_prefix + "post_feedforward_layernorm.weight",  layer->post_mlp_layernorm.weight);
 
-    loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", layer->attention.k_proj.weight);
-    loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", layer->attention.o_proj.weight);
-    loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", layer->attention.q_proj.weight);
-    loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", layer->attention.v_proj.weight);
-}
+        loader.read_tensor(layer_prefix + "self_attn.k_proj.weight", layer->attention.k_proj.weight);
+        loader.read_tensor(layer_prefix + "self_attn.o_proj.weight", layer->attention.o_proj.weight);
+        loader.read_tensor(layer_prefix + "self_attn.q_proj.weight", layer->attention.q_proj.weight);
+        loader.read_tensor(layer_prefix + "self_attn.v_proj.weight", layer->attention.v_proj.weight);
+    }
 
-class ConditionalGeneration : public BaseModelForConditionalGeneration
-{
-public:
-    typedef HeterogeneousModel ModelClass;
-public:
-    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA2)
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
         : BaseModelForConditionalGeneration(type, config, runtime_config), config(config),
-          logits_pp(1.0f / config.final_logit_soft_capping / sqrtf((float)config.hidden_size), config.final_logit_soft_capping),
-          attn_scores_pp(1.0f / config.attn_logit_soft_capping, config.attn_logit_soft_capping)
+        logits_pp(1.0f / config.final_logit_soft_capping / sqrtf((float)config.hidden_size), config.final_logit_soft_capping),
+        attn_scores_pp(1.0f / config.attn_logit_soft_capping, config.attn_logit_soft_capping)
     {
         const size_t tensor_ovhd = ggml_tensor_overhead();
         const size_t num_tensors = 2 + (config.num_hidden_layers - config.num_hidden_layers / 2) * 14 + config.num_hidden_layers / 2 * 15;
@@ -313,7 +219,7 @@ public:
         batch_input = false;
     }
 
-    void load(ModelLoader &loader) override
+    void ConditionalGeneration::load(ModelLoader &loader)
     {
         auto transformer = get_typed_transformer<ModelClass>();
 
@@ -335,54 +241,18 @@ public:
         CHATLLM_CHECK(w_ctx_.get_used_mem() == w_ctx_.get_mem_size())
             << "corrupted model weights";
     }
-
-public:
-
-    bool is_sliding(int layer_id)
-    {
-        return layer_id % 2;
-    }
-
-public:
-    BaseConfig config;
-    TanhScaling logits_pp;
-    TanhScaling attn_scores_pp;
-};
 }
 
 namespace chatllm::gemma::siglip
 {
-struct Config
-{
-    ggml::type dtype;
-    int hidden_size;
-    int image_size;
-    int intermediate_size;
-    int num_attention_heads;
-    int num_channels;
-    int num_hidden_layers;
-    int patch_size;
-    int mm_tokens_per_image;
-    float image_mean[3];
-    float image_std[3];
-    bool vision_use_head;
-
-    int max_num_crops;
-    int min_crop_size;
-    float min_ratio_to_activate;
-};
-
-class PatchEmbedding : public Block
-{
-public:
-    PatchEmbedding(InitContext *ctx, int num_channels, int embed_dim, int image_size, int patch_size)
+    PatchEmbedding::PatchEmbedding(InitContext *ctx, int num_channels, int embed_dim, int image_size, int patch_size)
         : num_patches((image_size / patch_size) * (image_size / patch_size)),
-          num_positions(num_patches),
-          patch_embedding(ctx, num_channels, embed_dim, patch_size, patch_size),
-          position_embedding(ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F32, embed_dim, num_positions))
+        num_positions(num_patches),
+        patch_embedding(ctx, num_channels, embed_dim, patch_size, patch_size),
+        position_embedding(ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F32, embed_dim, num_positions))
     {}
 
-    ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override
+    ggml::tensor *PatchEmbedding::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         auto embedding = patch_embedding.forward(ctx, input);
         embedding = ggml::reshape_3d(ctx, embedding, ggml::get_dim(embedding, 0) * ggml::get_dim(embedding, 1), ggml::get_dim(embedding, 2), ggml::get_dim(embedding, 3));
@@ -392,7 +262,7 @@ public:
         return embedding;
     }
 
-    int64_t get_param_num(bool effective_only) const override
+    int64_t PatchEmbedding::get_param_num(bool effective_only) const
     {
         int64_t r = 0;
         r += patch_embedding.get_param_num(effective_only);
@@ -400,35 +270,23 @@ public:
         return r;
     }
 
-    void load(const std::string &path, TensorLoader *loader) override
+    void PatchEmbedding::load(const std::string &path, TensorLoader *loader)
     {
         patch_embedding.load(path + "patch_embedding.", loader);
         loader->read_tensor(path + "position_embedding.weight", position_embedding);
     }
 
-public:
-    const int num_patches;
-    const int num_positions;
-    Conv2D patch_embedding;
-    ggml::tensor *position_embedding;
-};
-
-typedef TheBiasedGELUMLP SigMLP;
-
-class MultiModalProjector : public Block
-{
-public:
-    MultiModalProjector(InitContext *ctx, const Config &config, int lm_hidden_size)
+    MultiModalProjector::MultiModalProjector(InitContext *ctx, const Config &config, int lm_hidden_size)
         : mm_tokens_per_image(config.mm_tokens_per_image),
-		  patches_per_image(config.image_size / config.patch_size),
-          tokens_per_side((int)std::sqrt(config.mm_tokens_per_image)),
-          kernel_size(patches_per_image / tokens_per_side),
-          input_projection(ctx, config.hidden_size, lm_hidden_size, false),
-          soft_emb_norm(ctx, config.hidden_size)
+        patches_per_image(config.image_size / config.patch_size),
+        tokens_per_side((int)std::sqrt(config.mm_tokens_per_image)),
+        kernel_size(patches_per_image / tokens_per_side),
+        input_projection(ctx, config.hidden_size, lm_hidden_size, false),
+        soft_emb_norm(ctx, config.hidden_size)
     {
     }
 
-    ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *vision_outputs) override
+    ggml::tensor *MultiModalProjector::forward(ComputeContext *ctx, ggml::tensor *vision_outputs)
     {
         CHATLLM_CHECK(ggml::get_dim(vision_outputs, 3) == 1) << "too many dimensions!";
 
@@ -436,15 +294,15 @@ public:
         output = ggml::cont(ctx, output);
         output = ggml::reshape_4d(ctx, output, patches_per_image, patches_per_image, ggml::get_dim(output, 1), ggml::get_dim(output, 2));
         output = ggml::avg_pool_2d(ctx, output, kernel_size, kernel_size);
-		output = ggml::reshape_3d(ctx, output, mm_tokens_per_image, ggml::get_dim(output, 2), ggml::get_dim(output, 3));
-		output = ggml::transpose(ctx, output);
+        output = ggml::reshape_3d(ctx, output, mm_tokens_per_image, ggml::get_dim(output, 2), ggml::get_dim(output, 3));
+        output = ggml::transpose(ctx, output);
         output = ggml::cont(ctx, output);
         output = soft_emb_norm.forward(ctx, output);
         output = input_projection.forward(ctx, output);
         return output;
     }
 
-    int64_t get_param_num(bool effective_only) const override
+    int64_t MultiModalProjector::get_param_num(bool effective_only) const
     {
         int64_t r = 0;
         r += input_projection.get_param_num(effective_only);
@@ -452,41 +310,19 @@ public:
         return r;
     }
 
-    void load(const std::string &path, TensorLoader *loader) override
+    void MultiModalProjector::load(const std::string &path, TensorLoader *loader)
     {
         input_projection.load(path + "mm_input_projection.", loader);
         soft_emb_norm.load(path + "mm_soft_emb_norm.", loader);
     }
 
-public:
-	const int mm_tokens_per_image;
-    const int patches_per_image;
-    const int tokens_per_side;
-    const int kernel_size;
-    Linear  input_projection;
-    RMSNorm soft_emb_norm;
-};
 
-class SigSelfAttention : public BaseCachelessAttention
-{
-public:
-    SigSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
-        : BaseCachelessAttention(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, true, true)
-    {
-        causal = false;
-    }
-};
-
-class VisionTransformer : public Block
-{
-public:
-    typedef LMBlock1<LayerNorm, SigSelfAttention, LayerNorm, SigMLP> LayerBlock;
-    VisionTransformer(InitContext *ctx, const Config &config, int lm_hidden_size)
+    VisionTransformer::VisionTransformer(InitContext *ctx, const Config &config, int lm_hidden_size)
         : embeddings(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog),
-                     config.num_channels, config.hidden_size, config.image_size, config.patch_size),
-          post_layernorm(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size),
-          multi_modal_projector(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config, lm_hidden_size),
-          loaded(false)
+                    config.num_channels, config.hidden_size, config.image_size, config.patch_size),
+        post_layernorm(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size),
+        multi_modal_projector(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config, lm_hidden_size),
+        loaded(false)
     {
         for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
         {
@@ -497,7 +333,7 @@ public:
         }
     }
 
-    int64_t get_param_num(bool effective_only) const override
+    int64_t VisionTransformer::get_param_num(bool effective_only) const
     {
         int64_t r = 0;
         r += embeddings.get_param_num(effective_only);
@@ -508,7 +344,7 @@ public:
         return r;
     }
 
-    void load(const std::string &path, TensorLoader *loader) override
+    void VisionTransformer::load(const std::string &path, TensorLoader *loader)
     {
         if (!loader->has_tensor(path + "embeddings.patch_embedding.weight")) return;
 
@@ -523,7 +359,7 @@ public:
         loaded = true;
     }
 
-    ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override
+    ggml::tensor *VisionTransformer::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         auto output = embeddings.forward(ctx, input);
         for (size_t i = 0; i < layers.size(); i++)
@@ -535,31 +371,15 @@ public:
         return output;
     }
 
-    bool is_loaded(void) const
-    {
-        return loaded;
-    }
 
-public:
-    PatchEmbedding embeddings;
-    std::vector<std::unique_ptr<LayerBlock>> layers;
-    LayerNorm  post_layernorm;
-    MultiModalProjector multi_modal_projector;
-protected:
-    bool loaded;
-};
-
-class VisualEmbeddingGeneration
-{
-public:
-    VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 4096)
+    VisualEmbeddingGeneration::VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE)
         : GRAPH_SIZE(GRAPH_SIZE), _ctx(&backend_context), n_threads(runtime_config.n_threads)
     {
         _ctx.cache_dtype = runtime_config.cache_type;
         model_gpu_layers = BackendContext::get_ngl_of_model(runtime_config.model_gpu_layers, "vis");
     }
 
-    bool load(ModelLoader &loader)
+    bool VisualEmbeddingGeneration::load(ModelLoader &loader)
     {
         if (vis_model.get())
         {
@@ -572,7 +392,7 @@ public:
             return false;
     }
 
-    bool load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config)
+    bool VisualEmbeddingGeneration::load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config)
     {
         auto cfg = config["config.json"];
         if (!cfg.IsObject()) return false;
@@ -616,7 +436,7 @@ public:
         return true;
     }
 
-    void generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf)
+    void VisualEmbeddingGeneration::generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf)
     {
         if ((vis_model.get() == nullptr) || (tok->media_emb.size() < 1)) return;
         if (!vis_model->is_loaded()) return;
@@ -627,8 +447,7 @@ public:
         }
     }
 
-protected:
-    bool run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &image, std::vector<uint8_t> &buf)
+    bool VisualEmbeddingGeneration::run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &image, std::vector<uint8_t> &buf)
     {
         ForwardContext ctx(&backend_context);
         ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
@@ -670,57 +489,17 @@ protected:
 
         return true;
     }
-
-protected:
-    std::unique_ptr<VisionTransformer> vis_model;
-    BackendContext backend_context;
-    const size_t GRAPH_SIZE;
-    InitContext _ctx; // weight context
-    const int n_threads;
-    std::string model_gpu_layers;
-public:
-    Config vis_config;
-};
-
 }
 
 namespace chatllm::gemma::v3
 {
-struct Config : public BaseConfig
-{
-    int num_key_value_heads;
-    int head_dim;
-    int query_pre_attn_scalar;
-    int sliding_window;
-    int sliding_window_pattern;
+    static ChatHistoryEncoder _chat_encoder;
 
-    float rope_local_base_freq;
-    float rope_theta;
-    float rope_scaling_factor;
-};
-
-class ChatHistoryEncoder : public v1::ChatHistoryEncoder
-{
-public:
-    void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
-protected:
-    bool append_image(const vision::image_pixels_t pixels, const int w, const int h, std::vector<int> &ids) const;
-public:
-    const siglip::Config *vis_config = nullptr;
-    int MAX_PATCH_NUM = 0;
-    bool vit_loaded = false;
-};
-
-static ChatHistoryEncoder _chat_encoder;
-
-class Tokenizer : public v1::Tokenizer
-{
-public:
-    Tokenizer(const BaseConfig &config)
+    Tokenizer::Tokenizer(const BaseConfig &config)
         : v1::Tokenizer(config, &_chat_encoder)
     {}
 
-    size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
         size_t size = v1::Tokenizer::load(buffer, n_vocab);
 
@@ -728,67 +507,22 @@ public:
         eoi_token_id = tp->PieceToId("<end_of_image>");
         return size;
     }
-public:
-    int boi_token_id;
-    int eoi_token_id;
-    bool do_pan_and_scan = false;
-};
 
-template <int sliding_window_len> class Gemma3SWASelfAttention : public QKNormedAttention<RMSNorm, SlidingWindowAttentionImpl<sliding_window_len>>
-{
-public:
-    Gemma3SWASelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
-        : QKNormedAttention<RMSNorm, SlidingWindowAttentionImpl<sliding_window_len>>
-            (ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
-};
+    template <class Layer> static void setup_layer(Block *block, const Config &config, float rope_theta, float rope_scaling_factor = -1.0f)
+    {
+        auto layer = dynamic_cast<Layer *>(block);
+        auto &attention = layer->attention;
+        attention.freq_base = rope_theta;
+        attention.attn_scaling_factor = powf((float)config.query_pre_attn_scalar, -0.5);
+        if (rope_scaling_factor > 0)
+            attention.freq_scale = 1 / rope_scaling_factor;
+    }
 
-template <int sliding_window_len> class Gemma3SWABlock : public LMBlock4<RMSNorm, Gemma3SWASelfAttention<sliding_window_len>, RMSNorm, RMSNorm, GELUMLP, RMSNorm>
-{
-public:
-    Gemma3SWABlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
-        : LMBlock4<RMSNorm, Gemma3SWASelfAttention<sliding_window_len>, RMSNorm, RMSNorm, GELUMLP, RMSNorm>
-                  (ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
-    {}
-};
-
-class Gemma3FullSelfAttention : public QKNormedAttention<RMSNorm, BaseAttention>
-{
-public:
-    Gemma3FullSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
-        : QKNormedAttention<RMSNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
-};
-
-class Gemma3FullBlock : public LMBlock4<RMSNorm, Gemma3FullSelfAttention, RMSNorm, RMSNorm, GELUMLP, RMSNorm>
-{
-public:
-    Gemma3FullBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
-        : LMBlock4(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
-    {}
-};
-
-typedef Gemma3SWABlock<512> Gemma3SWABlock512;
-typedef Gemma3SWABlock<1024> Gemma3SWABlock1024;
-
-template <class Layer> static void setup_layer(Block *block, const Config &config, float rope_theta, float rope_scaling_factor = -1.0f)
-{
-    auto layer = dynamic_cast<Layer *>(block);
-    auto &attention = layer->attention;
-    attention.freq_base = rope_theta;
-    attention.attn_scaling_factor = powf((float)config.query_pre_attn_scalar, -0.5);
-    if (rope_scaling_factor > 0)
-        attention.freq_scale = 1 / rope_scaling_factor;
-}
-
-class ConditionalGeneration : public BaseModelForConditionalGeneration
-{
-public:
-    typedef HeterogeneousModel ModelClass;
-public:
-    ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA3)
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
         : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config),
-          sliding_window(config.sliding_window),
-          sliding_window_pattern(config.sliding_window_pattern),
-          visual(runtime_config)
+        sliding_window(config.sliding_window),
+        sliding_window_pattern(config.sliding_window_pattern),
+        visual(runtime_config)
     {
         const size_t tensor_ovhd = ggml_tensor_overhead();
         size_t num_tensors = 2;
@@ -796,8 +530,10 @@ public:
         const size_t ctx_size = num_tensors * tensor_ovhd;
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
+        const int num_sliding_layer = number_of_sliding_window_layer();
 
-        CHATLLM_CHECK((512 == sliding_window) || (1024 == sliding_window))<< "unsupported SWA param";
+        if (num_sliding_layer > 0)
+            CHATLLM_CHECK((512 == sliding_window) || (1024 == sliding_window))<< "unsupported SWA param";
 
         auto create_layer = [&](InitContext *ctx, int layer_index) -> Block *
         {
@@ -849,10 +585,11 @@ public:
             }
         }
 
-        batch_input = false;
+        if (num_sliding_layer > 0)
+            batch_input = false;
     }
 
-    void load(ModelLoader &loader) override
+    void ConditionalGeneration::load(ModelLoader &loader)
     {
         loader.add_tensor_name_translations({
             {".pre_attention_layernorm.",   ".input_layernorm."},
@@ -864,7 +601,7 @@ public:
         _chat_encoder.vit_loaded = visual.load(loader);
     }
 
-    bool load_more(const json::JSON &config) override
+    bool ConditionalGeneration::load_more(const json::JSON &config)
     {
         BaseModelForConditionalGeneration::load_more(config);
         bool r = visual.load_more(this->config.dtype, this->config.hidden_size, config);
@@ -875,144 +612,148 @@ public:
         return r;
     }
 
-    void set_additional_args(const std::map<std::string, std::string> &args) override
+    void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        if (nullptr == tok) return;
         tok->do_pan_and_scan = utils::get_opt(args, "do-pan-and-scan", false);
     }
 
-    void before_generate(const GenerationConfig &gen_config) override
+    void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
     {
         std::vector<uint8_t> buf;
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        if (nullptr == tok) return;
         auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
-        visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
+        visual.generate(gen_config, tok, ggml::type_of(emb->weight), buf);
         if (buf.size() < 1) return;
 
         size_t offset = emb->get_base_nbytes();
         Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
     }
 
-public:
-
-    bool is_sliding(int layer_id)
+    bool ConditionalGeneration::is_sliding(int layer_id) const
     {
         return ((layer_id + 1) % sliding_window_pattern) != 0;
     }
 
-public:
-    BaseConfig config;
-    const int sliding_window;
-    const int sliding_window_pattern;
-    siglip::VisualEmbeddingGeneration visual;
-};
-
-bool ChatHistoryEncoder::append_image(const vision::image_pixels_t pixels, const int w, const int h, std::vector<int> &ids) const
-{
-    const int patch_size = vis_config->patch_size;
-    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-    std::vector<float> scaled;
-
-    vision::image_rescale(pixels, scaled);
-
-    vision::image_normalize(scaled, vis_config->image_mean, vis_config->image_std);
-
-    tok->media_emb.push_back({.grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
-
-    auto &image = tok->media_emb.back();
-
-    vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::ChannelsRGB_PixelsLeftRightDown);
-
-    image.emb_vec_number = vis_config->mm_tokens_per_image;
-
-    const int total_patches = tok->get_image_total_emb_vectors();
-    CHATLLM_CHECK(total_patches <= MAX_PATCH_NUM) << "too many image patches!";
-
-    ids.push_back(tok->nl_token_id);
-    ids.push_back(tok->nl_token_id);
-    ids.push_back(tok->boi_token_id);
-    int id = total_patches - image.emb_vec_number + tok->vocab_size;
-    for (int j = 0; j < image.emb_vec_number; j++)
+    int ConditionalGeneration::number_of_sliding_window_layer(void) const
     {
-        ids.push_back(id++);
+        int r = 0;
+        for (int i = 0; i < config.num_hidden_layers; i++)
+            r += is_sliding(i) ? 1 : 0;
+        return r;
     }
-    ids.push_back(tok->eoi_token_id);
-    ids.push_back(tok->nl_token_id);
-    ids.push_back(tok->nl_token_id);
 
-    return true;
-}
-
-void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
-{
-    Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-
-    tok->encode("user\n", ids, true, false);
-
-    for (auto &piece : user.pieces)
+    bool ChatHistoryEncoder::append_image(const vision::image_pixels_t pixels, const int w, const int h, std::vector<int> &ids) const
     {
-        if (piece.type == ContentPiece::Type::Text)
+        const int patch_size = vis_config->patch_size;
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        if (nullptr == tok) return false;
+
+        std::vector<float> scaled;
+
+        vision::image_rescale(pixels, scaled);
+
+        vision::image_normalize(scaled, vis_config->image_mean, vis_config->image_std);
+
+        tok->media_emb.push_back({.grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
+
+        auto &image = tok->media_emb.back();
+
+        vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::ChannelsRGB_PixelsLeftRightDown);
+
+        image.emb_vec_number = vis_config->mm_tokens_per_image;
+
+        const int total_patches = tok->get_image_total_emb_vectors();
+        CHATLLM_CHECK(total_patches <= MAX_PATCH_NUM) << "too many image patches!";
+
+        ids.push_back(tok->nl_token_id);
+        ids.push_back(tok->nl_token_id);
+        ids.push_back(tok->boi_token_id);
+        int id = total_patches - image.emb_vec_number + tok->vocab_size;
+        for (int j = 0; j < image.emb_vec_number; j++)
         {
-            tok->encode(piece.content, ids, false, false);
+            ids.push_back(id++);
         }
-        else if (piece.type == ContentPiece::Type::Image)
+        ids.push_back(tok->eoi_token_id);
+        ids.push_back(tok->nl_token_id);
+        ids.push_back(tok->nl_token_id);
+
+        return true;
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        tok->encode("user\n", ids, true, false);
+
+        for (auto &piece : user.pieces)
         {
-            CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
-
-            if (tok->do_pan_and_scan)
+            if (piece.type == ContentPiece::Type::Text)
             {
-                std::vector<vision::image_pixels_t> crops;
+                tok->encode(piece.content, ids, false, false);
+            }
+            else if (piece.type == ContentPiece::Type::Image)
+            {
+                CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
 
-                vision::PanScanDir dir = vision::PanScanDir::Horizontal;
-
-                vision::image_load_pan_and_scan(piece.content.c_str(),
-                    crops, tok->do_pan_and_scan,
-                    vis_config->min_crop_size, vis_config->max_num_crops, vis_config->min_ratio_to_activate,
-                    vis_config->image_size, vis_config->image_size,
-                    dir);
-
-                printf("crops: %d\n", (int)crops.size());
-                if (crops.size() < 1) continue;
-
-                if (crops.size() == 1)
+                if (tok->do_pan_and_scan)
                 {
+                    std::vector<vision::image_pixels_t> crops;
+
+                    vision::PanScanDir dir = vision::PanScanDir::Horizontal;
+
+                    vision::image_load_pan_and_scan(piece.content.c_str(),
+                        crops, tok->do_pan_and_scan,
+                        vis_config->min_crop_size, vis_config->max_num_crops, vis_config->min_ratio_to_activate,
+                        vis_config->image_size, vis_config->image_size,
+                        dir);
+
+                    printf("crops: %d\n", (int)crops.size());
+                    if (crops.size() < 1) continue;
+
+                    if (crops.size() == 1)
+                    {
+                        append_image(crops[0], vis_config->image_size, vis_config->image_size, ids);
+                        continue;
+                    }
+
+                    tok->encode("Here is the original image ", ids, false, false);
                     append_image(crops[0], vis_config->image_size, vis_config->image_size, ids);
-                    continue;
+                    tok->encode(" and here are some crops to help you see better", ids, false, false);
+
+                    for (size_t i = 1; i < crops.size(); i++)
+                    {
+                        tok->encode(" ", ids, false, false);
+                        append_image(crops[i], vis_config->image_size, vis_config->image_size, ids);
+                    }
                 }
-
-                tok->encode("Here is the original image ", ids, false, false);
-                append_image(crops[0], vis_config->image_size, vis_config->image_size, ids);
-                tok->encode(" and here are some crops to help you see better", ids, false, false);
-
-                for (size_t i = 1; i < crops.size(); i++)
+                else
                 {
-                    tok->encode(" ", ids, false, false);
-                    append_image(crops[i], vis_config->image_size, vis_config->image_size, ids);
+                    vision::Resize resize(vis_config->image_size, vis_config->image_size);
+
+                    int w, h;
+                    std::vector<uint8_t> pixels;
+                    const int patch_size = vis_config->patch_size;
+                    vision::image_load(piece.content.c_str(), pixels, w, h, patch_size);
+
+                    if (w <= 0) continue;
+
+                    append_image(pixels, w, h, ids);
                 }
             }
             else
             {
-                vision::Resize resize(vis_config->image_size, vis_config->image_size);
-
-                int w, h;
-                std::vector<uint8_t> pixels;
-                const int patch_size = vis_config->patch_size;
-                vision::image_load(piece.content.c_str(), pixels, w, h, patch_size);
-
-                if (w <= 0) continue;
-
-                append_image(pixels, w, h, ids);
+                CHATLLM_THROW << "Unsupported content type: " << (int)piece.type;
             }
         }
-        else
-        {
-            CHATLLM_THROW << "Unsupported content type: " << (int)piece.type;
-        }
+
+        tok->encode("", ids, false, true);
     }
-
-    tok->encode("", ids, false, true);
 }
 
-}
 
 namespace chatllm
 {

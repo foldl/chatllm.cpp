@@ -96,7 +96,7 @@ namespace chatllm::llama::v3
     {}
 
     Tokenizer::Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder)
-        : BaseTokenizer::BaseTokenizer(config, encoder), is_seed_coder(false)
+        : BaseTokenizer::BaseTokenizer(config, encoder)
     {
         sys_prompt = "";
     }
@@ -106,8 +106,8 @@ namespace chatllm::llama::v3
         auto name = config["model_name"];
         if (name.IsString())
         {
-            is_seed_coder = name.ToString() == "Seed-Coder";
-            if (is_seed_coder)
+            auto n = name.ToString();
+            if (n == "Seed-Coder")
                 sys_prompt = "You are an AI programming assistant, utilizing the Seed-Coder model, developed by ByteDance Seed, and you only answer questions related to computer science. For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.\n\n";
         }
         return BaseTokenizer::load_config(config);
@@ -150,7 +150,7 @@ namespace chatllm::llama::v3
             encode(text, ids);
             ids.push_back(end_header_id);
             ids.push_back(nl_token_id);
-            ids.push_back(nl_token_id);
+            if (double_nl_token) ids.push_back(nl_token_id);
         }
         else
         {

@@ -113,6 +113,7 @@ set(core_files src/backend.cpp
     models/phi.cpp
     models/qwen.cpp
     models/reka.cpp
+    models/rnj.cpp
     models/seed.cpp
     models/siglip.cpp
     models/smol.cpp

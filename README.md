@@ -33,6 +33,7 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
+* 2025-12-15: Rnj-1
 * 2025-12-08: Ministral-3
 * 2025-11-06: Maya1
 * 2025-11-03: Ouro

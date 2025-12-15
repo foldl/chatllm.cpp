@@ -288,6 +288,7 @@ void Processor::OverrideTokenDecoding(int id, const std::string &tok)
 
 void Processor::AddAddedToken(const std::string &tok, int id)
 {
+    CHATLLM_CHECK(id >= 0) << "AddAddedToken: " << tok << ", id = " << id;
     OverrideTokenDecoding(id, tok);
     added_tokens.emplace_back(TokenId{tok, id});
 }

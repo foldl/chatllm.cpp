@@ -80,6 +80,8 @@
 
     Note: Only download `tokenizer.model` and DO NOT download `tokenizer.json` when converting.
 
+    * [x] Rnj-1: [Intruct](https://huggingface.co/EssentialAI/rnj-1-instruct/tree/2360f0368eec9bcf6d51aec66f6341503a6934f0)
+
 * GPT (`GptOssForCausalLM`)
     * [x] OSS: [20B](https://huggingface.co/openai/gpt-oss-20b/tree/cbf31f62664d4b1360b3a78427f7b3c3ed8f0fa8), [120B](https://huggingface.co/openai/gpt-oss-120b/tree/bc75b44b8a2a116a0e4c6659bcd1b7969885f423)
 
