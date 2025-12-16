@@ -3622,7 +3622,7 @@
     },
     "dolphin-v2": {
         "brief": "Dolphin-v2 is an enhanced universal document parsing model that substantially improves upon the original Dolphin.",
-        "default": "1.5b",
+        "default": "4b",
         "license": "Unknown",
         "variants": {
             "4b": {
@@ -3631,6 +3631,22 @@
                     "q8": {
                         "size": 4128566736,
                         "url": "chatllm_quantized_dolphin/dolphin-v2.bin"
+                    }
+                }
+            }
+        }
+    },
+    "rnj-1": {
+        "brief": "Rnj-1 is a family of 8B parameter open-weight, dense models trained from scratch by Essential AI.",
+        "default": "8b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8837356032,
+                        "url": "chatllm_quantized_rnj/rnj-1-it-8b.bin"
                     }
                 }
             }
