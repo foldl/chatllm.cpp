@@ -420,6 +420,14 @@ namespace utils
         return value.substr(value.size() - ending.size()) == ending;
     }
 
+    std::string to_lower(const std::string &ss)
+    {
+        std::string s(ss);
+        std::transform(s.begin(), s.end(), s.begin(),
+                    [](unsigned char c) { return std::tolower(c); });
+        return s;
+    }
+
     void parallel_for(int64_t start, int64_t end, std::function<void(int64_t)> func, int num_threads)
     {
         // Determine number of threads to use

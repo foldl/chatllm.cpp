@@ -3651,5 +3651,21 @@
                 }
             }
         }
+    },
+    "nanbeige4": {
+        "brief": "Nanbeige4-3B-Thinking-2511 is an enhanced iteration over previous Nanbeige4-3B-Thinking-2510.",
+        "default": "3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4182500800,
+                        "url": "chatllm_quantized_nanbeige/nanbeige-3b-thinking.bin"
+                    }
+                }
+            }
+        }
     }
 }

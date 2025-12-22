@@ -483,17 +483,16 @@ proc handle_embeddings(req: Request) {.async gcsafe.} =
     await req.end_headers_send($(%* r))
 
 proc handle_index(req: Request) {.async gcsafe.} =
-    const compiled_file = readFile("../scripts/chat_ui.html")
+    const defaultUI {.strdefine: "defaultUI".}: string = "..\\scripts\\chat_ui.html"
+    const compiled_file = readFile(defaultUI)
     var headers = @[("Content-type", "text/html; charset=utf-8")]
     {.cast(gcsafe).}:
-        let fn_ui = ui
+        let fn_ui = if ui != "": ui else: defaultUI
+        let content = if ui != "": readFile(ui) else: compiled_file
 
-    if fn_ui == "":
-        await req.respond(Http200, compiled_file, headers.newHttpHeaders())
-    else:
-        if fn_ui.endswith(".gz"):
-            headers.add ("Content-Encoding", "gzip")
-        await req.respond(Http200, readFile(fn_ui), headers.newHttpHeaders())
+    if fn_ui.endswith(".gz"):
+        headers.add ("Content-Encoding", "gzip")
+    await req.respond(Http200, content, headers.newHttpHeaders())
 
 proc handle_oai_models(req: Request) {.async gcsafe.} =
     type
@@ -570,7 +569,7 @@ proc handle_ollama_show(req: Request) {.async gcsafe.} =
     rsp["model_info"] = info
     rsp["capabilities"] = newJArray()
 
-    const mapping = toTable({"Text Embedding": "embedding", "Ranker": "ranking", "Text": "completion", "Image Input": "vision"})
+    const mapping = toTable({"Text Embedding": "embedding", "Ranker": "ranking", "Text": "completion", "Image Input": "vision", "Audio Input": "audio"})
     for s in model["capabilities"].getElems():
         let ss = s.getStr()
         if ss in mapping:

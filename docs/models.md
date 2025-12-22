@@ -171,8 +171,11 @@
     * [x] LlaMA-4: [Scout-Instruct](https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct/tree/7dab2f5f854fe665b6b2f1eccbd3c48e5f627ad8), [Maverick-Instruct](https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E-Instruct/tree/f0ee6477b90b7a6aaefd2cfdf1b4a05d36184137)
     * [x] Seed-Coder: [Instruct-8B](https://huggingface.co/ByteDance-Seed/Seed-Coder-8B-Instruct/tree/7b934eb8f2ce8f40191fa26d12236eb8bc3a77aa),
     [Reasoning-8B](https://huggingface.co/ByteDance-Seed/Seed-Coder-8B-Reasoning/tree/47f18f877ea7d6aa5c0d87a474f30d420b22bd98) (`--name Seed-Coder`)
+    * [x] Nanbeige4: [3B-Thinking](https://huggingface.co/Nanbeige/Nanbeige4-3B-Thinking-2511/tree/396a1fb7a5e1a87941b321b4da85bc510b424d00)
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
+
+    If there are both `tokenizer.model` and `tokenizer.json`, only download `tokenizer.model`.
 
 * Megrez (`MegrezMoeForCausalLM`)
     * [x] (3x7B-A3B)[https://huggingface.co/Infinigence/Megrez2-3x7B-A3B/tree/3ffc3b7c0ffc0f0b27d71fba2a97dcc14c797bb4]

@@ -1,5 +1,6 @@
 #include "llama.h"
 #include <numbers>
+#include "../src/chat_encoders.h"
 
 namespace chatllm::llama::v2
 {
@@ -384,6 +385,31 @@ namespace chatllm::llama::v2_plus
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
         : v3::ConditionalGeneration(config, runtime_config, type)
     {}
+
+    bool ConditionalGeneration::load_more(const json::JSON &config)
+    {
+        auto result = v3::ConditionalGeneration::load_more(config);
+        auto obj = config["tokenizer_config.json"]["chat_template"];
+        if (!obj.IsString()) return result;
+
+        auto tmpl = obj.ToString();
+        if (tmpl.find("<|im_start|>") == std::string::npos) return result;
+        is_using_im_start = true;
+        if (utils::to_lower(config["model_name"].ToString()).starts_with("nanbeige"))
+            is_nanbeige = true;
+        return result;
+    }
+
+    void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
+    {
+        v3::ConditionalGeneration::set_tokenizer(tokenizer);
+        if (is_using_im_start)
+        {
+            tokenizer->set_chat_encoder(HistoryEncoderImStartImEnd::get());
+            if (is_nanbeige)
+                tokenizer->set_system_prompt("你是南北阁，一款由BOSS直聘自主研发并训练的专业大语言模型。");
+        }
+    }
 }
 
 namespace chatllm::llama::multi

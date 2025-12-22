@@ -361,7 +361,7 @@ namespace chatllm
 
         virtual void append_message(const Message &msg, std::vector<int> &ids) const;
 
-        void set_tokenizer(BaseTokenizer *tokenizer)
+        virtual void set_tokenizer(BaseTokenizer *tokenizer)
         {
             this->tokenizer = tokenizer;
         }

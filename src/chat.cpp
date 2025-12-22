@@ -2793,3 +2793,5 @@ final:
     }
 
 } // namespace chatllm
+
+#include "chat_encoders.cpp"

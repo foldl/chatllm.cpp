@@ -232,6 +232,12 @@ namespace chatllm::llama::v2_plus
     public:
         ConditionalGeneration() = default;
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_LLAMA2);
+
+        bool load_more(const json::JSON &config) override;
+        void set_tokenizer(BaseTokenizer *tokenizer) override;
+    public:
+        bool is_using_im_start = false;
+        bool is_nanbeige = false;
     };
 }
 

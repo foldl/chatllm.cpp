@@ -70,6 +70,7 @@ namespace utils
 
     bool starts_with(const std::string& value, const std::string& starting);
     bool ends_with(const std::string& value, const std::string& ending);
+    std::string to_lower(const std::string &s);
 
     // for (i = start; i < end; i++) { func(i); }
     void parallel_for(int64_t start, int64_t end, std::function<void(int64_t)> func, int num_threads = 0);

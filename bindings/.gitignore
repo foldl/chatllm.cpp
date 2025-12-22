@@ -17,3 +17,5 @@ node_modules/
 bugs.*
 bun.*
 cacert.*
+
+*.html.gz

@@ -183,6 +183,12 @@ In interactive mode, your chat history will serve as the context for the next-ro
 
 Run `./build/bin/main -h` to explore more options!
 
+## Plan Nim
+
+All Python scripts are going to be rewritten in [Nim](https://nim-lang.org/), with following exceptions:
+
+* when `pickle` is used
+
 ## Acknowledgements
 
 * This project is started as refactoring of [ChatGLM.cpp](https://github.com/li-plus/chatglm.cpp), without which, this project could not be possible.
