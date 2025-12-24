@@ -386,6 +386,11 @@ Please use `--format completion` for these models.
 
     Note: Only download `tokenizer.model` and DO NOT download `tokenizer.json` when converting. Use `--set do-pan-and-scan 1` to enable _Pan and Scan_.
 
+* GLM (`Glm4vForConditionalGeneration`)
+    * [x] v4: [4.6V-Flash](https://huggingface.co/zai-org/GLM-4.6V-Flash/tree/411bb4d77144a3f03accbf4b780f5acb8b7cde4e)
+
+    Support additional options (Use `--set X Y` to change values) like `Kimi`.
+
 * Janus (`MultiModalityCausalLM`)
     * [x] Pro: [1B](https://huggingface.co/deepseek-ai/Janus-Pro-1B/tree/960ab33191f61342a4c60ae74d8dc356a39fafcb), [7B](https://huggingface.co/deepseek-ai/Janus-Pro-7B/tree/5c3eb3fb2a3b61094328465ba61fcd4272090d67)
 

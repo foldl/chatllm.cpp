@@ -251,6 +251,7 @@ class ModelType(Enum):
     Qwen2_5VL               = ModelTypeTagChatImageVideoIn + 0x0000001
     Qwen2_VL                = ModelTypeTagChatImageVideoIn + 0x0000002
     Qwen3_VL                = ModelTypeTagChatImageVideoIn + 0x0000003
+    GLM4V                   = ModelTypeTagChatImageVideoIn + 0x0000040
     KimiVL                  = ModelTypeTagChatImageVideoIn + 0x0000100
     SmolVLM                 = ModelTypeTagChatImageVideoIn + 0x0000200
 
@@ -3897,6 +3898,112 @@ class GLM4Converter(BaseConverter):
 
         return weight_names
 
+class GLM4VConverter(BaseConverter):
+    MODEL_TYPE = ModelType.GLM4V
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for n in state_dict:
+            name: str= n
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.startswith('model.language_model.'):
+                name = name.replace('model.language_model.', 'model.')
+                if name.endswith('mlp.gate_up_proj.weight'):
+                    r[name.replace('gate_up_proj.weight', 'gate_proj.weight')] = part(tensor, 0, 2).contiguous()
+                    r[name.replace('gate_up_proj.weight', 'up_proj.weight')]   = part(tensor, 1, 2).contiguous()
+                elif ('.k_proj.' in name) or ('.q_proj.' in name):
+                    rope_dim = GLM4VConverter.rope_dim
+                    head_dim = GLM4VConverter.txt_config.hidden_size // GLM4VConverter.txt_config.num_attention_heads
+                    r[name] = permute_pair_rope_nope(tensor, tensor.shape[0] // head_dim, rope_dim)
+                else:
+                    r[name] = tensor
+            elif name.startswith('model.visual.blocks.'):
+                name = name.replace('model.visual.blocks.', 'visual.layers.')
+                if '.qkv.' in name:
+                    r[name.replace('.qkv.', '.q_proj.')] = part(tensor, 0, 3).contiguous()
+                    r[name.replace('.qkv.', '.k_proj.')] = part(tensor, 1, 3).contiguous()
+                    r[name.replace('.qkv.', '.v_proj.')] = part(tensor, 2, 3).contiguous()
+                elif '.proj.' in name:
+                    r[name.replace('.proj.', '.o_proj.')] = tensor
+                else:
+                    r[name] = tensor
+            elif name.startswith('model.visual.'):
+                name = name.replace('model.visual.', 'visual.')
+                if name == 'visual.patch_embed.proj.weight':
+                    shape = tensor.shape
+                    assert len(shape) == 5
+                    assert shape[2] == 2
+                    r[name.replace('proj.weight', 'proj.0.weight')] = tensor[:, :, 0, :, :]
+                    r[name.replace('proj.weight', 'proj.1.weight')] = tensor[:, :, 1, :, :]
+                else:
+                    r[name] = tensor
+            else:
+                r[name] = tensor
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        GLM4VConverter.txt_config = AttributeDict(config.text_config)
+        txt_config = GLM4VConverter.txt_config
+        assert txt_config.attention_bias
+        if isinstance(txt_config.eos_token_id, list):
+            txt_config.eos_token_id = txt_config.eos_token_id[0]
+
+        head_dim = txt_config.hidden_size // txt_config.num_attention_heads
+
+        rope_dim = int(txt_config.rope_parameters["partial_rotary_factor"] * head_dim)
+        GLM4VConverter.rope_dim = rope_dim
+
+        dump_llama_like_config(f, txt_config, ggml_type)
+
+        MROPE_SECTION_MAX = 4
+        config_values = [
+            txt_config.num_key_value_heads,
+            1 if txt_config.attention_bias else 0,
+            rope_dim,
+            txt_config.rope_parameters["rope_theta"],
+        ]  + pad_to_len(txt_config.rope_parameters['mrope_section'], MROPE_SECTION_MAX)
+        f.write(struct.pack("<iiif" + "i" * MROPE_SECTION_MAX, *config_values))
+
+    @staticmethod
+    def get_vit_weight_names(num_layer):
+        weight_names = ["visual.downsample.weight",
+                        "visual.downsample.bias",
+                        "visual.merger.gate_proj.weight",
+                        "visual.merger.up_proj.weight",
+                        "visual.merger.down_proj.weight",
+                        "visual.merger.proj.weight",
+                        "visual.merger.post_projection_norm.weight",
+                        "visual.merger.post_projection_norm.bias",
+                        "visual.embeddings.position_embedding.weight",
+                        "visual.patch_embed.proj.0.weight",
+                        "visual.patch_embed.proj.bias",
+                        "visual.patch_embed.proj.1.weight",
+                        "visual.post_conv_layernorm.weight",
+                        "visual.post_layernorm.weight"]
+        for i in range(num_layer):
+            weight_names += [
+                    f"visual.layers.{i}.norm1.weight",
+                    f"visual.layers.{i}.norm2.weight",
+                    f"visual.layers.{i}.attn.q_proj.weight",
+                    f"visual.layers.{i}.attn.k_proj.weight",
+                    f"visual.layers.{i}.attn.v_proj.weight",
+                    f"visual.layers.{i}.attn.o_proj.weight",
+                    f"visual.layers.{i}.mlp.gate_proj.weight",
+                    f"visual.layers.{i}.mlp.up_proj.weight",
+                    f"visual.layers.{i}.mlp.down_proj.weight",
+            ]
+        return weight_names
+
+    @staticmethod
+    def get_weight_names(config):
+        weights  = GLM4Converter.get_weight_names(GLM4VConverter.txt_config)
+        weights += GLM4VConverter.get_vit_weight_names(config.vision_config['depth'])
+        return weights
+
 class Phi2Converter(BaseConverter):
     MODEL_TYPE = ModelType.Phi2
 
@@ -5256,6 +5363,16 @@ def permute_pair_3(weights: torch.Tensor, n_head: int, nope_dim: int) -> torch.T
     other = reshaped[:, :nope_dim, ...]
     rot = rot.reshape(n_head, rope_dim // 2, 2, *weights.shape[1:]).swapaxes(1, 2).reshape(rot.shape)
     combined = torch.concat((other, rot), dim = 1)
+    return combined.reshape(weights.shape)
+
+def permute_pair_rope_nope(weights: torch.Tensor, n_head: int, rope_dim: int) -> torch.Tensor:
+    hidden_size = weights.shape[0]
+    head_dim = hidden_size // n_head
+    reshaped = weights.reshape(n_head, head_dim, *weights.shape[1:])
+    rot = reshaped[:, :rope_dim, ...]
+    other = reshaped[:, rope_dim:, ...]
+    rot = rot.reshape(n_head, rope_dim // 2, 2, *weights.shape[1:]).swapaxes(1, 2).reshape(rot.shape)
+    combined = torch.concat((rot, other), dim = 1)
     return combined.reshape(weights.shape)
 
 class PersimmonConverter(BaseConverter):
@@ -8978,6 +9095,8 @@ def main():
         JanusConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'DotsOCRForCausalLM':
         DotsOCRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch.endswith('Glm4vForConditionalGeneration'):
+        GLM4VConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MegrezMoeForCausalLM':
         MegrezMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OuroForCausalLM':

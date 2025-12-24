@@ -130,6 +130,8 @@ namespace chatllm::glm::v4
     public:
         Tokenizer(const BaseConfig &config);
 
+        using v3::Tokenizer::Tokenizer;
+
         void encode(const std::string &text, std::vector<int> &ids) const override;
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
     public:
@@ -162,7 +164,11 @@ namespace chatllm::glm::glm4_0414
     {
     public:
         Tokenizer(const Config &config);
+        using v4::Tokenizer::Tokenizer;
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
+    public:
+        int think_open_token_id;
+        int think_close_token_id;
     };
 
     class ConditionalGeneration : public BaseModelForConditionalGeneration

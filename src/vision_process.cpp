@@ -401,17 +401,6 @@ namespace vision
                 width  = (int)(width * ratio);
                 height = new_h;
             }
-
-            if (params.max_patch_num > 0)
-            {
-                int patch_num = (width / patch_size) * (height / patch_size);
-                if (patch_num > params.max_patch_num)
-                {
-                    double ratio = std::sqrt((double)params.max_patch_num / patch_num);
-                    height = patch_size * (int)floor(((height / patch_size) * ratio));
-                    width  = patch_size * (int)floor(((width  / patch_size) * ratio));
-                }
-            }
         }
 
         oss << " -resize \"" << width << "x" << height << ">\"";
@@ -420,6 +409,23 @@ namespace vision
         int aligned_height = 0;
         const int patch_size_w = params.merge_kernel_size[0] > 0 ? patch_size * params.merge_kernel_size[0] : patch_size;
         const int patch_size_h = params.merge_kernel_size[1] > 0 ? patch_size * params.merge_kernel_size[1] : patch_size;
+
+        auto apply_max_patch_num = [&aligned_width, &aligned_height, patch_size_w, patch_size_h, patch_size]() {
+            if (params.max_patch_num > 0)
+            {
+                int patch_num = (aligned_width / patch_size) * (aligned_height / patch_size);
+                if (patch_num > params.max_patch_num)
+                {
+                    double ratio = std::sqrt((double)params.max_patch_num / patch_num);
+
+                    auto height = patch_size * (int)floor(((aligned_height / patch_size) * ratio));
+                    auto width  = patch_size * (int)floor(((aligned_width  / patch_size) * ratio));
+
+                    aligned_width  = (width  / patch_size_w) * patch_size_w;
+                    aligned_height = (height / patch_size_h) * patch_size_h;
+                }
+            }
+        };
 
         if (params.do_resize)
         {
@@ -435,6 +441,8 @@ namespace vision
             aligned_width  = ((width  + patch_size_w - 1) / patch_size_w) * patch_size_w;
             aligned_height = ((height + patch_size_h - 1) / patch_size_h) * patch_size_h;
 
+            apply_max_patch_num();
+
             oss << " -compose Copy -gravity northwest";
             oss << " -background " << pad;
             oss << " -extent " << aligned_width << "x" << aligned_height;
@@ -443,6 +451,8 @@ namespace vision
         {
             aligned_width  = (width  / patch_size_w) * patch_size_w;
             aligned_height = (height / patch_size_h) * patch_size_h;
+
+            apply_max_patch_num();
 
             oss << " -crop " << aligned_width << "x" << aligned_height << "+" << (width - aligned_width) / 2 << "+" << (height - aligned_height) / 2;
         }

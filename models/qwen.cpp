@@ -1101,15 +1101,6 @@ namespace chatllm::qwen::vit
         TensorPosHelper *helper;
     };
 
-    class ViTParams
-    {
-    public:
-        static bool is_full_attention();
-        static void set_full_attention(bool flag);
-    protected:
-        static bool _is_full_attention;
-    };
-
     bool ViTParams::_is_full_attention = false;
 
     bool ViTParams::is_full_attention()
@@ -1123,8 +1114,12 @@ namespace chatllm::qwen::vit
     }
 
     ViTSelfAttention::ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length)
+        : ViTSelfAttention(ctx, hidden_size, num_attention_heads, max_length, true)
+    {}
+
+    ViTSelfAttention::ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool use_bias)
         : TensorPosHelperPrelude(new TensorPosHelper2D(max_length)),
-          RoPESelfAttention<BaseCachelessAttention>(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, true, true),
+          RoPESelfAttention<BaseCachelessAttention>(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, use_bias, use_bias),
           full_attention(ViTParams::is_full_attention()),
           mask(full_attention ? nullptr : ggml::new_tensor_2d(ctx, GGML_TYPE_F32, max_length, max_length))
     {
@@ -1493,13 +1488,6 @@ namespace chatllm::qwen::v2_5_vl
             ids.push_back(i + ids_to_inject_start);
         ids.push_back(vision_end_token_id);
     }
-
-    struct ImageGridSize
-    {
-        int w, h;
-        int frame_num;
-        ImageGridSize(int w, int h, int frame_num = 1) : w(w), h(h), frame_num(frame_num) {}
-    };
 
     class ConditionalGeneration;
 

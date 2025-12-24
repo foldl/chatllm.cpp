@@ -412,10 +412,20 @@ namespace chatllm::qwen
             std::vector<float> v_mask;
         };
 
+        class ViTParams
+        {
+        public:
+            static bool is_full_attention();
+            static void set_full_attention(bool flag);
+        protected:
+            static bool _is_full_attention;
+        };
+
         class ViTSelfAttention : public TensorPosHelperPrelude, public RoPESelfAttention<BaseCachelessAttention>
         {
         public:
             ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length);
+            ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool use_bias);
             void set_pos_helper(TensorPosHelper *helper);
         protected:
             ggml::tensor *apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size) const;
@@ -545,6 +555,13 @@ namespace chatllm::qwen
 
     namespace v2_5_vl
     {
+        struct ImageGridSize
+        {
+            int w, h;
+            int frame_num;
+            ImageGridSize(int w, int h, int frame_num = 1) : w(w), h(h), frame_num(frame_num) {}
+        };
+
         const int MROPE_SECTION_MAX = 4;
 
         struct Config : v2::Config
