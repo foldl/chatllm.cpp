@@ -238,6 +238,7 @@ namespace chatllm
 
         // load config
         config = loader.read_basic<Config>();
+        loader.basic_config = config;
         if (args.max_length > 0)
             config.max_length = args.max_length;
         if (args.re_quantize >= 0)

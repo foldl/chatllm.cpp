@@ -174,6 +174,8 @@ proc start_chat(streamer: StreamerWithHistory, messages: JsonNode): bool =
         streamer.history = @[]
         streamer.set_system_prompt(sys_prompt)
 
+    streamer.flush()
+
     var k = 0
     var pos = -1
     block search:
@@ -251,6 +253,8 @@ proc start_chat(streamer: StreamerWithHistory, messages: JsonNode): bool =
             result = streamer.llm.chatllm_async_tool_completion(msg[^1].content[0].content.cstring) == 0
         else:
             raise newException(ValueError, fmt"unexpected {msg[^1].role}")
+    if result:
+        streamer.is_generating = true
 
 proc sendCode(req: Request, code: HttpCode): Future[void] =
     var msg = "HTTP/1.1 " & $code & "\c\L"
@@ -265,9 +269,17 @@ type
         completion_tokens: Option[int]
         total_tokens: int = 1
 
+    ChatMessageTimings = object
+        cache_n: int = 0
+        predicted_ms: float = 0.0
+        predicted_n: int = 0
+        prompt_ms: float = 0.0
+        prompt_n: int = 0
+
     ChunkChoiceDelta = object
         role: string = "assistant"
-        content: string = ""
+        content: Option[string] = none(string)
+        reasoning_content: Option[string] = none(string)
 
     ChunkChoice = object
         delta: ChunkChoiceDelta
@@ -282,6 +294,7 @@ type
         choices: seq[ChunkChoice]
         `object`: string = "chat.completion.chunk"
         system_fingerprint: string = "fp_xxx"
+        timings: Option[ChatMessageTimings] = none(ChatMessageTimings)
 
     CompletionResponse = object
         id: string
@@ -297,6 +310,7 @@ type
         timestamp: int
         model: string
         id: string
+        timings: ChatMessageTimings
 
     ChatCompletionStreamResponder = ref object of HttpResponder
 
@@ -308,42 +322,56 @@ proc initHttpResponder(responder: HttpResponder, req: Request, timestamp: int, m
     responder.model = model
     responder.id = id
 
-method recv_chunk(self: HttpResponder, chunk: string): Future[void] {.async base gcsafe.} =
-    return
+method recv_chunk(self: HttpResponder, chunk: string): Future[bool] {.async base gcsafe.} =
+    result = true
 
-method done(self: HttpResponder; all, thought: string, prompt_tokens, completion_tokens: int) {.async base gcsafe.} =
-    discard
+method recv_thought(self: HttpResponder, chunk: string): Future[bool] {.async base gcsafe.} =
+    result = true
 
-method send_str(self: HttpResponder, s: string): Future[void] {.async base gcsafe.} =
-    return self.req.client.send(s)
+method done(self: HttpResponder; all, thought: string, prompt_tokens, completion_tokens: int): Future[bool] {.async base gcsafe.} =
+    result = true
+
+method send_str(self: HttpResponder, s: string): Future[bool] {.async base gcsafe.} =
+    try:
+        await self.req.client.send(s, {})
+        result = true
+    except:
+        echo "send error"
+        result = false
 
 proc newChatCompletionStreamResponder(req: Request, timestamp: int, model, id: string): ChatCompletionStreamResponder =
     new(result)
     initHttpResponder(result, req, timestamp, model, id)
 
-method recv_chunk(self: ChatCompletionStreamResponder, chunk: string): Future[void] {.async.} =
+method recv_chunk(self: ChatCompletionStreamResponder, chunk: string): Future[bool] {.async.} =
     var rsp = CompletionChunkResponse(id: self.id, created: self.timestamp, model: self.model)
-    rsp.choices.add(ChunkChoice(delta: ChunkChoiceDelta(content: chunk)))
-    return self.send_str("data: " & $(%* rsp) & "\n\n")
+    rsp.choices.add(ChunkChoice(delta: ChunkChoiceDelta(content: some(chunk))))
+    rsp.timings = some(self.timings)
+    return await self.send_str("data: " & $(%* rsp) & "\n\n")
 
-method done(self: ChatCompletionStreamResponder; all, thought: string, prompt_tokens, completion_tokens: int) {.async.} =
+method recv_thought(self: ChatCompletionStreamResponder, chunk: string): Future[bool] {.async.} =
+    var rsp = CompletionChunkResponse(id: self.id, created: self.timestamp, model: self.model)
+    rsp.choices.add(ChunkChoice(delta: ChunkChoiceDelta(reasoning_content: some(chunk))))
+    rsp.timings = some(self.timings)
+    return await self.send_str("data: " & $(%* rsp) & "\n\n")
+
+method done(self: ChatCompletionStreamResponder; all, thought: string, prompt_tokens, completion_tokens: int): Future[bool] {.async.} =
     var rsp = CompletionResponse(id: self.id, created: self.timestamp, model: self.model)
     rsp.usage = APIUsage(prompt_tokens: prompt_tokens, completion_tokens: some(completion_tokens), total_tokens: prompt_tokens + completion_tokens)
     rsp.choices.add(ChunkChoice(delta: ChunkChoiceDelta(), finish_reason: some("stop")))
-    self.send_str("data: " & $(%* rsp) & "\n\ndata: [DONE]\n")
+    return await self.send_str("data: " & $(%* rsp) & "\n\ndata: [DONE]\n")
 
 proc newChatCompletionNoneStreamResponder(req: Request, timestamp: int, model, id: string): ChatCompletionNonStreamResponder =
     new(result)
     initHttpResponder(result, req, timestamp, model, id)
 
-method recv_chunk(self: ChatCompletionNonStreamResponder, chunk: string): Future[void] {.async.} =
-    discard
-
-method done(self: ChatCompletionNonStreamResponder; all, thought: string, prompt_tokens, completion_tokens: int) {.async.} =
+method done(self: ChatCompletionNonStreamResponder; all, thought: string, prompt_tokens, completion_tokens: int): Future[bool] {.async.} =
     var rsp = CompletionResponse(id: self.id, created: self.timestamp, model: self.model)
     rsp.usage = APIUsage(prompt_tokens: prompt_tokens, completion_tokens: some(completion_tokens), total_tokens: prompt_tokens + completion_tokens)
-    rsp.choices.add(ChunkChoice(delta: ChunkChoiceDelta(content: all), finish_reason: some("stop")))
-    self.send_str($(%* rsp) & "\n\n")
+    rsp.choices.add(ChunkChoice(
+        delta: ChunkChoiceDelta(content: some(all), reasoning_content: if thought != "": some(thought) else: none(string)),
+        finish_reason: some("stop")))
+    return await self.send_str($(%* rsp) & "\n\n")
 
 proc send_headers(req: Request, headers: seq[(string, string)]) {.async gcsafe.} =
     await req.sendHeaders(headers.newHttpHeaders)
@@ -389,6 +417,7 @@ proc handle_completions(req: Request) {.async gcsafe.} =
         await req.respond(Http404, "`messages` is missing")
         return
 
+    let t_prompt_start = cpuTime()
     if not streamer.start_chat(messages):
         await req.respond(Http404, "Interval error")
         return
@@ -400,12 +429,41 @@ proc handle_completions(req: Request) {.async gcsafe.} =
     await req.send_header("Content-type", if stream: "text/event-stream; charset=utf-8" else: "application/json")
     await req.end_headers()
 
+    cls.timings.cache_n = streamer.tokens_start
+
+    var waiting_first = true
+
+    var t_prediction_start = 0.0
+    var predict_tok_n = 0
+
     for chunk in chunks(streamer):
-        if not req.client.isClosed():
-            await cls.recv_chunk(chunk[1])
-        else:
+        if req.client.isClosed():
             streamer.abort()
             break
+
+        var t = cpuTime()
+
+        if waiting_first:
+            waiting_first = false
+            predict_tok_n = streamer.get_cursor() - 1
+            t_prediction_start = t
+
+            cls.timings.prompt_n  = streamer.get_cursor() - cls.timings.cache_n
+            cls.timings.prompt_ms = (t - t_prompt_start) * 1000
+
+        cls.timings.predicted_n  = streamer.get_cursor() - predict_tok_n
+        cls.timings.predicted_ms = (t - t_prediction_start) * 1000
+
+        case chunk[0]:
+            of ChunkType.Chat:
+                if not await cls.recv_chunk(chunk[1]):
+                    streamer.abort()
+                    break
+            of ChunkType.Thought:
+                if not await cls.recv_thought(chunk[1]):
+                    streamer.abort()
+                    break
+            else: discard
 
     streamer.history[^1].messages.add (role: "assistant", content: @[(t: "text", content: streamer.acc)])
     streamer.history[^1].pos = streamer.get_cursor()
@@ -413,11 +471,8 @@ proc handle_completions(req: Request) {.async gcsafe.} =
     if streamer.tokens_start > streamer.history[^1].pos:
         streamer.tokens_start = streamer.history[^1].pos
 
-    let total_tokens = streamer.history[^1].pos - streamer.tokens_start
-    let prompt_tokens = total_tokens div 2
-
     if not req.client.isClosed():
-        await cls.done(streamer.acc, streamer.thought_acc, prompt_tokens, total_tokens - prompt_tokens)
+        discard await cls.done(streamer.acc, streamer.thought_acc, cls.timings.prompt_n, cls.timings.predicted_n)
 
     streamer.acc = ""
 
@@ -517,11 +572,19 @@ proc handle_oai_models(req: Request) {.async gcsafe.} =
         let info = parseJson(streamer.model_info)
         var m = Info(id: info["name"].getStr(), created: now().toTime().toUnix())
         m.meta.n_params     = info["param_num"].getInt()
-        m.meta.n_ctx_train  = info["context_length"].getInt()
+        m.meta.n_ctx_train  = info["training_context_length"].getInt()
         infos.data.add(m)
 
     let headers = {"Content-type": "application/json"}
     await req.respond(Http200, $(%* infos), headers.newHttpHeaders())
+
+func format_model_name(info: JsonNode): string =
+    let name = info.getOrDefault("name").getStr()
+    let native = info.getOrDefault("native_name").getStr()
+    let n = info.getOrDefault("param_num").getInt()
+    result = fmt"{name}-{float(n)/1000000000.0:.1f}B"
+    if native != "":
+        result = result & fmt" ({native})"
 
 proc handle_ollama_tags(req: Request) {.async gcsafe.} =
     type
@@ -535,7 +598,7 @@ proc handle_ollama_tags(req: Request) {.async gcsafe.} =
         var tags = Infos(models: @[])
         for k in streamer_table.keys():
             let info = parseJson(streamer_table[k].model_info)
-            var m = Info(name: info["name"].getStr(), model: info["name"].getStr())
+            var m = Info(name: info["name"].getStr(), model: format_model_name(info))
             tags.models.add(m)
     let headers = {"Content-type": "application/json"}
     await req.respond(Http200, $(%* tags), headers.newHttpHeaders())
@@ -546,17 +609,15 @@ proc handle_ollama_version(req: Request) {.async gcsafe.} =
     await req.respond(Http200, rsp, headers.newHttpHeaders())
 
 proc handle_ollama_show(req: Request) {.async gcsafe.} =
-    echo req.body
     let model_name = parseJson(req.body)["model"].getStr()
     var model: JsonNode = nil
-    echo req.body
     {.cast(gcsafe).}:
         for k in streamer_table.keys():
             let info = parseJson(streamer_table[k].model_info)
             if info["name"].getStr() == model_name:
                 model = info
                 break
-    echo model_name
+
     if model == nil:
         await req.respond(Http404, "NOT FOUND")
         return
@@ -576,7 +637,6 @@ proc handle_ollama_show(req: Request) {.async gcsafe.} =
             rsp["capabilities"].add(% mapping[ss])
 
     let headers = {"Content-type": "application/json"}
-    echo rsp
     await req.respond(Http200, $(%* rsp), headers.newHttpHeaders())
 
 proc handle_llama_props(req: Request) {.async gcsafe.} =
@@ -607,7 +667,7 @@ proc handle_llama_props(req: Request) {.async gcsafe.} =
         let capabilities = info.getOrDefault("capabilities")
         props.default_generation_settings.n_ctx         = info["context_length"].getInt()
         props.default_generation_settings.is_processing = streamer.busy()
-        props.model_alias = info.getOrDefault("name").getStr()
+        props.model_alias = format_model_name(info)
         for c in capabilities.getElems():
             if c.getStr() == "Image Input":
                 props.modalities.vision = true
@@ -671,7 +731,10 @@ proc run {.async.} =
     echo "Serving at curl http://localhost:" & $port.uint16 & "/"
     while true:
         if server.shouldAcceptRequest():
-            await server.acceptRequest(router.toHandler())
+            try:
+                await server.acceptRequest(router.toHandler())
+            except:
+                discard
         else:
             await sleepAsync(500)
 

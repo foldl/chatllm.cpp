@@ -527,7 +527,7 @@ type
         system_prompt_updating: bool
         acc*: string
         thought_acc*: string
-        is_generating: bool
+        is_generating*: bool
         input_id: int
         tool_input_id: int
         references: seq[string]
@@ -559,6 +559,10 @@ method on_thought_completed(streamer: Streamer) {.base.} =
 
 method on_print_meta(streamer: Streamer, text: string) {.base.} =
     discard
+
+proc streamer_on_end(user_data: pointer) {.cdecl.} =
+    var streamer = get_streamer(user_data)
+    streamer.is_generating = false
 
 proc streamer_on_print(user_data: pointer, print_type: cint, utf8_str: cstring) {.cdecl.} =
     var streamer = get_streamer(user_data)
@@ -594,13 +598,10 @@ proc streamer_on_print(user_data: pointer, print_type: cint, utf8_str: cstring) 
         of PrintType.PRINT_THOUGHT_CHUNK:
             streamer.chan_output.send((t: StreamerMessageType.ThoughtChunk, chunk: $utf8_str))
         of PrintType.PRINT_EVT_ASYNC_COMPLETED:
+            streamer.is_generating = false
             streamer.chan_output.send((t: StreamerMessageType.Done, chunk: ""))
         of PrintType.PRINT_EVT_THOUGHT_COMPLETED:
             streamer.chan_output.send((t: StreamerMessageType.ThoughtDone, chunk: ""))
-
-proc streamer_on_end(user_data: pointer) {.cdecl.} =
-    var streamer = get_streamer(user_data)
-    streamer.is_generating = false
 
 proc initStreamer*(streamer: Streamer; args: openArray[string], auto_restart: bool = false): bool =
     const candidates = ["-m", "--model", "--embedding_model", "--reranker_model"]
@@ -676,8 +677,7 @@ proc set_system_prompt*(streamer: Streamer, prompt: string) =
     streamer.system_prompt_updating = true
 
 proc abort*(streamer: Streamer) =
-    if streamer.is_generating:
-        chatllm_abort_generation(streamer.llm)
+    chatllm_abort_generation(streamer.llm)
 
 method restart*(streamer: Streamer) {.base gcsafe.} =
     if not streamer.is_generating:
@@ -686,6 +686,9 @@ method restart*(streamer: Streamer) {.base gcsafe.} =
 proc clear(chan: var Channel[StreamerMessage]) =
     while chan.tryRecv().dataAvailable:
         discard
+
+proc flush*(streamer: Streamer) =
+    streamer.chan_output.clear()
 
 proc start_chat*(streamer: Streamer, user_input: string): bool =
     if streamer.is_generating:

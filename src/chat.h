@@ -155,6 +155,7 @@ namespace chatllm
         Content content;
         const MsgRole role;
         const int round;
+        int tok_pos = -1;
     };
 
     class Messages
@@ -199,6 +200,17 @@ namespace chatllm
         int get_cursor(void) const
         {
             return cursor;
+        }
+
+        int get_token_cursor(void) const
+        {
+            return history.size() > 0 ? history.back().tok_pos : 0;
+        }
+
+        void save_token_cursor(int pos)
+        {
+            if (history.size() > 0)
+                history.back().tok_pos = pos;
         }
 
         void set_mm_tags(const std::string &opening, const std::string &closing);
@@ -786,6 +798,7 @@ namespace chatllm
         std::unique_ptr<tokenizer::DataReader> _file;
 
     public:
+        BaseConfig basic_config;
         size_t offset_config;
         size_t offset_tokenizer;
         int model_type;
@@ -1398,6 +1411,8 @@ namespace chatllm
 
         virtual int save_session(const Messages &history, const std::string &file_name);
         virtual int load_session(Messages &history, const std::string &file_name, BaseStreamer *streamer, int *n_past = nullptr);
+
+        ModelLoader *get_loader(void);
     protected:
         const char head_magic[18] = "CHATLLM-SESSION\x00\x02";
 

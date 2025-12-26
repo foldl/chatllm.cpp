@@ -1844,6 +1844,11 @@ namespace chatllm
         return r;
     }
 
+    ModelLoader *Pipeline::get_loader(void)
+    {
+        return modelobj.loader.get();
+    }
+
     void Pipeline::add_ai_prefix(std::vector<int> &input_ids, const GenerationConfig &gen_config, BaseStreamer *streamer)
     {
         if (gen_config.ai_prefix.size() > 0)
@@ -1971,7 +1976,7 @@ namespace chatllm
     int Pipeline::get_cursor(void)
     {
         if (!modelobj.loaded) return -1;
-        return model->get_n_past();
+        return initializing ? 0 : model->get_n_past();
     }
 
     int Pipeline::set_cursor(int pos)
