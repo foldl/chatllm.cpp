@@ -3667,5 +3667,21 @@
                 }
             }
         }
+    },
+    "glm-4.6v": {
+        "brief": "GLM-4.6V series model includes two versions: GLM-4.6V (106B), a foundation model designed for cloud and high-performance cluster scenarios, and GLM-4.6V-Flash (9B), a lightweight model optimized for local deployment and low-latency applications.",
+        "default": "flash",
+        "license": "MIT",
+        "variants": {
+            "flash": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 10971131968,
+                        "url": "chatllm_quantized_glm/glm-4.6v-flash.bin"
+                    }
+                }
+            }
+        }
     }
 }
