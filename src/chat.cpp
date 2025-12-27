@@ -359,6 +359,13 @@ namespace chatllm
         const_cast<Messages *>(this)->move_cursor_to_end();
     }
 
+    void Messages::move_cursor_to(int pos)
+    {
+        if (pos < 0) pos = 0;
+        if (pos > (int)history.size()) pos = (int)history.size();
+        cursor = pos;
+    }
+
     void Messages::shrink(int size)
     {
         while (history.size() > size)

@@ -196,6 +196,7 @@ namespace chatllm
 
         void move_cursor_to_end(void) const;
         void move_cursor_to_end(void);
+        void move_cursor_to(int pos);
         void shrink(int size);
         int get_cursor(void) const
         {
@@ -204,7 +205,7 @@ namespace chatllm
 
         int get_token_cursor(void) const
         {
-            return history.size() > 0 ? history.back().tok_pos : 0;
+            return cursor >= 1 ? history[cursor - 1].tok_pos : 0;
         }
 
         void save_token_cursor(int pos)

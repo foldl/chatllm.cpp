@@ -2055,17 +2055,17 @@ int API_CALL chatllm_history_set_cursor(struct chatllm_obj *obj, int pos)
         chat->history.history.pop_back();
     }
 
-    while (chat->history.size() > 0)
+    chat->history.move_cursor_to(0);
+    for (int i = (int)chat->history.size() - 1; i >= 0; i++)
     {
-        if (chat->history.history.back().tok_pos >= 0) break;
-        chat->history.history.pop_back();
+        if (chat->history[i].tok_pos >= 0)
+        {
+            chat->history.move_cursor_to(i + 1);
+            break;
+        }
     }
 
-    chat->history.move_cursor_to_end();
-    if (chat->history.size() > 0)
-        chat->pipeline->set_cursor(chat->history.get_token_cursor());
-    else
-        chatllm_restart(obj, nullptr);
+    chat->pipeline->set_cursor(chat->history.get_token_cursor());
     return chatllm_history_get_cursor(obj);
 }
 
