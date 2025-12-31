@@ -454,14 +454,14 @@ proc get_model(model_id: string; storage_dir: string): string =
         let parts = model_id.split(":")
         if all_models == nil:
             let fn = joinPath([parentDir(paramStr(0)), "../scripts/models.json"])
-            const compiled_file = readFile("../scripts/models.json")
+            const compiled_file = readFile(currentSourcePath.parentDir() & "/../scripts/models.json")
             all_models = if fileExists(fn): json.parseFile(fn) else: json.parseJson(compiled_file)
 
         let id = parts[0]
         if not all_models.contains(id):
             let guess = find_nearest_item(id, all_models.keys().toSeq())
             raise newException(ValueError, fmt"""`{id}` is recognized as a model id. Did you mean something like `{guess.join(", ")}`?""")
-            return nil
+
         let model = all_models[id]
         let variants = model["variants"]
         let variant = variants[if len(parts) >= 2: parts[1] else: model["default"].getStr()]

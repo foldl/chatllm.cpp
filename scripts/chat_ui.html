@@ -1341,7 +1341,9 @@
             var msgContent = [{type: 'text', text: messageText}]
             if (multimediaInputs.length > 0) {
                 for (let mm of multimediaInputs) {
-                    msgContent.push({type: mm.type, url: 'data:' + mm.dataUrl});
+                    var m = {type: mm.type};
+                    m[mm.type] = {url: mm.dataUrl};
+                    msgContent.push(m);
                 }
                 multimediaInputs = [];
             }
@@ -1505,7 +1507,7 @@
                     name: fileName,
                     dataUrl: e.target.result,
                     ext: fileExt,
-                    type: 'image',
+                    type: 'image_url',
                     media_type: file.type,
                 };
 

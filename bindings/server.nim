@@ -538,7 +538,7 @@ proc handle_embeddings(req: Request) {.async gcsafe.} =
     await req.end_headers_send($(%* r))
 
 proc handle_index(req: Request) {.async gcsafe.} =
-    const defaultUI {.strdefine: "defaultUI".}: string = "..\\scripts\\chat_ui.html"
+    const defaultUI {.strdefine: "defaultUI".}: string = currentSourcePath.parentDir() & "/../scripts/chat_ui.html"
     const compiled_file = readFile(defaultUI)
     var headers = @[("Content-type", "text/html; charset=utf-8")]
     {.cast(gcsafe).}:
