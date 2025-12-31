@@ -1325,6 +1325,12 @@ namespace chatllm
         for (auto &layer : layers)
         {
             ctx->move_to_layer(layer->get_id());
+            if (layer_preprocess.get())
+            {
+                auto t = layer_preprocess->forward(this, ctx, hidden_states, layer->get_id());
+                if (t) hidden_states = t;
+            }
+
             hidden_states = layer->forward(ctx, hidden_states, n_past);
         }
 
@@ -1377,6 +1383,16 @@ namespace chatllm
     ModelFinalSteps *HeterogeneousModel::get_final_steps()
     {
         return final_steps.get();
+    }
+
+    void HeterogeneousModel::set_layer_preprocess(std::unique_ptr<ModelLayerInputPreprocess> layer_preprocess)
+    {
+        this->layer_preprocess = std::move(layer_preprocess);
+    }
+
+    ModelLayerInputPreprocess *HeterogeneousModel::get_layer_preprocess()
+    {
+        return layer_preprocess.get();
     }
 
     int HeterogeneousModel::save_session(FILE *f)
@@ -1866,7 +1882,7 @@ namespace chatllm
     bool ModelFactory::load(int model_type, int version, ModelLoader &loader, Result &result, const ModelObject::extra_args &args)
     {
         auto _loader = ModelLoadRegistry::get_loader(model_type);
-        CHATLLM_CHECK(_loader != nullptr) << "invalid model type " << model_type;
+        CHATLLM_CHECK(_loader != nullptr) << "invalid model type 0x" << std::hex << model_type;
         CHATLLM_CHECK(version == _loader->version) << "only support version " << _loader->version << " for now but got " << version;
         return _loader->load_model(loader, result, args);
     }

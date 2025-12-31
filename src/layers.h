@@ -2050,6 +2050,7 @@ namespace chatllm
         Original        = GGML_ROPE_TYPE_NEOX,          // II...IQQ...Q (i.e. Su's Paper)
         MROPE           = GGML_ROPE_TYPE_MROPE,
         VISION          = GGML_ROPE_TYPE_VISION,
+        IMROPE          = GGML_ROPE_TYPE_IMROPE,        // interleaved MROPE
     };
 
     template <class BaseAttn> class RoPESelfAttention : public BaseAttn

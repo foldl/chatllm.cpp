@@ -41,6 +41,15 @@ namespace chatllm
         }
     };
 
+    class ModelLayerInputPreprocess
+    {
+    public:
+        virtual ggml::tensor *forward(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *hidden_states, int layer_index)
+        {
+            return nullptr;
+        }
+    };
+
     class HeterogeneousModel : public ModelBlock
     {
     public:
@@ -64,6 +73,9 @@ namespace chatllm
 
         void set_final_steps(std::unique_ptr<ModelFinalSteps> final_steps);
         ModelFinalSteps *get_final_steps();
+
+        void set_layer_preprocess(std::unique_ptr<ModelLayerInputPreprocess> layer_preprocess);
+        ModelLayerInputPreprocess *get_layer_preprocess();
 
         int save_session(FILE *f) override;
         int load_session(FILE *f) override;
@@ -96,6 +108,7 @@ namespace chatllm
         std::vector<Block *> layers;
         size_t cache_size;
         std::unique_ptr<ModelFinalSteps> final_steps;
+        std::unique_ptr<ModelLayerInputPreprocess> layer_preprocess;
     };
 
     class LMFinalStepsDisabler;

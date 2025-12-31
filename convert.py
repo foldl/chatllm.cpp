@@ -5323,6 +5323,120 @@ class QWen3Converter(BaseConverter):
 class Qwen3VLConverter(BaseConverter):
     MODEL_TYPE = ModelType.Qwen3_VL
 
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for k in state_dict: # name: str
+            name: str = k
+            tensor: torch.Tensor = state_dict[name]
+            if name.startswith('model.language_model.'):
+                name = name.replace('model.language_model.', 'model.')
+                if name.endswith('experts.down_proj'):
+                    shape = tensor.shape
+                    for j in range(shape[0]):
+                        kkk = name.replace('mlp.experts.down_proj', f'mlp.experts.{j}.down_proj.weight')
+                        r[kkk] = tensor[j].T.contiguous()
+                elif name.endswith('experts.gate_up_proj'):
+                    shape = tensor.shape
+                    gate = tensor[:, :, : shape[2] // 2]
+                    up   = tensor[:, :, shape[2] // 2 : ]
+                    for j in range(shape[0]):
+                        kkk = name.replace('experts.gate_up_proj', f'experts.{j}.gate_proj.weight')
+                        r[kkk] = gate[j].T.contiguous()
+                        kkk = name.replace('experts.gate_up_proj', f'experts.{j}.up_proj.weight')
+                        r[kkk] = up[j].T.contiguous()
+                else:
+                    r[name] = tensor
+                continue
+
+            name = name.replace('model.visual.', 'visual.')
+
+            if name == 'visual.patch_embed.proj.weight':
+                shape = tensor.shape
+                assert len(shape) == 5
+                assert shape[2] == 2
+                r[name.replace('proj.weight', 'proj.0.weight')] = tensor[:, :, 0, :, :]
+                r[name.replace('proj.weight', 'proj.1.weight')] = tensor[:, :, 1, :, :]
+            elif name.endswith('.attn.qkv.bias') or name.endswith('.attn.qkv.weight'):
+                #print(f'shape: {name} = {tensor.shape}')
+                num_heads = config.vision_config['hidden_size']
+                q, k, v = tensor.split([num_heads, num_heads, num_heads], dim=0)
+                r[name.replace('.attn.qkv.', '.attn.q_proj.')] = q
+                r[name.replace('.attn.qkv.', '.attn.k_proj.')] = k
+                r[name.replace('.attn.qkv.', '.attn.v_proj.')] = v
+            else:
+                name = name.replace('.mlp.linear_fc1.', '.mlp.fc0.')
+                name = name.replace('.mlp.linear_fc2.', '.mlp.fc1.')
+                name = name.replace('.linear_fc1.', '.mlp.fc0.')
+                name = name.replace('.linear_fc2.', '.mlp.fc1.')
+                r[name] = tensor
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MROPE_SECTION_MAX = 4
+        rope_scaling = config.text_config['rope_scaling']
+        assert rope_scaling['mrope_interleaved']
+        assert config.vision_config["hidden_act"] == "gelu_pytorch_tanh"
+
+        config.text_config['rope_scaling'] = None
+        Qwen3VLConverter.text_config = AttributeDict(config.text_config)
+        QWen3Converter.dump_config(f, Qwen3VLConverter.text_config, ggml_type)
+
+        config_values = pad_to_len(rope_scaling['mrope_section'], MROPE_SECTION_MAX)
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = QWen3Converter.get_weight_names(Qwen3VLConverter.text_config)
+
+        for i in range(config.vision_config['depth']):
+            weight_names += [
+                f"visual.blocks.{i}.attn.proj.bias",
+                f"visual.blocks.{i}.attn.proj.weight",
+                f"visual.blocks.{i}.attn.q_proj.bias",
+                f"visual.blocks.{i}.attn.q_proj.weight",
+                f"visual.blocks.{i}.attn.k_proj.bias",
+                f"visual.blocks.{i}.attn.k_proj.weight",
+                f"visual.blocks.{i}.attn.v_proj.bias",
+                f"visual.blocks.{i}.attn.v_proj.weight",
+                f"visual.blocks.{i}.mlp.fc0.bias",
+                f"visual.blocks.{i}.mlp.fc0.weight",
+                f"visual.blocks.{i}.mlp.fc1.bias",
+                f"visual.blocks.{i}.mlp.fc1.weight",
+                f"visual.blocks.{i}.norm1.bias",
+                f"visual.blocks.{i}.norm1.weight",
+                f"visual.blocks.{i}.norm2.bias",
+                f"visual.blocks.{i}.norm2.weight",
+            ]
+
+        for i in range(len(config.vision_config['deepstack_visual_indexes'])):
+            weight_names += [
+                f"visual.deepstack_merger_list.{i}.mlp.fc0.bias",
+                f"visual.deepstack_merger_list.{i}.mlp.fc0.weight",
+                f"visual.deepstack_merger_list.{i}.mlp.fc1.bias",
+                f"visual.deepstack_merger_list.{i}.mlp.fc1.weight",
+                f"visual.deepstack_merger_list.{i}.norm.bias",
+                f"visual.deepstack_merger_list.{i}.norm.weight",
+            ]
+
+        weight_names += [
+                "visual.merger.mlp.fc0.bias",
+                "visual.merger.mlp.fc0.weight",
+                "visual.merger.mlp.fc1.bias",
+                "visual.merger.mlp.fc1.weight",
+                "visual.merger.norm.bias",
+                "visual.merger.norm.weight",
+                "visual.patch_embed.proj.0.weight",
+                "visual.patch_embed.proj.1.weight",
+                "visual.patch_embed.proj.bias",
+                "visual.pos_embed.weight",
+            ]
+
+        return weight_names
+
+
 class QWen3EmbConverter(BaseConverter):
     MODEL_TYPE = ModelType.QWen3_Embedding
 
@@ -8938,6 +9052,8 @@ def main():
         QWen2_VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen2_5_VLForConditionalGeneration':
         QWen2_5VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch in ['Qwen3VLForConditionalGeneration', 'Qwen3VLMoeForConditionalGeneration']:
+        Qwen3VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'KimiVLForConditionalGeneration':
         KimiVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen':

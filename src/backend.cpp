@@ -524,6 +524,16 @@ namespace chatllm
         ggml_backend_tensor_set(tensor, data, 0, ggml::nbytes(tensor));
     }
 
+    void Backend::tensor_memset(ggml::tensor * tensor, uint8_t value)
+    {
+        ggml_backend_tensor_memset(tensor, value, 0, ggml::nbytes(tensor));
+    }
+
+    void Backend::tensor_memset(ggml::tensor * tensor, uint8_t value, size_t offset, size_t size)
+    {
+        ggml_backend_tensor_memset(tensor, value, offset, size);
+    }
+
     void Backend::read_tensor_data_async(ggml::tensor * tensor, void * data, size_t offset, size_t size)
     {
         ggml_backend_tensor_get_async(backend, tensor, data, offset, size);
@@ -970,12 +980,23 @@ namespace chatllm
         return ggml_get_mem_size(get_ctx());
     }
 
-    bool ComputeContext::check_used_mem_size(bool assertion)
+    bool ComputeContext::check_used_mem_size(bool assertion, int extra_tensors)
     {
-        bool r = get_used_mem() == get_mem_size();
+        bool r = get_used_mem() + ggml::tensor_overhead() * extra_tensors == get_mem_size();
         if (!r && assertion)
         {
-            CHATLLM_THROW << "tensor number mismatch: " << get_used_mem() / ggml::tensor_overhead() << " (used) vs "  << get_mem_size() / ggml::tensor_overhead();;
+            if (extra_tensors > 0)
+            {
+                CHATLLM_THROW << "tensor number mismatch: " << get_used_mem() / ggml::tensor_overhead()
+                              << " + " << extra_tensors
+                              << " (used) vs "  << get_mem_size() / ggml::tensor_overhead();;
+            }
+            else
+            {
+                CHATLLM_THROW << "tensor number mismatch: " << get_used_mem() / ggml::tensor_overhead()
+                              << " (used) vs "  << get_mem_size() / ggml::tensor_overhead();;
+            }
+
         }
         return r;
     }

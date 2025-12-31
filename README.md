@@ -33,6 +33,7 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
+* 2025-12-31: Qwen3-VL
 * 2025-12-24: GLM-4.6V-Flash
 * 2025-12-15: Rnj-1
 * 2025-12-08: Ministral-3

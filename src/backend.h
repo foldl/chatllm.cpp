@@ -288,6 +288,9 @@ namespace chatllm
 
         static void write_tensor_data(ggml::tensor * tensor, const void * data);
 
+        static void tensor_memset(ggml::tensor * tensor, uint8_t value);
+        static void tensor_memset(ggml::tensor * tensor, uint8_t value, size_t offset, size_t size);
+
         void read_tensor_data_async(ggml::tensor * tensor, void * data, size_t offset, size_t size);
 
         static void read_tensor_data(ggml::tensor * tensor, void * data, size_t offset, size_t size);
@@ -427,7 +430,7 @@ namespace chatllm
 
         virtual size_t get_used_mem(void);
         virtual size_t get_mem_size(void);
-        virtual bool check_used_mem_size(bool assertion = true);
+        virtual bool check_used_mem_size(bool assertion = true, int extra_tensors = 0);
 
         virtual bool is_using_gpu(void) const { return backend_context->is_using_gpu(); }
 

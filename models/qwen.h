@@ -349,28 +349,32 @@ namespace chatllm::qwen
     {
         const int VIT_MAX_LAYERS   = 128;
 
-        struct Config
+        struct BaseConfig
         {
             ggml::type dtype;
-            bool is_ver_2_0;
             int patch_size;
+            int max_patches;
             int num_attention_heads;
             int num_hidden_layers;
             int hidden_size;
             int intermediate_size;
             int spatial_merge_size;
-            int spatial_patch_size;
-            int window_size;
-            int tokens_per_second;
             int temporal_patch_size;
-            bool fullatt_block_indices[VIT_MAX_LAYERS];
-            int min_pixels;
-            int max_pixels;
-            int max_patches;
-            int merge_size;
 
             float image_mean[3];
             float image_std[3];
+        };
+
+        struct Config : BaseConfig
+        {
+            bool is_ver_2_0;
+            int spatial_patch_size;
+            int window_size;
+            int tokens_per_second;
+            bool fullatt_block_indices[VIT_MAX_LAYERS];
+            int min_pixels;
+            int max_pixels;
+            int merge_size;
         };
 
         class PatchEmbedding : public Block
@@ -576,7 +580,7 @@ namespace chatllm::qwen
             void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
 
         public:
-            const vit::Config *vis_config = nullptr;
+            const vit::BaseConfig *vis_config = nullptr;
             bool vit_loaded = false;
         };
 
@@ -584,6 +588,8 @@ namespace chatllm::qwen
         {
         public:
             Tokenizer(const BaseConfig &config);
+
+            Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder);
 
             size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 

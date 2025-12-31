@@ -411,11 +411,14 @@ Please use `--format completion` for these models.
     [8B-Reasoning-2512](https://huggingface.co/mistralai/Ministral-3-8B-Reasoning-2512/tree/f511871f6402ba68dadfb42a94a7a7e13499fd65)
     * [x] Devstral-Small-2: [24B-Instruct-2512](https://huggingface.co/mistralai/Devstral-Small-2-24B-Instruct-2512/tree/8d27a0d2120f1563c11dc91d494e99f9678ecf79)
 
-* Qwen (`Qwen2AudioForConditionalGeneration`, `Qwen2_5_VLForConditionalGeneration`)
+* Qwen (`Qwen2AudioForConditionalGeneration`, `Qwen2_5_VLForConditionalGeneration`, `Qwen3VLForConditionalGeneration`, `Qwen3VLMoeForConditionalGeneration`)
     * [x] Qwen2-Audio: [7B-Instruct](https://huggingface.co/Qwen/Qwen2-Audio-7B-Instruct/tree/0a095220c30b7b31434169c3086508ef3ea5bf0a)
     * [x] Qwen2.5-VL: [3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/tree/66285546d2b821cf421d4f5eb2576359d3770cd3), [7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/tree/cc594898137f460bfe9f0759e9844b3ce807cfb5)
     * [x] MiMo-VL: [7B-RL](https://huggingface.co/XiaomiMiMo/MiMo-VL-7B-RL/tree/460c34be0c6cfe79b6b311647ae9112784f80b73), [7B-RL-2508](https://huggingface.co/XiaomiMiMo/MiMo-VL-7B-RL-2508/tree/4bfb270765825d2fa059011deb4c96fdd579be6f)
     * [x] Dolphin: [v2](https://huggingface.co/ByteDance/Dolphin-v2/tree/c37c62768c644bb594da4283149c627765aa80f3)
+    * [x] Qwen3-VL: [2B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct/tree/89644892e4d85e24eaac8bacfd4f463576704203),
+    [4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct/tree/ebb281ec70b05090aa6165b016eac8ec08e71b17),
+    [A3B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct/tree/9c4b90e1e4ba969fd3b5378b57d966d725f1b86c), etc
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
     * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)
