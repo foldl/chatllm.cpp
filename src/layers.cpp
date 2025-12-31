@@ -228,6 +228,12 @@ namespace chatllm
         return ggml::init_tensor(tensor, type, 4, ne);
     }
 
+    ggml::tensor *ggml::init_tensor(ggml::tensor  *tensor, ggml::tensor *like)
+    {
+        int64_t ne[4] = {ggml::get_dim(like, 0), ggml::get_dim(like, 1), ggml::get_dim(like, 2), ggml::get_dim(like, 3)};
+        return ggml::init_tensor(tensor, ggml::type_of(like), 4, ne);
+    }
+
     ggml::tensor *ggml::init_tensor(ggml::tensor *tensor,
         ggml::type    type,
         int           n_dims,

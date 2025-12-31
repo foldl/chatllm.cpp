@@ -572,7 +572,7 @@ namespace chatllm
               bias(use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, out_features) : nullptr) {}
 
         Linear(InitContext *ctx, int in_features, int out_features, ggml::tensor *weight, bool use_bias = true)
-            : weight(weight != NULL ? weight : ggml::new_tensor_2d(ctx, ctx->dtype, in_features, out_features)),
+            : weight(weight != NULL ? weight : ggml::new_tensor_2d(ctx, ggml::type_fallback(ctx->dtype, in_features), in_features, out_features)),
               bias(use_bias ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, out_features) : nullptr) {}
 
         int in_features() const { return (int)weight->ne[0]; }
@@ -604,7 +604,7 @@ namespace chatllm
         {}
 
         MultiLinear(InitContext *ctx, int in_features, int out_features, int multi, bool use_bias)
-            : weight(ggml::new_tensor_3d(ctx, ctx->dtype, in_features, out_features, multi)),
+            : weight(ggml::new_tensor_3d(ctx, ggml::type_fallback(ctx->dtype, in_features), in_features, out_features, multi)),
               bias(use_bias ? ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F32, out_features, multi) : nullptr)
         {
         }

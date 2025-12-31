@@ -1163,11 +1163,13 @@ namespace chatllm
     }
 
     size_t TensorInfo::read_tensor_data(tokenizer::DataReader *reader, size_t read_offset, size_t write_offset, size_t data_size,
-                                        ggml::type target_type)
+                                        ggml::type target_type, ggml::tensor *src_tensor)
     {
         CHATLLM_CHECK(data) << "backend buffer still not allocated!";
         CHATLLM_CHECK(target_type == ggml::type_of(tensor)) << "tensor type mismatch!";
-        CHATLLM_CHECK(data->get_size() >= write_offset + data_size) << "read_tensor_data(" << ggml::get_name(&tensor) << "): write data exceeds tensor data size";
+
+        const ggml::type original_type = src_tensor ? ggml::type_of(src_tensor) : this->original_type;
+        if (nullptr == src_tensor) src_tensor = &tensor;
 
         reader->seek(aligned_data_start(read_offset), SEEK_SET);
 
@@ -1185,7 +1187,7 @@ namespace chatllm
                 std::vector<uint8_t> buf_q;
 
                 ggml::tensor t;
-                ggml::init_tensor(&t, ggml::type::GGML_TYPE_F32, 4, tensor.ne);
+                ggml::init_tensor(&t, ggml::type::GGML_TYPE_F32, 4, src_tensor->ne);
                 buf.resize(ggml::nbytes(&t));
 
                 if (ggml::type::GGML_TYPE_F32 == original_type)
@@ -1194,18 +1196,19 @@ namespace chatllm
                 }
                 else
                 {
-                    ggml::init_tensor(&t, original_type, 4, tensor.ne);
+                    ggml::init_tensor(&t, original_type, 4, src_tensor->ne);
                     buf_q.resize(ggml::nbytes(&t));
                     reader->read_buffer(buf_q.data(), buf_q.size());
 
                     ggml::to_float(original_type, buf_q.data(), (float *)buf.data(), ggml::get_dim(&t, 0), ggml::nrows(&t));
                 }
 
-                ggml::init_tensor(&t, target_type, 4, tensor.ne);
+                ggml::init_tensor(&t, target_type, 4, src_tensor->ne);
                 buf_q.resize(ggml::nbytes(&t));
                 ggml::from_float(target_type, (const float *)buf.data(), (void *)buf_q.data(), ggml::get_dim(&t, 0), ggml::nrows(&t));
 
-                CHATLLM_CHECK(buf_q.size() == data_size) << "size mismatch? " << buf_q.size() << " : " << data_size;
+                if (data_size < buf_q.size())
+                    CHATLLM_CHECK(buf_q.size() == data_size) << "size mismatch? " << buf_q.size() << " : " << data_size;
 
                 alloc->get_backend()->write_tensor_data(&tensor, buf_q.data(), write_offset, buf_q.size());
 
@@ -1530,12 +1533,14 @@ namespace chatllm
             }
 
             size_t size = search->second.get_nbytes();
-            t.read_tensor_data(_file.get(), search->second._offset, write_offset, size, tensor->type);
+            size = t.read_tensor_data(_file.get(), search->second._offset, write_offset, size, tensor->type, &search->second.tensor);
+
+            CHATLLM_CHECK(total_size >= size) << "tensor " << name << " too much data: " << total_size << " > " << size;
 
             write_offset += size;
             total_size -= size;
         }
-        CHATLLM_CHECK(total_size == 0) << "tensor " << name << " not fully loaded.";
+        CHATLLM_CHECK(total_size == 0) << "tensor " << name << " not fully loaded, remain = " << total_size;
 
         t.assign_to(tensor);
     }

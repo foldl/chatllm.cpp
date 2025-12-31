@@ -21,6 +21,7 @@ namespace chatllm
         tensor *init_tensor(ggml::tensor  *tensor,
                             ggml::type     type,
                             int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
+        tensor *init_tensor(ggml::tensor  *tensor, ggml::tensor *like);
         void change_type(ggml::tensor  *tensor, ggml::type type);
 
         size_t element_size(const ggml::tensor *tensor);
