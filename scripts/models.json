@@ -80,9 +80,18 @@
     },
     "llama3.3": {
         "brief": "New state of the art 70B model. Llama 3.3 70B offers similar performance compared to the Llama 3.1 405B model.",
-        "default": "70b",
+        "default": "8b",
         "license": "LLAMA 3.3 COMMUNITY LICENSE AGREEMENT",
         "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8538791968,
+                        "url": "chatllm_quantized_llama3.3/llama3.3-8b.bin"
+                    }
+                }
+            },
             "70b": {
                 "default": "q4_0",
                 "quantized": {
@@ -3679,6 +3688,22 @@
                     "q8": {
                         "size": 10971131968,
                         "url": "chatllm_quantized_glm/glm-4.6v-flash.bin"
+                    }
+                }
+            }
+        }
+    },
+    "nemotron-cascade": {
+        "brief": "Nemotron-Cascade-8B, a powerful general-purpose model trained through sequential and domain-wise reinforcement learning.",
+        "default": "8b",
+        "license": "NVIDIA Open Model License Agreement",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8707852320,
+                        "url": "chatllm_quantized_nemotron/nemotron-cascade-8b.bin"
                     }
                 }
             }
