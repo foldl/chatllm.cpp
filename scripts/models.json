@@ -1534,6 +1534,44 @@
             }
         }
     },
+    "qwen3-vl" : {
+        "brief": "Qwen3-VL — the most powerful vision-language model in the Qwen series to date.",
+        "default": "2b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2267742336,
+                        "url": "chatllm_quantized_qwen3/qwen3-vl-2b-it.bin"
+                    }
+                }
+            },
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4722642576,
+                        "url": "chatllm_quantized_qwen3/qwen3-vl-4b-it.bin"
+                    }
+                }
+            },
+            "a3b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 19613743984,
+                        "url": "chatllm_quantized_qwen3/qwen3-vl-a3b-it-q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 33147565040,
+                        "url": "chatllm_quantized_qwen3/qwen3-vl-a3b-it.bin"
+                    }
+                }
+            }
+        }
+    },
     "starling-lm": {
         "brief": "Starling is a large language model trained by reinforcement learning from AI feedback focused on improving chatbot helpfulness.",
         "default": "7b",
@@ -3704,6 +3742,22 @@
                     "q8": {
                         "size": 8707852320,
                         "url": "chatllm_quantized_nemotron/nemotron-cascade-8b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "mai-ui": {
+        "brief": "MAI-UI, a family of foundation GUI agents spanning the full spectrum of sizes.",
+        "default": "2b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2267737776,
+                        "url": "chatllm_quantized_qwen3/mai-ui-2b.bin"
                     }
                 }
             }
