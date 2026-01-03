@@ -1,4 +1,5 @@
 #include "llama.h"
+#include "../src/chat_encoders.h"
 
 namespace chatllm::apriel
 {
@@ -11,38 +12,24 @@ namespace chatllm::apriel
         float rope_scaling_factor;
     };
 
-    class ChatHistoryEncoder : public BaseHistoryEncoder
+    class ChatHistoryEncoder : public HistoryEncoderBracketRole
     {
-    public:
-        void append_sys_prompt(std::vector<int> &ids) const override
+    protected:
+        void append_ending(std::vector<int> &ids) const
         {
-            std::ostringstream oss;
-            ids.push_back(tokenizer->bos_token_id);
-            oss << "<|system|>\n" << tokenizer->get_system_prompt() << "\n<|end|>\n";
-            tokenizer->encode(oss.str(), ids);
-        }
-        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override
-        {
-            append_ai_opening(round_idx, ids);
-            tokenizer->encode(ai, ids);
             tokenizer->encode("\n<|end|>\n", ids);
         }
-
-        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override
+        void append_sys_ending(std::vector<int> &ids) const override
         {
-            append_user_opening(round_idx, ids);
-            tokenizer->encode(user, ids);
-            tokenizer->encode("\n<|end|>\n", ids);
+            append_ending(ids);
         }
-
-        void append_ai_opening(int round_idx, std::vector<int> &ids) const override
+        void append_ai_ending(int round_idx, std::vector<int> &ids) const override
         {
-            tokenizer->encode("<|assistant|>\n", ids);
+            append_ending(ids);
         }
-
-        void append_user_opening(int round_idx, std::vector<int> &ids) const override
+        void append_user_ending(int round_idx, std::vector<int> &ids) const override
         {
-            tokenizer->encode("<|user|>\n", ids);
+            append_ending(ids);
         }
     };
 

@@ -29,4 +29,19 @@ namespace chatllm
         int im_end_token_id     = -1;
         int nl_token_id         = -1;
     };
+
+    class HistoryEncoderBracketRole : public BaseHistoryEncoder
+    {
+    public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+    protected:
+        virtual void append_sys_ending(std::vector<int> &ids) const;
+        virtual void append_user_ending(int round_idx, std::vector<int> &ids) const;
+        virtual void append_ai_ending(int round_idx, std::vector<int> &ids) const;
+    protected:
+        bool auto_add_bos = true;
+    };
 }
