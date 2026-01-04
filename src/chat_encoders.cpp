@@ -118,7 +118,7 @@ namespace chatllm
         if (tokenizer->get_system_prompt().size() > 0)
         {
             std::ostringstream oss;
-            oss << "'<|system|>\n" << tokenizer->get_system_prompt();
+            oss << "<|system|>\n" << tokenizer->get_system_prompt();
             tokenizer->encode(oss.str(), ids);
             append_sys_ending(ids);
         }
@@ -127,7 +127,7 @@ namespace chatllm
     void HistoryEncoderBracketRole::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         std::ostringstream oss;
-        oss << "'<|assistant|>\n" << ai;
+        oss << "<|assistant|>\n" << ai;
         tokenizer->encode(oss.str(), ids);
         append_ai_ending(round_idx, ids);
     }
@@ -143,7 +143,7 @@ namespace chatllm
     void HistoryEncoderBracketRole::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
     {
         std::ostringstream oss;
-        oss << "'<|user|>\n" << user;
+        oss << "<|user|>\n" << user;
         tokenizer->encode(oss.str(), ids);
         append_user_ending(round_idx, ids);
     }
@@ -151,7 +151,7 @@ namespace chatllm
     void HistoryEncoderBracketRole::append_ai_opening(int round_idx, std::vector<int> &ids) const
     {
         std::ostringstream oss;
-        oss << "'<|assistant|>\n";
+        oss << "<|assistant|>\n";
         tokenizer->encode(oss.str(), ids);
     }
 }
