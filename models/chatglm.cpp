@@ -2,7 +2,10 @@
 #include <regex>
 #include <codecvt>
 #include "qwen.h"
+#include "llama.h"
 #include "../src/vision_process.h"
+#include "../src/chat_encoders.h"
+#include "../src/audio_process.h"
 
 namespace chatllm::glm::v1
 {
@@ -1410,6 +1413,504 @@ namespace chatllm::glm::v4v
     }
 }
 
+namespace chatllm::glm::audio_tower
+{
+    struct Config
+    {
+        ggml::type dtype;
+        int num_hidden_layers;
+        int num_attention_heads;
+        int num_key_value_heads;
+        int intermediate_size;
+        int hidden_size;
+        int max_position_embeddings;
+        int rope_dim;
+        float rope_theta;
+
+        // mel features
+        int num_mel_bins;
+        int chunk_length;
+        int feature_size;
+        int hop_length;
+        int n_fft;
+        int n_samples;
+        int nb_max_frames;
+        int sampling_rate;
+    };
+
+    class AudioSelfAttention : public RoPESelfAttention<BaseCachelessAttention>
+    {
+    public:
+        AudioSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length);
+    };
+
+    AudioSelfAttention::AudioSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length):
+        RoPESelfAttention<BaseCachelessAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, true, true)
+    {
+        rope_mode = RoPEMode::Original;
+        causal = false;
+    }
+
+    class MultiModalProjector : public TheMLP
+    {
+    public:
+        MultiModalProjector(InitContext *ctx, const Config &config, int lm_hidden_size);
+    };
+
+    MultiModalProjector::MultiModalProjector(InitContext *ctx, const Config &config, int lm_hidden_size):
+        TheMLP(ctx, config.intermediate_size, lm_hidden_size * 2, lm_hidden_size, chatllm::ActFunc::GELU, true)
+    {
+    }
+
+    class AudioEmbedding : public Block
+    {
+    public:
+        AudioEmbedding(InitContext *ctx, const Config &config);
+
+        int64_t get_param_num(bool effective_only) const override;
+
+        void load(const std::string &path, TensorLoader *loader) override;
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+    public:
+        Conv1D    conv1;
+        Conv1D    conv2;
+    };
+
+    class AudioTransformer : public Block
+    {
+    public:
+        typedef LMBlock1<LayerNorm, AudioSelfAttention, LayerNorm, TheBiasedGELUMLP> LayerBlock;
+
+        AudioTransformer(InitContext *ctx, const Config &config, int lm_hidden_size);
+
+        int64_t get_param_num(bool effective_only) const override;
+
+        void load(const std::string &path, TensorLoader *loader) override;
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+
+        bool is_loaded(void) const;
+
+    protected:
+        const int intermedia_size;
+        AudioEmbedding          embed;
+        LayerNorm               norm;
+        MultiModalProjector     multi_modal_projector;
+        std::vector<std::unique_ptr<LayerBlock>> layers;
+    protected:
+        bool loaded;
+    };
+
+    class AudioEmbeddingGeneration
+    {
+    public:
+        AudioEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE = 4096);
+
+        bool load(ModelLoader &loader);
+
+        bool load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &json_config);
+
+        void generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf);
+
+    protected:
+        bool run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &audio, std::vector<uint8_t> &buf);
+    protected:
+        const int max_llm_tokens;
+        std::unique_ptr<AudioTransformer> model;
+        TensorGraphEvaluator eval;
+        InitContext _ctx; // weight context
+    public:
+        Config config;
+    };
+
+    AudioEmbedding::AudioEmbedding(InitContext *ctx, const Config &config):
+        conv1(ctx, config.num_mel_bins, config.hidden_size, 3, 1, 1),
+        conv2(ctx, config.hidden_size, config.hidden_size, 3, 2, 1)
+    {}
+
+    int64_t AudioEmbedding::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += conv1.get_param_num(effective_only);
+        r += conv2.get_param_num(effective_only);
+        return r;
+    }
+
+    void AudioEmbedding::load(const std::string &path, TensorLoader *loader)
+    {
+        conv1.load(path + "conv1.", loader);
+        conv2.load(path + "conv2.", loader);
+    }
+
+    ggml::tensor *AudioEmbedding::forward(ComputeContext *ctx, ggml::tensor *input)
+    {
+        auto output = conv1.forward(ctx, input);
+        output      = ggml::act(ctx, ActFunc::GELU, output);
+        output      = conv2.forward(ctx, output);
+        output      = ggml::act(ctx, ActFunc::GELU, output);
+        output      = ggml::permute(ctx, output, 1, 0, 2, 3);
+
+        return output;
+    }
+
+    AudioTransformer::AudioTransformer(InitContext *ctx, const Config &config, int lm_hidden_size) :
+        intermedia_size(config.intermediate_size),
+        embed(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), config),
+        norm(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size),
+        multi_modal_projector(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog),
+            config, lm_hidden_size),
+        loaded(false)
+    {
+        BlockParams::OverrideKProjBiased k_proj_biased(false);
+
+        for (int layer_id = 0; layer_id < config.num_hidden_layers; layer_id++)
+        {
+            ctx->move_to_layer(layer_id);
+            auto layer = new LayerBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size, config.num_key_value_heads,
+                config.hidden_size / config.num_attention_heads, config.max_position_embeddings);
+            layer->set_id(layer_id);
+            layer->attention.rope_dim = config.rope_dim;
+            layers.emplace_back(layer);
+        }
+    }
+
+    int64_t AudioTransformer::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += norm.get_param_num(effective_only);
+        r += embed.get_param_num(effective_only);
+        r += multi_modal_projector.get_param_num(effective_only);
+        for (size_t i = 0; i < layers.size(); i++)
+            r += layers[i]->get_param_num(effective_only);
+        return r;
+    }
+
+    void AudioTransformer::load(const std::string &path, TensorLoader *loader)
+    {
+        if (!loader->has_tensor(path + "conv1.bias")) return;
+
+        norm.load(path + "norm.", loader);
+        multi_modal_projector.load("multi_modal_projector.", loader);
+        embed.load(path, loader);
+
+        for (size_t i = 0; i < layers.size(); i++)
+        {
+            std::string block_path = path + "layers." + std::to_string(i) + ".";
+            layers[i]->load(block_path, loader);
+        }
+        loaded = true;
+    }
+
+    ggml::tensor *AudioTransformer::forward(ComputeContext *ctx, ggml::tensor *input)
+    {
+        auto output = embed.forward(ctx, input);
+
+        for (size_t i = 0; i < layers.size(); i++)
+        {
+            output = layers[i]->forward(ctx, output, 0);
+        }
+        output = norm.forward(ctx, output);
+
+        int multi = intermedia_size /ggml::get_dim(output, 0);
+
+        output = ggml::reshape(ctx, output, intermedia_size, ggml::get_dim(output, 1) / multi,
+                 ggml::get_dim(output, 2), ggml::get_dim(output, 3));
+        output = multi_modal_projector.forward(ctx, output);
+        return output;
+    }
+
+    bool AudioTransformer::is_loaded(void) const
+    {
+        return loaded;
+    }
+
+    AudioEmbeddingGeneration::AudioEmbeddingGeneration(const RuntimeConfig &runtime_config, size_t GRAPH_SIZE):
+        max_llm_tokens(max_llm_tokens),
+        eval(runtime_config, "aud", GRAPH_SIZE),
+        _ctx(eval.get_backend_context())
+    {
+        _ctx.cache_dtype = runtime_config.cache_type;
+    }
+
+    bool AudioEmbeddingGeneration::load(ModelLoader &loader)
+    {
+        if (model.get())
+        {
+            loader.push_allocator_manager(eval.get_layer_allocators());
+            model->load("audio.", &loader);
+            loader.pop_allocator_manager();
+            return model->is_loaded();
+        }
+        else
+            return false;
+    }
+
+    bool AudioEmbeddingGeneration::load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &json_config)
+    {
+        const auto _cfg = json_config["config.json"]["audio_config"];
+        if (!_cfg.IsObject()) return false;
+
+        config.dtype = dtype;
+
+        config.num_hidden_layers        = (int)_cfg["num_hidden_layers"].ToInt();
+        config.num_attention_heads      = (int)_cfg["num_attention_heads"].ToInt();
+        config.num_key_value_heads      = (int)_cfg["num_key_value_heads"].ToInt();
+        config.intermediate_size        = (int)_cfg["intermediate_size"].ToInt();
+        config.hidden_size              = (int)_cfg["hidden_size"].ToInt();
+        config.max_position_embeddings  = (int)_cfg["max_position_embeddings"].ToInt();
+        config.rope_dim                 = (int)(_cfg["head_dim"].ToInt() * _cfg["partial_rotary_factor"].ToFloat());
+        config.num_mel_bins             = (int)_cfg["num_mel_bins"].ToInt();
+        config.rope_theta               = (float)_cfg["rope_parameters"]["rope_theta"].ToFloat();
+
+        auto pp_cfg = json_config["processor_config.json"]["feature_extractor"];
+        if (!pp_cfg.IsObject()) return false;
+
+        config.chunk_length     = (int  )pp_cfg["chunk_length"].ToInt();
+        config.feature_size     = (int  )pp_cfg["feature_size"].ToInt();
+        config.hop_length       = (int  )pp_cfg["hop_length"].ToInt();
+        config.n_fft            = (int  )pp_cfg["n_fft"].ToInt();
+        config.n_samples        = (int  )pp_cfg["n_samples"].ToInt();
+        config.nb_max_frames    = (int  )pp_cfg["nb_max_frames"].ToInt();
+        config.sampling_rate    = (int  )pp_cfg["sampling_rate"].ToInt();
+
+        const size_t tensor_ovhd = ggml::tensor_overhead();
+        const size_t num_tensors = 10 + config.num_hidden_layers * 16;
+        const size_t ctx_size = num_tensors * tensor_ovhd;
+        _ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+        _ctx.dtype = dtype;
+
+        model.reset(new AudioTransformer(&_ctx, config, lm_hidden_size));
+
+        _ctx.check_used_mem_size(true);
+
+        return true;
+    }
+
+    void AudioEmbeddingGeneration::generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf)
+    {
+        if ((model.get() == nullptr) || (tok->media_emb.size() < 1)) return;
+        if (!model->is_loaded()) return;
+
+        for (auto &media : tok->media_emb)
+        {
+            run_model(gen_config, tok, dtype, media, buf);
+        }
+    }
+
+    bool AudioEmbeddingGeneration::run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &audio, std::vector<uint8_t> &buf)
+    {
+        ggml::tensor *media_emb = nullptr;
+        const auto make_graph = [this, &media_emb, &audio](ComputeContext *ctx) -> ggml::tensor * {
+            media_emb = ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F32, config.max_position_embeddings * 2, config.feature_size);;
+            auto r = model->forward(ctx, media_emb);
+            return r;
+        };
+        const auto write_input_data = [&media_emb, &audio](ComputeContext *ctx) {
+            Backend::write_tensor_data(media_emb, audio.data.data(), 0, audio.data.size() * sizeof(audio.data[0]));
+            //print_tensor(media_emb, 0, true);
+        };
+
+        std::vector<int64_t> shape;
+        eval.evaluate(gen_config, make_graph, write_input_data, dtype, shape, buf);
+        return true;
+    }
+}
+
+namespace chatllm::glm::asr
+{
+    typedef llama::v3::Config Config;
+
+    class ChatHistoryEncoder : public HistoryEncoderBracketRole
+    {
+    public:
+        void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
+
+    protected:
+        void append_ending(std::vector<int> &ids) const
+        {
+            tokenizer->encode("\n", ids);
+        }
+        void append_sys_ending(std::vector<int> &ids) const override
+        {
+            append_ending(ids);
+        }
+        void append_ai_ending(int round_idx, std::vector<int> &ids) const override
+        {
+            append_ending(ids);
+        }
+        void append_user_ending(int round_idx, std::vector<int> &ids) const override
+        {
+            append_ending(ids);
+        }
+    public:
+        const audio_tower::Config *aud_config = nullptr;
+        bool aud_loaded = false;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public BaseTokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config) : BaseTokenizer(config, &_chat_encoder)
+        {}
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            tp = new tokenizer::BPEProcessor2();
+            size_t size = tp->Load(buffer, n_vocab);
+            eos_token_id = tp->PieceToId("<|endoftext|>");
+            terminate_ids.insert(tp->PieceToId("<|user|>"));
+            terminate_ids.insert(tp->PieceToId("<|assistant|>"));
+
+            audio_bos_token_id = tp->PieceToId("<|begin_of_audio|>");
+            audio_eos_token_id = tp->PieceToId("<|end_of_audio|>");
+            user_token_id      = tp->PieceToId("<|user|>");
+            return size;
+        }
+
+        void inject_audio_ids(std::vector<int> &ids, const int  ids_to_inject_start, const int ids_to_inject_count)
+        {
+            ids.push_back(audio_bos_token_id);
+            for (int i = 0; i < ids_to_inject_count; i++)
+                ids.push_back(i + ids_to_inject_start);
+            ids.push_back(audio_eos_token_id);
+            ids.push_back(user_token_id);
+            encode("\n", ids);
+        }
+    public:
+        int audio_bos_token_id;
+        int audio_eos_token_id;
+        int user_token_id;
+        std::string transcription_prompt = "Please transcribe this audio into text";
+    };
+
+    class ExtendEmbedding
+    {
+    public:
+        ExtendEmbedding(int extra_ids) : pad_arg(new BlockParams::PadEmbedding(extra_ids, extra_ids)) {}
+    public:
+        BlockParams::PadEmbedding *pad_arg = nullptr;
+    };
+
+    class ConditionalGeneration : public ExtendEmbedding, public llama::v3::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration() = default;
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_GLM_ASR);
+
+        bool load_more(const json::JSON &config) override;
+        void load(ModelLoader &loader) override;
+        void before_generate(const GenerationConfig &gen_config) override;
+    public:
+        audio_tower::AudioEmbeddingGeneration audio;
+    };
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type):
+        ExtendEmbedding(1500),
+        llama::v3::ConditionalGeneration(config, runtime_config, type),
+        audio(runtime_config)
+    {
+        delete pad_arg;
+        pad_arg = nullptr;
+    }
+
+    bool ConditionalGeneration::load_more(const json::JSON &config)
+    {
+        Base::load_more(config);
+        bool r = audio.load_more(this->config.dtype, this->config.hidden_size, config);
+        if (r)
+        {
+            _chat_encoder.aud_config = &audio.config;
+        }
+        return r;
+    }
+
+    void ConditionalGeneration::load(ModelLoader &loader)
+    {
+        Base::load(loader);
+
+        loader.add_tensor_name_translations({
+            {"multi_modal_projector.fc0.",                      "multi_modal_projector.linear_1."},
+            {"multi_modal_projector.fc1.",                      "multi_modal_projector.linear_2."},
+            {".mlp.fc1.",                                       ".mlp.fc2."},
+            {".mlp.fc0.",                                       ".mlp.fc1."},
+        });
+
+        _chat_encoder.aud_loaded = audio.load(loader);
+    }
+
+    void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
+    {
+        std::vector<uint8_t> buf;
+        auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
+        audio.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
+        if (buf.size() < 1) return;
+
+        size_t offset = emb->get_base_nbytes();
+        Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::ostringstream oss_prompt;
+
+        ids.push_back(tok->user_token_id);
+        tok->encode("\n", ids);
+
+        bool found_prompt = false;
+
+        for (auto &piece : user.pieces)
+        {
+            if (piece.type == ContentPiece::Type::Text)
+            {
+                if (piece.content.size() > 0)
+                {
+                    tok->encode(piece.content, ids);
+                    found_prompt = true;
+                }
+            }
+            else if (piece.type == ContentPiece::Type::Audio)
+            {
+                CHATLLM_CHECK(aud_loaded) << "Audio model not loaded";
+
+                std::vector<float>          pcm_samples;
+                std::vector<audio::mel>     mel_chunks;
+
+                if (!audio::load(piece.content.c_str(), pcm_samples, aud_config->sampling_rate)) continue;
+
+                audio::mel_spectrogram(pcm_samples.data(), pcm_samples.size(),
+                    aud_config->n_samples,
+                    aud_config->sampling_rate,
+                    aud_config->feature_size,
+                    aud_config->n_fft,
+                    aud_config->hop_length,
+                    mel_chunks);
+
+                auto &mel = mel_chunks[0];
+                CHATLLM_CHECK(mel.n_len == aud_config->max_position_embeddings * 2);
+
+                tok->media_emb.push_back({.emb_vec_number = aud_config->max_position_embeddings / 2, .data = {}});
+
+                auto &media = tok->media_emb.back();
+                media.data = std::move(mel.data);
+
+                //audio::load_text_data_file("C:\\projects\\chatllm.cpp\\dump\\dump\\GlmAsrForConditionalGeneration_debug0_Identity", media.data);
+
+                const int id_start = tok->get_image_total_emb_vectors() - media.emb_vec_number + tok->vocab_size;
+                tok->inject_audio_ids(ids, id_start, media.emb_vec_number);
+            }
+            else
+            {
+                CHATLLM_THROW << "Unsupported content type: " << (int)piece.type;
+            }
+        }
+
+        if (!found_prompt)
+            tokenizer->encode(tok->transcription_prompt, ids);
+    }
+}
 
 namespace chatllm
 {
@@ -1419,4 +1920,5 @@ namespace chatllm
     REGISTER_MODEL_LOADER(GLM4,                  glm::v4, 1);
     REGISTER_MODEL_LOADER(GLM4_0414,             glm::glm4_0414, 1);
     REGISTER_MODEL_LOADER(GLM4V,                 glm::v4v, 1);
+    REGISTER_MODEL_LOADER(GLM_ASR,               glm::asr, 1);
 }

@@ -787,6 +787,50 @@ static void run_tts(Args &args, chatllm::Pipeline &pipeline, TextStreamer &strea
     streamer.cout << "Bye\n";
 }
 
+static void run_asr_ocr(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config, const std::string &tag)
+{
+    std::vector<int16_t> result;
+    int sample_rate = 0;
+    int channels = 0;
+
+    const std::string opening = "{{";
+    const std::string closing = "}}";
+
+    chatllm::Messages history(opening, closing);
+
+    auto make_msg = [&tag, &opening, &closing](const std::string &fn) {
+        std::ostringstream oss;
+        oss << opening << tag << ":" << fn << closing;
+        return oss.str();
+    };
+
+    if (!args.interactive)
+    {
+        history.push_back(make_msg(args.prompt), chatllm::MsgRole::User);
+        pipeline.chat(history, gen_config, &streamer);
+        return;
+    }
+
+    while (1)
+    {
+        streamer.cout << "File > " << std::flush;
+        std::string input;
+        if (!get_utf8_line(input, args.multi_line))
+        {
+            streamer.cout << "FAILED to read line." << std::endl;
+            break;
+        }
+        if (input.empty()) continue;
+
+        history.push_back(make_msg(input), chatllm::MsgRole::User);
+        pipeline.chat(history, gen_config, &streamer);
+
+        history.clear();
+        pipeline.restart();
+    }
+    streamer.cout << "Bye\n";
+}
+
 static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
     std::vector<float> result;
@@ -946,6 +990,9 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
             return;
         case chatllm::ModelPurpose::TTS:
             run_tts(args, pipeline, streamer, gen_config);
+            return;
+        case chatllm::ModelPurpose::ASR:
+            run_asr_ocr(args, pipeline, streamer, gen_config, "audio");
             return;
         default:
             break;

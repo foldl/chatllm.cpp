@@ -37,4 +37,6 @@ namespace audio
         int64_t frames_per_chunk = -1);
 
     void test(void);
+
+    void load_text_data_file(const char *fn, std::vector<float> &data);
 }

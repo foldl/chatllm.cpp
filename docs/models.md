@@ -436,6 +436,11 @@ Please use `--format completion` for these models.
 * Nanonets-OCR2 (`Qwen2VLForConditionalGeneration`, `Qwen2_5_VLForConditionalGeneration`)
     * [x] OCR2: [3B](https://huggingface.co/nanonets/Nanonets-OCR2-3B/tree/d0368059ad151ce9e38f526890cfd4f27b28be65), [1.5B](https://huggingface.co/nanonets/Nanonets-OCR2-1.5B-exp/tree/306a9b2a65672a3dbebd9bce9a9373a9a18674a2)
 
+## ASR Models
+
+* GLM-ASR (`GlmAsrForConditionalGeneration`)
+    * [x] [Nano-2512](https://huggingface.co/zai-org/GLM-ASR-Nano-2512/tree/8172188f128059b57f09686dda5b36edff1606dd)
+
 ## RAG Models
 
 * Text Embedding (`XLMRobertaModel`)

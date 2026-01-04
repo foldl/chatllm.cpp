@@ -172,6 +172,22 @@ namespace chatllm::qwen
             AudioSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length);
         };
 
+        class AudioEmbedding : public Block
+        {
+        public:
+            AudioEmbedding(InitContext *ctx, const Config &config);
+
+            int64_t get_param_num(bool effective_only) const override;
+
+            void load(const std::string &path, TensorLoader *loader) override;
+
+            ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+        public:
+            Embedding embed_positions;
+            Conv1D    conv1;
+            Conv1D    conv2;
+        };
+
         class AudioTransformer : public Block
         {
         public:
@@ -188,9 +204,7 @@ namespace chatllm::qwen
             bool is_loaded(void) const;
 
         protected:
-            Embedding embed_positions;
-            Conv1D    conv1;
-            Conv1D    conv2;
+            AudioEmbedding embed;
             LayerNorm layer_norm;
             Linear    multi_modal_projector;
             std::vector<std::unique_ptr<LayerBlock>> layers;

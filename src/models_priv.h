@@ -197,6 +197,7 @@ namespace chatllm
         MODEL_TYPE_QWEN3_Embedding          = 0x10000109,
         MODEL_TYPE_QWEN3_ReRanker           = 0x1000010A,
         MODEL_TYPE_MAYA1                    = 0x1000010B,
+        MODEL_TYPE_GLM_ASR                  = 0x1000010D,
 
         MODEL_TYPE_LLAMA_MULTI      = 0x20000001,
 

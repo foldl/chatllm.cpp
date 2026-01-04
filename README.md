@@ -33,41 +33,18 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
+* 2026-01-04: GLM-ASR-Nano
 * 2025-12-31: Qwen3-VL
 * 2025-12-24: GLM-4.6V-Flash
 * 2025-12-15: Rnj-1
 * 2025-12-08: Ministral-3
 * 2025-11-06: Maya1
 * 2025-11-03: Ouro
-* 2025-10-31: Megrez2-3x7B-A3B
-* 2025-10-25: LLaDA2.0-mini
-* 2025-10-14: Nanonets-OCR2
-* 2025-10-13: dots.ocr
 * 2025-10-10: [I can draw](./docs/multimodal.md): Janus-Pro
-* 2025-09-23: Qwen2.5-VL
-* 2025-09-15: Ling/Ring-mini-2.0
-* 2025-09-08: GroveMoE
-* 2025-09-03: Apertus
-* 2025-08-22: Seed-OSS
-* 2025-08-11: GPT-OSS
-* 2025-08-05: Pangu-Embedded
-* 2025-07-29: Jiutian
-* 2025-07-10: SmolLM-3
-* 2025-07-05: Pangu-Pro-MoE
-* 2025-07-04: ERNIE-MoE
-* 2025-06-30: Hunyuan-A13B, ERNIE-Dense
 * 2025-06-21: [I can hear](./docs/multimodal.md): Qwen2-Audio
-* 2025-06-10: SmolVLM2
-* 2025-06-07: MiniCPM4
-* 2025-06-06: Qwen-3 Embedding & Reranker
-* 2025-06-03: Kimi-VL
-* 2025-05-28: Gemma3 fully supported
 * 2025-05-23: [I can see](./docs/multimodal.md): Fuyu
 * 2025-05-21: Re-quantization when loading (e.g. `--re-quantize q4_k`)
-* 2025-05-19: OuteTTS
 * 2025-05-17: [I can speak](./docs/multimodal.md): Orpheus-TTS
-* 2025-05-11: Seed-Coder
-* 2025-04-30: QWen3, MiMo
 * 2025-03-24: [GGMM](./docs/ggmm.md) file format
 * 2025-02-21: [Distributed inference](./docs/rpc.md)
 * 2025-02-10: [GPU acceleration](./docs/gpu.md) 🔥

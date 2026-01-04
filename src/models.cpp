@@ -247,6 +247,8 @@ namespace chatllm
         case MODEL_TYPE_OUTE_TTS_QWEN3:
         case MODEL_TYPE_MAYA1:
             return ModelPurpose::TTS;
+        case MODEL_TYPE_GLM_ASR:
+            return ModelPurpose::ASR;
         default:
             return ModelPurpose::Chat;
         }

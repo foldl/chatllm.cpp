@@ -56,6 +56,7 @@ You can use `-mgl` (`--model_gpu_layers`) to specify number of layers of a speci
 
 * `main`: the main model.
 * `vis`: the vision accessory model (which typically project images/videos into LLM).
+* `aud`: the audio accessory model (which typically project audio into LLM).
 * `any`: any model.
 
 `-ngl N` is equivalent to `-mgl any N`.

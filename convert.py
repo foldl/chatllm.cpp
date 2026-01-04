@@ -238,6 +238,7 @@ class ModelType(Enum):
     QWen3_Embedding         = 0x10000109
     QWen3_ReRanker          = 0x1000010A
     Maya1                   = 0x1000010B
+    GLM_ASR                 = 0x1000010D
 
     LlaMAMulti    = 0x20000001
 
@@ -4612,6 +4613,70 @@ class QWen2AudioConverter(BaseConverter):
             "audio.layer_norm.weight",
             "multi_modal_projector.linear.bias",
             "multi_modal_projector.linear.weight",
+        ]
+
+        return weight_names
+
+class GLMASRConverter(BaseConverter):
+    MODEL_TYPE = ModelType.GLM_ASR
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            new_name = name
+            if new_name.startswith('audio_tower.'):
+                new_name = new_name.replace('audio_tower.', 'audio.')
+            elif new_name.startswith('language_model.'):
+                new_name = new_name.replace('language_model.', '')
+                tensor = Llama3Converter.pp(GLMASRConverter.txt_config, new_name, tensor)
+
+            r[new_name] = tensor
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        txt_config = AttributeDict(copy.deepcopy(config.text_config))
+        txt_config.rope_theta = txt_config.rope_parameters['rope_theta']
+
+        GLMASRConverter.txt_config = txt_config
+        Llama3Converter.dump_config(f, GLMASRConverter.txt_config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = Llama3Converter.get_weight_names(GLMASRConverter.txt_config)
+
+        for i in range(config.audio_config['num_hidden_layers']):
+            weight_names += [
+                f"audio.layers.{i}.mlp.fc1.bias",
+                f"audio.layers.{i}.mlp.fc1.weight",
+                f"audio.layers.{i}.mlp.fc2.bias",
+                f"audio.layers.{i}.mlp.fc2.weight",
+                f"audio.layers.{i}.post_attention_layernorm.bias",
+                f"audio.layers.{i}.post_attention_layernorm.weight",
+                f"audio.layers.{i}.self_attn.k_proj.weight",
+                f"audio.layers.{i}.self_attn.o_proj.bias",
+                f"audio.layers.{i}.self_attn.o_proj.weight",
+                f"audio.layers.{i}.self_attn.q_proj.bias",
+                f"audio.layers.{i}.self_attn.q_proj.weight",
+                f"audio.layers.{i}.self_attn.v_proj.bias",
+                f"audio.layers.{i}.self_attn.v_proj.weight",
+                f"audio.layers.{i}.input_layernorm.bias",
+                f"audio.layers.{i}.input_layernorm.weight",
+            ]
+
+        weight_names += [
+            "audio.conv1.bias",
+            "audio.conv1.weight",
+            "audio.conv2.bias",
+            "audio.conv2.weight",
+            "audio.norm.bias",
+            "audio.norm.weight",
+            "multi_modal_projector.linear_1.bias",
+            "multi_modal_projector.linear_1.weight",
+            "multi_modal_projector.linear_2.bias",
+            "multi_modal_projector.linear_2.weight",
         ]
 
         return weight_names
@@ -9219,6 +9284,8 @@ def main():
         OuroConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Mistral3ForConditionalGeneration':
         Mistral3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'GlmAsrForConditionalGeneration':
+        GLMASRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

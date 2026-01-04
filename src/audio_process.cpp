@@ -534,4 +534,15 @@ namespace audio
             }
         }
     }
+
+    void load_text_data_file(const char *fn, std::vector<float> &data)
+    {
+        FILE *f = fopen(fn, "r");
+        char buf[200];
+        for (size_t i = 0; i < data.size(); i++)
+        {
+            const char *l = fgets(buf, sizeof(buf) - 1, f);
+            sscanf(l, "%f", &data[i]);
+        }
+    }
 }
