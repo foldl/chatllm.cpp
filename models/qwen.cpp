@@ -629,11 +629,7 @@ namespace chatllm::qwen::v2_audio
 
     void Tokenizer::inject_audio_ids(std::vector<int> &ids, const int  ids_to_inject_start, const int ids_to_inject_count)
     {
-        if (audio_bos_token_id < 0)
-        {
-            audio_bos_token_id = tp->PieceToId("<|audio_bos|>");
-            audio_eos_token_id = tp->PieceToId("<|audio_eos|>");
-        }
+        CHATLLM_CHECK(audio_bos_token_id >= 0) << "audio_bos_token_id not found";
         ids.push_back(audio_bos_token_id);
         for (int i = 0; i < ids_to_inject_count; i++)
             ids.push_back(i + ids_to_inject_start);
@@ -649,9 +645,33 @@ namespace chatllm::qwen::v2_audio
         pad_arg = nullptr;
     }
 
+    void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
+    {
+        Base::set_tokenizer(tokenizer);
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->audio_bos_token_id = audio_bos_token_id;
+        tok->audio_eos_token_id = audio_eos_token_id;
+    }
+
     bool ConditionalGeneration::load_more(const json::JSON &config)
     {
         Base::load_more(config);
+
+        auto tok_cfg = config["tokenizer_config.json"]["added_tokens_decoder"];
+        if (!tok_cfg.IsObject()) return false;
+        for (auto &kv : tok_cfg.ObjectRange())
+        {
+            auto t = kv.second["content"].ToString();
+            if (t == "<|audio_bos|>")
+            {
+                audio_bos_token_id = (int)std::atoi(kv.first.c_str());
+            }
+            else if (t == "<|audio_eos|>")
+            {
+                audio_eos_token_id = (int)std::atoi(kv.first.c_str());
+            }
+        }
+
         bool r = audio.load_more(this->config.dtype, this->config.hidden_size, config);
         if (r)
         {

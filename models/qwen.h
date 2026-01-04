@@ -268,8 +268,13 @@ namespace chatllm::qwen
             void load(ModelLoader &loader) override;
 
             void before_generate(const GenerationConfig &gen_config) override;
+
+            void set_tokenizer(BaseTokenizer *tokenizer) override;
         public:
             audio_tower::AudioEmbeddingGeneration audio;
+        private:
+            int audio_bos_token_id = -1;
+            int audio_eos_token_id = -1;
         };
     }
 
