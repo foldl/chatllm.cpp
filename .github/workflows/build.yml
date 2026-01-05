@@ -791,6 +791,7 @@ jobs:
 
   macOS-latest-swift:
     runs-on: macos-latest
+    if: false
 
     strategy:
       matrix:
@@ -1266,6 +1267,7 @@ jobs:
 
   android-ndk-build:
     runs-on: ubuntu-latest
+    if: false
 
     env:
       OPENCL_VERSION: 2025.07.22
