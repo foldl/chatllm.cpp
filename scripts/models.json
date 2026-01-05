@@ -1569,6 +1569,19 @@
                         "url": "chatllm_quantized_qwen3/qwen3-vl-a3b-it.bin"
                     }
                 }
+            },
+            "a3b-thinking": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 19613743888,
+                        "url": "chatllm_quantized_qwen3/qwen3-vl-a3b-thinking-q4_1.bin"
+                    },
+                    "q8": {
+                        "size": 33147564944,
+                        "url": "chatllm_quantized_qwen3/qwen3-vl-a3b-thinking.bin"
+                    }
+                }
             }
         }
     },
@@ -3726,6 +3739,22 @@
                     "q8": {
                         "size": 10971131968,
                         "url": "chatllm_quantized_glm/glm-4.6v-flash.bin"
+                    }
+                }
+            }
+        }
+    },
+    "glm-asr": {
+        "brief": "GLM-ASR-Nano-2512 is a robust, open-source speech recognition model with 1.5B parameters.",
+        "default": "nano",
+        "license": "MIT",
+        "variants": {
+            "nano": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2408315232,
+                        "url": "chatllm_quantized_glm/glm-asr-nano-2512.bin"
                     }
                 }
             }
