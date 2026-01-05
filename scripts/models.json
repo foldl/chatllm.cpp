@@ -3791,5 +3791,30 @@
                 }
             }
         }
+    },
+    "hy-mt1.5": {
+        "brief": "Hunyuan Translation Model Version 1.5 includes a 1.8B translation model, HY-MT1.5-1.8B, and a 7B translation model, HY-MT1.5-7B.",
+        "default": "1.8b",
+        "license": "https://github.com/Tencent-Hunyuan/HY-MT/blob/main/License.txt",
+        "variants": {
+            "1.8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1907333088,
+                        "url": "chatllm_quantized_hunyuan/hunyuan-mt1.5-1.8b.bin"
+                    }
+                }
+            },
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7980004000,
+                        "url": "chatllm_quantized_hunyuan/hunyuan-mt1.5-7b.bin"
+                    }
+                }
+            }
+        }
     }
 }

@@ -283,6 +283,7 @@ const std::string Processor::IdToPiece(int id) const
 
 void Processor::OverrideTokenDecoding(int id, const std::string &tok)
 {
+    if (id < 0) return;
     token_override.emplace(id, tok);
 }
 

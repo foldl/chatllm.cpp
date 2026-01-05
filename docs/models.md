@@ -95,13 +95,14 @@
 * GroveMoE (`GroveMoeForCausalLM`)
     * [x] [Inst](https://huggingface.co/inclusionAI/GroveMoE-Inst/tree/b3441abf1f3ed166e58c005ef2c528c584b55764)
 
-* HunYuan (`HunYuanForCausalLM`)
+* HunYuan (`HunYuanForCausalLM`, `HunYuanDenseV1ForCausalLM`)
     * [x] ~~Dense: [Instruct-7B](https://huggingface.co/tencent/Hunyuan-7B-Instruct)~~ (lost)
     * [x] Dense: [0.5B-Instruct](https://huggingface.co/tencent/Hunyuan-0.5B-Instruct/tree/9ec1774c379d7dde3f2d7ddd3286cde88949e181),
     [1.8B-Instruct](https://huggingface.co/tencent/Hunyuan-1.8B-Instruct/tree/21ab9fd367ee99ba8001d34a182252ddb2ed255c),
     [4B-Instruct](https://huggingface.co/tencent/Hunyuan-4B-Instruct/tree/3a419720cb283ece18dc6baac1b2484418cf525f),
     [7B-Instruct](https://huggingface.co/tencent/Hunyuan-7B-Instruct/tree/e256110382dc42f4e2f4d97afc9f8bea5a907a4a)
     * [x] MoE: [A13B-Instruct](https://huggingface.co/tencent/Hunyuan-A13B-Instruct/tree/202c9758065873e0ac7c80211e6275593f165442)
+    * [x] MT1.5: [1.8B](https://huggingface.co/tencent/HY-MT1.5-1.8B/tree/dbad03788f49709801014c95d481a514c272ca52), [7B](https://huggingface.co/tencent/HY-MT1.5-7B/tree/f1aa7278ccb1825edaf806c7e40d1febcbf2cbbd)
 
 * Instella (`InstellaForCausalLM`)
     * [x] [Instruct-3B](https://huggingface.co/amd/Instella-3B-Instruct)

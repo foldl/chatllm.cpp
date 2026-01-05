@@ -144,7 +144,17 @@ namespace chatllm::hunyuan::dense_v1
         void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
-    static ChatHistoryEncoder _chat_encoder;
+    class ChatHistoryEncoderExtra04 : public BaseHistoryEncoder
+    {
+    public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder           _chat_encoder;
+    static ChatHistoryEncoderExtra04    _chat_encoder_extra04;
 
     class Tokenizer : public BaseTokenizer
     {
@@ -164,11 +174,20 @@ namespace chatllm::hunyuan::dense_v1
             size_t size = tp->Load(buffer, n_vocab);
 
             hy_User_token_id        = tp->PieceToId("<｜hy_User｜>");
-            hy_Assistant_token_id   = tp->PieceToId("<｜hy_Assistant｜>");
-            bos_token_id            = tp->PieceToId("<｜hy_begin▁of▁sentence｜>");
-            eos_token_id            = tp->PieceToId("<｜hy_place▁holder▁no▁2｜>");
+            if (hy_User_token_id >= 0)
+            {
+                hy_Assistant_token_id   = tp->PieceToId("<｜hy_Assistant｜>");
+                bos_token_id            = tp->PieceToId("<｜hy_begin▁of▁sentence｜>");
+                eos_token_id            = tp->PieceToId("<｜hy_place▁holder▁no▁2｜>");
 
-            terminate_ids.insert(eos_token_id);
+                terminate_ids.insert(eos_token_id);
+            }
+            else
+            {
+                extra_0_token_id        = tp->PieceToId("<|extra_0|>");
+                extra_4_token_id        = tp->PieceToId("<|extra_4|>");
+                set_chat_encoder(&_chat_encoder_extra04);
+            }
 
             tp->OverrideTokenDecoding(tp->PieceToId("<think>"),  "<think>");
             tp->OverrideTokenDecoding(tp->PieceToId("</think>"), "</think>");
@@ -177,8 +196,11 @@ namespace chatllm::hunyuan::dense_v1
         }
 
     public:
-        int hy_User_token_id;
-        int hy_Assistant_token_id;
+        int hy_User_token_id = -1;
+        int hy_Assistant_token_id = -1;
+
+        int extra_0_token_id = -1;
+        int extra_4_token_id = -1;
     };
 
     void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
@@ -214,6 +236,40 @@ namespace chatllm::hunyuan::dense_v1
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         ids.push_back(tok->hy_Assistant_token_id);
+    }
+
+    void ChatHistoryEncoderExtra04::append_sys_prompt(std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        ids.push_back(tok->bos_token_id);
+
+        if (tok->get_system_prompt().size() > 0)
+        {
+            tok->encode(tok->get_system_prompt(), ids);
+            ids.push_back(tok->extra_4_token_id);
+        }
+    }
+
+    void ChatHistoryEncoderExtra04::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        append_ai_opening(round_idx, ids);
+        tok->encode(ai, ids);
+        ids.push_back(tok->eos_token_id);
+    }
+
+    void ChatHistoryEncoderExtra04::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        tok->encode(user, ids);
+        ids.push_back(tok->extra_0_token_id);
+    }
+
+    void ChatHistoryEncoderExtra04::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
     }
 
     class ConditionalGeneration : public dense::ConditionalGeneration

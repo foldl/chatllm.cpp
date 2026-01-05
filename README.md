@@ -33,6 +33,7 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
+* 2026-01-05: HY-MT
 * 2026-01-04: GLM-ASR-Nano
 * 2025-12-31: Qwen3-VL
 * 2025-12-24: GLM-4.6V-Flash
