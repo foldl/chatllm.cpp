@@ -19,6 +19,8 @@ A.I. > Hello! How can I assist you today?
 You  >
 ```
 
+To use multi-modal models, see also [Multimodal](multimodal.md).
+
 For Linux/MacOS (and Windows) users, build [binding](binding.md) and start chatting.
 
 Note: `main_nim` built from [`main.nim`](../bindings/main.nim) supports model id and model downloading, while the _default_ `main`
