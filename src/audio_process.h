@@ -36,6 +36,8 @@ namespace audio
         std::vector<mel> & output,
         int64_t frames_per_chunk = -1);
 
+    int64_t mel_len(const int64_t n_samples, const int hop_length);
+
     void test(void);
 
     void load_text_data_file(const char *fn, std::vector<float> &data);

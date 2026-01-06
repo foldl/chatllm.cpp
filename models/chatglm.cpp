@@ -1491,7 +1491,8 @@ namespace chatllm::glm::audio_tower
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
 
         bool is_loaded(void) const;
-
+    public:
+        int emb_vector_len = 0;
     protected:
         const int intermedia_size;
         AudioEmbedding          embed;
@@ -1614,9 +1615,13 @@ namespace chatllm::glm::audio_tower
 
         int multi = intermedia_size /ggml::get_dim(output, 0);
 
+        output = ggml::view_2d(ctx, output, ggml::get_dim(output, 0), emb_vector_len * multi,
+                               ggml::get_dim(output, 0) * ggml::element_size(output), 0);
+
         output = ggml::reshape(ctx, output, intermedia_size, ggml::get_dim(output, 1) / multi,
                  ggml::get_dim(output, 2), ggml::get_dim(output, 3));
         output = multi_modal_projector.forward(ctx, output);
+
         return output;
     }
 
@@ -1698,9 +1703,11 @@ namespace chatllm::glm::audio_tower
         }
     }
 
-    bool AudioEmbeddingGeneration::run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &audio, std::vector<uint8_t> &buf)
+    bool AudioEmbeddingGeneration::run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype,
+        const BaseTokenizer::MediaAsEmbeddingVector &audio, std::vector<uint8_t> &buf)
     {
         ggml::tensor *media_emb = nullptr;
+        model->emb_vector_len = audio.emb_vec_number;
         const auto make_graph = [this, &media_emb, &audio](ComputeContext *ctx) -> ggml::tensor * {
             media_emb = ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F32, config.max_position_embeddings * 2, config.feature_size);;
             auto r = model->forward(ctx, media_emb);
@@ -1880,6 +1887,8 @@ namespace chatllm::glm::asr
 
                 if (!audio::load(piece.content.c_str(), pcm_samples, aud_config->sampling_rate)) continue;
 
+                int mel_frames = ((int)audio::mel_len(pcm_samples.size(), aud_config->hop_length) + 7) / 8 * 8;
+
                 audio::mel_spectrogram(pcm_samples.data(), pcm_samples.size(),
                     aud_config->n_samples,
                     aud_config->sampling_rate,
@@ -1889,14 +1898,13 @@ namespace chatllm::glm::asr
                     mel_chunks);
 
                 auto &mel = mel_chunks[0];
+                mel_frames = std::min((int)mel.n_len, mel_frames);
                 CHATLLM_CHECK(mel.n_len == aud_config->max_position_embeddings * 2);
 
-                tok->media_emb.push_back({.emb_vec_number = aud_config->max_position_embeddings / 2, .data = {}});
+                tok->media_emb.push_back({.emb_vec_number = mel_frames / 8, .data = {}});
 
                 auto &media = tok->media_emb.back();
                 media.data = std::move(mel.data);
-
-                //audio::load_text_data_file("C:\\projects\\chatllm.cpp\\dump\\dump\\GlmAsrForConditionalGeneration_debug0_Identity", media.data);
 
                 const int id_start = tok->get_image_total_emb_vectors() - media.emb_vec_number + tok->vocab_size;
                 tok->inject_audio_ids(ids, id_start, media.emb_vec_number);

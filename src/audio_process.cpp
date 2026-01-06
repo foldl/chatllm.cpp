@@ -503,6 +503,11 @@ namespace audio
         return true;
     }
 
+    int64_t mel_len(const int64_t n_samples, const int hop_length)
+    {
+        return n_samples / hop_length;
+    }
+
     void test(void)
     {
         std::vector<float> in(128, 0.0f);
