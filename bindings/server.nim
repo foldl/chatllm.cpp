@@ -313,8 +313,29 @@ type
         timings: ChatMessageTimings
 
     ChatCompletionStreamResponder = ref object of HttpResponder
-
     ChatCompletionNonStreamResponder = ref object of HttpResponder
+
+type
+    OllamaChatRspMessage = object
+        role: string = "assistant"
+        content: string = ""
+        thinking: Option[string] = none(string)
+
+    OllamaChatResponse = object
+        model: string
+        created_at: string
+        message: OllamaChatRspMessage
+        done: bool = false
+        done_reason: Option[string] = none(string)
+        total_duration: int
+        load_duration: int
+        prompt_eval_count: int
+        prompt_eval_duration: int
+        eval_count: int
+        eval_duration: int
+
+    OllamaChatStreamResponder = ref object of HttpResponder
+    OllamaChatNonStreamResponder = ref object of HttpResponder
 
 proc initHttpResponder(responder: HttpResponder, req: Request, timestamp: int, model, id: string) =
     responder.req = req
@@ -373,6 +394,38 @@ method done(self: ChatCompletionNonStreamResponder; all, thought: string, prompt
         finish_reason: some("stop")))
     return await self.send_str($(%* rsp) & "\n\n")
 
+proc newOllamaChatStreamResponder(req: Request, timestamp: int, model, id: string): OllamaChatStreamResponder =
+    new(result)
+    initHttpResponder(result, req, timestamp, model, id)
+
+method recv_chunk(self: OllamaChatStreamResponder, chunk: string): Future[bool] {.async.} =
+    var rsp = OllamaChatResponse(model: self.model, created_at: $ self.timestamp.fromUnix())
+    rsp.message.content = chunk
+    return await self.send_str($(%* rsp) & "\n")
+
+method recv_thought(self: OllamaChatStreamResponder, chunk: string): Future[bool] {.async.} =
+    var rsp = OllamaChatResponse(model: self.model, created_at: $ self.timestamp.fromUnix())
+    rsp.message.thinking = some(chunk)
+    return await self.send_str($(%* rsp) & "\n")
+
+method done(self: OllamaChatStreamResponder; all, thought: string, prompt_tokens, completion_tokens: int): Future[bool] {.async.} =
+    var rsp = OllamaChatResponse(model: self.model, created_at: $ self.timestamp.fromUnix())
+    rsp.done = true
+    rsp.done_reason = some("stop")
+    return await self.send_str($(%* rsp) & "\n")
+
+proc newOllamaChatNonStreamResponder(req: Request, timestamp: int, model, id: string): OllamaChatNonStreamResponder =
+    new(result)
+    initHttpResponder(result, req, timestamp, model, id)
+
+method done(self: OllamaChatNonStreamResponder; all, thought: string, prompt_tokens, completion_tokens: int): Future[bool] {.async.} =
+    var rsp = OllamaChatResponse(model: self.model, created_at: $ self.timestamp.fromUnix())
+    rsp.message.content = all
+    if thought.len > 0: rsp.message.thinking = some(thought)
+    rsp.done = true
+    rsp.done_reason = some("stop")
+    return await self.send_str($(%* rsp) & "\n")
+
 proc send_headers(req: Request, headers: seq[(string, string)]) {.async gcsafe.} =
     await req.sendHeaders(headers.newHttpHeaders)
 
@@ -395,24 +448,12 @@ proc end_headers_send(req: Request, response: string) {.async gcsafe.} =
     await req.end_headers(response.len)
     await req.client.send response
 
-proc handle_completions(req: Request) {.async gcsafe.} =
-    let streamer = get_streamer(StreamerType.Chat)
-    if streamer == nil:
-        await req.respond(Http404, "model not available")
-        return
-    let body = parseJson(req.body)
-    let stream = body.getOrDefault("stream").getBool()
-    let model = body.getOrDefault("model").getStr("chat")
-    let timestamp = getTime().toUnix()
-    let id = "id_" & $streamer.id()
-    streamer.set_max_gen_tokens(body.getOrDefault("max_tokens").getInt(-1))
-
+proc do_completions(req: Request, streamer: StreamerWithHistory, cls: HttpResponder, messages: JsonNode, contentType: string) {.async gcsafe.} =
     let headers = @[("Cache-Control", "no-cache"),
                 ("vary", "origin, access-control-request-method, access-control-request-headers"),
                 ("access-control-allow-credentials", "true"),
                 ("x-content-type-options", "nosniff")]
 
-    let messages = body["messages"]
     if (messages == nil) or (messages.kind != JArray):
         await req.respond(Http404, "`messages` is missing")
         return
@@ -422,11 +463,9 @@ proc handle_completions(req: Request) {.async gcsafe.} =
         await req.respond(Http404, "Interval error")
         return
 
-    var cls: HttpResponder = if stream: newChatCompletionStreamResponder(req, timestamp, model, id) else: newChatCompletionNoneStreamResponder(req, timestamp, model, id)
-
     await req.sendCode(Http200)
     await req.send_headers(headers)
-    await req.send_header("Content-type", if stream: "text/event-stream; charset=utf-8" else: "application/json")
+    await req.send_header("Content-type", contentType)
     await req.end_headers()
 
     cls.timings.cache_n = streamer.tokens_start
@@ -475,6 +514,40 @@ proc handle_completions(req: Request) {.async gcsafe.} =
         discard await cls.done(streamer.acc, streamer.thought_acc, cls.timings.prompt_n, cls.timings.predicted_n)
 
     streamer.acc = ""
+
+proc handle_completions(req: Request) {.async gcsafe.} =
+    let streamer = get_streamer(StreamerType.Chat)
+    if streamer == nil:
+        await req.respond(Http404, "model not available")
+        return
+    let body = parseJson(req.body)
+    let stream = body.getOrDefault("stream").getBool()
+    let model = body.getOrDefault("model").getStr("chat")
+    let timestamp = getTime().toUnix()
+    let id = "id_" & $streamer.id()
+    streamer.set_max_gen_tokens(body.getOrDefault("max_tokens").getInt(-1))
+
+    let contentType = if stream: "text/event-stream; charset=utf-8" else: "application/json"
+    let cls: HttpResponder = if stream: newChatCompletionStreamResponder(req, timestamp, model, id) else: newChatCompletionNoneStreamResponder(req, timestamp, model, id)
+
+    await do_completions(req, streamer, cls, body["messages"], contentType)
+
+proc handle_ollama_chat(req: Request) {.async gcsafe.} =
+    let streamer = get_streamer(StreamerType.Chat)
+    if streamer == nil:
+        await req.respond(Http404, "model not available")
+        return
+    let body = parseJson(req.body)
+    let stream = body.getOrDefault("stream").getBool()
+    let model = body.getOrDefault("model").getStr("chat")
+    let timestamp = getTime().toUnix()
+    let id = "id_" & $streamer.id()
+    streamer.set_max_gen_tokens(body.getOrDefault("max_tokens").getInt(-1))
+
+    let contentType = if stream: "application/x-ndjson" else: "application/json"
+    let cls: HttpResponder = if stream: newOllamaChatStreamResponder(req, timestamp, model, id) else: newOllamaChatNonStreamResponder(req, timestamp, model, id)
+
+    await do_completions(req, streamer, cls, body["messages"], contentType)
 
 func parse_embedding(s: string): seq[float] =
     result = @[]
@@ -588,9 +661,19 @@ func format_model_name(info: JsonNode): string =
 
 proc handle_ollama_tags(req: Request) {.async gcsafe.} =
     type
+        Details = object
+            format: string = "ggmm"
+            family: string = "llm"
+            families: seq[string] = @["llm"]
+            parameter_size: string
+            quantization_level: string = "Q8_0"
         Info = object
             name: string
             model: string
+            modified_at: string = "2025-01-01T00:00:00.0+00:00"
+            size: int = 100
+            digest: string = "123"
+            details: Details
         Infos = object
             models: seq[Info]
 
@@ -598,7 +681,9 @@ proc handle_ollama_tags(req: Request) {.async gcsafe.} =
         var tags = Infos(models: @[])
         for k in streamer_table.keys():
             let info = parseJson(streamer_table[k].model_info)
-            var m = Info(name: info["name"].getStr(), model: format_model_name(info))
+            var m = Info(model: info["name"].getStr() & ":latest", name: info["name"].getStr())
+            let n = info.getOrDefault("param_num").getInt()
+            m.details.parameter_size = fmt"{float(n)/1000000000.0:.1f}B"
             tags.models.add(m)
     let headers = {"Content-type": "application/json"}
     await req.respond(Http200, $(%* tags), headers.newHttpHeaders())
@@ -609,7 +694,10 @@ proc handle_ollama_version(req: Request) {.async gcsafe.} =
     await req.respond(Http200, rsp, headers.newHttpHeaders())
 
 proc handle_ollama_show(req: Request) {.async gcsafe.} =
-    let model_name = parseJson(req.body)["model"].getStr()
+    let reqObj = parseJson(req.body)
+    var model_name = if reqObj.contains("model"): reqObj["model"].getStr() else: ""
+    if model_name.endswith(":latest"): model_name = model_name[0..^8]
+
     var model: JsonNode = nil
     {.cast(gcsafe).}:
         for k in streamer_table.keys():
@@ -638,6 +726,43 @@ proc handle_ollama_show(req: Request) {.async gcsafe.} =
 
     let headers = {"Content-type": "application/json"}
     await req.respond(Http200, $(%* rsp), headers.newHttpHeaders())
+
+proc handle_ollama_ps(req: Request) {.async gcsafe.} =
+    type
+        Details = object
+            parent_model: string = ""
+            format: string = "ggmm"
+            family: string = "llm"
+            families: seq[string] = @["llm"]
+            parameter_size: string
+            quantization_level: string = "Q8_0"
+        Info = object
+            model: string
+            size: int = 100
+            digest: string = "123"
+            expires_at: string = "2125-01-01T00:00:00.0+00:00"
+            size_vram: int = 100
+            context_length: int
+            details: Details
+        Infos = object
+            models: seq[Info]
+
+    var tags = Infos(models: @[])
+
+    {.cast(gcsafe).}:
+        for k in streamer_table.keys():
+            let info = parseJson(streamer_table[k].model_info)
+            var m = Info(model: info["name"].getStr(), context_length: info["context_length"].getInt())
+            let n = info.getOrDefault("param_num").getInt()
+            m.details.parameter_size = fmt"{float(n)/1000000000.0:.1f}B"
+            tags.models.add(m)
+
+    let headers = {"Content-type": "application/json"}
+    await req.respond(Http200, $(%* tags), headers.newHttpHeaders())
+
+proc handle_llama_health(req: Request) {.async gcsafe.} =
+    let headers = {"Content-type": "application/json"}
+    await req.respond(Http200, "{\"status\": \"ok\"}", headers.newHttpHeaders())
 
 proc handle_llama_props(req: Request) {.async gcsafe.} =
     type
@@ -719,12 +844,14 @@ proc run {.async.} =
     # llama-compatible
     router.get  "/props",                   handle_llama_props
     router.get  "/slots",                   handle_llama_slots
+    router.get  "/health",                  handle_llama_health
 
     # ollama-compatible
     router.get  "/api/tags",                handle_ollama_tags
     router.get  "/api/version",             handle_ollama_version
     router.post "/api/show",                handle_ollama_show
-    router.post "/api/chat",                handle_completions
+    router.get  "/api/ps",                  handle_ollama_ps
+    router.post "/api/chat",                handle_ollama_chat
 
     server.listen(Port(port))
     let port = server.getPort
