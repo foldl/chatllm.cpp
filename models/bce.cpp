@@ -87,7 +87,7 @@ namespace chatllm::bce::embedding
             << "corrupted model weights";
     }
 
-    int ConditionalGeneration::get_text_embedding_dim(void) const
+    int ConditionalGeneration::get_embedding_dim(void) const
     {
         return config.hidden_size;
     }

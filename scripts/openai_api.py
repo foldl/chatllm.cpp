@@ -224,7 +224,7 @@ class HttpHandler(BaseHTTPRequestHandler):
 
         rsp = DataListResponse(model=obj['model'])
         for i, s in enumerate(input):
-            rsp.data.append(Embedding(index=i, embedding=emb_model_obj.text_embedding(s)))
+            rsp.data.append(Embedding(index=i, embedding=emb_model_obj.embedding(s)))
 
         self.wfile.write(json.dumps(asdict(rsp)).encode('utf-8'))
 

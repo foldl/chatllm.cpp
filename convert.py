@@ -39,6 +39,13 @@ class GGMLType(Enum):
     Q8_0 = 8
     Q4_K = 12
 
+class ModelPurpose(IntEnum):
+    Chat        = 0x0
+    Emb         = 0x1
+    Ranker      = 0x2
+    TTS         = 0x3
+    ASR         = 0x4
+
 class ChatModelAP(IntEnum):
     Text            = 0x01
     ImageInput      = 0x02
@@ -53,6 +60,10 @@ ModelTypeTagChatAudioIn = ((ChatModelAP.Text.value + ChatModelAP.AudioInput.valu
 ModelTypeTagChatImageVideoIn = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value) >> 1) << 24
 ModelTypeTagChatImageVideoAudioInAudioOut = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value + ChatModelAP.AudioInput.value + ChatModelAP.AudioOutput.value) >> 1) << 24
 ModelTypeTagChatImageInImageOut = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.ImageOutput.value) >> 1) << 24
+
+ModelTypeTagEmbText             = (ModelPurpose.Emb.value << 20)    | ((ChatModelAP.Text.value) << 23)
+ModelTypeTagEmbTextImage        = (ModelPurpose.Emb.value << 20)    | ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value) << 23)
+ModelTypeTagRankTextImage       = (ModelPurpose.Ranker.value << 20) | ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value) << 23)
 
 class ModelType(Enum):
     CHATGLM = 1
@@ -259,6 +270,10 @@ class ModelType(Enum):
     MiniCPM_O               = ModelTypeTagChatImageVideoAudioInAudioOut + 0x0000001
 
     JanusPro                = ModelTypeTagChatImageInImageOut + 0x0000001
+
+    QWen3_VL_Embedding      = ModelTypeTagEmbTextImage + 0x00001
+
+    QWen3_VL_ReRanker       = ModelTypeTagRankTextImage + 0x00001
 
 class TokenType(Enum):
     UNDEFINED    = 0
@@ -9294,6 +9309,13 @@ def main():
     elif arch == 'qwen3-reranker':
         QWen3Converter.MODEL_TYPE = ModelType.QWen3_ReRanker
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'qwen3-vl-embedding':
+        QWen3Converter.has_lm_head = False
+        Qwen3VLConverter.MODEL_TYPE = ModelType.QWen3_VL_Embedding
+        Qwen3VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'qwen3-vl-reranker':
+        Qwen3VLConverter.MODEL_TYPE = ModelType.QWen3_VL_ReRanker
+        Qwen3VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'reka-flash-3':
         assert config.rope_scaling is None, 'config.rope_scaling must be null'
         assert not config.tie_word_embeddings, 'config.tie_word_embeddings must be false'

@@ -30,7 +30,7 @@ namespace chatllm::bce::embedding
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type);
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
         void load(ModelLoader &loader) override;
-        int get_text_embedding_dim(void) const override;
+        int get_embedding_dim(void) const override;
     public:
         Config config;
     };

@@ -256,7 +256,7 @@ type
 ## @param[in] purpose           purpose, see `EmbeddingPurpose`
 ## @return                      0 if succeeded
 ##
-proc chatllm_text_embedding*(obj: ptr chatllm_obj; utf8_str: cstring; purpose: cint): cint {.stdcall, dynlib: libName, importc.}
+proc chatllm_embedding*(obj: ptr chatllm_obj; utf8_str: cstring; purpose: cint): cint {.stdcall, dynlib: libName, importc.}
 
 ##
 ##  @brief question & answer ranking
@@ -372,12 +372,12 @@ proc chatllm_async_tool_input*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.
 proc chatllm_async_tool_completion*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.stdcall, dynlib: libName, importc.}
 
 ##
-##  @brief async version of `chatllm_text_embedding`
+##  @brief async version of `chatllm_embedding`
 ##
 ##  @param   ...
 ##  @return                      0 if started else -1
 ##
-proc chatllm_async_text_embedding*(obj: ptr chatllm_obj; utf8_str: cstring; purpose: cint): cint {.stdcall, dynlib: libName, importc.}
+proc chatllm_async_embedding*(obj: ptr chatllm_obj; utf8_str: cstring; purpose: cint): cint {.stdcall, dynlib: libName, importc.}
 
 ##
 ##  @brief async version of `chatllm_qa_rank`

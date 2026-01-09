@@ -332,7 +332,7 @@ enum EmbeddingPurpose
  * @param[in] purpose           purpose, see `EmbeddingPurpose`
  * @return                      0 if succeeded
  */
-DLL_DECL int chatllm_text_embedding(struct chatllm_obj *obj, const char *utf8_str, int purpose);
+DLL_DECL int chatllm_embedding(struct chatllm_obj *obj, const char *utf8_str, int purpose);
 
 /**
  * @brief question & answer ranking
@@ -454,12 +454,12 @@ DLL_DECL int API_CALL chatllm_async_tool_input(struct chatllm_obj *obj, const ch
 DLL_DECL int chatllm_async_tool_completion(struct chatllm_obj *obj, const char *utf8_str);
 
 /**
- * @brief async version of `chatllm_text_embedding`
+ * @brief async version of `chatllm_embedding`
 
  * @param   ...
  * @return                      0 if started else -1
  */
-DLL_DECL int chatllm_async_text_embedding(struct chatllm_obj *obj, const char *utf8_str, int purpose);
+DLL_DECL int chatllm_async_embedding(struct chatllm_obj *obj, const char *utf8_str, int purpose);
 
 /**
  * @brief async version of `chatllm_qa_rank`

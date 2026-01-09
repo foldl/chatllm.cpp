@@ -444,20 +444,52 @@ Please use `--format completion` for these models.
 
 ## RAG Models
 
-* Text Embedding (`XLMRobertaModel`)
+### Text Embedding
+
+Note: Only dense embedding is implemented.
+
+* Roberta (`XLMRobertaModel`)
     * [x] [BCE-Embedding](https://huggingface.co/maidalun1020/bce-embedding-base_v1)
     * [x] [BGE-M3](https://huggingface.co/BAAI/bge-m3) (`-a BGE-M3`)
+
+* MiniCPM (`MiniCPMModel`)
     * [x] [MiniCPM-Embedding-Light](https://huggingface.co/openbmb/MiniCPM-Embedding-Light)
 
-        Note: Only dense embedding is implemented.
 
-    * Qwen-3 Embedding: [0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B/tree/b22da495047858cce924d27d76261e96be6febc0), [4B](https://huggingface.co/Qwen/Qwen3-Embedding-4B/tree/636cd9bf47d976946cdbb2b0c3ca0cb2f8eea5ff), [8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B/commit/4e423935c619ae4df87b646a3ce949610c66241c)
+* Qwen-3 Embedding  (`Qwen3ForCausalLM`)
+    * [0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B/tree/b22da495047858cce924d27d76261e96be6febc0), [4B](https://huggingface.co/Qwen/Qwen3-Embedding-4B/tree/636cd9bf47d976946cdbb2b0c3ca0cb2f8eea5ff), [8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B/commit/4e423935c619ae4df87b646a3ce949610c66241c) (`-a Qwen3-Embedding`)
 
-* QA Ranking (`XLMRobertaForSequenceClassification`)
+        Note: use `--set task ...` to specify task/instruction.
+
+### Text Ranking
+
+* Roberta (`XLMRobertaForSequenceClassification`)
     * [x] [BCE-ReRanker](https://huggingface.co/maidalun1020/bce-reranker-base_v1)
     * [x] [BGE-ReRanker-M3](https://huggingface.co/BAAI/bge-reranker-v2-m3) (`-a BGE-Reranker-M3`)
+
+* MiniCPM (`MiniCPMModel`)
     * [x] [MiniCPM-Reranker-Light](https://huggingface.co/openbmb/MiniCPM-Reranker-Light)
-    * [x] Qwen-3 Reranker: [0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B/tree/ad4c588e592307dad69ff0fabc1b3ca5ea8e9f76), [4B](https://huggingface.co/Qwen/Qwen3-Reranker-4B/tree/57906229d41697e4494d50ca5859598cf86154a1), [8B](https://huggingface.co/Qwen/Qwen3-Reranker-8B/tree/d678ef8b29dd0eb9d784473da5d5169b21ec948a)
+
+* Qwen-3 Reranker  (`Qwen3ForCausalLM`)
+    * [x] [0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B/tree/ad4c588e592307dad69ff0fabc1b3ca5ea8e9f76), [4B](https://huggingface.co/Qwen/Qwen3-Reranker-4B/tree/57906229d41697e4494d50ca5859598cf86154a1), [8B](https://huggingface.co/Qwen/Qwen3-Reranker-8B/tree/d678ef8b29dd0eb9d784473da5d5169b21ec948a) (`-a Qwen3-Reranker`)
+
+        Note: use `--set task ...` to specify task/instruction.
+
+### Multi-modal Embedding
+
+* Qwen3-VL Embedding (`Qwen3VLForConditionalGeneration`)
+    * : [2B](https://huggingface.co/Qwen/Qwen3-VL-Embedding-2B/tree/5d57766937d093eb57ad6317c145e59e1c2833ac),
+    [8B](https://huggingface.co/Qwen/Qwen3-VL-Embedding-8B/tree/93dc85c0aaf1836e8ed35366f06e70625138817b) (`-a Qwen3-VL-Embedding`)
+
+        Note: use `--set task ...` to specify task/instruction.
+
+### Multi-modal Ranking
+
+* Qwen3-VL Reranker (`Qwen3VLForConditionalGeneration`)
+    * : [2B](https://huggingface.co/Qwen/Qwen3-VL-Reranker-2B/tree/00002d1a4279cfce9b8361e3936d86e522672ebc),
+    [8B](https://huggingface.co/Qwen/Qwen3-VL-Reranker-8B/tree/f0c49f76deac23a9d80e9a52e60054ea127d44f0) (`-a Qwen3-VL-Reranker`)
+
+        Note: use `--set task ...` to specify task/instruction.
 
 ## LoRA Models
 

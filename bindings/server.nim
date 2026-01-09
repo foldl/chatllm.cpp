@@ -603,7 +603,7 @@ proc handle_embeddings(req: Request) {.async gcsafe.} =
     var r = Result(data: @[], model: model)
     for i in 0 ..< inputs.len:
         var o = EmbObject(index: i)
-        discard streamer.llm.chatllm_text_embedding(inputs[i].cstring, cint(EmbeddingPurpose.EMBEDDING_FOR_DOC))
+        discard streamer.llm.chatllm_embedding(inputs[i].cstring, cint(EmbeddingPurpose.EMBEDDING_FOR_DOC))
         o.embedding = parse_embedding(streamer.result_embedding)
         r.data.add o
 

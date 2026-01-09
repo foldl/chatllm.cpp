@@ -1770,10 +1770,9 @@ namespace chatllm::qwen::v2_5_vl
         return r;
     }
 
-    void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_content(const Content &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        append_user_opening(round_idx, ids);
 
         tok->media_emb.clear();
 
@@ -1845,6 +1844,15 @@ namespace chatllm::qwen::v2_5_vl
                 CHATLLM_THROW << "Unsupported content type: " << (int)piece.type;
             }
         }
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        append_user_opening(round_idx, ids);
+
+        append_content(user, ids);
+
         ids.push_back(tok->im_end_token_id);
         ids.push_back(tok->nl_token_id);
     }
@@ -2016,7 +2024,7 @@ namespace chatllm::qwen::v3_emb
         tok->task = utils::get_opt(args, "task", tok->task);
     }
 
-    int ConditionalGeneration::get_text_embedding_dim(void) const
+    int ConditionalGeneration::get_embedding_dim(void) const
     {
         return config.hidden_size;
     }
@@ -2532,7 +2540,9 @@ namespace chatllm::qwen::v3_vl
     class Tokenizer : public v2_5_vl::Tokenizer
     {
     public:
-        Tokenizer(const BaseConfig &config) : v2_5_vl::Tokenizer(config, &_chat_encoder)
+        Tokenizer(const BaseConfig &config) : Tokenizer(config, &_chat_encoder)
+        {}
+        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder) : v2_5_vl::Tokenizer(config, encoder)
         {}
     };
 
@@ -2550,7 +2560,9 @@ namespace chatllm::qwen::v3_vl
     class ConditionalGeneration : public TensorPosHelperPrelude, public v2_5_vl::ExtendEmbedding, public v3::ConditionalGeneration
     {
     public:
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = (ModelType)MODEL_TYPE_QWEN3_VL);
+
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, const bool skip_lm_head, int extra_tensors);
 
         bool load_more(const json::JSON &config) override;
         void load(ModelLoader &loader) override;
@@ -2568,6 +2580,8 @@ namespace chatllm::qwen::v3_vl
                                std::vector<float> &output,
                                const int batch_size = 1,
                                std::function<ggml::tensor *(ComputeContext *, ggml::tensor *)> func_epilog = nullptr) override;
+
+        virtual void prepare_pos_tensor(const std::vector<int> &input_ids, const GenerationConfig &gen_config);
     public:
         std::vector<int> v_pos;
         const Config config;
@@ -2590,10 +2604,11 @@ namespace chatllm::qwen::v3_vl
         return gen->lm_layer_preprocess(model, ctx, hidden_states, layer_index);
     }
 
-    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config):
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, const bool skip_lm_head, int extra_tensors):
         TensorPosHelperPrelude(new v2_5_vl::TensorPosHelper3D(config.max_length, config.vocab_size)),
         ExtendEmbedding(),
-        v3::ConditionalGeneration(config, runtime_config, (ModelType)MODEL_TYPE_QWEN3_VL),
+        v3::ConditionalGeneration(config, runtime_config, type, skip_lm_head, extra_tensors),
         config(config),
         token_time(0),
         visual(runtime_config, pad_arg->get()),
@@ -2623,6 +2638,11 @@ namespace chatllm::qwen::v3_vl
 
         TensorPosHelperPrelude::done();
     }
+
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type):
+        ConditionalGeneration(config, runtime_config, type, false, 0)
+    {}
 
     bool ConditionalGeneration::load_more(const json::JSON &config)
     {
@@ -2683,7 +2703,7 @@ namespace chatllm::qwen::v3_vl
         Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
     }
 
-    bool ConditionalGeneration::generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits)
+    void ConditionalGeneration::prepare_pos_tensor(const std::vector<int> &input_ids, const GenerationConfig &gen_config)
     {
         const int image_id_start = config.vocab_size;
         const int length = (int)input_ids.size();
@@ -2702,6 +2722,11 @@ namespace chatllm::qwen::v3_vl
 
         token_time = pos_helper->build_3d_pos(input_ids.data(), length,
             images_grid, image_id_start, token_n_inc, token_time);
+    }
+
+    bool ConditionalGeneration::generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits)
+    {
+        prepare_pos_tensor(input_ids, gen_config);
 
         auto r = v3::ConditionalGeneration::generate_next_token(input_ids, gen_config, lm_logits);
 
@@ -2789,6 +2814,168 @@ namespace chatllm::qwen::v3_vl
     }
 }
 
+namespace chatllm::qwen::v3_vl_emb
+{
+    typedef v3_vl::Config Config;
+
+    class Tokenizer : public v3_vl::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config):
+            v3_vl::Tokenizer::Tokenizer(config)
+        {
+            sys_prompt = "Represent the user's input.";
+        }
+
+        void encode_embedding(const Content &input, std::vector<int> &ids, EmbeddingPurpose purpose) const override
+        {
+            Messages messages;
+            messages.push_back(input, MsgRole::User);
+
+            auto x = std::move(const_cast<Tokenizer *>(this)->encode_history(chat_encoder, messages, max_length, false, true, false));
+            ids.insert(ids.end(), x.begin(), x.end());
+        }
+    };
+
+    class ConditionalGeneration : public v3_vl::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
+            ModelType type = ModelType::MODEL_TYPE_QWEN3_Embedding);
+
+        void set_additional_args(const std::map<std::string, std::string> &args) override;
+        int get_embedding_dim(void) const override;
+
+        void embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+                                std::vector<float> &embedding) override;
+    };
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : v3_vl::ConditionalGeneration(config, runtime_config, type)
+    {
+        dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(std::make_unique<EmbeddingLastTokenFinalSteps>());
+    }
+
+    void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->set_system_prompt(utils::get_opt(args, "task", tok->get_system_prompt()));
+    }
+
+    int ConditionalGeneration::get_embedding_dim(void) const
+    {
+        return config.hidden_size;
+    }
+
+    void ConditionalGeneration::embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+                                std::vector<float> &embedding)
+    {
+        prepare_pos_tensor(input_ids, gen_config);
+
+        v3::ConditionalGeneration::embedding(gen_config, input_ids, embedding);
+    }
+}
+
+namespace chatllm::qwen::v3_vl_ranker
+{
+    typedef v3_vl::Config Config;
+
+    class Tokenizer : public v3_vl::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config)
+            : v3_vl::Tokenizer(config)
+        {
+            sys_prompt = "Judge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be \"yes\" or \"no\".";
+        }
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            size_t size = v3_vl::Tokenizer::load(buffer, n_vocab);
+
+            yes_token_id = tp->PieceToId("yes");
+            no_token_id = tp->PieceToId("no");
+
+            CHATLLM_CHECK((yes_token_id >= 0) && (no_token_id >= 0));
+
+            return size;
+        }
+
+        void encode_qa(const Content &q, const Content &a, std::vector<int> &ids) const override;
+    public:
+        int yes_token_id;
+        int no_token_id;
+        std::string task = "Retrieve images or text relevant to the user's query."; // i.e. instruction
+    };
+
+    void Tokenizer::encode_qa(const Content &q, const Content &a, std::vector<int> &ids) const
+    {
+        Messages messages;
+
+        Content input(&messages, "<Instruct>: " + task);
+
+        input.push_back("<Query>:");
+        input.push_back(q);
+
+        input.push_back("\n<Document>:");
+        input.push_back(a);
+
+        messages.push_back(input, MsgRole::User);
+
+        auto x = std::move(const_cast<Tokenizer *>(this)->encode_history(chat_encoder, messages, max_length, false, true, false));
+        ids.insert(ids.end(), x.begin(), x.end());
+    }
+
+    class ConditionalGeneration : public v3_vl::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
+            ModelType type = ModelType::MODEL_TYPE_QWEN3_Embedding);
+
+        void set_tokenizer(BaseTokenizer *tokenizer) override;
+        void set_additional_args(const std::map<std::string, std::string> &args) override;
+
+        float qa_rank(const GenerationConfig &gen_config, const std::vector<int> &input_ids) override;
+    protected:
+            ggml::tensor *yes_no_ids = nullptr;
+    };
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : v3_vl::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_QWEN3_VL_ReRanker, false, 1)
+    {
+        dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(std::make_unique<v3_ranker::FinalSteps>());
+
+        v3_ranker::FinalSteps *steps = dynamic_cast<v3_ranker::FinalSteps *>(dynamic_cast<HeterogeneousModel *>(transformer)->get_final_steps());
+        steps->yes_no_ids = ggml::new_tensor_1d(&w_ctx_, ggml::type::GGML_TYPE_I32, 2);
+        w_ctx_.get_allocator()->alloc(steps->yes_no_ids);
+        yes_no_ids = steps->yes_no_ids;
+    }
+
+    void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
+    {
+        v3::ConditionalGeneration::set_tokenizer(tokenizer);
+
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        int ids[2];
+        ids[0] = tok->yes_token_id;
+        ids[1] = tok->no_token_id;
+        Backend::write_tensor_data(yes_no_ids, ids, 0, sizeof(ids));
+    }
+
+    void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->task = utils::get_opt(args, "task", tok->task);
+    }
+
+    float ConditionalGeneration::qa_rank(const GenerationConfig &gen_config, const std::vector<int> &input_ids)
+    {
+        prepare_pos_tensor(input_ids, gen_config);
+
+        return v3_vl::ConditionalGeneration::qa_rank(gen_config, input_ids);
+    }
+}
+
 namespace chatllm
 {
     REGISTER_MODEL_LOADER(QWEN,                         qwen::v1, 2);
@@ -2806,4 +2993,6 @@ namespace chatllm
     REGISTER_MODEL_LOADER(QWEN3_Embedding,              qwen::v3_emb, 1);
     REGISTER_MODEL_LOADER(QWEN3_ReRanker,               qwen::v3_ranker, 1);
     REGISTER_MODEL_LOADER(QWEN3_VL,                     qwen::v3_vl, 1);
+    REGISTER_MODEL_LOADER(QWEN3_VL_Embedding,           qwen::v3_vl_emb, 1);
+    REGISTER_MODEL_LOADER(QWEN3_VL_ReRanker,            qwen::v3_vl_ranker, 1);
 }

@@ -211,7 +211,7 @@ type
     @param[in] purpose           purpose, see `EmbeddingPurpose`
     @return                      0 if succeeded
   }
-  function ChatLLMTextEmbedding(Obj: PChatLLMObj; AUTF8Str: PAnsiChar; Purpose: Integer): Integer; stdcall; external CHATLLMLIB name 'chatllm_text_embedding';
+  function ChatLLMEmbedding(Obj: PChatLLMObj; AUTF8Str: PAnsiChar; Purpose: Integer): Integer; stdcall; external CHATLLMLIB name 'chatllm_embedding';
 
   {
     @brief question & answer ranking
@@ -359,7 +359,7 @@ type
 
     function CallChat(const AInput: string; OnResult: TLLMPrintEvent): Integer;
 
-    function TextEmbedding(const AText: string; const APurpose: TEmbeddingPurpose = epForDoc): Integer;
+    function Embedding(const AText: string; const APurpose: TEmbeddingPurpose = epForDoc): Integer;
     function QARanking(const AQustion, AAnswer: string): Integer;
     function RAGSelectStore(const AName: string): Integer;
 
@@ -533,7 +533,7 @@ end;
 
 procedure TThreadedEmbeddingTask.Exec;
 begin
-  FState := ChatLLMTextEmbedding(FLLM.FObj, PUTF8Char(UTF8Encode(FInput)), Integer(FPurpose));
+  FState := ChatLLMEmbedding(FLLM.FObj, PUTF8Char(UTF8Encode(FInput)), Integer(FPurpose));
 end;
 
 { TThreadedQATask }
@@ -962,7 +962,7 @@ begin
   Result := ChatLLMStart(FObj, @_LLMPrint, @_LLMEnd, Self);
 end;
 
-function TChatLLM.TextEmbedding(const AText: string; const APurpose: TEmbeddingPurpose): Integer;
+function TChatLLM.Embedding(const AText: string; const APurpose: TEmbeddingPurpose): Integer;
 begin
   if Busy then Exit(-1);
 

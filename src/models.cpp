@@ -236,7 +236,7 @@ namespace chatllm
         case MODEL_TYPE_BGE_M3:
         case MODEL_TYPE_MiniCPM_Embedding_Light:
         case MODEL_TYPE_QWEN3_Embedding:
-            return ModelPurpose::TextEmbedding;
+            return ModelPurpose::Emb;
         case MODEL_TYPE_BCE_ReRanker:
         case MODEL_TYPE_BGE_ReRanker_M3:
         case MODEL_TYPE_MiniCPM_ReRanker_Light:
@@ -250,24 +250,39 @@ namespace chatllm
         case MODEL_TYPE_GLM_ASR:
             return ModelPurpose::ASR;
         default:
-            return ModelPurpose::Chat;
+            return (ModelPurpose)(GET_PURPOSE_TAG(model_type));
         }
     }
 
     ChatModelAccessPoints get_chat_model_access_points(ModelType model_type)
     {
-        if (get_model_purpose(model_type) != ModelPurpose::Chat) return 0;
-
         switch (model_type)
         {
+        case MODEL_TYPE_BCE_Embedding:
+        case MODEL_TYPE_BGE_M3:
+        case MODEL_TYPE_MiniCPM_Embedding_Light:
+        case MODEL_TYPE_QWEN3_Embedding:
+        case MODEL_TYPE_BCE_ReRanker:
+        case MODEL_TYPE_BGE_ReRanker_M3:
+        case MODEL_TYPE_MiniCPM_ReRanker_Light:
+        case MODEL_TYPE_QWEN3_ReRanker:
+            return ChatModelAccessPoint::Text;
+        case MODEL_TYPE_ORPHEUS_TTS:
+        case MODEL_TYPE_OUTE_TTS_LLAMA:
+        case MODEL_TYPE_OUTE_TTS_QWEN3:
+        case MODEL_TYPE_MAYA1:
+            return ChatModelAccessPoint::Text | ChatModelAccessPoint::AudioOutput;
+        case MODEL_TYPE_GLM_ASR:
+            return ChatModelAccessPoint::Text | ChatModelAccessPoint::AudioInput;
         case MODEL_TYPE_LLAMA_MULTI:
             return ChatModelAccessPoint::Text;
         default:
             break;
         }
 
-        ChatModelAccessPoints tag = model_type >> 24;
-        return (tag << 1) | 1;
+        ChatModelAccessPoints tag = model_type >> 23;
+        if (GET_PURPOSE_TAG(model_type) == ModelPurpose::Chat) tag |= ChatModelAccessPoint::Text;
+        return tag;
     }
 
     static std::string format_access_points(ChatModelAccessPoints bitmap)
@@ -287,8 +302,8 @@ namespace chatllm
     {
         switch (purpose)
         {
-        case ModelPurpose::TextEmbedding:
-            return "Text Embedding";
+        case ModelPurpose::Emb:
+            return "Embedding";
         case ModelPurpose::Ranker:
             return "Ranker";
         case ModelPurpose::Chat:
@@ -1052,9 +1067,10 @@ namespace chatllm
         return output_ids;
     }
 
-    void BaseModelForConditionalGeneration::text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+    void BaseModelForConditionalGeneration::embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                 std::vector<float> &embedding)
     {
+        before_generate(gen_config);
         auto r = run_model(input_ids, gen_config, 0, embedding);
         if (!r) ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
     }
@@ -1062,6 +1078,8 @@ namespace chatllm
     float BaseModelForConditionalGeneration::qa_rank(const GenerationConfig &gen_config, const std::vector<int> &input_ids)
     {
         std::vector<float> output;
+
+        before_generate(gen_config);
         auto r = run_model(input_ids, gen_config, 0, output);
         if (!r) ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
         CHATLLM_CHECK(output.size() == 1) << "ouput must be scaler";
@@ -1794,8 +1812,7 @@ namespace chatllm
         oss << std::endl;
 
         oss << "Model type  : " << to_string(purpose);
-        if (ModelPurpose::Chat == purpose)
-            oss << " {" << format_access_points(get_chat_model_access_points(model_type)) << "}";
+        oss << " {" << format_access_points(get_chat_model_access_points(model_type)) << "}";
         oss << std::endl;
 
         oss << "File version: " << loader.version << " (" << ModelLoader::ff_to_str(loader.ff) << ")" << std::endl

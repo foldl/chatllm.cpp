@@ -95,7 +95,7 @@ class LibChatLLM:
         self._chatllm_tool_input        = self._lib.chatllm_tool_input
         self._chatllm_tool_completion   = self._lib.chatllm_tool_completion
         self._chatllm_text_tokenize     = self._lib.chatllm_text_tokenize
-        self._chatllm_text_embedding    = self._lib.chatllm_text_embedding
+        self._chatllm_text_embedding    = self._lib.chatllm_embedding
         self._chatllm_qa_rank           = self._lib.chatllm_qa_rank
         self._chatllm_rag_select_store  = self._lib.chatllm_rag_select_store
         self._chatllm_abort_generation  = self._lib.chatllm_abort_generation
@@ -320,7 +320,7 @@ class LibChatLLM:
     def text_tokenize(self, obj: c_void_p, text: str) -> str:
         return self._chatllm_text_tokenize(obj, c_char_p(text.encode()))
 
-    def text_embedding(self, obj: c_void_p, text: str, purpose: EmbeddingPurpose = EmbeddingPurpose.Document) -> str:
+    def embedding(self, obj: c_void_p, text: str, purpose: EmbeddingPurpose = EmbeddingPurpose.Document) -> str:
         return self._chatllm_text_embedding(obj, c_char_p(text.encode()), c_int(purpose.value))
 
     def qa_rank(self, obj: c_void_p, q: str, a: str) -> float:
@@ -470,9 +470,9 @@ class ChatLLM:
         assert self._lib.text_tokenize(self._chat, txt) >= 0, 'text_tokenize failed'
         return json.loads(f"[{self._result_text_tokenize}]")
 
-    def text_embedding(self, txt: str) -> list[float]:
+    def embedding(self, txt: str) -> list[float]:
         self._result_embedding = ''
-        assert self._lib.text_embedding(self._chat, txt) == 0, 'text_embedding failed'
+        assert self._lib.embedding(self._chat, txt) == 0, 'embedding failed'
         return json.loads(f"[{self._result_embedding}]")
 
     def qa_rank(self, q: str, a: str) -> float:
@@ -677,7 +677,7 @@ def demo_embedding(params, cls = ChatLLM, lib_path: str =''):
     while True:
         s = input('Input    > ')
         print('Embedding > ', flush=True)
-        print(llm.text_embedding(s))
+        print(llm.embedding(s))
 
 def demo_ranking(params, cls = ChatLLM, lib_path: str =''):
     global llm

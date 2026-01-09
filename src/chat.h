@@ -26,11 +26,11 @@ namespace chatllm
 
     enum ModelPurpose
     {
-        Chat = 0,
-        TextEmbedding,
-        Ranker,
-        TTS,
-        ASR,
+        Chat        = 0x0,
+        Emb         = 0x1,
+        Ranker      = 0x2,
+        TTS         = 0x3,
+        ASR         = 0x4,
     };
 
     enum ChatModelAccessPoint
@@ -298,7 +298,8 @@ namespace chatllm
         virtual void encode_external_text_completion(const std::string &text, std::vector<int> &ids) const;
 
         virtual void encode_qa(const std::string &q, const std::string &a, std::vector<int> &ids) const;
-        virtual void encode_embedding(const std::string &text, std::vector<int> &ids, EmbeddingPurpose purpose) const;
+        virtual void encode_qa(const Content &q, const Content &a, std::vector<int> &ids) const;
+        virtual void encode_embedding(const Content &input, std::vector<int> &ids, EmbeddingPurpose purpose) const;
 
         virtual std::string decode(const std::vector<int> &ids) const;
 
@@ -335,6 +336,7 @@ namespace chatllm
         int sep_token_id;
 
     protected:
+        virtual void encode_embedding(const std::string &text, std::vector<int> &ids, EmbeddingPurpose purpose) const;
         virtual int get_history_start(const Messages &history, int max_length) const;
 
         virtual std::string preprocess(const std::string &text) const;
@@ -959,11 +961,11 @@ namespace chatllm
 
         virtual void abort_generation(void) = 0;
 
-        virtual void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+        virtual void embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                     std::vector<float> &embedding) = 0;
         virtual float qa_rank(const GenerationConfig &gen_config,
                               const std::vector<int> &input_ids) = 0;
-        virtual int get_text_embedding_dim(void) const = 0;
+        virtual int get_embedding_dim(void) const = 0;
 
         // image input
         virtual int append_image(const uint8_t *rgb_pixels, int width, int height) = 0;
@@ -1050,10 +1052,10 @@ namespace chatllm
 
         void abort_generation(void) override { model->abort_generation(); }
 
-        void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+        void embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                     std::vector<float> &embedding) override
         {
-            model->text_embedding(gen_config, input_ids, embedding);
+            model->embedding(gen_config, input_ids, embedding);
         }
 
         float qa_rank(const GenerationConfig &gen_config,
@@ -1066,7 +1068,7 @@ namespace chatllm
             model->speech_synthesis(gen_config, input_ids, audio, sample_rate, channels);
         }
 
-        int get_text_embedding_dim(void) const override { return model->get_text_embedding_dim(); }
+        int get_embedding_dim(void) const override { return model->get_embedding_dim(); }
 
         int append_image(const uint8_t *rgb_pixels, int width, int height) override
         {
@@ -1182,7 +1184,7 @@ namespace chatllm
             return p->aborted;
         }
 
-        void text_embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
+        void embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                     std::vector<float> &embedding) override
         {}
 
@@ -1192,7 +1194,7 @@ namespace chatllm
             return 0.0f;
         }
 
-        int get_text_embedding_dim(void) const override { return -1; }
+        int get_embedding_dim(void) const override { return -1; }
 
         int append_image(const uint8_t *rgb_pixels, int width, int height) override
         {
@@ -1393,13 +1395,13 @@ namespace chatllm
         void set_extending_method(ExtendingMethod method);
         virtual void set_additional_args(const std::map<std::string, std::string> &args);
 
-        void text_embedding(const std::string &input, const GenerationConfig &gen_config, std::vector<float> &result, BaseTokenizer::EmbeddingPurpose purpose = BaseTokenizer::EmbeddingPurpose::Document);
         void text_tokenize(const std::string &input, const GenerationConfig &gen_config, std::vector<int> &result);
-        float qa_rank(const std::string &q, const std::string &a, const GenerationConfig &gen_config);
+        void embedding(const Content &input, const GenerationConfig &gen_config, std::vector<float> &result, BaseTokenizer::EmbeddingPurpose purpose = BaseTokenizer::EmbeddingPurpose::Document);
+        float qa_rank(const Content &q, const Content &a, const GenerationConfig &gen_config);
 
         bool speech_synthesis(const std::string &input, const GenerationConfig &gen_config, std::vector<int16_t> &audio, int &sample_rate, int &channels);
 
-        int get_text_embedding_dim(void);
+        int get_embedding_dim(void);
 
         virtual std::string get_additional_description(void) const;
 
@@ -1540,8 +1542,8 @@ namespace chatllm
         void post_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer) override;
 
         VectorStores vs;
-        ModelObject embedding;
-        std::unique_ptr<ModelObject> reranker;
+        ModelObject model_embedding;
+        std::unique_ptr<ModelObject> model_reranker;
         std::vector<std::string> metainfo;
 
     private:

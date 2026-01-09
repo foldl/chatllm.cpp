@@ -633,6 +633,8 @@ public:
     int ref_count;
 };
 
+#define DEF_MESSAGES_FROM_ARG(messages, args) chatllm::Messages messages((args).multimedia_file_tags[0], (args).multimedia_file_tags[1])
+
 static void print_timing(char *str, const char *prefix, size_t tok_number, double duration_sec)
 {
     sprintf(str, "%s = %12.2f ms / %5zd tokens ( %8.2f ms per token, %8.2f tokens per second)", prefix, duration_sec, tok_number,
@@ -660,7 +662,7 @@ static void show_stat(chatllm::Pipeline &pipeline, chatllm::BaseStreamer &stream
 
 static void run_file(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
-    chatllm::Messages history(args.multimedia_file_tags[0], args.multimedia_file_tags[1]);
+    DEF_MESSAGES_FROM_ARG(history, args);
     std::string input;
     std::ifstream f(args.test_fn);
 
@@ -831,14 +833,16 @@ static void run_asr_ocr(Args &args, chatllm::Pipeline &pipeline, TextStreamer &s
     streamer.cout << "Bye\n";
 }
 
-static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
+static void run_embedding(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
     std::vector<float> result;
     chatllm::BaseTokenizer::EmbeddingPurpose purpose = chatllm::BaseTokenizer::EmbeddingPurpose::Document;
+    DEF_MESSAGES_FROM_ARG(messages, args);
 
     if (!args.interactive)
     {
-        pipeline.text_embedding(args.prompt, gen_config, result, purpose);
+        chatllm::Content input(&messages, args.prompt);
+        pipeline.embedding(input, gen_config, result, purpose);
         print_embedding(result, streamer.cout);
         return;
     }
@@ -855,7 +859,7 @@ static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, TextStre
         if (input.empty()) continue;
 
         result.clear();
-        pipeline.text_embedding(input, gen_config, result, purpose);
+        pipeline.embedding(chatllm::Content(&messages, input), gen_config, result, purpose);
         streamer.cout << "      > ";
 
         print_embedding(result, streamer.cout);
@@ -868,6 +872,9 @@ static void run_text_embedding(Args &args, chatllm::Pipeline &pipeline, TextStre
 
 static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
 {
+    DEF_MESSAGES_FROM_ARG(messages, args);
+    chatllm::Content q(&messages, args.prompt);
+
     while (1)
     {
         streamer.cout << "Answer > " << std::flush;
@@ -879,7 +886,8 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
         }
         if (answer.empty()) continue;
 
-        float rank = pipeline.qa_rank(args.prompt, answer, gen_config);
+        chatllm::Content a(&messages, answer);
+        float rank = pipeline.qa_rank(q, a, gen_config);
         streamer.cout << std::setw(14) << std::fixed << std::setprecision(8) << rank << std::endl;
     }
     streamer.cout << "Bye\n";
@@ -974,7 +982,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
     };
 
     DEF_GenerationConfig(gen_config, args);
-    chatllm::Messages history(args.multimedia_file_tags[0], args.multimedia_file_tags[1]);
+    DEF_MESSAGES_FROM_ARG(history, args);
 
     show_banner(pipeline, args.interactive && args.show_banner, &streamer);
 
@@ -982,8 +990,8 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
     {
         switch (pipeline.model->get_purpose())
         {
-        case chatllm::ModelPurpose::TextEmbedding:
-            run_text_embedding(args, pipeline, streamer, gen_config);
+        case chatllm::ModelPurpose::Emb:
+            run_embedding(args, pipeline, streamer, gen_config);
             return;
         case chatllm::ModelPurpose::Ranker:
             run_qa_ranker(args, pipeline, streamer, gen_config);
@@ -1214,15 +1222,16 @@ static int init_vector_store(Args &args)
     DEF_ExtraArgs(pipe_args, args);
     chatllm::Pipeline pipeline(args.embedding_model_path, pipe_args);
     args.max_length = pipeline.model->get_max_length();
+    DEF_MESSAGES_FROM_ARG(messages, args);
 
     DEF_GenerationConfig(gen_config, args);
     std::vector<float> r;
 
-    CVectorStore vs(args.vc, pipeline.get_text_embedding_dim(),
-        [&pipeline, &gen_config, &r](const std::string &s, float *emb)
+    CVectorStore vs(args.vc, pipeline.get_embedding_dim(),
+        [&pipeline, &gen_config, &r, &messages](const std::string &s, float *emb)
         {
-            pipeline.text_embedding(s, gen_config, r);
-            CHATLLM_CHECK((int)r.size() == pipeline.get_text_embedding_dim()) << "embedding dim mismatch";
+            pipeline.embedding(chatllm::Content(&messages, s), gen_config, r);
+            CHATLLM_CHECK((int)r.size() == pipeline.get_embedding_dim()) << "embedding dim mismatch";
             memcpy(emb, r.data(), r.size() * sizeof(float));
         },
         args.vector_store_in.c_str());
@@ -1627,8 +1636,8 @@ static void emit_model_info(Chat *chat, const Args &args, chatllm::Pipeline &pip
     o["active_param_num"]   = pipeline.model->get_param_num(true);
     o["context_length"]     = pipeline.model->get_max_length();
     o["training_context_length"] = pipeline.get_loader()->basic_config.max_length;
-    if (pipeline.model->get_text_embedding_dim() > 0)
-        o["embedding_dim"]  = pipeline.model->get_text_embedding_dim();
+    if (pipeline.model->get_embedding_dim() > 0)
+        o["embedding_dim"]  = pipeline.model->get_embedding_dim();
 
     std::string s = chatllm::format_model_capabilities(pipeline.model->get_type());
     auto cap = json::JSON::Make(json::JSON::Class::Array);
@@ -1945,19 +1954,22 @@ int chatllm_async_tool_completion(struct chatllm_obj *obj, const char *utf8_str)
     ASYNC_FUN_BODY(chatllm_tool_completion(obj, utf8_str));
 }
 
-int chatllm_text_embedding(struct chatllm_obj *obj, const char *utf8_str, int purpose)
+int chatllm_embedding(struct chatllm_obj *obj, const char *utf8_str, int purpose)
 {
     int r = 0;
     DEF_CHAT_STREAMER();
 
-    if (!chat->pipeline->is_loaded() || (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::TextEmbedding))
+    if (!chat->pipeline->is_loaded() || (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Emb))
         return -1;
 
     chatllm::BaseTokenizer::EmbeddingPurpose purp = (chatllm::BaseTokenizer::EmbeddingPurpose)purpose;
 
     std::vector<float> result;
     std::string input(utf8_str);
-    chat->pipeline->text_embedding(input, chat->gen_config, result, purp);
+
+    DEF_MESSAGES_FROM_ARG(messages, chat->args);
+
+    chat->pipeline->embedding(chatllm::Content(&messages, input), chat->gen_config, result, purp);
 
     std::ostringstream oss;
     for (size_t i = 0; i < result.size() - 1; i++)
@@ -1972,9 +1984,9 @@ int chatllm_text_embedding(struct chatllm_obj *obj, const char *utf8_str, int pu
     return r;
 }
 
-int chatllm_async_text_embedding(struct chatllm_obj *obj, const char *utf8_str, int purpose)
+int chatllm_async_embedding(struct chatllm_obj *obj, const char *utf8_str, int purpose)
 {
-    ASYNC_FUN_BODY(chatllm_text_embedding(obj, utf8_str, purpose));
+    ASYNC_FUN_BODY(chatllm_embedding(obj, utf8_str, purpose));
 }
 
 int chatllm_text_tokenize(struct chatllm_obj *obj, const char *utf8_str)
@@ -2022,7 +2034,9 @@ int chatllm_qa_rank(struct chatllm_obj *obj, const char *utf8_str_q, const char 
 
     std::string q(utf8_str_q);
     std::string a(utf8_str_a);
-    float result = chat->pipeline->qa_rank(q, a, chat->gen_config);
+    DEF_MESSAGES_FROM_ARG(messages, chat->args);
+
+    float result = chat->pipeline->qa_rank(chatllm::Content(&messages, q), chatllm::Content(&messages, a), chat->gen_config);
 
     std::ostringstream oss;
     oss << std::setw(14) << std::fixed << std::setprecision(8) << result;
