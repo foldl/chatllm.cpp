@@ -1260,7 +1260,7 @@ namespace chatllm
     int  BlockParams::num_padding_embeddings = 0;
     bool BlockParams::OverrideKProjBiased::active = false;
     bool BlockParams::OverrideKProjBiased::biased = false;
-    bool BlockParams::DisableCache::disabled      = true;
+    bool BlockParams::DisableCache::disabled      = false;
     int  BlockParams::CoreAttentionUseSinks::size = 0;
     int  BlockParams::MoE::num_experts = 0;
     int  BlockParams::MoE::experts_per_tok = 0;
