@@ -257,6 +257,16 @@ namespace chatllm
             static bool biased;
         };
 
+        class DisableCache
+        {
+        public:
+            DisableCache();
+            ~DisableCache();
+            static bool is_disabled(void);
+        protected:
+            static bool disabled;
+        };
+
         class CoreAttentionUseSinks
         {
         public:
@@ -279,6 +289,16 @@ namespace chatllm
         public:
             static float rms_norm;
         };
+    };
+
+    class PreludeCacheDisable
+    {
+    public:
+        PreludeCacheDisable(void): disabler(new BlockParams::DisableCache())
+        {
+        }
+    protected:
+        BlockParams::DisableCache *disabler;
     };
 
     class Block
@@ -1482,20 +1502,26 @@ namespace chatllm
             : CoreAttention(ctx, num_attention_heads, num_kv_heads, max_length),
               k_hidden_size(k_hidden_size),
               v_hidden_size(v_hidden_size),
-              cache_length(cache_length),
-              k_cache(cache_length > 0 ?
-                    ggml::new_tensor_2d(ctx, ggml::type_fallback(ctx->cache_dtype, k_hidden_size), k_hidden_size, cache_length) : nullptr),
-              v_cache(cache_length > 0 ?
-                    ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F16, cache_length, v_hidden_size) : nullptr)
+              cache_length(BlockParams::DisableCache::is_disabled() ? 0 : cache_length),
+              k_cache(nullptr), v_cache(nullptr), raw_k(nullptr), raw_v(nullptr)
         {
             if (cache_length > 0)
             {
+                if (BlockParams::DisableCache::is_disabled())
+                {
+                    k_cache = ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F16, 1, 1);
+                    v_cache = ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F16, 1, 1);
+                }
+                else
+                {
+                    k_cache = ggml::new_tensor_2d(ctx, ggml::type_fallback(ctx->cache_dtype, k_hidden_size), k_hidden_size, cache_length),
+                    v_cache = ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F16, cache_length, v_hidden_size);
+                }
+
                 ggml::set_name(k_cache, "k_cache");
-            }
-            if (cache_length > 0)
-            {
                 ggml::set_name(v_cache, "v_cache");
             }
+            else;
         }
 
         size_t get_cache_size(void) const override
@@ -1545,6 +1571,9 @@ namespace chatllm
         ggml::tensor *k_cache;
         ggml::tensor *v_cache;
         int batch_size = 1;
+    private:
+        ggml::tensor *raw_k;
+        ggml::tensor *raw_v;
     };
 
     class BaseConsolidatedQKVAttention : public KVCacheAttention

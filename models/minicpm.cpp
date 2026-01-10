@@ -544,10 +544,10 @@ namespace chatllm::minicpm::emb_light
         int im_end_token_id;
     };
 
-    class MiniCPMLongRoPESelfAttention : public RoPESelfAttention<BaseAttention>
+    class MiniCPMLongRoPESelfAttention : public RoPESelfAttention<BaseCachelessAttention>
     {
     private:
-        typedef RoPESelfAttention<BaseAttention> Base;
+        typedef RoPESelfAttention<BaseCachelessAttention> Base;
     public:
         MiniCPMLongRoPESelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
             : Base(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)

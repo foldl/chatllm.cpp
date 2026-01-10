@@ -712,7 +712,7 @@ namespace chatllm::qwen
             std::string task;
         };
 
-        class ConditionalGeneration : public v3::ConditionalGeneration
+        class ConditionalGeneration : public PreludeCacheDisable, public v3::ConditionalGeneration
         {
         public:
             ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,

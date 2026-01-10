@@ -455,7 +455,6 @@ Note: Only dense embedding is implemented.
 * MiniCPM (`MiniCPMModel`)
     * [x] [MiniCPM-Embedding-Light](https://huggingface.co/openbmb/MiniCPM-Embedding-Light)
 
-
 * Qwen-3 Embedding  (`Qwen3ForCausalLM`)
     * [0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B/tree/b22da495047858cce924d27d76261e96be6febc0), [4B](https://huggingface.co/Qwen/Qwen3-Embedding-4B/tree/636cd9bf47d976946cdbb2b0c3ca0cb2f8eea5ff), [8B](https://huggingface.co/Qwen/Qwen3-Embedding-8B/commit/4e423935c619ae4df87b646a3ce949610c66241c) (`-a Qwen3-Embedding`)
 
