@@ -3848,5 +3848,21 @@
                 }
             }
         }
+    },
+    "mirothinker-v1.5": {
+        "brief": "MiroThinker v1.5 is the world-leading search agent designed to advance tool-augmented reasoning and information-seeking capabilities.",
+        "default": "30b",
+        "license": "MIT",
+        "variants": {
+            "30b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1" : {
+                        "size": 19089034208,
+                        "url": "chatllm_quantized_miromind/mirothinker-v1.5-30b-q4_1.bin"
+                    }
+                }
+            }
+        }
     }
 }

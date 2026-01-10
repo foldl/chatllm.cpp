@@ -261,7 +261,7 @@
 
     * [x] Phi-4: [Instruct](https://huggingface.co/microsoft/phi-4), [Mini-Instruct](https://huggingface.co/microsoft/Phi-4-mini-instruct)
 
-* QWen (`QWenLMHeadModel`, `Qwen2ForCausalLM`, `Qwen2MoeForCausalLM`)
+* QWen (`QWenLMHeadModel`, `Qwen2ForCausalLM`, `Qwen2MoeForCausalLM`, `Qwen3MoeForCausalLM`, `Qwen3ForCausalLM`)
     * [x] v1: [Chat-7B](https://huggingface.co/Qwen/Qwen-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen-14B-Chat), [QAnything-7B](https://huggingface.co/netease-youdao/Qwen-7B-QAnything)
     * [x] v1.5: [Chat-0.5B](https://huggingface.co/Qwen/Qwen1.5-0.5B-Chat), [Chat-1.8B](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat), [Chat-4B](https://huggingface.co/Qwen/Qwen1.5-4B-Chat), [Chat-7B](https://huggingface.co/Qwen/Qwen1.5-7B-Chat), [Chat-14B](https://huggingface.co/Qwen/Qwen1.5-14B-Chat), [CodeQwen-Chat-7B](https://huggingface.co/Qwen/CodeQwen1.5-7B-Chat) (`-a CodeQwen`)
     * [x] v1.5 MoE: [Chat-A2.7B](https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B-Chat)
@@ -294,6 +294,7 @@
     * [x] Confucius3-Math: [14B](https://huggingface.co/netease-youdao/Confucius3-Math/tree/62621490d5dccf5fea997be9df62dd8dc017f777) (`-a DeepSeek-R1-Distill-QWen`)
     * [x] Jan-Nano: [4B](https://huggingface.co/Menlo/Jan-nano/tree/5f4e450c127322db9477400890a0dd951c9f6ab7)
     * [x] Baichuan-M2: [32B](https://huggingface.co/baichuan-inc/Baichuan-M2-32B/tree/ebd3cf50aa02061a941f69e78d365d5620c5b5ac)
+    * [x] MiroThinker-v1.5: [30B](https://huggingface.co/miromind-ai/MiroThinker-v1.5-30B/tree/fc29738d08b1b000af7af8f27c84caabeae8fb1d)
 
 * Seed (`SeedOssForCausalLM`)
     * [x] OSS: [36B-Instruct](https://huggingface.co/ByteDance-Seed/Seed-OSS-36B-Instruct/tree/6f42c8b5bf8f3f687bd6fb28833da03a19867ce8)
