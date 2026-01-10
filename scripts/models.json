@@ -3132,6 +3132,22 @@
             }
         }
     },
+    "qwen3-vl-emb": {
+        "brief": "The Qwen3-VL-Embedding and Qwen3-VL-Reranker model series are the latest additions to the Qwen family.",
+        "default": "2b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2267737840,
+                        "url": "chatllm_quantized_qwen3/qwen3-vl-emb-2b.bin"
+                    }
+                }
+            }
+        }
+    },
     "qwen3-reranker": {
         "brief": "The Qwen3 Embedding model series is the latest proprietary model of the Qwen family, specifically designed for text embedding and ranking tasks.",
         "default": "0.6b",
@@ -3143,6 +3159,22 @@
                     "q8": {
                         "size": 637488928,
                         "url": "chatllm_quantized_qwen3/qwen3-reranker-0.6b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "qwen3-vl-reranker": {
+        "brief": "The Qwen3-VL-Embedding and Qwen3-VL-Reranker model series are the latest additions to the Qwen family.",
+        "default": "2b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2267737712,
+                        "url": "chatllm_quantized_qwen3/qwen3-vl-reranker-2b.bin"
                     }
                 }
             }

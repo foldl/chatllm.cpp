@@ -2818,11 +2818,22 @@ namespace chatllm::qwen::v3_vl_emb
 {
     typedef v3_vl::Config Config;
 
+    class ChatHistoryEncoder : public v3_vl::ChatHistoryEncoder
+    {
+    public:
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override
+        {
+            ids.push_back(tokenizer->eos_token_id);
+        }
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
     class Tokenizer : public v3_vl::Tokenizer
     {
     public:
         Tokenizer(const BaseConfig &config):
-            v3_vl::Tokenizer::Tokenizer(config)
+            v3_vl::Tokenizer::Tokenizer(config, &_chat_encoder)
         {
             sys_prompt = "Represent the user's input.";
         }
