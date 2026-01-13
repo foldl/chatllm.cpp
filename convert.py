@@ -200,6 +200,7 @@ class ModelType(Enum):
     HunYuanDense    = 0x1f00
     HunYuanMoEV1    = 0x1f01
     HunYuanDenseV1  = 0x1f02
+    WeDLM           = 0x1f03
 
     MoonLight       = 0x2000
 
@@ -9301,6 +9302,9 @@ def main():
         Mistral3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'GlmAsrForConditionalGeneration':
         GLMASRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'WeDLMForCausalLM':
+        QWen3Converter.MODEL_TYPE = ModelType.WeDLM
+        QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

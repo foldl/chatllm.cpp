@@ -425,8 +425,6 @@ namespace chatllm::bailing::llada
         threshold    = (float)utils::get_opt(args, "threshold", threshold);
         final_steps->set_read_last_n(block_length);
         steps               = std::min(steps, block_length);
-
-
     }
 
     void ConditionalGeneration::update_mask(int past, int qlen)
@@ -681,8 +679,9 @@ namespace chatllm::bailing::llada
                 for (int i = 0; i < (int)block_result.size(); i++, logits += config_.vocab_size)
                 {
                     if (block_result[i] != mask_id) continue;
-                    int next_token_id = sampler->sampling(logits,  config_.vocab_size);
-                    if (logits[next_token_id] <= threshold)
+                    float prob;
+                    int next_token_id = sampler->sampling(logits,  config_.vocab_size, &prob);
+                    if (prob <= threshold)
                     {
                         candidates.emplace_back(i, next_token_id, logits[next_token_id]);
                         continue;

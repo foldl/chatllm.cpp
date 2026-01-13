@@ -3864,5 +3864,21 @@
                 }
             }
         }
+    },
+    "wedlm": {
+        "brief": "WeDLM-8B-Instruct is our flagship instruction-tuned diffusion language model that performs parallel decoding under standard causal attention, fine-tuned from WeDLM-8B.",
+        "default": "8b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8" : {
+                        "size": 8707847728,
+                        "url": "chatllm_quantized_hunyuan/wedlm-8b-it.bin"
+                    }
+                }
+            }
+        }
     }
 }

@@ -667,13 +667,23 @@ namespace chatllm
         }
     }
 
-
     class GreedySampler : public Sampler
     {
     public:
-        int sampling(float *logits, const int vocab_size) override
+        int sampling(float *logits, const int vocab_size, float *confidence_level) override
         {
-            return (int)(std::max_element(logits, logits + vocab_size) - logits);
+            int r = (int)(std::max_element(logits, logits + vocab_size) - logits);
+            if (confidence_level)
+            {
+                float max_score = *std::max_element(logits, logits + vocab_size);
+                float sum = 0.f;
+                for (int i = 0; i < vocab_size; i++)
+                {
+                    sum += expf(logits[i] - max_score);
+                }
+                *confidence_level = expf(logits[r] - max_score) / sum;
+            }
+            return r;
         }
     };
 
@@ -689,7 +699,7 @@ namespace chatllm
         }
 
 
-        int sampling(float *logits, const int vocab_size) override
+        int sampling(float *logits, const int vocab_size, float *confidence_level) override
         {
             if (temp_en)
             {
@@ -728,9 +738,11 @@ namespace chatllm
             }
 
             std::discrete_distribution<> dist(logits_candidates.data(), logits_candidates.data() + token_scores.size());
-            int next_token_id = token_scores[dist(gen)].id;
+            auto pos = dist(gen);
+            int next_token_id = token_scores[pos].id;
 
             penalty.accept_choice(next_token_id);
+            if (confidence_level) *confidence_level = token_scores[pos].score;
 
             return next_token_id;
         }
@@ -1241,6 +1253,7 @@ namespace chatllm
                 r = ggml::scale(&ctx, r, logit_scale);
         }
 
+        ggml::set_output(r);
         ggml::build_forward_expand(&ctx, r);
 
         CHATLLM_CHECK(r->type == GGML_TYPE_F32) << "output type must be float: " << r->type;
@@ -1560,8 +1573,8 @@ namespace chatllm
 
         if (order)
         {
-            ggml::build_forward_expand(ctx, order);
             ggml::set_output(order);
+            ggml::build_forward_expand(ctx, order);
         }
 
         return lm_logits;
@@ -1645,6 +1658,7 @@ namespace chatllm
 
         ggml::get_shape(r, result_shape);
 
+        ggml::set_output(r);
         ggml::build_forward_expand(&ctx, r);
 
         CHATLLM_CHECK(ctx.allocate()) << "failed to allocate memory";
@@ -1723,6 +1737,7 @@ namespace chatllm
             r = ggml::cpy(&ctx, r, t);
         }
 
+        ggml::set_output(r);
         ggml::build_forward_expand(&ctx, r);
 
         CHATLLM_CHECK(ctx.allocate()) << "failed to allocate memory";

@@ -1154,6 +1154,37 @@ namespace chatllm
         return ggml::map_custom1(ctx, input, ggml_custom_xielu, GGML_N_TASKS_MAX, p);
     }
 
+    ggml::tensor *ggml::logsumexp(ComputeContext *ctx, ggml::tensor *a)
+    {
+        std::vector<ggml::tensor *> inputs;
+        inputs.push_back(a);
+
+        return custom(ctx, ggml_custom_logsumexp, GGML_MAX_N_THREADS, nullptr, inputs, ggml::type::GGML_TYPE_F32,
+            1, ggml::get_dim(a, 1), ggml::get_dim(a, 2), ggml::get_dim(a, 3));
+    }
+
+    ggml::tensor *ggml::categorical_entropy(ComputeContext *ctx, ggml::tensor *probs, ggml::tensor *logits)
+    {
+        CHATLLM_CHECK((probs != nullptr) ^ (logits != nullptr));
+        if (logits)
+        {
+            auto lsp    = ggml::logsumexp(ctx, logits);
+            logits      = ggml::sub(ctx, logits, lsp);
+            probs       = ggml::soft_max(ctx, logits);
+        }
+
+        // else
+
+        {
+            logits = ggml::log(ctx, probs);
+        }
+
+        auto p_log_p = ggml::mul(ctx, logits, probs);
+        auto r       = ggml::sum_rows(ctx, p_log_p);
+        r            = ggml::scale(ctx, r, -1.0f);
+        return r;
+    }
+
     ggml::tensor *ggml::map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata)
     {
         ggml::tensor *tensor = ggml_map_custom1(ctx->get_ctx(), a, fun, n_tasks, userdata);

@@ -648,7 +648,7 @@ namespace chatllm
             penalty.reset();
         }
 
-        virtual int sampling(float *logits, const int vocab_size) = 0;
+        virtual int sampling(float *logits, const int vocab_size, float *confidence_level = nullptr) = 0;
     public:
         LogitsPenalty penalty;
     protected:

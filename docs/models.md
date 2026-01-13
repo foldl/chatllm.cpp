@@ -124,15 +124,6 @@
     * [x] v1.5: [Ling-lite-1.5-2507](https://huggingface.co/inclusionAI/Ling-lite-1.5-2507/tree/6656efdc763a77102207fc66b176e4c5d07a316b), [Ring-lite2507](https://huggingface.co/inclusionAI/Ring-lite-2507/commit/8cf0ec244871c90102b353cef3568e061fd2504f)
     * [x] v2: [Ling-mini-2.0](https://huggingface.co/inclusionAI/Ling-mini-2.0/tree/56c261e07b78d95dad61336fcbdb21ef4fdbcabe), [Ring-mini-2.0](https://huggingface.co/inclusionAI/Ring-mini-2.0/tree/d4eac003b34b59b733f05039a876616d840a37d6)
 
-* LLaDA (`LLaDA2MoeModelLM`)
-    * [x] [mini-preview](https://huggingface.co/inclusionAI/LLaDA2.0-mini-preview/tree/d25d3b2ac0b966b64da11d6c791f8bf4bc31e90c), [mini](https://huggingface.co/inclusionAI/LLaDA2.0-mini/tree/d699e90dd1bd154d65128d9447f3570f4dac44f4)
-
-        Supported options (`--set OPTION VALUE`):
-        - `block_length`: default 32
-        - `steps`: default 32
-        - `minimal_topk`: default 1
-        - `threshold`: default 0.95
-
 * LlaMA-like (`LlamaForCausalLM`, `Llama4ForConditionalGeneration`):
     * [x] All LlaMA-1 models
     * [x] LlaMA-2: [Chat-7B](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf), etc
@@ -498,6 +489,33 @@ These LoRA models have been tested:
 * [Llama-3-Chinese-8B-Instruct](https://huggingface.co/hfl/llama-3-chinese-8b-instruct-lora)
 
 ## Special Models
+
+Tips for diffusion LLMs, they are very sensitive to sampling parameters. The results may be completely unacceptable with improper parameters.
+
+* LLaDA (`LLaDA2MoeModelLM`)
+    * [x] [mini-preview](https://huggingface.co/inclusionAI/LLaDA2.0-mini-preview/tree/d25d3b2ac0b966b64da11d6c791f8bf4bc31e90c), [mini](https://huggingface.co/inclusionAI/LLaDA2.0-mini/tree/d699e90dd1bd154d65128d9447f3570f4dac44f4)
+
+        Supported options (`--set OPTION VALUE`):
+        - `block_length`: default 32
+        - `steps`: default 32
+        - `minimal_topk`: default 1
+        - `threshold`: default 0.95
+
+* WeDLM (`WeDLMForCausalLM`)
+    * [x] [8B-Instruct](https://huggingface.co/tencent/WeDLM-8B-Instruct/tree/c1e0373ec7e11bc27321a548ea54ea9728b0d9c0)
+
+        Supported options (`--set OPTION VALUE`):
+        - `block_size`: default 16
+
+            When set to <= 1, it falls back to auto regressive decoding.
+        - `accept_algo`: default 2
+            - 0: entropy algo: https://github.com/Tencent/WeDLM/blob/d4481cab821044b8ebd5f78bc37f23787a6275ed/wedlm/engine/sampler.py#L169
+            - 1: prob    algo: https://huggingface.co/tencent/WeDLM-8B-Instruct/blob/main/modeling_wedlm.py#L694
+            - 2: custom  algo: sampling + prob
+        - `threshold`: default 0.7
+
+            For algo 0, tokens are accepted if entropy is less than threshold; for others, tokens are accepted when probability (or condidence level) is larger than this.
+        - `pos_penalty_factor`: default 0.02 (used by entropy algo)
 
 * [Meta-AI multi-token prediction models](https://huggingface.co/facebook/multi-token-prediction) checkpoints
 

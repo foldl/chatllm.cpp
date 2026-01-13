@@ -201,6 +201,11 @@ namespace chatllm
 
         ggml::tensor *xielu(ComputeContext *ctx, ggml::tensor *input, float alpha_n, float alpha_p, float beta, float eps);
 
+        ggml::tensor *logsumexp(ComputeContext *ctx, ggml::tensor *a);
+
+        // accept either probs or logits, but not both
+        ggml::tensor *categorical_entropy(ComputeContext *ctx, ggml::tensor *probs, ggml::tensor *logits);
+
         ggml::tensor *map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom2(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom3(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, ggml::tensor *c, const ggml_custom3_op_t fun, int n_tasks, void *userdata);

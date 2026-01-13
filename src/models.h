@@ -133,8 +133,7 @@ namespace chatllm
     public:
         LMFinalStepsDisabler(LMFinalSteps *target, bool active = true) : target(target), state(target->disable_head)
         {
-            if (active)
-                target->disable_head = false;
+            target->disable_head = active;
         }
         ~LMFinalStepsDisabler()
         {
