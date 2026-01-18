@@ -1020,6 +1020,8 @@ namespace chatllm
         virtual void set_additional_args(const std::map<std::string, std::string> &args) {}
 
         virtual LayerAllocatorManager *get_alloc_manager(void) = 0;
+
+        virtual bool support_multi_turn(void) const { return false; }
     };
 
     class ModelProxy : public AbstractModel
@@ -1293,6 +1295,8 @@ namespace chatllm
         int save_session(ModelSessionMemory &session) const override;
         int load_session(ModelSessionMemory &session) override;
 
+        bool support_multi_turn(void) const override { return multi_turn; }
+
     private:
         struct state
         {
@@ -1309,6 +1313,7 @@ namespace chatllm
         BaseTokenizer *tokenizer;
         ModelPurpose purpose;
         bool aborted;
+        bool multi_turn = true;
     private:
         int _seed;
     };
@@ -1406,6 +1411,7 @@ namespace chatllm
         virtual std::string get_additional_description(void) const;
 
         bool is_loaded(void) const { return modelobj.loaded; }
+        virtual bool support_multi_turn(void) const;
 
         virtual void restart(void);
         virtual void rewind(int n_past);

@@ -1991,6 +1991,11 @@ namespace chatllm
         return "";
     }
 
+    bool Pipeline::support_multi_turn(void) const
+    {
+        return is_loaded() ? modelobj.model->support_multi_turn() : false;
+    }
+
     void Pipeline::restart(void)
     {
         initializing = true;

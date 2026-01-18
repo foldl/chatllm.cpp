@@ -331,6 +331,7 @@ namespace chatllm::gemma::v3
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA3);
         void load(ModelLoader &loader) override;
 
+        void set_tokenizer(BaseTokenizer *tokenizer) override;
         bool load_more(const json::JSON &config) override;
         void set_additional_args(const std::map<std::string, std::string> &args) override;
 

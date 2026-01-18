@@ -65,6 +65,7 @@ namespace utils
     std::string trim(const std::string& str);
 
     std::string join(const std::vector<std::string>& vec, const std::string& sep);
+    void split(const std::string &str, const std::string &delimiter, std::vector<std::string> &items);
 
     std::string replace_all(const std::string& str, const std::string& from, const std::string& to);
 

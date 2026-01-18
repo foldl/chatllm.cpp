@@ -395,6 +395,21 @@ namespace utils
         return result;
     }
 
+    void split(const std::string &str, const std::string &delimiter, std::vector<std::string> &items)
+    {
+        const int len = (int)delimiter.size();
+        std::string sub(str);
+        while (sub.size() > 0)
+        {
+            auto pos = sub.find(delimiter);
+            items.push_back(sub.substr(0, pos));
+
+            if (pos == std::string::npos) break;
+
+            sub = sub.substr(pos + len);
+        }
+    }
+
     std::string replace_all(const std::string& str0, const std::string& from, const std::string& to)
     {
         if (from.empty()) return str0;

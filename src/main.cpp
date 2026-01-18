@@ -1075,7 +1075,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
             std::string output = pipeline.chat(history, gen_config, &streamer);
             history.push_back(output, chatllm::MsgRole::User);
 
-            if (args.single_turn)
+            if (args.single_turn || !pipeline.support_multi_turn())
             {
                 history.clear();
                 pipeline.restart();
@@ -1107,7 +1107,7 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
             std::string output = pipeline.chat(history, gen_config, &streamer);
             history.push_back(output, chatllm::MsgRole::Assistant);
 
-            if (args.single_turn)
+            if (args.single_turn || !pipeline.support_multi_turn())
             {
                 history.clear();
                 pipeline.restart();
