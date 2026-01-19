@@ -769,3 +769,108 @@ std::vector<std::string> unicode_regex_split(const std::string & text, const std
 
     return unicode_byte_encoding_process(bpe_words);
 }
+
+namespace utils
+{
+    static inline bool in_range(char32_t cp, char32_t lo, char32_t hi) {
+        return cp >= lo && cp <= hi;
+    }
+
+    std::string detect_language(const std::string& text) {
+        auto u32 = unicode_cpts_from_utf8(text);
+
+        // Count scripts
+        size_t latin=0, cyr=0, greek=0, arab=0, heb=0, dev=0, hangul=0, hira=0, kata=0, thai=0, geo=0, arm=0, han=0;
+        for (char32_t cp : u32) {
+            if (in_range(cp, 0x0041, 0x024F) || in_range(cp, 0x1E00, 0x1EFF)) latin++;
+            else if (in_range(cp, 0x0400, 0x04FF) || in_range(cp, 0x0500, 0x052F)) cyr++;
+            else if (in_range(cp, 0x0370, 0x03FF)) greek++;
+            else if (in_range(cp, 0x0600, 0x06FF)) arab++;
+            else if (in_range(cp, 0x0590, 0x05FF)) heb++;
+            else if (in_range(cp, 0x0900, 0x097F)) dev++;
+            else if (in_range(cp, 0xAC00, 0xD7AF)) hangul++;
+            else if (in_range(cp, 0x3040, 0x309F)) hira++;
+            else if (in_range(cp, 0x30A0, 0x30FF)) kata++;
+            else if (in_range(cp, 0x0E00, 0x0E7F)) thai++;
+            else if (in_range(cp, 0x10A0, 0x10FF)) geo++;
+            else if (in_range(cp, 0x0530, 0x058F)) arm++;
+            else if (in_range(cp, 0x4E00, 0x9FFF)     // CJK Unified Ideographs
+                || in_range(cp, 0x3400, 0x4DBF)     // CJK Ext A
+                || in_range(cp, 0x20000, 0x2A6DF))  // CJK Ext B (BMP surrogate pairs in UTF-16)
+                han++;
+        }
+
+        size_t total = latin + cyr + greek + arab + heb + dev + hangul + hira + kata + thai + geo + arm + han;
+        if (total == 0) return "und";
+
+        struct Pick { const char* code; size_t count; };
+        std::vector<Pick> scripts = {
+            {"ja", hira + kata},
+            {"ko", hangul},
+            {"zh", han},
+            {"ru", cyr},     // heuristic: any Cyrillic -> ru
+            {"el", greek},
+            {"ar", arab},
+            {"he", heb},
+            {"hi", dev},
+            {"th", thai},
+            {"ka", geo},
+            {"hy", arm}
+        };
+        auto best_script = std::max_element(scripts.begin(), scripts.end(),
+                                            [](const Pick& a, const Pick& b){ return a.count < b.count; });
+        if (best_script->count > latin) return best_script->code;
+
+        // Latin-based heuristic
+        // Normalize ASCII letters to lowercase and punctuation to spaces for stopword matching
+        std::string norm = " ";
+        norm.reserve(text.size() + 2);
+        for (unsigned char ch : text) {
+            if (ch < 128) {
+                if (std::isalpha(ch)) norm.push_back(static_cast<char>(std::tolower(ch)));
+                else norm.push_back(std::isspace(ch) ? ' ' : ' ');
+            } else {
+                norm.push_back(' ');
+            }
+        }
+        norm.push_back(' ');
+
+        auto count_words = [&](const std::vector<std::string>& words) {
+            size_t score = 0;
+            for (const auto& w : words) {
+                if (norm.find(w) != std::string::npos) score++;
+            }
+            return score;
+        };
+
+        const std::vector<std::string> en={" the "," and "," of "," to "," in "," is "," that "," for "," on "};
+        const std::vector<std::string> es={" el "," la "," los "," las "," de "," que "," y "," en "," del "};
+        const std::vector<std::string> fr={" le "," la "," les "," de "," des "," et "," en "," que "," du "};
+        const std::vector<std::string> de={" der "," die "," das "," und "," zu "," nicht "," ist "," ein "," eine "};
+        const std::vector<std::string> it={" il "," lo "," la "," gli "," dei "," che "," e "," di "," in "};
+        const std::vector<std::string> pt={" o "," a "," os "," as "," de "," que "," e "," em "," do "," da "};
+        const std::vector<std::string> nl={" de "," het "," en "," van "," een "," is "," op "," dat "};
+
+        size_t s_en = count_words(en), s_es=count_words(es), s_fr=count_words(fr), s_de=count_words(de);
+        size_t s_it=count_words(it), s_pt=count_words(pt), s_nl=count_words(nl);
+
+        // Diacritic markers (search original bytes; ASCII lowercasing doesn't affect multibyte)
+        auto contains = [&](const char* needle){ return text.find(needle) != std::string::npos; };
+        if (contains("ß")) return "de";
+        if (contains("¿") || contains("¡") || contains("ñ")) return "es";
+        if (contains("ã") || contains("õ")) return "pt";
+        if (contains("ø") || contains("å")) return "no"; // could also be da
+        if (contains("ç") && s_fr >= s_pt) return "fr";
+
+        struct Score { const char* code; size_t score; };
+        std::vector<Score> lang_scores = {
+            {"en", s_en}, {"es", s_es}, {"fr", s_fr}, {"de", s_de},
+            {"it", s_it}, {"pt", s_pt}, {"nl", s_nl}
+        };
+        auto best = std::max_element(lang_scores.begin(), lang_scores.end(),
+                                    [](const Score& a, const Score& b){ return a.score < b.score; });
+        if (best->score > 0) return best->code;
+
+        return "en"; // default for Latin text
+    }
+}

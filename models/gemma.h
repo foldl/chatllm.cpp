@@ -286,6 +286,8 @@ namespace chatllm::gemma::v3
         int boi_token_id = -1;
         int eoi_token_id = -1;
         bool do_pan_and_scan = false;
+        std::string source_lang_code = "zh";
+        std::string target_lang_code = "en";
     };
 
     template <int sliding_window_len> class Gemma3SWASelfAttention : public QKNormedAttention<RMSNorm, SlidingWindowAttentionImpl<sliding_window_len>>

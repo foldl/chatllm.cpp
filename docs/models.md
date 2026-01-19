@@ -376,8 +376,11 @@ Please use `--format completion` for these models.
 * Gemma (`Gemma3ForConditionalGeneration`)
     * [x] v3: [Instruct-4B](https://huggingface.co/google/gemma-3-4b-it/tree/dbd91bbaf64a0e591f4340ce8b66fd1dba9ab6bd), [Instruct-12B](https://huggingface.co/google/gemma-3-12b-it/tree/7553b6f39c33dc229bfbfe3831f7bcdbb6b738c7), [Instruct-27B](https://huggingface.co/google/gemma-3-27b-it/tree/dfb98f29ff907e391ceed2be3834ca071ea260f1)
     * [x] MedGemma: [Instruct-4B](https://huggingface.co/google/medgemma-4b-it/commit/698f7911b8e0569ff4ebac5d5552f02a9553063c), [Instruct-27B](https://huggingface.co/google/medgemma-27b-it/tree/2d3e00ea38b50018bf5dd3aa1009457cd2d5a48f)
+    * [x] TranslateGemma: [4B](https://huggingface.co/google/translategemma-4b-it/tree/4eded5e6860cc44d717912be26cc02d37606cf4f), [12B](https://huggingface.co/google/translategemma-12b-it/tree/94fb76d93138708b0deaab35e45af0cf5036e02a), [27B](https://huggingface.co/google/translategemma-27b-it/tree/006f953135eb646ad0c92bbde4d96ef7a023140c)
 
     Note: Only download `tokenizer.model` and DO NOT download `tokenizer.json` when converting. Use `--set do-pan-and-scan 1` to enable _Pan and Scan_.
+    Use `--name TranslateGemma` when converting TranslateGemma models to activate translation support: specify language codes in prompts like
+    `/en->zh Hello world.`. Source language code can be set to `auto` when translating texts. Default language codes can be configured by `--set ID code`,  such as `--set source-language-code zh` and `--set target-language-code en`.
 
 * GLM (`Glm4vForConditionalGeneration`)
     * [x] v4: [4.6V-Flash](https://huggingface.co/zai-org/GLM-4.6V-Flash/tree/411bb4d77144a3f03accbf4b780f5acb8b7cde4e)

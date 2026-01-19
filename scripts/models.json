@@ -3880,5 +3880,39 @@
                 }
             }
         }
+    },
+    "translategemma": {
+        "brief": "TranslateGemma is a family of lightweight, state-of-the-art open translation models from Google, based on the Gemma 3 family of models.",
+        "default": "4b",
+        "license": "https://ai.google.dev/gemma/terms",
+        "variants": {
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4702295440,
+                        "url": "chatllm_quantized_gemma-3/translategemma-4b-it.bin"
+                    }
+                }
+            },
+            "12b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 13083673872,
+                        "url": "chatllm_quantized_gemma-3/translategemma-12b-it.bin"
+                    }
+                }
+            },
+            "27b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 29283314832,
+                        "url": "chatllm_quantized_gemma-3/translategemma-27b-it.bin"
+                    }
+                }
+            }
+        }
     }
 }

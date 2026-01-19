@@ -563,8 +563,8 @@ namespace chatllm::gemma::translation
     public:
         void parse_command(std::string &user) const;
     public:
-        std::string def_source_lang_code = "zh";
-        std::string def_target_lang_code = "en";
+        std::string def_source_lang_code;
+        std::string def_target_lang_code;
         std::string source_lang_code;
         std::string target_lang_code;
     };
@@ -588,10 +588,16 @@ namespace chatllm::gemma::translation
 
         auto obj = const_cast<TranslateGemmaHistoryEncoder *>(this);
 
-        if (language_code_dict.hasKey(items[0]))
+        if (items[0] != "auto")
+        {
+            CHATLLM_CHECK(language_code_dict.hasKey(items[0])) << "`" << items[0] << "` is not a valid language code";
             obj->source_lang_code = items[0];
-        if (language_code_dict.hasKey(items[1]))
-            obj->target_lang_code = items[1];
+        }
+        else
+            obj->source_lang_code = "auto";
+
+        CHATLLM_CHECK(language_code_dict.hasKey(items[1])) << "`" << items[1] << "` is not a valid language code";
+        obj->target_lang_code = items[1];
     }
 
     void TranslateGemmaHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
@@ -605,8 +611,8 @@ namespace chatllm::gemma::translation
         std::string text = "";
         std::string image = "";
 
+        auto obj = const_cast<TranslateGemmaHistoryEncoder *>(this);
         {
-            auto obj = const_cast<TranslateGemmaHistoryEncoder *>(this);
             obj->source_lang_code = def_source_lang_code;
             obj->target_lang_code = def_target_lang_code;
         }
@@ -632,6 +638,12 @@ namespace chatllm::gemma::translation
                 CHATLLM_CHECK(false) << "only text/image input are allowed";
                 break;
             }
+        }
+
+        if (source_lang_code == "auto")
+        {
+            CHATLLM_CHECK(text.size() > 0) << "when souce_lang_code is auto, only text input is expected";
+            obj->source_lang_code = utils::detect_language(text);
         }
 
         const std::string source_lang = language_code_dict[source_lang_code].ToString();
@@ -726,6 +738,7 @@ namespace chatllm::gemma::v3
 
         BlockParams::PadEmbedding padding(1024, 1024); // 4 media_emb
         _chat_encoder.MAX_PATCH_NUM = padding.get();
+        translation::_translate_encoder.MAX_PATCH_NUM = padding.get();
 
         transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
                     create_embedding<Embedding>(&w_ctx_, config),
@@ -776,7 +789,11 @@ namespace chatllm::gemma::v3
         {
             Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
             tok->set_chat_encoder(&translation::_translate_encoder);
+            translation::_translate_encoder.vis_config = _chat_encoder.vis_config;
+            translation::_translate_encoder.vit_loaded = _chat_encoder.vit_loaded;
             multi_turn = false;
+            translation::_translate_encoder.def_source_lang_code = tok->source_lang_code;
+            translation::_translate_encoder.def_target_lang_code = tok->target_lang_code;
         }
     }
 
@@ -795,7 +812,9 @@ namespace chatllm::gemma::v3
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         if (nullptr == tok) return;
-        tok->do_pan_and_scan = utils::get_opt(args, "do-pan-and-scan", false);
+        tok->do_pan_and_scan  = utils::get_opt(args, "do-pan-and-scan", false);
+        tok->source_lang_code = utils::get_opt(args, "source_lang_code", tok->source_lang_code);
+        tok->target_lang_code = utils::get_opt(args, "target_lang_code", tok->target_lang_code);
     }
 
     void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
@@ -890,7 +909,6 @@ namespace chatllm::gemma::v3
                         vis_config->image_size, vis_config->image_size,
                         dir);
 
-                    printf("crops: %d\n", (int)crops.size());
                     if (crops.size() < 1) continue;
 
                     if (crops.size() == 1)
