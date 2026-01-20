@@ -129,8 +129,7 @@ namespace chatllm::glm::v4
     {
     public:
         Tokenizer(const BaseConfig &config);
-
-        using v3::Tokenizer::Tokenizer;
+        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *_chat_encoder);
 
         void encode(const std::string &text, std::vector<int> &ids) const override;
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
@@ -163,8 +162,9 @@ namespace chatllm::glm::glm4_0414
     class Tokenizer : public v4::Tokenizer
     {
     public:
-        Tokenizer(const Config &config);
-        using v4::Tokenizer::Tokenizer;
+        Tokenizer(const BaseConfig &config);
+        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *_chat_encoder);
+
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
     public:
         int think_open_token_id;

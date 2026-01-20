@@ -33,6 +33,7 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
+* 2026-01-20: GLM-4.7-Flash
 * 2026-01-19: TranslateGemma
 * 2026-01-13: WeDLM
 * 2026-01-09: QWen3-VL-Embedding/Reranker

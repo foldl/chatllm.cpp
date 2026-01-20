@@ -24,7 +24,7 @@
 * BlueLM (`BlueLMForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/vivo-ai/BlueLM-7B-Chat), [Chat-7B 32K](https://huggingface.co/vivo-ai/BlueLM-7B-Chat-32K)
 
-* ChatGLM (`ChatGLMModel`, `Glm4ForCausalLM`):
+* ChatGLM (`ChatGLMModel`, `Glm4ForCausalLM`, `Glm4MoeLiteForCausalLM`):
     * [x] ~~ChatGLM: [6B](https://huggingface.co/THUDM/chatglm-6b)~~
     * [x] ChatGLM2 family: [ChatGLM2 6B](https://huggingface.co/THUDM/chatglm2-6b), [CodeGeeX2 6B](https://huggingface.co/THUDM/codegeex2-6b), [ChatGLM3 6B](https://huggingface.co/THUDM/chatglm3-6b)
 
@@ -36,11 +36,12 @@
 
     * [x] GLM-4: [Chat-9B-128k](https://huggingface.co/THUDM/glm-4-9b-chat), [Chat-9B-1M](https://huggingface.co/THUDM/glm-4-9b-chat-1m)
     * [x] CodeGeeX4: [9B](https://huggingface.co/THUDM/codegeex4-all-9b) (`-a CodeGeeX4`)
-    * [x] GLM-4-0414: [](https://huggingface.co/THUDM/GLM-4-9B-0414/tree/645b8482494e31b6b752272bf7f7f273ef0f3caf),
+    * [x] GLM-4: [GLM-4-0414](https://huggingface.co/THUDM/GLM-4-9B-0414/tree/645b8482494e31b6b752272bf7f7f273ef0f3caf),
     [GLM-Z1-9B-0414](https://huggingface.co/THUDM/GLM-Z1-9B-0414/commit/66907f8ddffdcdcafb7e8c9e96b7366449176c1a),
     [GLM-4-32B-0414](https://huggingface.co/THUDM/GLM-4-32B-0414/tree/dc842812afac55db3a8aca4484ca6f3c60bd472f),
     [GLM-Z1-32B-0414](https://huggingface.co/THUDM/GLM-Z1-32B-0414/tree/93593a027f03a597582d1db7e84894a0a8fa027e),
     [GLM-Z1-Rumination-32B-0414](https://huggingface.co/THUDM/GLM-Z1-Rumination-32B-0414/tree/6ae9ac6152a7d85761409d6d6ef201d9e8e8aeb1)
+    * [x] 4.7-Flash: (https://huggingface.co/zai-org/GLM-4.7-Flash/tree/279ecdf8ee35f17f1939f95d6b113d8b806a7b2b)
 
 * Cohere (`CohereForCausalLM`)
     * [x] [C4AI Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-v01)

@@ -3,9 +3,15 @@
 #include <codecvt>
 #include "qwen.h"
 #include "llama.h"
+#include "deepseek.h"
 #include "../src/vision_process.h"
 #include "../src/chat_encoders.h"
 #include "../src/audio_process.h"
+
+namespace chatllm
+{
+    const int MODEL_TYPE_GLM_MOE_LITE   = 9;
+}
 
 namespace chatllm::glm::v1
 {
@@ -476,11 +482,18 @@ namespace chatllm::glm::v4
         void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
         void append_sys_prompt(std::vector<int> &ids) const override;
         void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+    protected:
+        void append_role_tok(std::vector<int> &ids, int role_tok) const;
+    public:
+        bool add_nl_token = true;
     };
 
     static ChatHistoryEncoder _chat_encoder;
 
     Tokenizer::Tokenizer(const BaseConfig &config) : v3::Tokenizer(config, &_chat_encoder)
+    {}
+
+    Tokenizer::Tokenizer(const BaseConfig &config, BaseHistoryEncoder *_chat_encoder) : v3::Tokenizer(config, _chat_encoder)
     {}
 
     void Tokenizer::encode(const std::string &text, std::vector<int> &ids) const
@@ -503,6 +516,11 @@ namespace chatllm::glm::v4
         tp = new tokenizer::BPEProcessor2(regex_exprs);
         size_t size = tp->Load(buffer, n_vocab);
         tp->EnableReturnSpecialToken(true);
+
+        if (eos_token_id < 0)
+        {
+            eos_token_id = tp->PieceToId("<|endoftext|>");
+        }
 
         int special_id = eos_token_id + 1;
         mask_token_id = special_id++;
@@ -603,6 +621,13 @@ namespace chatllm::glm::v4
         return &interceptor;
     }
 
+    void ChatHistoryEncoder::append_role_tok(std::vector<int> &ids, int role_tok) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(role_tok);
+        if (add_nl_token) ids.push_back(tok->nl_token_id);
+    }
+
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
@@ -618,7 +643,7 @@ namespace chatllm::glm::v4
 
         if (tok->get_system_prompt().size() > 0)
         {
-            ids.insert(ids.end(), {tok->system_token_id, tok->nl_token_id});
+            append_role_tok(ids, tok->system_token_id);
             tok->encode(tok->get_system_prompt(), ids);
         }
     }
@@ -627,7 +652,7 @@ namespace chatllm::glm::v4
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        ids.insert(ids.end(), {tok->user_token_id, tok->nl_token_id});
+        append_role_tok(ids, tok->user_token_id);
         tok->encode(user, ids);
     }
 
@@ -635,15 +660,18 @@ namespace chatllm::glm::v4
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        ids.push_back(tok->assistant_token_id);
-        ids.push_back(tok->nl_token_id);
+        append_role_tok(ids, tok->assistant_token_id);
     }
 }
 
 namespace chatllm::glm::glm4_0414
 {
-    Tokenizer::Tokenizer(const Config &config)
+    Tokenizer::Tokenizer(const BaseConfig &config)
         : v4::Tokenizer(config)
+    {}
+
+    Tokenizer::Tokenizer(const BaseConfig &config, BaseHistoryEncoder *_chat_encoder)
+        : v4::Tokenizer(config, _chat_encoder)
     {}
 
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
@@ -1920,6 +1948,93 @@ namespace chatllm::glm::asr
     }
 }
 
+namespace chatllm::glm::moe_lite
+{
+    struct Config : public deepseek::v2_light::Config
+    {
+        int q_lora_rank;
+        int topk_group;     // TODO: group_limited_greedy
+    };
+
+    class ChatHistoryEncoder : public v4::ChatHistoryEncoder
+    {
+    public:
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+        std::string get_ai_prefix(void) const;
+        int         get_ai_prefix_tok(void);
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public glm4_0414::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config)
+            : glm4_0414::Tokenizer(config, &_chat_encoder)
+        {
+            _chat_encoder.add_nl_token = false;
+        }
+        bool enable_thinking = false;
+    };
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        v4::ChatHistoryEncoder::append_ai_opening(round_idx, ids);
+        tok->encode(get_ai_prefix(), ids);
+    }
+
+    int ChatHistoryEncoder::get_ai_prefix_tok(void)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        return tok->enable_thinking ? tok->think_open_token_id : -1;
+    }
+
+    std::string ChatHistoryEncoder::get_ai_prefix(void) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        return tok->enable_thinking ? "<think>" : "</think>";
+    }
+
+    const int NUM_EXPERTS                   =  64;
+    const int EXPERTS_PER_TOK               =  4;
+
+    class ConditionalGeneration : public deepseek::v2_light::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK, EXPERTS_PER_TOK>
+    {
+    public:
+        typedef deepseek::v2_light::ConditionalGeneration0<NUM_EXPERTS, EXPERTS_PER_TOK, EXPERTS_PER_TOK> Base;
+        ConditionalGeneration() = default;
+
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = (ModelType)MODEL_TYPE_GLM_MOE_LITE)
+            : Base(config, runtime_config, type, config.q_lora_rank)
+        {
+        }
+
+        void set_additional_args(const std::map<std::string, std::string> &args) override
+        {
+            Tokenizer *tok          = dynamic_cast<Tokenizer *>(tokenizer);
+            tok->enable_thinking    = utils::get_opt(args, "enable_thinking", tok->enable_thinking);
+        }
+
+        std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                                const bool continuous,
+                                bool &completed,
+                                ModelPerfInfo *performance,
+                                BaseStreamer *streamer) override
+        {
+            if (streamer)
+            {
+                auto id = _chat_encoder.get_ai_prefix_tok();
+                if (id >= 0)
+                    streamer->put({id});
+            }
+
+            return Base::generate(input_ids, gen_config, continuous, completed, performance, streamer);
+        }
+    };
+}
+
 namespace chatllm
 {
     REGISTER_MODEL_LOADER(CHATGLM,               glm::v1, 1);
@@ -1929,4 +2044,5 @@ namespace chatllm
     REGISTER_MODEL_LOADER(GLM4_0414,             glm::glm4_0414, 1);
     REGISTER_MODEL_LOADER(GLM4V,                 glm::v4v, 1);
     REGISTER_MODEL_LOADER(GLM_ASR,               glm::asr, 1);
+    REGISTER_MODEL_LOADER(GLM_MOE_LITE,          glm::moe_lite, 1);
 }

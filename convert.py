@@ -74,6 +74,7 @@ class ModelType(Enum):
     CHATGLM4 = 6
     CODEGEEX4 = 7
     GLM4        = 8
+    GLM4MoELite = 9
 
     InternLM    = 0x100
     InternLM2   = 0x101
@@ -7054,13 +7055,15 @@ class DeepSeekV3Converter(BaseConverter):
     def dump_config(f, config, ggml_type):
         assert config.hidden_act == 'silu', "hidden_act must be silu"
         assert config.attention_bias == False, "attention_bias must be False"
-        assert config.ep_size == 1, "ep_size must be 1"
+        assert (config.ep_size is None) or (config.ep_size == 1), "ep_size must be 1"
         if config.rope_scaling is not None:
             assert config.rope_scaling['type'] == 'yarn', "rope_scaling['type'] must be 'yarn'"
-        assert config.scoring_func == 'sigmoid', "scoring_func must be 'sigmoid'"
+        assert (config.scoring_func is None) or (config.scoring_func == 'sigmoid'), "scoring_func must be 'sigmoid'"
         assert config.topk_method == 'noaux_tc', "topk_method must be 'noaux_tc'"
         assert config.n_routed_experts is not None, "n_routed_experts must not be null"
         has_scaling = config.rope_scaling is not None
+        if config.moe_layer_freq is None:
+            config.moe_layer_freq = 1
 
         config_values = [
             ggml_type.value,
@@ -9305,6 +9308,12 @@ def main():
     elif arch == 'WeDLMForCausalLM':
         QWen3Converter.MODEL_TYPE = ModelType.WeDLM
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Glm4MoeLiteForCausalLM':
+        DeepSeekV3Converter.MODEL_TYPE = ModelType.GLM4MoELite
+        assert config.q_lora_rank is not None
+        assert config.partial_rotary_factor == 1.0
+        print(f"Warning: `num_nextn_predict_layers` is not supported")
+        DeepSeekV3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
