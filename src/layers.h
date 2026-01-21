@@ -29,6 +29,7 @@ namespace chatllm
     enum ActFunc
     {
         GELU,   // equivelent to `gelu_new`
+        GELU_QUICK,
         SILU,
         Tanh,
         RELU,

@@ -376,6 +376,10 @@ namespace chatllm
             tensor = ggml_gelu_inplace(ctx->get_ctx(), input);
             ctx->cb_op_tensor(tensor);
             break;
+        case ActFunc::GELU_QUICK:
+            tensor = ggml_gelu_quick_inplace(ctx->get_ctx(), input);
+            ctx->cb_op_tensor(tensor);
+            break;
         case ActFunc::SILU:
             tensor = ggml_silu_inplace(ctx->get_ctx(), input);
             ctx->cb_op_tensor(tensor);
@@ -408,6 +412,10 @@ namespace chatllm
         {
         case ActFunc::GELU:
             tensor = ggml_gelu(ctx->get_ctx(), input);
+            ctx->cb_op_tensor(tensor);
+            break;
+        case ActFunc::GELU_QUICK:
+            tensor = ggml_gelu_quick(ctx->get_ctx(), input);
             ctx->cb_op_tensor(tensor);
             break;
         case ActFunc::SILU:

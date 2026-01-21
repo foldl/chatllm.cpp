@@ -259,6 +259,7 @@ class ModelType(Enum):
     Gemma3Vis               = ModelTypeTagChatImageIn + 0x0000011
     DotsOCR                 = ModelTypeTagChatImageIn + 0x0000020
     Mistral3                = ModelTypeTagChatImageIn + 0x0000030
+    StepVL                  = ModelTypeTagChatImageIn + 0x0000040
 
     Qwen2Audio              = ModelTypeTagChatAudioIn + 0x0000001
 
@@ -8668,6 +8669,88 @@ class Mistral3Converter(BaseConverter):
 
         return weight_names
 
+class StepVLConverter(BaseConverter):
+    MODEL_TYPE = ModelType.StepVL
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for k in state_dict: # name: str
+            name: str = k
+            tensor: torch.Tensor = state_dict[name]
+            if name.startswith('vision_model.transformer.resblocks.'):
+                name = name.replace('vision_model.transformer.resblocks.', 'visual.blocks.')
+                if name.endswith('in_proj_weight') or name.endswith('in_proj_bias'):
+                    #print(f'shape: {name} = {tensor.shape}')
+                    hidden_size = config.vision_config['width']
+                    q, k, v = tensor.split([hidden_size, hidden_size, hidden_size], dim=0)
+                    n_head = config.vision_config['heads']
+                    r[name.replace('.in_proj_', '.q_proj.')] = permute_pair(q, n_head)
+                    r[name.replace('.in_proj_', '.k_proj.')] = permute_pair(k, n_head)
+                    r[name.replace('.in_proj_', '.v_proj.')] = v
+                else:
+                    name = name.replace('.attn.out_proj.', '.attn.o_proj.')
+                    r[name] = tensor
+            elif name.startswith('vision_model.'):
+                name = name.replace('vision_model.', 'visual.')
+                r[name] = tensor
+            elif name.startswith('vit_large_projector'):
+                name = 'visual.' + name
+                r[name] = tensor
+            else:
+                r[name] = tensor
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.text_config['rope_scaling'] is None
+        assert config.vision_config["hidden_act"] == "quick_gelu"
+
+        config.text_config['rope_scaling'] = None
+        StepVLConverter.text_config = AttributeDict(config.text_config)
+        QWen3Converter.dump_config(f, StepVLConverter.text_config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = QWen3Converter.get_weight_names(StepVLConverter.text_config)
+
+        for i in range(config.vision_config['layers']):
+            weight_names += [
+                f"visual.blocks.{i}.attn.o_proj.bias",
+                f"visual.blocks.{i}.attn.o_proj.weight",
+                f"visual.blocks.{i}.attn.q_proj.bias",
+                f"visual.blocks.{i}.attn.q_proj.weight",
+                f"visual.blocks.{i}.attn.k_proj.bias",
+                f"visual.blocks.{i}.attn.k_proj.weight",
+                f"visual.blocks.{i}.attn.v_proj.bias",
+                f"visual.blocks.{i}.attn.v_proj.weight",
+                f"visual.blocks.{i}.ls_1.gamma",
+                f"visual.blocks.{i}.ls_2.gamma",
+                f"visual.blocks.{i}.ln_1.weight",
+                f"visual.blocks.{i}.ln_1.bias",
+                f"visual.blocks.{i}.ln_2.weight",
+                f"visual.blocks.{i}.ln_2.bias",
+                f"visual.blocks.{i}.mlp.c_fc.weight",
+                f"visual.blocks.{i}.mlp.c_fc.bias",
+                f"visual.blocks.{i}.mlp.c_proj.weight",
+                f"visual.blocks.{i}.mlp.c_proj.bias",
+            ]
+
+        weight_names += [
+            "visual.positional_embedding",
+            "visual.conv1.weight",
+            "visual.ln_pre.weight",
+            "visual.ln_pre.bias",
+            "visual.vit_downsampler1.weight",
+            "visual.vit_downsampler1.bias",
+            "visual.vit_downsampler2.weight",
+            "visual.vit_downsampler2.bias",
+            "visual.vit_large_projector.weight",
+        ]
+
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -8819,7 +8902,8 @@ def load_some_model(path: Path, fallback_files: list[Path] = []) -> List[Path]:
     if path.is_dir():
         globs = ["model-*-of-*.safetensors", "consolidated.*.pth",
                  "pytorch_model-*-of-*.bin", "pytorch_model_*-of-*.bin",
-                 "pytorch_model.bin", "model.safetensors", "*.pt", "consolidated.safetensors", "consolidated.pth"]
+                 "pytorch_model.bin", "model.safetensors", "*.pt", "consolidated.safetensors", "consolidated.pth",
+                 "model-*.safetensors"]
         for glob in globs:
             files = list(path.glob(glob))
             if len(files) > 0:
@@ -9314,6 +9398,8 @@ def main():
         assert config.partial_rotary_factor == 1.0
         print(f"Warning: `num_nextn_predict_layers` is not supported")
         DeepSeekV3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'StepVLForConditionalGeneration':
+        StepVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

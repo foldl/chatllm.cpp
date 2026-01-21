@@ -679,7 +679,7 @@ namespace chatllm::qwen
             Block *create_layer(InitContext *ctx, int layer_index);
 
         public:
-            Config config;
+            const Config config;
         };
     }
 

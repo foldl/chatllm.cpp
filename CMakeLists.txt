@@ -121,6 +121,7 @@ set(core_files src/backend.cpp
     models/stablelm.cpp
     models/starcoder.cpp
     models/starling.cpp
+    models/step.cpp
     models/telechat.cpp
     models/tigerbot.cpp
     models/wizard.cpp

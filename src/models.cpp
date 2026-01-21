@@ -975,6 +975,9 @@ namespace chatllm
 
         bool first_call = true;
 
+        if ((auto_output_prefix.size() > 0) && streamer)
+            streamer->put(auto_output_prefix);
+
         if (performance)
             performance->Reset();
 
