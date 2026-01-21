@@ -2007,8 +2007,9 @@ namespace chatllm::glm::moe_lite
         ConditionalGeneration() = default;
 
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = (ModelType)MODEL_TYPE_GLM_MOE_LITE)
-            : Base(config, runtime_config, type, config.q_lora_rank)
+            : Base(config, runtime_config, type, config.q_lora_rank, BaseSparseMLP::ScoreFunc::Sigmoid, true, true)
         {
+            CHATLLM_CHECK(config.n_group == 1) << "TODO: group top-k";
         }
 
         void set_additional_args(const std::map<std::string, std::string> &args) override
