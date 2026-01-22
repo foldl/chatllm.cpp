@@ -422,6 +422,13 @@ Please use `--format completion` for these models.
 
     Note: Use `--set do-split 1` to enable _Split_.
 
+* Step-VL (`StepVLForConditionalGeneration`)
+    * [x] v3: [10B](https://huggingface.co/stepfun-ai/Step3-VL-10B/tree/1028f3d962d9d06039885737cf1c224752f78a70)
+
+    Additional options (Use `--set X Y` to change values):
+    * `do-pan-and-scan`: default 1 (i.e. true). Set to `0` to use only a global view to reduce the compute.
+    * `native-resolution`: default 0 (i.e. false). This model can support native resolution _mathematically_ without pan and scan. (for experiment only)
+
 ## OCR Models
 
 * dots.ocr (`DotsOCRForCausalLM`)

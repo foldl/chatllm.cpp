@@ -351,6 +351,177 @@ namespace vision
         }
     }
 
+    void image_load_pan_and_scan(const char *fn, std::vector<image_pixels_t> &crops,
+        const int image_size, int crop_size, int &crops_per_row)
+    {
+        const int MAX_IMAGE_SIZE = 3024;
+        crops.clear();
+        crops_per_row = 0;
+
+        int width = -1;
+        int height = -1;
+        image_dimension(fn, width, height);
+        if (width <= 0) return;
+
+        auto get_image_size_for_padding = [](int img_width, int img_height)
+        {
+            const double ratio = (double)img_width / img_height;
+            if ((std::min(img_height, img_width) < 32) && ((ratio > 4.0 || (ratio < 1.0 / 4))))
+            {
+                const int new_size = std::max(img_height, img_width);
+                return std::pair<int, int>(new_size, new_size);
+            }
+            return std::pair<int, int>(img_width, img_height);
+        };
+
+        auto get_image_size_for_preprocess = [](int img_width, int img_height)
+        {
+            if (std::max(img_height, img_width) > MAX_IMAGE_SIZE)
+            {
+                double scale_factor = (double)MAX_IMAGE_SIZE / std::max(img_height, img_width);
+                img_width = int(img_width * scale_factor);
+                img_height = int(img_height * scale_factor);
+
+            }
+            return std::pair<int, int>(img_width, img_height);
+        };
+
+        auto determine_window_size = [](int long_side, int short_side)
+        {
+            if (long_side <= 728)
+                return (double)long_side / short_side > 1.5 ? short_side : 0;
+            return (double)long_side / short_side > 4 ? std::min(short_side, 504) : 504;
+        };
+
+        auto get_image_size_for_crop = [](int img_width, int img_height, int window_size)
+        {
+            double w_ratio = (double)img_width / window_size;
+            double h_ratio = (double)img_height / window_size;
+
+            int width_new = img_width;
+            int height_new = img_height;
+
+            if (w_ratio >= 1)
+            {
+                const double decimal_w = w_ratio - img_width / window_size;
+                w_ratio = decimal_w > 0.2 ? int(w_ratio) + 1 : int(w_ratio);
+                width_new = int(window_size * w_ratio);
+            }
+
+            if (h_ratio >= 1)
+            {
+                const double decimal_h = h_ratio - img_height / window_size;
+                h_ratio = decimal_h > 0.2 ? int(h_ratio) + 1 : int(h_ratio);
+                height_new = int(window_size * h_ratio);
+            }
+            return std::pair<int, int>(width_new, height_new);
+        };
+
+        struct bbox
+        {
+            int x, y;
+            int w, h;
+        };
+
+        auto slide_window = [](const int width, const int height,
+            const int size_w, const int size_h,
+            const int step_w, const int step_h,
+            int &crops_per_row,
+            std::vector<bbox> &windows,
+            const float img_rate_thr = 0.6)
+        {
+            crops_per_row   = width  <= size_w ? 1 : (int)std::ceil((double)(width  - size_w) / step_w + 1);
+            const int y_num = height <= size_h ? 1 : (int)std::ceil((double)(height - size_h) / step_h + 1);
+
+            for (int j = 0; j < y_num; j++)
+            {
+                const int y_start = std::min(step_h * j, height - size_h);
+                for (int i = 0; i < crops_per_row; i++)
+                {
+                    const int x_start = std::min(step_w * i, width - size_w);
+
+                    bbox b;
+                    b.x = x_start; b.y = y_start;
+                    b.w = size_w;  b.h = size_h;
+                    windows.push_back(b);
+                }
+            }
+        };
+
+        const auto padded_size = get_image_size_for_padding(width, height);
+        int square_padded_size = -1;
+        if ((padded_size.first != width) || (padded_size.second != height))
+        {
+            square_padded_size = std::max(width, height);
+            width = square_padded_size;
+            height = square_padded_size;
+        }
+
+        const auto resized_size = get_image_size_for_preprocess(width, height);
+        int resized_width = -1;
+        int resized_height = -1;
+        if ((resized_size.first != width) || (resized_size.second != height))
+        {
+            width = resized_width = resized_size.first;
+            height = resized_height = resized_size.second;
+        }
+
+        const int window_size = determine_window_size(std::max(width, height), std::min(width, height));
+
+        std::vector<bbox> windows;
+
+        if (window_size > 1)
+        {
+            const auto size_for_crop = get_image_size_for_crop(width, height, window_size);
+            if ((size_for_crop.first != width) || (size_for_crop.second != height))
+            {
+                width = resized_width = size_for_crop.first;
+                height = resized_height = size_for_crop.second;
+            }
+
+            slide_window(width, height, crop_size, crop_size, crop_size, crop_size, crops_per_row, windows);
+        }
+
+        // whole image
+        {
+            std::ostringstream oss;
+            oss << MAGICK_CONVERT_CMD << " -depth 8 \"" << std::string(fn) << "\"";
+            if (square_padded_size > 0)
+            {
+                oss << " -compose Copy -gravity northwest";
+                oss << " -background back";
+                oss << " -extent " << square_padded_size << "x" << square_padded_size;
+            }
+            oss << " -resize " << image_size << "x" << image_size << "!";
+
+            crops.emplace_back(image_pixels_t());
+            auto &image = crops.back();
+            run_cmd(oss, image);
+        }
+
+        for (auto b : windows)
+        {
+            std::ostringstream oss;
+            oss << MAGICK_CONVERT_CMD << " -depth 8 \"" << std::string(fn) << "\"";
+            if (square_padded_size > 0)
+            {
+                oss << " -compose Copy -gravity northwest";
+                oss << " -background back";
+                oss << " -extent " << square_padded_size << "x" << square_padded_size;
+            }
+            if (resized_width > 0)
+            {
+                oss << " -resize " << resized_width << "x" << resized_height << "!";
+            }
+            oss << " -crop " << b.w << "x" << b.h << "+" << b.x << "+" << b.y;
+            oss << " -resize " << crop_size << "x" << crop_size << "!";
+
+            crops.emplace_back(image_pixels_t());
+            auto &image = crops.back();
+            run_cmd(oss, image);
+        }
+    }
+
     void image_load(const char *fn, std::vector<uint8_t> &rgb_pixels, int &width, int &height, int patch_size, const std::string &pad)
     {
         // magick -depth 8 demo.jpeg -resize 100x100 rgb:"aaa.raw"

@@ -119,6 +119,10 @@ namespace vision
         const int crop_width, const int crop_height,
         PanScanDir &dir);
 
+    // pan and scan for step-vl
+    void image_load_pan_and_scan(const char *fn, std::vector<image_pixels_t> &crops,
+        const int image_size, int crop_size, int &crops_per_row);
+
     void image_rescale(const std::vector<uint8_t> &rgb_pixels, std::vector<float> &scaled_rgb_pixels, float scale_factor = 1/255.0f);
     void image_normalize(std::vector<float> &rgb_pixels, const float *mean, const float *std_d);
 

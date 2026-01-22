@@ -1089,6 +1089,22 @@
             }
         }
     },
+    "medgemma-1.5": {
+        "brief": "MedGemma 1.5 4B is an updated version of the MedGemma 1 4B model.",
+        "default": "4b",
+        "license": "https://developers.google.com/health-ai-developer-foundations/terms",
+        "variants": {
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4702295312,
+                        "url": "chatllm_quantized_gemma-3/medgemma-1.5-4b-it.bin"
+                    }
+                }
+            }
+        }
+    },
     "llama3": {
         "brief": "Meta Llama 3: The most capable openly available LLM to date.",
         "default": "8b",
@@ -1554,6 +1570,15 @@
                     "q8": {
                         "size": 4722642576,
                         "url": "chatllm_quantized_qwen3/qwen3-vl-4b-it.bin"
+                    }
+                }
+            },
+            "8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 9448812704,
+                        "url": "chatllm_quantized_qwen3/qwen3-vl-8b-it.bin"
                     }
                 }
             },
@@ -3910,6 +3935,42 @@
                     "q8": {
                         "size": 29283314832,
                         "url": "chatllm_quantized_gemma-3/translategemma-27b-it.bin"
+                    }
+                }
+            }
+        }
+    },
+    "glm-4.7": {
+        "brief": "GLM-4.7-Flash is a 30B-A3B MoE model.",
+        "default": "flash",
+        "license": "MIT",
+        "variants": {
+            "flash": {
+                "default": "q4_1",
+                "quantized": {
+                    "q8": {
+                        "size": 31823406368,
+                        "url": "chatllm_quantized_glm/glm-4.7-flash.bin"
+                    },
+                    "q4_1": {
+                        "size": 18723284256,
+                        "url": "chatllm_quantized_glm/glm-4.7-flash-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "step3-vl": {
+        "brief": "STEP3-VL-10B is a lightweight open-source foundation model designed to redefine the trade-off between compact efficiency and frontier-level multimodal intelligence.",
+        "default": "10b",
+        "license": "MIT",
+        "variants": {
+            "10b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 11016250064,
+                        "url": "chatllm_quantized_step/step3-vl-10b.bin"
                     }
                 }
             }

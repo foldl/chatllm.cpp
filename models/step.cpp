@@ -1,4 +1,5 @@
 #include "qwen.h"
+#include <cstring>
 #include "../src/vision_process.h"
 
 namespace chatllm::step::vit
@@ -13,6 +14,7 @@ namespace chatllm::step::vit
         int hidden_size;
         int intermediate_size;
         int image_size;
+        int big_patch_size;
 
         float image_mean[3];
         float image_std[3];
@@ -58,6 +60,7 @@ namespace chatllm::step::vit
 
                     interp = ggml::permute(ctx, interp, 1, 2, 0); // -> [hidden, w, h]
                     interp = ggml::cont(ctx, interp);
+                    interp = ggml::reshape_2d(ctx, interp, hidden_size, grid_w * grid_h);
                 }
 
                 hidden_state = ggml::add(ctx, hidden_state, interp);
@@ -462,6 +465,8 @@ namespace chatllm::step::vit
             vis_config.num_attention_heads  = (int)vis_cfg["heads"].ToInt();
             vis_config.intermediate_size    = (int)(vis_config.hidden_size * (8960.0 / 1536));
 
+            vis_config.big_patch_size       = 504;
+
             const float mean[] = {0.48145466f, 0.4578275f, 0.40821073f};
             const float std[]  = {0.26862954f, 0.26130258f, 0.27577711f};
             memcpy(vis_config.image_mean, mean, sizeof(mean));
@@ -594,6 +599,8 @@ namespace chatllm::step::vl
         int patch_newline_token_id;
         int image_start_token_id;
         int image_end_token_id;
+        bool do_pan_and_scan = true;
+        bool native_global_view = false;
     };
 
     void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
@@ -606,7 +613,7 @@ namespace chatllm::step::vl
     class ExtendEmbedding
     {
     public:
-        ExtendEmbedding() : pad_arg(new BlockParams::PadEmbedding(2048, 2048)) {}
+        ExtendEmbedding() : pad_arg(new BlockParams::PadEmbedding(4096, 4096)) {}
     public:
         BlockParams::PadEmbedding *pad_arg = nullptr;
     };
@@ -623,6 +630,7 @@ namespace chatllm::step::vl
         int64_t get_param_num(bool effective_only) const;
         void before_generate(const GenerationConfig &gen_config) override;
         void set_tokenizer(BaseTokenizer *tokenizer) override;
+        void set_additional_args(const std::map<std::string, std::string> &args) override;
     protected:
         vit::VisualEmbeddingGeneration visual;
     };
@@ -651,6 +659,16 @@ namespace chatllm::step::vl
             _chat_encoder.vis_config = &visual.vis_config;
         }
         return r;
+    }
+
+    void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        if (nullptr == tok) return;
+        tok->do_pan_and_scan      = utils::get_opt(args, "do-pan-and-scan", tok->do_pan_and_scan);
+        tok->native_global_view   = utils::get_opt(args, "native-resolution", tok->native_global_view);
+        if (tok->native_global_view)
+            tok->do_pan_and_scan = false;
     }
 
     void ConditionalGeneration::load(ModelLoader &loader)
@@ -710,28 +728,69 @@ namespace chatllm::step::vl
             {
                 CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
 
-                vision::Resize resize(vis_config->image_size, vis_config->image_size);
+                std::vector<vision::image_pixels_t> crops;
+                int crops_per_row = 0;
+                int whole_image_width  = vis_config->image_size;
+                int whole_image_height = vis_config->image_size;
 
-                int w, h;
-                std::vector<uint8_t> pixels;
-                std::vector<float> scaled;
-                const int patch_size = vis_config->patch_size;
-                vision::image_load(piece.content.c_str(), pixels, w, h, patch_size);
+                if (!tok->do_pan_and_scan)
+                {
+                    std::unique_ptr<vision::Resize> resize;
+                    if (!tok->native_global_view)
+                        resize.reset(new vision::Resize(vis_config->image_size, vis_config->image_size));
 
-                if (w <= 0) continue;
+                    int w = 0;
+                    int h = 0;
+                    crops.emplace_back(vision::image_pixels_t());
+                    auto &image = crops.back();
+                    vision::image_load(piece.content.c_str(), image, w, h, vis_config->patch_size, vision::PaddingMode::Black);
+                    if (w < 1) continue;
+                    whole_image_width  = w;
+                    whole_image_height = h;
+                }
+                else
+                {
+                    vision::image_load_pan_and_scan(piece.content.c_str(),
+                        crops,
+                        vis_config->image_size, vis_config->big_patch_size,
+                        crops_per_row);
+                }
 
-                vision::image_rescale(pixels, scaled);
-                vision::image_normalize(scaled, vis_config->image_mean, vis_config->image_std);
+                if (crops.size() < 1) continue;
 
-                tok->media_emb.push_back({.width = w, .height = h, .grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
+                for (int i = 0; i < (int)crops.size(); i++)
+                {
+                    // <patch>...<patch><image>
+                    const int id = (i + 1) % crops.size();
+                    const auto &pixels = crops[id];
 
-                auto &image = tok->media_emb.back();
-                image.emb_vec_number = (image.grid_height / 4) * (image.grid_width / 4);
+                    const int w = id == 0 ? whole_image_width  : vis_config->big_patch_size;
+                    const int h = id == 0 ? whole_image_height : vis_config->big_patch_size;
+                    std::vector<float> scaled;
+                    const int patch_size = vis_config->patch_size;
 
-                vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::ChannelsRGB_PixelsLeftRightDown);
+                    vision::image_rescale(pixels, scaled);
+                    vision::image_normalize(scaled, vis_config->image_mean, vis_config->image_std);
 
-                const int id_start = tok->get_image_total_emb_vectors() - image.emb_vec_number + tok->vocab_size;
-                tok->inject_image(ids, id_start, image.emb_vec_number);
+                    tok->media_emb.push_back({.width = w, .height = h, .grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
+
+                    auto &image = tok->media_emb.back();
+                    image.emb_vec_number = (image.grid_height / 4) * (image.grid_width / 4);
+
+                    vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::ChannelsRGB_PixelsLeftRightDown);
+
+                    const int id_start = tok->get_image_total_emb_vectors() - image.emb_vec_number + tok->vocab_size;
+
+                    if (0 == id)
+                    {
+                        tok->inject_image(ids, id_start, image.emb_vec_number);
+                    }
+                    else
+                    {
+                        const bool append_nl = ((id % crops_per_row) == 0) && (id < (int)crops.size() - 1);
+                        tok->inject_big_patch(ids, id_start, image.emb_vec_number, append_nl);
+                    }
+                }
             }
             else
             {

@@ -41,6 +41,14 @@ class EmbeddingPurpose(IntEnum):
     Document = 0,                   # for document
     Query    = 1,                   # for query
 
+def dll_name(lib: str) -> str:
+    if sys.platform == 'win32':
+        return lib + '.dll'
+    elif sys.platform == 'darwin':
+        return lib + '.dylib'
+    else:
+        return lib + '.so'
+
 class LibChatLLM:
 
     _obj2id = {}
@@ -49,22 +57,22 @@ class LibChatLLM:
     def __init__(self, lib: str = '', model_storage: str = '', init_params: list[str] = []) -> None:
 
         if lib == '':
-            lib = os.path.dirname(os.path.abspath(sys.argv[0]))
+            this_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+            lib = this_dir
+            if not os.path.isfile(os.path.join(lib, dll_name('libchatllm'))):
+                lib = os.path.abspath(os.path.join(this_dir, '..', 'bin'))
+                assert os.path.isfile(os.path.join(lib, dll_name('libchatllm')))
+
         self._lib_path = lib
         self.model_storage = os.path.abspath(model_storage if model_storage != '' else os.path.join(lib, '..', 'quantized'))
 
         init_params = ['--ggml_dir', lib] + init_params
-        lib = os.path.join(lib, 'libchatllm.')
+        lib = os.path.join(lib, dll_name('libchatllm'))
         if sys.platform == 'win32':
             import re
-            lib = lib + 'dll'
             for path in os.getenv('PATH').split(';'):
                 if re.match(r'.+\\CUDA\\v[0-9]+\.[0-9]+\\bin', path) is not None:
                     os.add_dll_directory(path)
-        elif sys.platform == 'darwin':
-            lib = lib + 'dylib'
-        else:
-            lib = lib + 'so'
 
         if sys.platform == 'win32':
             self._lib = windll.LoadLibrary(lib)
