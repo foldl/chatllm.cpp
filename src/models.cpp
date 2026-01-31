@@ -248,6 +248,7 @@ namespace chatllm
         case MODEL_TYPE_MAYA1:
             return ModelPurpose::TTS;
         case MODEL_TYPE_GLM_ASR:
+        case MODEL_TYPE_QWEN3_ASR:
             return ModelPurpose::ASR;
         default:
             return (ModelPurpose)(GET_PURPOSE_TAG(model_type));
@@ -273,6 +274,7 @@ namespace chatllm
         case MODEL_TYPE_MAYA1:
             return ChatModelAccessPoint::Text | ChatModelAccessPoint::AudioOutput;
         case MODEL_TYPE_GLM_ASR:
+        case MODEL_TYPE_QWEN3_ASR:
             return ChatModelAccessPoint::Text | ChatModelAccessPoint::AudioInput;
         case MODEL_TYPE_LLAMA_MULTI:
             return ChatModelAccessPoint::Text;
@@ -1259,7 +1261,7 @@ namespace chatllm
         ggml::set_output(r);
         ggml::build_forward_expand(&ctx, r);
 
-        CHATLLM_CHECK(r->type == GGML_TYPE_F32) << "output type must be float: " << r->type;
+        CHATLLM_CHECK((r->type == GGML_TYPE_F32) || (r->type == GGML_TYPE_I32)) << "output type must be float/int32: " << r->type;
 
         output.resize(ggml::nbytes(r) / sizeof(output[0]));
 
@@ -1617,6 +1619,11 @@ namespace chatllm
     Block *create_lm_head(InitContext *ctx, const BaseConfig &config, bool bias)
     {
         return new Linear(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, config.vocab_size, bias);
+    }
+
+    Block *create_lm_head(InitContext *ctx, int hidden_size, int vocab_size, bool bias)
+    {
+        return new Linear(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), hidden_size, vocab_size, bias);
     }
 
     DynamicBlock::DynamicBlock() : Block(), _loaded(false)

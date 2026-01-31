@@ -37,6 +37,7 @@ namespace audio
         int64_t frames_per_chunk = -1);
 
     int64_t mel_len(const int64_t n_samples, const int hop_length);
+    int64_t sample_len_for_mel_len(const int64_t n_mel, const int hop_length);
 
     void test(void);
 

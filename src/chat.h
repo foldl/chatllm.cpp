@@ -113,6 +113,7 @@ namespace chatllm
         Content &operator =(const std::string & right);
 
         std::string to_string(void) const;
+        std::string extract_text(const std::string delimiter = "") const;
         bool is_simple_text(void) const;
 
     public:
@@ -327,6 +328,7 @@ namespace chatllm
         virtual void set_skip_sys_prompt(bool skip);
 
         void set_chat_encoder(BaseHistoryEncoder *encoder);
+        BaseHistoryEncoder *get_chat_encoder(void) { return chat_encoder; }
 
         int get_image_total_emb_vectors(void);
 

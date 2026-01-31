@@ -15,7 +15,7 @@
 #include <locale>
 #include <codecvt>
 
-static std::string unicode_cpts_to_utf8(const std::vector<uint32_t> & cps) {
+std::string unicode_cpts_to_utf8(const std::vector<uint32_t> & cps) {
     std::string result;
     for (size_t i = 0; i < cps.size(); ++i) {
         result.append(unicode_cpt_to_utf8(cps[i]));
@@ -770,12 +770,23 @@ std::vector<std::string> unicode_regex_split(const std::string & text, const std
     return unicode_byte_encoding_process(bpe_words);
 }
 
+static inline bool in_range(char32_t cp, char32_t lo, char32_t hi) {
+    return cp >= lo && cp <= hi;
+}
+
+bool is_cpt_cjk(const uint32_t cp) {
+    return in_range(cp, 0x4E00, 0x9FFF)     // CJK Unified Ideographs
+        || in_range(cp, 0x3400, 0x4DBF)     // CJK Ext A
+        || in_range(cp, 0x20000, 0x2A6DF)   // Extension B
+        || in_range(cp, 0x2A700, 0x2B73F)   // Extension C
+        || in_range(cp, 0x2B740, 0x2B81F)   // Extension D
+        || in_range(cp, 0x2B820, 0x2CEAF)   // Extension E
+        || in_range(cp, 0xF900 , 0xFAFF )   // Compatibility Ideographs
+        ;
+}
+
 namespace utils
 {
-    static inline bool in_range(char32_t cp, char32_t lo, char32_t hi) {
-        return cp >= lo && cp <= hi;
-    }
-
     std::string detect_language(const std::string& text) {
         auto u32 = unicode_cpts_from_utf8(text);
 
@@ -794,9 +805,7 @@ namespace utils
             else if (in_range(cp, 0x0E00, 0x0E7F)) thai++;
             else if (in_range(cp, 0x10A0, 0x10FF)) geo++;
             else if (in_range(cp, 0x0530, 0x058F)) arm++;
-            else if (in_range(cp, 0x4E00, 0x9FFF)     // CJK Unified Ideographs
-                || in_range(cp, 0x3400, 0x4DBF)     // CJK Ext A
-                || in_range(cp, 0x20000, 0x2A6DF))  // CJK Ext B (BMP surrogate pairs in UTF-16)
+            else if (is_cpt_cjk(cp))
                 han++;
         }
 

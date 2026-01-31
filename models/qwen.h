@@ -255,6 +255,7 @@ namespace chatllm::qwen
         {
         public:
             Tokenizer(const BaseConfig &config);
+            Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder);
 
             void inject_audio_ids(std::vector<int> &ids, const int  ids_to_inject_start, const int ids_to_inject_count);
         public:

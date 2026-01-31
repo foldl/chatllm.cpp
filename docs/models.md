@@ -445,6 +445,9 @@ Please use `--format completion` for these models.
 * GLM-ASR (`GlmAsrForConditionalGeneration`)
     * [x] [Nano-2512](https://huggingface.co/zai-org/GLM-ASR-Nano-2512/tree/8172188f128059b57f09686dda5b36edff1606dd)
 
+* Qwen3-ASR (`Qwen3ASRForConditionalGeneration`)
+    * [x] [0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B/tree/5eb144179a02acc5e5ba31e748d22b0cf3e303b0), [1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B/tree/7278e1e70fe206f11671096ffdd38061171dd6e5)
+
 ## RAG Models
 
 ### Text Embedding

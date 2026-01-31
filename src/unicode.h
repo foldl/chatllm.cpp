@@ -48,6 +48,8 @@ struct codepoint_flags {
 
 
 std::string unicode_cpt_to_utf8(uint32_t cp);
+std::string unicode_cpts_to_utf8(const std::vector<uint32_t> & cps);
+
 uint32_t unicode_cpt_from_utf8(const std::string & utf8, size_t & offset);
 bool try_unicode_cpt_from_utf8(const std::string & utf8, size_t & offset, uint32_t &cpt);
 std::vector<uint32_t> unicode_cpts_from_utf8(const std::string & utf8);
@@ -56,6 +58,7 @@ std::vector<uint32_t> unicode_cpts_normalize_nfd(const std::vector<uint32_t> & c
 
 codepoint_flags unicode_cpt_flags(const uint32_t cp);
 codepoint_flags unicode_cpt_flags(const std::string & utf8);
+bool is_cpt_cjk(const uint32_t cp);
 
 std::string unicode_byte_to_utf8(uint8_t byte);
 uint8_t unicode_utf8_to_byte(const std::string & utf8);

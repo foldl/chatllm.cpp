@@ -1,11 +1,15 @@
 #include "qwen.h"
+#include <optional>
 #include "../src/audio_process.h"
 #include "../src/vision_process.h"
+#include "qwen_asr.h"
+#include "../src/unicode.h"
 
 namespace chatllm
 {
     const int MODEL_TYPE_QWEN2_VL = MODEL_TYPE_QWEN2_5_VL + 1;
     const int MODEL_TYPE_QWEN3_VL = MODEL_TYPE_QWEN2_5_VL + 2;
+    const int MODEL_TYPE_QWEN3_ForcedAligner = MODEL_TYPE_QWEN2_AUDIO + 1;
 }
 
 namespace chatllm::qwen::v1
@@ -644,11 +648,16 @@ namespace chatllm::qwen::v2_audio
     typedef v2::Config Config;
     static ChatHistoryEncoder _chat_encoder;
 
-    Tokenizer::Tokenizer(const BaseConfig &config)
-        : v2::Tokenizer(config, &_chat_encoder),
+    Tokenizer::Tokenizer(const BaseConfig &config):
+        Tokenizer(config, &_chat_encoder)
+    {}
+
+    Tokenizer::Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder):
+        v2::Tokenizer(config, encoder),
         audio_bos_token_id(-1),
         audio_eos_token_id(-1)
-    {}
+    {
+    }
 
     void Tokenizer::inject_audio_ids(std::vector<int> &ids, const int  ids_to_inject_start, const int ids_to_inject_count)
     {
@@ -1939,7 +1948,7 @@ namespace chatllm::qwen::v3
             }
         }
 
-        w_ctx_.check_used_mem_size(true, extra_tensors);
+        w_ctx_.check_used_mem_size(true, extra_tensors + (skip_lm_head && (0 == config.tie_word_embeddings) ? 1 : 0));
     }
 
     int ConditionalGeneration::get_sparse_layer_num()
@@ -2993,6 +3002,690 @@ namespace chatllm::qwen::v3_vl_ranker
     }
 }
 
+namespace chatllm::qwen::v3_asr
+{
+    struct Config : v3::Config
+    {
+        int mrope_section[v2_5_vl::MROPE_SECTION_MAX];
+    };
+
+    class ChatHistoryEncoder : public v1::ChatHistoryEncoder
+    {
+    public:
+        void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
+    protected:
+        void load_audio(const Content &user) const;
+    public:
+        const v3::audio_tower::Config *aud_config = nullptr;
+        bool aud_loaded = false;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public v2_audio::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config);
+        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder);
+        void add_tokens(const std::map<std::string, int> &added_tokens);
+    public:
+        int asr_text_token_id;
+        int timestamp_token_id;
+    };
+
+    Tokenizer::Tokenizer(const BaseConfig &config):
+        Tokenizer(config, &_chat_encoder)
+    {}
+
+    Tokenizer::Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder):
+        v2_audio::Tokenizer(config, encoder)
+    {
+        sys_prompt = "";
+    }
+
+    void Tokenizer::add_tokens(const std::map<std::string, int> &added_tokens)
+    {
+        auto get_or_def = [&added_tokens](const std::string &name, int def = -1)
+        {
+            auto it = added_tokens.find(name);
+            return it != added_tokens.end() ? it->second : def;
+        };
+
+        audio_bos_token_id  = get_or_def("<|audio_start|>");
+        audio_eos_token_id  = get_or_def("<|audio_end|>");
+        im_start_token_id   = get_or_def("<|im_start|>");
+        im_end_token_id     = get_or_def("<|im_end|>");
+        asr_text_token_id   = get_or_def("<asr_text>");
+        timestamp_token_id  = get_or_def("<asr_text>");
+        tp->OverrideTokenDecoding(asr_text_token_id, "<asr_text>");
+    }
+
+    class ConditionalGeneration : public v2_audio::ExtendEmbedding, public v3::ConditionalGeneration
+    {
+    public:
+        typedef v3::ConditionalGeneration Base;
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
+            ModelType type = ModelType::MODEL_TYPE_QWEN3_ASR, bool skip_lm_head = false);
+        bool load_more(const json::JSON &config) override;
+        void load(ModelLoader &loader) override;
+        void before_generate(const GenerationConfig &gen_config) override;
+        void set_tokenizer(BaseTokenizer *tokenizer) override;
+    public:
+        v3::audio_tower::AudioEmbeddingGeneration audio;
+    private:
+        const int extended_vocab_size;
+        std::map<std::string, int> added_tokens;
+        bool aud_loaded = false;
+    };
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
+            ModelType type, bool skip_lm_head):
+        v2_audio::ExtendEmbedding(10000),
+        v3::ConditionalGeneration(config, runtime_config, type, skip_lm_head),
+        extended_vocab_size(pad_arg->get()),
+        audio(runtime_config)
+    {
+        delete pad_arg;
+        multi_turn = false;
+    }
+
+    void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
+    {
+        Base::set_tokenizer(tokenizer);
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->add_tokens(added_tokens);
+
+        auto enc = dynamic_cast<ChatHistoryEncoder*>(tok->get_chat_encoder());
+        enc->aud_loaded = aud_loaded;
+        enc->aud_config = &audio.config;
+    }
+
+    bool ConditionalGeneration::load_more(const json::JSON &config)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        Base::load_more(config);
+
+        auto tok_cfg = config["tokenizer_config.json"]["added_tokens_decoder"];
+        if (!tok_cfg.IsObject()) return false;
+        for (auto &kv : tok_cfg.ObjectRange())
+        {
+            auto t = kv.second["content"].ToString();
+            added_tokens.insert_or_assign(t, (int)std::atoi(kv.first.c_str()));
+        }
+
+        bool r = audio.load_more(this->config.dtype, this->config.hidden_size, config);
+        if (r)
+        {
+            _chat_encoder.aud_config = &audio.config;
+        }
+
+        return r;
+    }
+
+    void ConditionalGeneration::load(ModelLoader &loader)
+    {
+        Tokenizer* tok = dynamic_cast<Tokenizer*>(tokenizer);
+        v3::ConditionalGeneration::load(loader);
+
+        loader.add_tensor_name_translations({
+            {"multi_modal_projector.fc0.",              "multi_modal_projector.proj1."},
+            {"multi_modal_projector.fc1.",              "multi_modal_projector.proj2."},
+        });
+
+        aud_loaded = audio.load(loader);
+    }
+
+    void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        std::vector<uint8_t> buf;
+        auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
+
+        CHATLLM_CHECK(tok->get_image_total_emb_vectors() <= extended_vocab_size) << "media too long.";
+
+        audio.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
+        if (buf.size() < 1) return;
+
+        size_t offset = emb->get_base_nbytes();
+        Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
+    }
+
+    void ChatHistoryEncoder::load_audio(const Content &user) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->media_emb.clear();
+
+        for (auto &piece : user.pieces)
+        {
+            if (piece.type != ContentPiece::Type::Audio)
+                continue;
+
+            CHATLLM_CHECK(aud_loaded) << "Audio model not loaded";
+
+            std::vector<float>          pcm_samples;
+            std::vector<audio::mel>     mel_chunks;
+
+            if (!audio::load(piece.content.c_str(), pcm_samples, aud_config->sampling_rate)) continue;
+
+            int64_t n = audio::mel_len(pcm_samples.size(), aud_config->hop_length);
+            n = audio::sample_len_for_mel_len(v3::audio_tower::pad_mel_len((int)n), aud_config->hop_length);
+
+            audio::mel_spectrogram(pcm_samples.data(), pcm_samples.size(),
+                n,
+                aud_config->sampling_rate,
+                aud_config->feature_size,
+                aud_config->n_fft,
+                aud_config->hop_length,
+                mel_chunks);
+
+            auto &mel = mel_chunks[0];
+
+            tok->media_emb.push_back({.emb_vec_number = v3::audio_tower::get_feat_extract_output_lengths((int)mel.n_len), .data = {}});
+
+            auto &media = tok->media_emb.back();
+            media.data = std::move(mel.data);
+        }
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        load_audio(user);
+        tok->encode("user", ids, true, false, true);
+        tok->inject_audio_ids(ids, tok->vocab_size, tok->get_image_total_emb_vectors());
+        ids.push_back(tok->im_end_token_id);
+        ids.push_back(tok->nl_token_id);
+    }
+}
+
+namespace chatllm::qwen::v3_forcedaligner
+{
+    struct Config : v3_asr::Config
+    {
+        int classify_num;
+    };
+
+    class ChatHistoryEncoder : public v3_asr::ChatHistoryEncoder
+    {
+    public:
+        void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    struct word_seg
+    {
+        std::string str;
+        int parent_id;
+    };
+
+    struct timestamp
+    {
+        double start;
+        double end;
+        timestamp(double start, double end): start(start), end(end) {}
+    };
+
+    class Tokenizer : public v3_asr::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config);
+        void inject_words(const std::vector<word_seg> &words, std::vector<int> &ids) const;
+        void append_sentence(std::vector<word_seg> &words, const std::string &sentence, const int id);
+        std::string show_timestampes();
+    protected:
+        std::string fmt_time(double timestamp);
+    public:
+        std::string language = "chinese";
+        std::string format   = "srt";
+        std::string delimiter = "";
+        int pos_first_timestamp_token = 0;
+        std::vector<word_seg> cleaned_words;
+        std::vector<std::string> sentences;     // timestamp is reported for each "sentence".
+        std::vector<timestamp>   timestamps;
+    };
+
+    Tokenizer::Tokenizer(const BaseConfig &config):
+        v3_asr::Tokenizer(config, &_chat_encoder)
+    {
+    }
+
+    class ConditionalGeneration : public v3_asr::ConditionalGeneration
+    {
+    public:
+        typedef v3_asr::ConditionalGeneration Base;
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
+            ModelType type = (ModelType)MODEL_TYPE_QWEN3_ForcedAligner);
+        void set_additional_args(const std::map<std::string, std::string> &args) override;
+        bool load_more(const json::JSON &config) override;
+        std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                                  const bool continuous,
+                                  bool &completed,
+                                  ModelPerfInfo *performance,
+                                  BaseStreamer *streamer = nullptr) override;
+    public:
+        const int classify_num;
+        double timestamp_segment_time = 0.0;
+    };
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
+            ModelType type):
+        v3_asr::ConditionalGeneration(config, runtime_config, type, true),
+        classify_num(config.classify_num)
+    {
+        transformer->lm_head = create_lm_head(&w_ctx_, config.hidden_size, config.classify_num);
+    }
+
+    void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->language   = utils::to_lower(utils::get_opt(args, "language", tok->language));
+        tok->format     = utils::to_lower(utils::get_opt(args, "format", tok->format));
+        tok->delimiter  =                 utils::get_opt(args, "delimiter", tok->delimiter);
+    }
+
+    bool ConditionalGeneration::load_more(const json::JSON &config)
+    {
+        auto r = Base::load_more(config);
+        timestamp_segment_time = config["config.json"]["timestamp_segment_time"].ToFloat();
+        return r;
+    }
+
+    void fix_timestamp(const std::vector<double> &data, std::vector<double> &timestamps)
+    {
+        timestamps.clear();
+        int n = (int)data.size();
+        if (n == 0)
+            return;
+
+        std::vector<int> dp(n, 1);
+        std::vector<int> parent(n, -1);
+
+        for (int i = 1; i < n; ++i)
+        {
+            for (int j = 0; j < i; ++j)
+            {
+                if (data[j] <= data[i] && dp[j] + 1 > dp[i])
+                {
+                    dp[i] = dp[j] + 1;
+                    parent[i] = j;
+                }
+            }
+        }
+
+        int max_length = 0;
+        int max_idx = -1;
+        if (!dp.empty())
+        {
+            auto max_it = std::max_element(dp.begin(), dp.end());
+            max_length = *max_it;
+            max_idx = (int)std::distance(dp.begin(), max_it);
+        }
+
+        std::vector<int> lis_indices;
+        int idx = max_idx;
+        while (idx != -1)
+        {
+            lis_indices.push_back(idx);
+            idx = parent[idx];
+        }
+        std::reverse(lis_indices.begin(), lis_indices.end());
+
+        std::vector<bool> is_normal(n, false);
+        for (int lis_idx : lis_indices)
+        {
+            is_normal[lis_idx] = true;
+        }
+
+        std::vector<double> result = data;
+        int i = 0;
+        while (i < n)
+        {
+            if (!is_normal[i])
+            {
+                int j = i;
+                while (j < n && !is_normal[j])
+                {
+                    j++;
+                }
+
+                int anomaly_count = j - i;
+                std::optional<double> left_val;
+                for (int k = i - 1; k >= 0; --k)
+                {
+                    if (is_normal[k]) {
+                        left_val = result[k];
+                        break;
+                    }
+                }
+
+                std::optional<double> right_val;
+                for (int k = j; k < n; ++k)
+                {
+                    if (is_normal[k])
+                    {
+                        right_val = result[k];
+                        break;
+                    }
+                }
+
+                if (anomaly_count <= 2)
+                {
+                    for (int k = i; k < j; ++k)
+                    {
+                        if (!left_val.has_value())
+                        {
+                            result[k] = right_val.value_or(0);
+                        } else if (!right_val.has_value())
+                        {
+                            result[k] = left_val.value();
+                        } else
+                        {
+                            result[k] = (k - (i - 1)) <= (j - k) ? left_val.value() : right_val.value();
+                        }
+                    }
+                } else {
+                    if (left_val.has_value() && right_val.has_value())
+                    {
+                        double step = (right_val.value() - left_val.value()) / (anomaly_count + 1);
+                        for (size_t k = i; k < j; ++k)
+                        {
+                            result[k] = left_val.value() + (step * (k - i + 1));
+                        }
+                    }
+                    else if (left_val.has_value())
+                    {
+                        for (int k = i; k < j; ++k)
+                        {
+                            result[k] = left_val.value();
+                        }
+                    }
+                    else if (right_val.has_value())
+                    {
+                        for (int k = i; k < j; ++k)
+                        {
+                            result[k] = right_val.value();
+                        }
+                    }
+                }
+                i = j;
+            }
+            else
+            {
+                i++;
+            }
+        }
+
+        timestamps = std::move(result);
+    }
+
+    std::vector<int> ConditionalGeneration::generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                                  const bool continuous,
+                                  bool &completed,
+                                  ModelPerfInfo *performance,
+                                  BaseStreamer *streamer)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        CHATLLM_CHECK(gen_config.max_length <= config_.max_length)
+            << "requested max_length (" << gen_config.max_length << ") is larger than model's max_length ("
+            << config_.max_length << ")";
+
+        std::vector<int> output_ids;
+        std::vector<float> lm_ordering;
+        output_ids.reserve(input_ids.size());
+
+        auto final_step = dynamic_cast<LMFinalSteps *>(transformer->get_final_steps());
+        const int last_n = (int)input_ids.size() - tok->pos_first_timestamp_token;
+        final_step->set_read_last_n(last_n);
+
+        n_past = 0;
+        n_past_offset = 0;
+
+        completed = false;
+
+        transformer->set_ctx((int)input_ids.size());
+
+        if (performance)
+            performance->Reset();
+
+        before_generate(gen_config);
+
+        auto sort_logits = [](ComputeContext *ctx, ggml::tensor *r)
+        {
+            return ggml::ordering(ctx, r, true);
+        };
+
+        run_model(input_ids.data(), (int)input_ids.size(), gen_config, n_past, lm_ordering, 1,
+            sort_logits);
+
+        if (performance)
+            performance->Accumulate(ModelPerfInfo::Type::Prompt, input_ids.size());
+
+        std::vector<double> data;
+        std::vector<double> timestamps;
+        const int *order = (const int *)lm_ordering.data();
+        const int pos_offset = tok->pos_first_timestamp_token;
+        for (int i = 0; i < last_n; i++, order += classify_num)
+        {
+            if (input_ids[pos_offset + i] != tok->timestamp_token_id) continue;
+            data.push_back(timestamp_segment_time * order[0]);
+        }
+
+        fix_timestamp(data, timestamps);
+
+        tok->timestamps.clear();
+        for (int i = 0; i < (int)tok->cleaned_words.size(); i++)
+        {
+            auto &w = tok->cleaned_words[i];
+            if (w.parent_id >= (int)tok->timestamps.size())
+            {
+                CHATLLM_CHECK(w.parent_id == (int)tok->timestamps.size());
+                tok->timestamps.emplace_back(timestamps[2 * i + 0], timestamps[2 * i + 1]);
+            }
+            else
+            {
+                CHATLLM_CHECK(w.parent_id == (int)tok->timestamps.size() - 1);
+                tok->timestamps.back().end = timestamps[2 * i + 1];
+            }
+        }
+
+        if (streamer)
+        {
+            auto r = tok->show_timestampes();
+            streamer->call_put_chunk(true, r);
+        }
+
+        after_generate();
+
+        completed = true;
+
+        return output_ids;
+    }
+
+    void Tokenizer::inject_words(const std::vector<word_seg> &words, std::vector<int> &ids) const
+    {
+        bool first = true;
+        for (auto s : words)
+        {
+            if (!first)
+            {
+                ids.push_back(timestamp_token_id);
+                ids.push_back(timestamp_token_id);
+            }
+            else
+            {
+                first = false;
+            }
+            encode(s.str, ids);
+        }
+        ids.push_back(timestamp_token_id);
+        ids.push_back(timestamp_token_id);
+    }
+
+    std::string Tokenizer::show_timestampes()
+    {
+        std::ostringstream oss;
+        CHATLLM_CHECK(sentences.size() == timestamps.size());
+
+        if ("srt" == format)
+        {
+            for (int i = 0; i < (int)sentences.size(); i++)
+            {
+                auto t = timestamps[i];
+
+                oss << i << std::endl
+                    << fmt_time(t.start) << " --> " << fmt_time(t.end) << std::endl
+                    << sentences[i] << std::endl
+                    << std::endl;
+            }
+        }
+        else
+        {
+            oss << "[" << std::endl;
+            for (int i = 0; i < (int)sentences.size(); i++)
+            {
+                auto t = timestamps[i];
+
+                if (i > 0) oss << "," << std::endl;
+
+                oss << "    {" << std::endl
+                    << "        \"start\":" << t.start      << "," << std::endl
+                    << "        \"end\":"   << t.end        << "," << std::endl
+                    << "        \"text\": \""  << json::utility::json_escape(sentences[i]) << "\"" << std::endl
+                    << "    }";
+            }
+            oss << std::endl << "]" << std::endl;
+        }
+
+        return oss.str();
+    }
+
+    std::string Tokenizer::fmt_time(double timestamp)
+    {
+        return utils::sec2hms(timestamp / 1000.0, false, false, true, ',');
+    }
+
+    bool is_kept_char(const uint32_t cp)
+    {
+        if (cp == '\'') return true;
+
+        auto flags = unicode_cpt_flags(cp);
+        return flags.is_number || flags.is_letter;
+    }
+
+    std::vector<uint32_t> clean_token(const std::vector<uint32_t> &u32)
+    {
+        std::vector<uint32_t> r;
+        for (auto c : u32)
+            if (is_kept_char(c)) r.push_back(c);
+        return r;
+    };
+
+    void split_cjk(const std::vector<uint32_t> &u32, std::vector<std::vector<uint32_t>> &words)
+    {
+        std::vector<uint32_t> w;
+        bool flag = false;
+        for (auto c : u32)
+        {
+            if (is_cpt_cjk(c))
+            {
+                if (w.size() > 0)
+                {
+                    words.push_back(w);
+                    w.clear();
+                }
+                words.push_back({c});
+            }
+            else
+                w.push_back(c);
+        }
+        if (w.size() > 0)
+            words.push_back(w);
+    }
+
+    void Tokenizer::append_sentence(std::vector<word_seg> &word_segs, const std::string &sentence, const int id)
+    {
+        std::vector<std::string> words;
+        utils::split(sentence, words);
+        CHATLLM_CHECK(words.size() > 0);
+
+        for (auto &w : words)
+        {
+            auto u32 = unicode_cpts_from_utf8(utils::to_lower(w));
+            auto cleaned = clean_token(u32);
+            if (cleaned.size() < 1) continue;
+
+            std::vector<std::vector<uint32_t>> words32;
+            if ("chinese" == language)
+                split_cjk(cleaned, words32);
+            else
+                words32.push_back(cleaned);
+
+            for (auto w32: words32)
+            {
+                cleaned_words.emplace_back(unicode_cpts_to_utf8(w32), id);
+            }
+        }
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        tok->cleaned_words.clear();
+        tok->sentences.clear();
+
+        load_audio(user);
+        tok->encode("user", ids, true, false, true);
+        tok->inject_audio_ids(ids, tok->vocab_size, tok->get_image_total_emb_vectors());
+
+        if (tok->delimiter.size() > 0)
+        {
+            utils::split(user.extract_text(""), tok->delimiter, tok->sentences);
+        }
+        else
+        {
+            if ("chinese" == tok->language)
+            {
+                std::vector<std::string> l;
+                utils::split(user.extract_text(" "), l);
+                for (auto s : l)
+                {
+                    auto u32 = unicode_cpts_from_utf8(utils::to_lower(s));
+                    auto cleaned = clean_token(u32);
+                    if (cleaned.size() < 1) continue;
+
+                    std::vector<std::vector<uint32_t>> words32;
+                    split_cjk(cleaned, words32);
+
+                    for (auto w32 : words32)
+                    {
+                        if (w32.size() > 0)
+                        {
+                            tok->sentences.push_back(unicode_cpts_to_utf8(w32));
+                        }
+                    }
+                }
+            }
+            else
+            {
+                utils::split(user.extract_text(" "), tok->sentences);
+            }
+        }
+
+        for (int i = 0; i < (int)tok->sentences.size(); i++)
+            tok->append_sentence(tok->cleaned_words, tok->sentences[i], i);
+
+        tok->pos_first_timestamp_token = (int)ids.size();
+        tok->inject_words(tok->cleaned_words, ids);
+
+        ids.push_back(tok->im_end_token_id);
+        ids.push_back(tok->nl_token_id);
+    }
+}
+
 namespace chatllm
 {
     REGISTER_MODEL_LOADER(QWEN,                         qwen::v1, 2);
@@ -3012,4 +3705,6 @@ namespace chatllm
     REGISTER_MODEL_LOADER(QWEN3_VL,                     qwen::v3_vl, 1);
     REGISTER_MODEL_LOADER(QWEN3_VL_Embedding,           qwen::v3_vl_emb, 1);
     REGISTER_MODEL_LOADER(QWEN3_VL_ReRanker,            qwen::v3_vl_ranker, 1);
+    REGISTER_MODEL_LOADER(QWEN3_ASR,                    qwen::v3_asr, 1);
+    REGISTER_MODEL_LOADER(QWEN3_ForcedAligner,          qwen::v3_forcedaligner, 1);
 }

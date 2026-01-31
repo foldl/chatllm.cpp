@@ -112,6 +112,7 @@ set(core_files src/backend.cpp
     models/pangu.cpp
     models/phi.cpp
     models/qwen.cpp
+    models/qwen_asr.cpp
     models/reka.cpp
     models/rnj.cpp
     models/seed.cpp

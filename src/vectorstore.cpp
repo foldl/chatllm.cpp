@@ -410,6 +410,28 @@ namespace utils
         }
     }
 
+    void split(const std::string &str, std::vector<std::string> &words)
+    {
+        words.clear();
+        const char *data = str.c_str();
+        const size_t len = str.size();
+        size_t i = 0;
+
+        while (i < len)
+        {
+            while ((i < len) && std::isspace(static_cast<unsigned char>(data[i])))
+                i++;
+
+            if (i >= len) break;
+
+            size_t start = i;
+            while ((i < len) && !std::isspace(static_cast<unsigned char>(data[i])))
+                i++;
+
+            words.emplace_back(str.substr(start, i - start));
+        }
+    }
+
     std::string replace_all(const std::string& str0, const std::string& from, const std::string& to)
     {
         if (from.empty()) return str0;
@@ -576,7 +598,7 @@ namespace utils
         return result;
     }
 
-    std::string sec2hms(double seconds, bool hour_2digits, bool show_ms)
+    std::string sec2hms(double seconds, bool hour_2digits, bool show_us, bool show_ms, char ms_delimiter)
     {
         int sec = (int)seconds;
         int ms  = (int)((seconds - sec) * 1000000);
@@ -587,29 +609,33 @@ namespace utils
         char s[100];
         if (hour_2digits)
         {
-            if (show_ms)
-                sprintf(s, "%02d:%02d:%02d.%06d", hh, min, sec, ms);
+            if (show_us)
+                sprintf(s, "%02d:%02d:%02d%c%06d", hh, min, sec, ms_delimiter, ms);
+            else if (show_ms)
+                sprintf(s, "%02d:%02d:%02d%c%03d", hh, min, sec, ms_delimiter, ms / 1000);
             else
                 sprintf(s, "%02d:%02d:%02d", hh, min, sec);
         }
         else
         {
-            if (show_ms)
-                sprintf(s, "%d:%02d:%02d.%06d", hh, min, sec, ms);
+            if (show_us)
+                sprintf(s, "%d:%02d:%02d%c%06d", hh, min, sec, ms_delimiter, ms);
+            else if (show_ms)
+                sprintf(s, "%02d:%02d:%02d%c%03d", hh, min, sec, ms_delimiter, ms / 1000);
             else
                 sprintf(s, "%d:%02d:%02d", hh, min, sec);
         }
         return s;
     }
 
-    std::string sec2ms(double seconds, bool show_ms)
+    std::string sec2ms(double seconds, bool show_us)
     {
         int sec = (int)seconds;
         int ms  = (int)((seconds - sec) * 1000000);
         int min = sec / 60;
         sec %= 60;
         char s[100];
-        if (show_ms)
+        if (show_us)
             sprintf(s, "%02d:%02d.%06d", min, sec, ms);
         else
             sprintf(s, "%02d:%02d", min, sec);

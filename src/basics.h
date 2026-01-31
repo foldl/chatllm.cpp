@@ -66,6 +66,7 @@ namespace utils
 
     std::string join(const std::vector<std::string>& vec, const std::string& sep);
     void split(const std::string &str, const std::string &delimiter, std::vector<std::string> &items);
+    void split(const std::string &str, std::vector<std::string> &words);
 
     std::string replace_all(const std::string& str, const std::string& from, const std::string& to);
 
@@ -81,8 +82,8 @@ namespace utils
 
     std::string num2words(int value);
 
-    std::string sec2hms(double seconds, bool hour_2digits = false, bool show_ms = false);
-    std::string sec2ms(double seconds, bool show_ms = false);
+    std::string sec2hms(double seconds, bool hour_2digits = false, bool show_us = false, bool show_ms = false, char ms_delimiter = '.');
+    std::string sec2ms(double seconds, bool show_us = false);
 
     // create a unique temp file name (full path)
     std::string tmpname(void);

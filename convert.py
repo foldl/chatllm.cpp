@@ -252,6 +252,7 @@ class ModelType(Enum):
     QWen3_ReRanker          = 0x1000010A
     Maya1                   = 0x1000010B
     GLM_ASR                 = 0x1000010D
+    Qwen3_ASR               = 0x1000010F
 
     LlaMAMulti    = 0x20000001
 
@@ -262,6 +263,7 @@ class ModelType(Enum):
     StepVL                  = ModelTypeTagChatImageIn + 0x0000040
 
     Qwen2Audio              = ModelTypeTagChatAudioIn + 0x0000001
+    Qwen3ForcedAligner      = ModelTypeTagChatAudioIn + 0x0000002
 
     Qwen2_5VL               = ModelTypeTagChatImageVideoIn + 0x0000001
     Qwen2_VL                = ModelTypeTagChatImageVideoIn + 0x0000002
@@ -5519,6 +5521,91 @@ class Qwen3VLConverter(BaseConverter):
 
         return weight_names
 
+class Qwen3ASRConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Qwen3_ASR
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for k in state_dict: # name: str
+            name: str = k
+            tensor: torch.Tensor = state_dict[name]
+            name = name.replace('thinker.', '')
+
+            if name.startswith('audio_tower.'):
+                if ('.proj1.' in name) or ('.proj2.' in name):
+                    name = name.replace('audio_tower.', 'multi_modal_projector.')
+                else:
+                    name = name.replace('audio_tower.', 'audio.')
+                    name = name.replace('.fc1.', '.mlp.fc0.')
+                    name = name.replace('.fc2.', '.mlp.fc1.')
+                    name = name.replace('.final_layer_norm.', '.post_attention_layernorm.')
+                    name = name.replace('.self_attn_layer_norm.', '.input_layernorm.')
+                    name = name.replace('.out_proj.', '.o_proj.')
+
+            r[name] = tensor
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MROPE_SECTION_MAX = 4
+
+        Qwen3ASRConverter.text_config = AttributeDict(copy.deepcopy(config.thinker_config['text_config']))
+
+        rope_scaling = Qwen3ASRConverter.text_config['rope_scaling']
+        assert rope_scaling['mrope_interleaved'] or rope_scaling['interleaved']
+        Qwen3ASRConverter.text_config['rope_scaling'] = None
+        Qwen3ASRConverter.text_config['tie_word_embeddings'] = False
+
+        QWen3Converter.dump_config(f, Qwen3ASRConverter.text_config, ggml_type)
+
+        config_values = pad_to_len(rope_scaling['mrope_section'], MROPE_SECTION_MAX)
+        if Qwen3ASRConverter.MODEL_TYPE == ModelType.Qwen3ForcedAligner:
+            config_values += [config.thinker_config['classify_num']]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = QWen3Converter.get_weight_names(Qwen3ASRConverter.text_config)
+
+        for i in range(config.thinker_config['audio_config']['num_hidden_layers']):
+            weight_names += [
+                f"audio.layers.{i}.mlp.fc1.bias",
+                f"audio.layers.{i}.mlp.fc1.weight",
+                f"audio.layers.{i}.mlp.fc0.bias",
+                f"audio.layers.{i}.mlp.fc0.weight",
+                f"audio.layers.{i}.post_attention_layernorm.bias",
+                f"audio.layers.{i}.post_attention_layernorm.weight",
+                f"audio.layers.{i}.self_attn.k_proj.weight",
+                f"audio.layers.{i}.self_attn.k_proj.bias",
+                f"audio.layers.{i}.self_attn.o_proj.bias",
+                f"audio.layers.{i}.self_attn.o_proj.weight",
+                f"audio.layers.{i}.self_attn.q_proj.bias",
+                f"audio.layers.{i}.self_attn.q_proj.weight",
+                f"audio.layers.{i}.self_attn.v_proj.bias",
+                f"audio.layers.{i}.self_attn.v_proj.weight",
+                f"audio.layers.{i}.input_layernorm.bias",
+                f"audio.layers.{i}.input_layernorm.weight",
+            ]
+
+        weight_names += [
+            "audio.conv2d1.bias",
+            "audio.conv2d1.weight",
+            "audio.conv2d2.bias",
+            "audio.conv2d2.weight",
+            "audio.conv2d3.bias",
+            "audio.conv2d3.weight",
+            "audio.conv_out.weight",
+            "audio.ln_post.bias",
+            "audio.ln_post.weight",
+            "multi_modal_projector.proj1.bias",
+            "multi_modal_projector.proj1.weight",
+            "multi_modal_projector.proj2.bias",
+            "multi_modal_projector.proj2.weight",
+        ]
+
+        return weight_names
 
 class QWen3EmbConverter(BaseConverter):
     MODEL_TYPE = ModelType.QWen3_Embedding
@@ -8865,7 +8952,7 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
         path8 = path / 'merges.txt'
         if path6.exists():
              config = json.load(open(path6, encoding='utf-8'))
-             if (config['tokenizer_class'] == 'GPT2Tokenizer') and path7.exists() and path8.exists():
+             if (config['tokenizer_class'] in ['Qwen2Tokenizer', 'GPT2Tokenizer']) and path7.exists() and path8.exists():
                  return GenericBPETokenizerVocab(path7, path8)
 
         path9 = path / 'vocab' / "360.tiktoken"
@@ -9222,6 +9309,10 @@ def main():
         QWen2_5VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch in ['Qwen3VLForConditionalGeneration', 'Qwen3VLMoeForConditionalGeneration']:
         Qwen3VLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Qwen3ASRForConditionalGeneration':
+        if config['thinker_config']['model_type'] == 'qwen3_forced_aligner':
+            Qwen3ASRConverter.MODEL_TYPE = ModelType.Qwen3ForcedAligner
+        Qwen3ASRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'KimiVLForConditionalGeneration':
         KimiVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen':

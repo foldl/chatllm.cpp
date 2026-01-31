@@ -408,7 +408,6 @@ namespace chatllm::baichuan::m1
         {
             if (utils::get_opt(args, "chat_template", "") == "im")
                     tokenizer->set_chat_encoder(&_im_chat_encoder);
-
         }
 
     private:

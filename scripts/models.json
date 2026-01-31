@@ -3975,5 +3975,30 @@
                 }
             }
         }
+    },
+    "qwen3-asr": {
+        "brief": "The Qwen3-ASR family includes Qwen3-ASR-1.7B and Qwen3-ASR-0.6B, which support language identification and ASR for 52 languages and dialects.",
+        "default": "1.7b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "1.7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2505570400,
+                        "url": "chatllm_quantized_qwen3/qwen3-asr-1.7b.bin"
+                    }
+                }
+            },
+            "0.6b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1005656864,
+                        "url": "chatllm_quantized_qwen3/qwen3-asr-0.6b.bin"
+                    }
+                }
+            }
+        }
     }
 }

@@ -218,6 +218,24 @@ namespace chatllm
         return result;
     }
 
+    std::string Content::extract_text(const std::string delimiter)const
+    {
+        std::string result;
+        for (const auto &piece : pieces)
+        {
+            switch (piece.type)
+            {
+            case ContentPiece::Type::Text:
+                if (result.size() > 0) result.append(delimiter);
+                result.append(piece.content);
+                break;
+            default:
+                break;
+            }
+        }
+        return result;
+    }
+
     bool Content::is_simple_text(void) const
     {
         if (pieces.size() > 1)

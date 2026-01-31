@@ -70,6 +70,13 @@ namespace chatllm
         ggml::tensor *transpose(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *concat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int dim);
 
+        ggml::tensor *pad(ComputeContext *ctx, ggml::tensor *a,
+            int l0, int r0,
+            int l1 = 0, int r1 = 0,
+            int l2 = 0, int r2 = 0,
+            int l3 = 0, int r3 = 0
+        );
+
         // operators
         ggml::tensor *get_rows(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
         ggml::tensor *set_rows(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *indices, ggml::tensor *source);

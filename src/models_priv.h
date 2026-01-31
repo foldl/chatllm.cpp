@@ -206,6 +206,7 @@ namespace chatllm
         MODEL_TYPE_QWEN3_ReRanker           = 0x1000010A,
         MODEL_TYPE_MAYA1                    = 0x1000010B,
         MODEL_TYPE_GLM_ASR                  = 0x1000010D,
+        MODEL_TYPE_QWEN3_ASR                = 0x1000010F,
 
         MODEL_TYPE_LLAMA_MULTI      = 0x20000001,
 
@@ -544,6 +545,7 @@ namespace chatllm
     }
 
     Block *create_lm_head(InitContext *ctx, const BaseConfig &config, bool bias = false);
+    Block *create_lm_head(InitContext *ctx, int hidden_size, int vocab_size, bool bias = false);
 
     class DynamicBlock: public Block
     {

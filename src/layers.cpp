@@ -1089,6 +1089,14 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::pad(ComputeContext *ctx, ggml::tensor *a,
+            int l0, int r0, int l1, int r1, int l2, int r2, int l3, int r3)
+    {
+        ggml::tensor *tensor = ggml_pad_ext(ctx->get_ctx(), a, l0, r0, l1, r1, l2, r2, l3, r3);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::add(ComputeContext *ctx, ggml::tensor * a, ggml::tensor * b)
     {
         ggml::tensor *tensor = ggml_add(ctx->get_ctx(), a, b);

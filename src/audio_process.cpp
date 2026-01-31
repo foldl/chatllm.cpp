@@ -391,6 +391,8 @@ namespace audio
     {
         stft fft(frame_size);
 
+        if (pad_to_samples < 1) pad_to_samples = n_samples;
+
         // Calculate the length of padding
         int64_t stage_2_pad = reverse_prefix_length;
         n_samples = std::min(n_samples, pad_to_samples);
@@ -506,6 +508,11 @@ namespace audio
     int64_t mel_len(const int64_t n_samples, const int hop_length)
     {
         return n_samples / hop_length;
+    }
+
+    int64_t sample_len_for_mel_len(const int64_t n_mel, const int hop_length)
+    {
+        return n_mel * hop_length;
     }
 
     void test(void)
