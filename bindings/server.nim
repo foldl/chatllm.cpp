@@ -150,16 +150,20 @@ func flatten(messages: JsonNode, sys_prompt: var string): seq[FlatMessage] =
                     result[^1].content.add (t: t, content: m["content"].getStr())
             of JObject:
                 t = m["content"]["type"].getStr()
-                if "url" in t:
+                if t == "input_audio":
+                    result[^1].content.add (t: t, content: m["content"][t]["data"].getStr())
+                elif "url" in t:
                     result[^1].content.add (t: t, content: m["content"][t]["url"].getStr())
                 else:
                     result[^1].content.add (t: t, content: m["content"]["text"].getStr())
             of JArray:
                 for o in m["content"].getElems():
                     t = o["type"].getStr()
-                    if "url" in t:
+                    if t == "input_audio":
+                        result[^1].content.add (t: t, content: o[t]["data"].getStr())
+                    elif "url" in t:
                         result[^1].content.add (t: t, content: o[t]["url"].getStr())
-                    else:
+                    elif o.contains("text"):
                         result[^1].content.add (t: t, content: o["text"].getStr())
             else:
                 raise newException(ValueError, fmt"""expected kind: {m["content"].kind}""")
@@ -227,6 +231,8 @@ proc start_chat(streamer: StreamerWithHistory, messages: JsonNode): bool =
                     discard streamer.llm.chatllm_multimedia_msg_append("audio", extract_base64(m.content).cstring)
                 of "video_url":
                     discard streamer.llm.chatllm_multimedia_msg_append("video", extract_base64(m.content).cstring)
+                of "input_audio":
+                    discard streamer.llm.chatllm_multimedia_msg_append("audio", m.content.cstring)
 
     streamer.history.add (pos: -1, messages: @[])
     for i in k..<msg.len: streamer.history[^1].messages.add msg[i]
@@ -796,7 +802,7 @@ proc handle_llama_props(req: Request) {.async gcsafe.} =
         for c in capabilities.getElems():
             if c.getStr() == "Image Input":
                 props.modalities.vision = true
-            elif c.getStr() == "Audio Input":
+            elif (c.getStr() == "Audio Input") or (c.getStr() == "ASR"):
                 props.modalities.audio = true
 
     let headers = {"Content-type": "application/json"}
