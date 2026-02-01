@@ -4000,5 +4000,25 @@
                 }
             }
         }
+    },
+    "qwen3-forcedaligner": {
+        "brief": "Qwen3-ForcedAligner-0.6B supports timestamp prediction for arbitrary units within up to 5 minutes of speech in 11 languages.",
+        "default": "0.6b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "0.6b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 984439424,
+                        "url": "chatllm_quantized_qwen3/qwen3-focedaligner-0.6b.bin"
+                    },
+                    "f16": {
+                        "size": 1840552064,
+                        "url": "chatllm_quantized_qwen3/qwen3-focedaligner-0.6b-f16.bin"
+                    }
+                }
+            }
+        }
     }
 }

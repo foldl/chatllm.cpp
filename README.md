@@ -33,6 +33,7 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
+* 2026-02-01: Qwen3-ForceAligner
 * 2026-01-31: Qwen3-ASR
 * 2026-01-21: Step3-VL
 * 2026-01-20: GLM-4.7-Flash

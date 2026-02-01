@@ -448,6 +448,16 @@ Please use `--format completion` for these models.
 * Qwen3-ASR (`Qwen3ASRForConditionalGeneration`)
     * [x] [0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B/tree/5eb144179a02acc5e5ba31e748d22b0cf3e303b0), [1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B/tree/7278e1e70fe206f11671096ffdd38061171dd6e5)
 
+    Additional options (Use `--set X Y` to change values):
+    * `language`: default "auto".
+
+    * [x] [ForcedAligner-0.6B](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B/tree/c7cbfc2048c462b0d63a45797104fc9db3ad62b7)
+
+    Additional options (Use `--set X Y` to change values):
+    * `language`: default "Chinese". This affects how sentences are cutted into words. Each character is a "word" for Chinese. For other languages, words are separated by spaces.
+    * `delimiter`: default "". Time stamps are reported for "sentences": sentences are separated by this delimiter. For Chinese, when delimiter is empty, each character is treated as a sentence.
+    * `format`: default "srt". Format of output. "srt" or "json" are supported.
+
 ## RAG Models
 
 ### Text Embedding

@@ -3012,7 +3012,9 @@ namespace chatllm::qwen::v3_asr
     class ChatHistoryEncoder : public v1::ChatHistoryEncoder
     {
     public:
+        typedef v1::ChatHistoryEncoder Base;
         void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
     protected:
         void load_audio(const Content &user) const;
     public:
@@ -3028,9 +3030,13 @@ namespace chatllm::qwen::v3_asr
         Tokenizer(const BaseConfig &config);
         Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder);
         void add_tokens(const std::map<std::string, int> &added_tokens);
+        std::string normalize_lang(const std::string &s) const;
     public:
         int asr_text_token_id;
         int timestamp_token_id;
+        std::string language = "auto";
+        std::string format   = "srt";
+        std::string delimiter = "";
     };
 
     Tokenizer::Tokenizer(const BaseConfig &config):
@@ -3056,7 +3062,7 @@ namespace chatllm::qwen::v3_asr
         im_start_token_id   = get_or_def("<|im_start|>");
         im_end_token_id     = get_or_def("<|im_end|>");
         asr_text_token_id   = get_or_def("<asr_text>");
-        timestamp_token_id  = get_or_def("<asr_text>");
+        timestamp_token_id  = get_or_def("<timestamp>");
         tp->OverrideTokenDecoding(asr_text_token_id, "<asr_text>");
     }
 
@@ -3068,14 +3074,17 @@ namespace chatllm::qwen::v3_asr
             ModelType type = ModelType::MODEL_TYPE_QWEN3_ASR, bool skip_lm_head = false);
         bool load_more(const json::JSON &config) override;
         void load(ModelLoader &loader) override;
+        void set_additional_args(const std::map<std::string, std::string> &args) override;
         void before_generate(const GenerationConfig &gen_config) override;
         void set_tokenizer(BaseTokenizer *tokenizer) override;
+        std::string normalize_lang(const std::string &s) const;
     public:
         v3::audio_tower::AudioEmbeddingGeneration audio;
     private:
         const int extended_vocab_size;
         std::map<std::string, int> added_tokens;
         bool aud_loaded = false;
+        std::map<std::string, std::string> support_languages;
     };
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
@@ -3100,6 +3109,20 @@ namespace chatllm::qwen::v3_asr
         enc->aud_config = &audio.config;
     }
 
+    std::string ConditionalGeneration::normalize_lang(const std::string &s) const
+    {
+        auto l = utils::to_lower(s);
+        return support_languages.count(l) > 0 ? support_languages.find(l)->second : "";
+    }
+
+    void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->language   =  normalize_lang(utils::get_opt(args, "language", tok->language));
+        tok->format     = utils::to_lower(utils::get_opt(args, "format", tok->format));
+        tok->delimiter  =                 utils::get_opt(args, "delimiter", tok->delimiter);
+    }
+
     bool ConditionalGeneration::load_more(const json::JSON &config)
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
@@ -3111,6 +3134,13 @@ namespace chatllm::qwen::v3_asr
         {
             auto t = kv.second["content"].ToString();
             added_tokens.insert_or_assign(t, (int)std::atoi(kv.first.c_str()));
+        }
+
+        tok_cfg = config["config.json"]["support_languages"];
+        if (!tok_cfg.IsArray()) return false;
+        for (auto &ele : tok_cfg.ArrayRange())
+        {
+            support_languages.insert_or_assign(utils::to_lower(ele.ToString()), ele.ToString());
         }
 
         bool r = audio.load_more(this->config.dtype, this->config.hidden_size, config);
@@ -3197,6 +3227,17 @@ namespace chatllm::qwen::v3_asr
         ids.push_back(tok->im_end_token_id);
         ids.push_back(tok->nl_token_id);
     }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        Base::append_ai_opening(round_idx, ids);
+
+        if (tok->language.size() > 0)
+        {
+            tok->encode("language " + tok->language, ids);
+        }
+    }
 }
 
 namespace chatllm::qwen::v3_forcedaligner
@@ -3209,6 +3250,10 @@ namespace chatllm::qwen::v3_forcedaligner
     class ChatHistoryEncoder : public v3_asr::ChatHistoryEncoder
     {
     public:
+        void append_sys_prompt(std::vector<int> &ids) const override {}
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override {}
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override {}
+        void append_user_opening(int round_idx, std::vector<int> &ids) const override {}
         void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
     };
 
@@ -3237,9 +3282,6 @@ namespace chatllm::qwen::v3_forcedaligner
     protected:
         std::string fmt_time(double timestamp);
     public:
-        std::string language = "chinese";
-        std::string format   = "srt";
-        std::string delimiter = "";
         int pos_first_timestamp_token = 0;
         std::vector<word_seg> cleaned_words;
         std::vector<std::string> sentences;     // timestamp is reported for each "sentence".
@@ -3249,6 +3291,7 @@ namespace chatllm::qwen::v3_forcedaligner
     Tokenizer::Tokenizer(const BaseConfig &config):
         v3_asr::Tokenizer(config, &_chat_encoder)
     {
+        language = "Chinese";
     }
 
     class ConditionalGeneration : public v3_asr::ConditionalGeneration
@@ -3257,7 +3300,6 @@ namespace chatllm::qwen::v3_forcedaligner
         typedef v3_asr::ConditionalGeneration Base;
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
             ModelType type = (ModelType)MODEL_TYPE_QWEN3_ForcedAligner);
-        void set_additional_args(const std::map<std::string, std::string> &args) override;
         bool load_more(const json::JSON &config) override;
         std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                   const bool continuous,
@@ -3275,14 +3317,6 @@ namespace chatllm::qwen::v3_forcedaligner
         classify_num(config.classify_num)
     {
         transformer->lm_head = create_lm_head(&w_ctx_, config.hidden_size, config.classify_num);
-    }
-
-    void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
-    {
-        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        tok->language   = utils::to_lower(utils::get_opt(args, "language", tok->language));
-        tok->format     = utils::to_lower(utils::get_opt(args, "format", tok->format));
-        tok->delimiter  =                 utils::get_opt(args, "delimiter", tok->delimiter);
     }
 
     bool ConditionalGeneration::load_more(const json::JSON &config)
@@ -3618,7 +3652,7 @@ namespace chatllm::qwen::v3_forcedaligner
             if (cleaned.size() < 1) continue;
 
             std::vector<std::vector<uint32_t>> words32;
-            if ("chinese" == language)
+            if ("Chinese" == language)
                 split_cjk(cleaned, words32);
             else
                 words32.push_back(cleaned);
@@ -3638,7 +3672,6 @@ namespace chatllm::qwen::v3_forcedaligner
         tok->sentences.clear();
 
         load_audio(user);
-        tok->encode("user", ids, true, false, true);
         tok->inject_audio_ids(ids, tok->vocab_size, tok->get_image_total_emb_vectors());
 
         if (tok->delimiter.size() > 0)
@@ -3647,7 +3680,7 @@ namespace chatllm::qwen::v3_forcedaligner
         }
         else
         {
-            if ("chinese" == tok->language)
+            if ("Chinese" == tok->language)
             {
                 std::vector<std::string> l;
                 utils::split(user.extract_text(" "), l);
@@ -3680,9 +3713,6 @@ namespace chatllm::qwen::v3_forcedaligner
 
         tok->pos_first_timestamp_token = (int)ids.size();
         tok->inject_words(tok->cleaned_words, ids);
-
-        ids.push_back(tok->im_end_token_id);
-        ids.push_back(tok->nl_token_id);
     }
 }
 
