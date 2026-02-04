@@ -4,6 +4,8 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
+<a href='https://ko-fi.com/H2H21TKE4P' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi5.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
+
 ![](./docs/demo.gif)
 
 在计算机（CPU）上实时[多模态](./docs/multimodal.md)聊天，可 [检索增强生成](./docs/rag.md) 。支持从不到 1B 到超过 300B 的一系列模型的推理。基于 [@ggerganov](https://github.com/ggerganov) 的 [ggml](https://github.com/ggerganov/ggml)，纯 C++ 实现。

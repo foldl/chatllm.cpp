@@ -4,6 +4,8 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![CI](https://github.com/foldl/chatllm.cpp/actions/workflows/build.yml/badge.svg)](https://github.com/foldl/chatllm.cpp/actions/workflows/build.yml)
 
+<a href='https://ko-fi.com/H2H21TKE4P' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi5.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
+
 ![](./docs/demo.gif)
 
 Inference of a bunch of models from less than 1B to more than 300B, for real-time [multimodal](./docs/multimodal.md) chat with [RAG](./docs/rag.md) on your computer (CPU & GPU),
