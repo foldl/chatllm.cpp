@@ -505,6 +505,7 @@ type
         interactive*: bool = false
         reversed_role*: bool = false
         use_multiple_lines*: bool = false
+        single_turn*: bool = false
         prompt*: string
         sys_prompt*: string
 
@@ -639,6 +640,8 @@ proc initStreamer*(streamer: Streamer; args: openArray[string], auto_restart: bo
             streamer.fe_options.reversed_role = true
         elif s.is_same_command_option("--multi"):
             streamer.fe_options.use_multiple_lines = true
+        elif s.is_same_command_option("+single_turn"):
+            streamer.fe_options.single_turn = true
         elif s.is_same_command_option(["-p", "--prompt"]):
             inc i
             if i < len(args): streamer.fe_options.prompt = args[i]
@@ -694,7 +697,7 @@ proc start_chat*(streamer: Streamer, user_input: string): bool =
     if streamer.is_generating:
         return false
     inc streamer.input_id
-    if streamer.auto_restart or streamer.system_prompt_updating:
+    if streamer.auto_restart or streamer.system_prompt_updating or streamer.fe_options.single_turn:
         streamer.restart()
     else:
         discard

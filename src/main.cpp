@@ -1863,8 +1863,11 @@ int chatllm_user_input(struct chatllm_obj *obj, const char *utf8_str)
 
     if (!streamer->is_prompt) return -1;
 
-    if (chat->pipeline->is_loaded() && (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Chat))
-        return -1;
+    if (!chat->pipeline->is_loaded()) return -2;
+
+    if (    (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::Chat)
+        &&  (chat->pipeline->model->get_purpose() != chatllm::ModelPurpose::ASR))
+        return -3;
 
     chat->history.push_back(utf8_str, role_user);
 

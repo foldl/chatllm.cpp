@@ -374,6 +374,56 @@ class LLMChatMeta:
         self.id = id
         self.text = text
 
+def is_same_command_option(a: str, b: Union[str, list[str]]) -> bool:
+    if isinstance(b, list):
+        for s in b:
+            if is_same_command_option(a, s): return True
+        return False
+
+    if len(a) != len(b): return False
+    for i in range(len(a)):
+        c1 = a[i]
+        c2 = b[i]
+        if c1 == '-': c1 = '_'
+        if c2 == '-': c2 = '_'
+        if c1 != c2: return False
+    return True
+
+class FrontendOptions:
+    def __init__(self, param: Union[None, str, List[str]]) -> None:
+        self.help = False
+        self.interactive = False
+        self.reversed_role = False
+        self.use_multiple_lines = False
+        self.single_turn = False
+        self.prompt = ""
+        self.sys_prompt = ""
+
+        if param is None: return
+        if isinstance(param, str):
+            param = [param]
+
+        i = 0
+        while i < len(param):
+            s = param[i]
+            if is_same_command_option(s, ["-h", "--help"]):
+                self.help = True
+            elif is_same_command_option(s, ["-i", "--interactive"]):
+                self.interactive = True
+            elif is_same_command_option(s, "--reversed_role"):
+                self.reversed_role = True
+            elif is_same_command_option(s, "--multi"):
+                self.use_multiple_lines = True
+            elif is_same_command_option(s, "+single_turn"):
+                self.single_turn = True
+            elif is_same_command_option(s, ["-p", "--prompt"]):
+                i += 1
+                if i < len(param): self.prompt = param[i]
+            elif is_same_command_option(s, ["-s", "--system"]):
+                i += 1
+                if i < len(param): self.sys_prompt = param[i]
+            i += 1
+
 class ChatLLM:
     def __init__(self, lib: LibChatLLM, param: Union[None, str, List[str]], auto_start: bool = True) -> None:
         self._lib = lib
@@ -390,6 +440,7 @@ class ChatLLM:
         self._result_text_tokenize = None
         self._model_info = None
         self.is_first_thought_chunk = True
+        self.fe_options = FrontendOptions(param)
         if param is not None:
             self.append_param(param)
             if auto_start:
@@ -418,6 +469,8 @@ class ChatLLM:
         self.beam_search_results = []
         self.rewritten_query = ''
         self.is_first_thought_chunk = True
+        if self.fe_options.single_turn:
+            self.restart()
         r = self._lib.chat(self._chat, user_input)
         self.is_generating = False
         if r != 0:
