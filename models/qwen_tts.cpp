@@ -1,4 +1,5 @@
 #include "qwen_tts.h"
+#include <string.h>
 
 namespace chatllm::qwen::tts
 {
