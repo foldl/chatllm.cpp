@@ -252,6 +252,7 @@ class ModelType(Enum):
     QWen3_ReRanker          = 0x1000010A
     Maya1                   = 0x1000010B
     GLM_ASR                 = 0x1000010D
+    Qwen3_TTS               = 0x1000010E
     Qwen3_ASR               = 0x1000010F
 
     LlaMAMulti    = 0x20000001
@@ -512,6 +513,55 @@ class AttributeDict(dict):
 
 def transpose(weight, fan_in_fan_out):
     return weight.T if fan_in_fan_out else weight
+
+def list_tensors(path: Path) -> List[str]:
+    fp = open(path, 'rb')
+    first8 = fp.read(8)
+    fp.seek(0)
+    if first8[:2] == b'PK':
+        content = torch.load(fp, map_location=torch.device('cpu'))
+        if sorted(list(content.keys())) == ['metadata', 'state_dict']:
+            content = content['state_dict']
+            return list(content.items().keys())
+    elif struct.unpack('<Q', first8)[0] < 16 * 1024 * 1024:
+        from safetensors import safe_open
+        tensors = []
+        with safe_open(path, framework="pt", device="cpu") as f:
+            return list(f.keys())
+    else:
+        raise ValueError(f"unknown format: {path}")
+
+def load_model_file(path: Path) -> Dict:
+    print(f"loading {path} ...")
+    fp = open(path, 'rb')
+    first8 = fp.read(8)
+    fp.seek(0)
+    if first8[:2] == b'PK':
+        content = torch.load(fp, map_location=torch.device('cpu'))
+        if sorted(list(content.keys())) == ['metadata', 'state_dict']:
+            content = content['state_dict']
+        return content.items()
+    elif struct.unpack('<Q', first8)[0] < 16 * 1024 * 1024:
+        from safetensors import safe_open
+        tensors = []
+        with safe_open(path, framework="pt", device="cpu") as f:
+            for key in f.keys():
+                tensors.append((key, f.get_tensor(key)))
+        return tensors
+    else:
+        raise ValueError(f"unknown format: {path}")
+
+def get_all_tensors(paths: list[Path] | Path | str) -> List[str]:
+    r = set()
+    if not isinstance(paths, list): paths = [paths]
+    for f in paths:
+        t = set(list_tensors(f))
+        intersection = r & t
+        if len(intersection) > 0:
+            raise ValueError(f"{f} contains tensors {intersection} already exists")
+        r = r | t
+
+    return sorted(list(r))
 
 class LoRAState:
     def __init__(self, path: Path, verbose: bool = False) -> None:
@@ -5521,6 +5571,49 @@ class Qwen3VLConverter(BaseConverter):
 
         return weight_names
 
+class Qwen3TTSConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Qwen3_TTS
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for k in state_dict: # name: str
+            name: str = k
+            tensor: torch.Tensor = state_dict[name]
+            if name.endswith('.cluster_usage'): continue
+            if name.endswith('.embedding_sum'):
+                cluster_usage = state_dict[name.replace('.embedding_sum', '.cluster_usage')]
+                tensor = tensor / cluster_usage.clamp(min=1e-5)[:, None]
+            r[name] = tensor
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MROPE_SECTION_MAX = 4
+        rope_scaling = config.talker_config['rope_scaling']
+        assert rope_scaling.get('mrope_interleaved', rope_scaling.get('interleaved'))
+
+        Qwen3VLConverter.text_config = AttributeDict(copy.deepcopy(config.talker_config))
+        Qwen3VLConverter.text_config.rope_scaling = None
+        vocab_size = Qwen3VLConverter.text_config.vocab_size
+        Qwen3VLConverter.text_config.vocab_size = Qwen3VLConverter.text_config.text_vocab_size
+        QWen3Converter.dump_config(f, Qwen3VLConverter.text_config, ggml_type)
+
+        config_values = pad_to_len(rope_scaling['mrope_section'], MROPE_SECTION_MAX) + [
+            Qwen3VLConverter.text_config.text_hidden_size,
+            vocab_size
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = []
+        names = get_all_tensors(Qwen3TTSConverter.model_files)
+        for n in names:
+            if n.endswith('.cluster_usage'): continue
+            weight_names.append(n)
+        return weight_names
+
 class Qwen3ASRConverter(BaseConverter):
     MODEL_TYPE = ModelType.Qwen3_ASR
 
@@ -8951,8 +9044,7 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
         path7 = path / 'vocab.json'
         path8 = path / 'merges.txt'
         if path6.exists():
-             config = json.load(open(path6, encoding='utf-8'))
-             if (config['tokenizer_class'] in ['Qwen2Tokenizer', 'GPT2Tokenizer']) and path7.exists() and path8.exists():
+             if path7.exists() and path8.exists():
                  return GenericBPETokenizerVocab(path7, path8)
 
         path9 = path / 'vocab' / "360.tiktoken"
@@ -9092,6 +9184,12 @@ def main():
         g_model_meta['model_name'] = args.name
     if args.native_name != '':
         g_model_meta['model_native_name'] = args.native_name
+
+    if arch == 'Qwen3TTSForConditionalGeneration':
+        Qwen3TTSConverter.model_path = Path(args.model_name_or_path)
+        model_files += load_some_model(Qwen3TTSConverter.model_path / 'speech_tokenizer')
+        Qwen3TTSConverter.model_files = model_files
+        load_some_info(g_model_meta, Qwen3TTSConverter.model_path / 'speech_tokenizer', 'speech_tokenizer-')
 
     #if args.lora_model_name_or_path is not None:
     #    from peft import PeftModel
@@ -9491,6 +9589,8 @@ def main():
         DeepSeekV3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'StepVLForConditionalGeneration':
         StepVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Qwen3TTSForConditionalGeneration':
+        Qwen3TTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

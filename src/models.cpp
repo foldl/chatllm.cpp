@@ -94,6 +94,18 @@ namespace chatllm
                 if (flag) exit(-1);
             }
             break;
+        case GGML_TYPE_I32:
+            {
+                const int32_t * p = (int32_t *)data.data();
+                const size_t n = ggml::nbytes(tensor) / sizeof(int32_t);
+
+                for (size_t i = 0; i < n; i++)
+                {
+                    if (!full && ((PRINT_CNT < i) && (i < n - PRINT_CNT))) continue;
+                    printf("[%3d] = %d\n", (int)i, p[i]);
+                }
+            }
+            break;
         case GGML_TYPE_F16:
             {
                 ggml_fp16_t * p = (ggml_fp16_t *)data.data();
@@ -246,6 +258,7 @@ namespace chatllm
         case MODEL_TYPE_OUTE_TTS_LLAMA:
         case MODEL_TYPE_OUTE_TTS_QWEN3:
         case MODEL_TYPE_MAYA1:
+        case MODEL_TYPE_QWEN3_TTS:
             return ModelPurpose::TTS;
         case MODEL_TYPE_GLM_ASR:
         case MODEL_TYPE_QWEN3_ASR:
@@ -272,6 +285,7 @@ namespace chatllm
         case MODEL_TYPE_OUTE_TTS_LLAMA:
         case MODEL_TYPE_OUTE_TTS_QWEN3:
         case MODEL_TYPE_MAYA1:
+        case MODEL_TYPE_QWEN3_TTS:
             return ChatModelAccessPoint::Text | ChatModelAccessPoint::AudioOutput;
         case MODEL_TYPE_GLM_ASR:
         case MODEL_TYPE_QWEN3_ASR:
@@ -877,7 +891,7 @@ namespace chatllm
         std::vector<float> snd_d;
     };
 
-    Sampler *SamplerFactory::Create(const GenerationConfig &gen_config, int seed)
+    Sampler *SamplerFactory::Create(const GenerationConfig &gen_config)
     {
         Sampler *r = nullptr;
         if (gen_config.do_sample)
@@ -893,7 +907,7 @@ namespace chatllm
         if (nullptr == r)
             r = new GreedySampler();
 
-        r->seed(seed);
+        r->seed(gen_config.get_seed());
         return r;
     }
 
@@ -951,7 +965,7 @@ namespace chatllm
         //    printf("%d, ", input_ids[i]);
         //printf("\nn_past = %d, %d\n\n", n_past, continuous);
 
-        std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config, get_seed()));
+        std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config));
 
         aborted = false;
 
@@ -1556,7 +1570,9 @@ namespace chatllm
         // now, this is continous
         transformer_outputs = ggml::reshape_2d(ctx, transformer_outputs, ggml::get_dim(transformer_outputs, 0), last_n * batch);
 
+        ggml::set_output(transformer_outputs);
         model->last_hidden_state = transformer_outputs;
+
         if (model->skip_lm_head)
             return transformer_outputs;
 
@@ -1635,12 +1651,12 @@ namespace chatllm
         return _loaded;
     }
 
-    TensorGraphEvaluator::TensorGraphEvaluator(const RuntimeConfig &runtime_config, const std::string model_id, size_t GRAPH_SIZE)
+    TensorGraphEvaluator::TensorGraphEvaluator(const RuntimeConfig &runtime_config, const std::string model_id, size_t GRAPH_SIZE, int max_layers)
         : GRAPH_SIZE(GRAPH_SIZE),
         n_threads(runtime_config.n_threads)
     {
         model_gpu_layers = BackendContext::get_ngl_of_model(runtime_config.model_gpu_layers, model_id);
-        backend_context.init(model_gpu_layers, 1, GRAPH_SIZE, n_threads);
+        backend_context.init(model_gpu_layers, max_layers, GRAPH_SIZE, n_threads);
     }
 
     bool TensorGraphEvaluator::evaluate(const GenerationConfig &gen_config,

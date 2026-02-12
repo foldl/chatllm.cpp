@@ -900,7 +900,9 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
                                          gen_config.repeat_penalty = args.repeat_penalty; \
                                          gen_config.frequency_penalty = args.frequency_penalty; \
                                          gen_config.penalty_window = args.penalty_window; \
-                                         gen_config.max_new_tokens = args.max_new_tokens;
+                                         gen_config.max_new_tokens = args.max_new_tokens; \
+                                         gen_config._seed = args.seed;
+
 
 #define DEF_ExtraArgs(pipe_args, args)  \
     chatllm::ModelObject::extra_args pipe_args(args.max_length, args.layer_spec, args.moe_on_cpu, args.num_threads, args.batch_size, args.cache_dtype, args.re_quantize);\
@@ -942,7 +944,6 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
 
     if (pipeline.is_loaded())
     {
-        pipeline.model->seed(args.seed);
         args.max_length = pipeline.model->get_max_length();
 
         pipeline.set_extending_method(args.extending);
@@ -1666,7 +1667,6 @@ static int start_chat(Chat *chat, Args &args, chatllm::Pipeline &pipeline)
 
     if (pipeline.is_loaded())
     {
-        pipeline.model->seed(args.seed);
         args.max_length = pipeline.model->get_max_length();
 
         pipeline.set_extending_method(args.extending);

@@ -866,6 +866,7 @@ namespace chatllm
         float repeat_penalty;
         float frequency_penalty;
         float tfs_z;
+        int _seed = -1;
         std::string sampling;
         std::string ai_prefix;
         std::string dump_dot;
@@ -884,6 +885,18 @@ namespace chatllm
               sampling(sampling), ai_prefix("") {}
 
         void set_ai_prefix(const std::string &prefix);
+
+        int get_seed(void) const
+        {
+            if (_seed > 0) return _seed;
+
+            std::random_device rd;
+            return rd();
+        }
+        void seed(int x)
+        {
+            _seed = x;
+        }
     };
 
     class ModelPerfInfo
@@ -998,9 +1011,6 @@ namespace chatllm
         virtual void set_tokenizer(BaseTokenizer *tokenizer) = 0;
 
         virtual void set_ctx(int n_ctx)= 0;
-
-        virtual void seed(int x) = 0;
-        virtual int get_seed(void) const = 0;
 
         virtual int get_max_length(void) = 0;
 
@@ -1122,9 +1132,6 @@ namespace chatllm
 
         void set_ctx(int n_ctx) override { model->set_ctx(n_ctx); }
 
-        void seed(int x) override { model->seed(x); }
-        int get_seed(void) const override { return model->get_seed(); }
-
         int get_max_length(void) override { return model->get_max_length(); }
 
         int get_n_past(void) override { return model->get_n_past(); }
@@ -1158,8 +1165,7 @@ namespace chatllm
         BaseModel(uint32_t type, ModelPurpose purpose) :
             type_(type), n_past(0),
             n_past_offset(0), tokenizer(nullptr),
-            purpose(purpose), aborted(false),
-            _seed(-1)
+            purpose(purpose), aborted(false)
         {}
 
         virtual ~BaseModel()
@@ -1261,15 +1267,6 @@ namespace chatllm
 
         void set_ctx(int n_ctx) override {}
 
-        void seed(int x) override { _seed = x; }
-        int get_seed(void) const override
-        {
-            if (_seed > 0) return _seed;
-
-            std::random_device rd;
-            return rd();
-        }
-
         int get_n_past(void) override { return n_past; }
 
         void set_n_past(int n_past) override
@@ -1316,8 +1313,6 @@ namespace chatllm
         ModelPurpose purpose;
         bool aborted;
         bool multi_turn = true;
-    private:
-        int _seed;
     };
 
     class ModelObject

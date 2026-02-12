@@ -462,7 +462,6 @@ namespace chatllm::qwen
             int grid_w = 0;
             int grid_h = 0;
             const bool full_attention;
-            ggml::tensor *mask;
         };
 
         class MLP : public TheMLP
@@ -630,6 +629,14 @@ namespace chatllm::qwen
             int video_max_frames = 20;
             double fps = 2.0f;
         };
+
+        class ExtendEmbedding
+        {
+        public:
+            ExtendEmbedding(int n = 2048) : pad_arg(new BlockParams::PadEmbedding(n, n)) {}
+        public:
+            BlockParams::PadEmbedding *pad_arg = nullptr;
+        };
     }
 
     namespace v3
@@ -672,7 +679,8 @@ namespace chatllm::qwen
             typedef HeterogeneousModel ModelClass;
         public:
             ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
-                ModelType type = ModelType::MODEL_TYPE_QWEN3, const bool skip_lm_head = false, int extra_tensors = 0);
+                ModelType type = ModelType::MODEL_TYPE_QWEN3, const bool skip_lm_head = false, int extra_tensors = 0,
+                const int vocab_size = -1, const int hidden_size = -1);
 
         private:
             int get_sparse_layer_num();

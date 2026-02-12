@@ -570,7 +570,7 @@ namespace chatllm::bailing::llada
         GenerationConfig _gen_config(gen_config);
         _gen_config.do_sample = true;
         _gen_config.sampling = "top_p";
-        std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(_gen_config, get_seed()));
+        std::unique_ptr<Sampler> sampler = std::unique_ptr<Sampler>(SamplerFactory::Create(_gen_config));
 
         aborted = false;
 

@@ -1178,9 +1178,9 @@ namespace chatllm::qwen::vit
     ViTSelfAttention::ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool use_bias)
         : TensorPosHelperPrelude(new TensorPosHelper2D(max_length)),
           RoPESelfAttention<BaseCachelessAttention>(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, use_bias, use_bias),
-          full_attention(ViTParams::is_full_attention()),
-          mask(full_attention ? nullptr : ggml::new_tensor_2d(ctx, GGML_TYPE_F32, max_length, max_length))
+          full_attention(ViTParams::is_full_attention())
     {
+        mask = full_attention ? nullptr : ggml::new_tensor_2d(ctx, GGML_TYPE_F32, max_length, max_length);
         TensorPosHelperPrelude::done();
 
         causal = false;
@@ -1583,14 +1583,6 @@ namespace chatllm::qwen::v2_5_vl
         const int image_id_start;
     };
 
-    class ExtendEmbedding
-    {
-    public:
-        ExtendEmbedding() : pad_arg(new BlockParams::PadEmbedding(2048, 2048)) {}
-    public:
-        BlockParams::PadEmbedding *pad_arg = nullptr;
-    };
-
     class ConditionalGeneration : public TensorPosHelperPrelude, public ExtendEmbedding, public v2::ConditionalGeneration
     {
     public:
@@ -1895,13 +1887,14 @@ namespace chatllm::qwen::v3
 
     typedef QWen3MoEBlock<128, 8> QWen3MoEBlock128_8;
 
-    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, const bool skip_lm_head, int extra_tensors)
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, const bool skip_lm_head, int extra_tensors,
+        const int vocab_size, const int hidden_size)
         : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
         config(config)
     {
         const size_t tensor_ovhd = ggml_tensor_overhead();
         const int sparse_layers = get_sparse_layer_num();
-        const size_t num_tensors = 3 + (config.tie_word_embeddings ? -1 : 0)
+        const size_t num_tensors = 3 + (skip_lm_head || config.tie_word_embeddings ? -1 : 0)
                                     + (config.num_hidden_layers - sparse_layers) * 14
                                     + sparse_layers * (14 + 1)
                                     + extra_tensors;
@@ -1912,7 +1905,7 @@ namespace chatllm::qwen::v3
         if (skip_lm_head || config.tie_word_embeddings)
         {
             transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
-                create_embedding<Embedding>(&w_ctx_, config),
+                vocab_size <= 0 ? create_embedding<Embedding>(&w_ctx_, config) : create_embedding<Embedding>(&w_ctx_, vocab_size, hidden_size),
                 create_final_norm<RMSNorm>(&w_ctx_, config),
                 nullptr,
                 [&](InitContext *ctx, int layer_index) {
@@ -1922,7 +1915,7 @@ namespace chatllm::qwen::v3
         else
         {
             transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
-                create_embedding<Embedding>(&w_ctx_, config),
+                vocab_size <= 0 ? create_embedding<Embedding>(&w_ctx_, config) : create_embedding<Embedding>(&w_ctx_, vocab_size, hidden_size),
                 create_final_norm<RMSNorm>(&w_ctx_, config),
                 create_lm_head(&w_ctx_, config, false),
                 [&](InitContext *ctx, int layer_index) {
@@ -1948,7 +1941,7 @@ namespace chatllm::qwen::v3
             }
         }
 
-        w_ctx_.check_used_mem_size(true, extra_tensors + (skip_lm_head && (0 == config.tie_word_embeddings) ? 1 : 0));
+        w_ctx_.check_used_mem_size(true, extra_tensors);
     }
 
     int ConditionalGeneration::get_sparse_layer_num()
@@ -3090,7 +3083,7 @@ namespace chatllm::qwen::v3_asr
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
             ModelType type, bool skip_lm_head):
         v2_audio::ExtendEmbedding(10000),
-        v3::ConditionalGeneration(config, runtime_config, type, skip_lm_head),
+        v3::ConditionalGeneration(config, runtime_config, type, skip_lm_head, skip_lm_head ? 1 : 0),
         extended_vocab_size(pad_arg->get()),
         audio(runtime_config)
     {

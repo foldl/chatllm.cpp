@@ -240,6 +240,7 @@ namespace chatllm
 
         void mul_mat_set_prec(ggml::tensor *a, ggml::prec prec);
         bool is_contiguous(const ggml::tensor *a);
+        bool is_view(const ggml::tensor *tensor);
 
         struct ggml_cgraph *new_graph_custom(ComputeContext *ctx, size_t size, bool grads);
         void build_forward_expand(ComputeContext *ctx, ggml::tensor * tensor);
@@ -1492,6 +1493,7 @@ namespace chatllm
         const int num_attention_heads;
         const int num_kv_heads;
         ggml::tensor *pos;
+        ggml::tensor *mask = nullptr;
         const int max_length;
         float attn_scaling_factor;
         Block *attn_scores_pp;
@@ -2990,7 +2992,6 @@ namespace chatllm
     public:
         float  bias_max;
         float  scale;
-        ggml::tensor *mask;
     };
 
     class BaichuanBlock : public LMBlock1<RMSNorm, ALiBiSelfAttention, RMSNorm, SiLUMLP>

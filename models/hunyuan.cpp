@@ -720,7 +720,7 @@ namespace chatllm::hunyuan::wedlm
         const int mask_id = mask_tok_id;
 
         std::unique_ptr<Sampler> sampler =
-            std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config, get_seed()));
+            std::unique_ptr<Sampler>(SamplerFactory::Create(gen_config));
         logits_pp.temperature = gen_config.temperature;
 
         aborted = false;

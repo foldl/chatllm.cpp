@@ -206,6 +206,7 @@ namespace chatllm
         MODEL_TYPE_QWEN3_ReRanker           = 0x1000010A,
         MODEL_TYPE_MAYA1                    = 0x1000010B,
         MODEL_TYPE_GLM_ASR                  = 0x1000010D,
+        MODEL_TYPE_QWEN3_TTS                = 0x1000010E,
         MODEL_TYPE_QWEN3_ASR                = 0x1000010F,
 
         MODEL_TYPE_LLAMA_MULTI      = 0x20000001,
@@ -539,6 +540,11 @@ namespace chatllm
         return new Embedding(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), config.vocab_size, config.hidden_size, config.max_length);
     }
 
+    template <class Embedding> Block *create_embedding(InitContext *ctx, int vocab_size, int hidden_size)
+    {
+        return new Embedding(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), vocab_size, hidden_size);
+    }
+
     template <class FinalNorm> Block *create_final_norm(InitContext *ctx, const BaseConfig &config)
     {
         return new FinalNorm(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size);
@@ -559,7 +565,7 @@ namespace chatllm
     class TensorGraphEvaluator
     {
     public:
-        TensorGraphEvaluator(const RuntimeConfig &runtime_config, const std::string model_id = "main", size_t GRAPH_SIZE = 4096);
+        TensorGraphEvaluator(const RuntimeConfig &runtime_config, const std::string model_id = "main", size_t GRAPH_SIZE = 4096, int max_layers = 99);
         virtual bool evaluate(const GenerationConfig &gen_config,
              std::function<ggml::tensor *(ComputeContext *ctx)> make_graph,
              std::function<void(ComputeContext *ctx)> write_input_data,
@@ -662,6 +668,6 @@ namespace chatllm
     class SamplerFactory
     {
     public:
-        static Sampler *Create(const GenerationConfig &gen_config, int seed);
+        static Sampler *Create(const GenerationConfig &gen_config);
     };
 }

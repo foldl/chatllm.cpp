@@ -369,6 +369,16 @@ Please use `--format completion` for these models.
 
         Use `--set speaker /path/to/speaker.json` to select a speaker profile. [More info](https://github.com/edwko/OuteTTS/blob/main/docs/interface_usage.md#creating-custom-speaker-profiles).
 
+* Qwen3-TTS (`Qwen3TTSForConditionalGeneration`):
+    * [x] [1.7B-CustomVoice](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice/tree/0c0e3051f131929182e2c023b9537f8b1c68adfe), [1.7B-VoiceDesign](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign/tree/5ecdb67327fd37bb2e042aab12ff7391903235d3)
+
+    Note: Voice clone is not supported yet.
+
+    Additional options (Use `--set X Y` to change values):
+    * `lanuage`: default `auto`.
+    * `speaker`: default `vivian`.
+    * `instruct`: default "".
+
 ## Multimodal Models
 
 * Fuyu (`FuyuForCausalLM`)
