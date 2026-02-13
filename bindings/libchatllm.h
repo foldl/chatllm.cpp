@@ -248,6 +248,7 @@ DLL_DECL int API_CALL chatllm_user_input(struct chatllm_obj *obj, const char *ut
  * @param[in] obj               model object
  * @return                      0 if succeeded
  */
+DLL_DECL int API_CALL chatllm_destroy(struct chatllm_obj *obj);
 DLL_DECL int API_CALL chatllm_user_input_multimedia_msg(struct chatllm_obj *obj);
 
 /**
