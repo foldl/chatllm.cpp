@@ -46,7 +46,7 @@ namespace audio
 
         // Open pipe to ffmpeg process
         std::unique_ptr<FILE, decltype(&pclose)> pipe(
-            popen(oss.str().c_str(), "rb"),
+            popen(oss.str().c_str(), "r"),
             pclose
         );
 
