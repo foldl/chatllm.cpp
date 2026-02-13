@@ -259,6 +259,7 @@ DLL_DECL int API_CALL chatllm_user_input_multimedia_msg(struct chatllm_obj *obj)
  * @param[in] utf8_str          prefix
  * @return                      0 if succeeded
  */
+DLL_DECL int API_CALL chatllm_set_additional_args(struct chatllm_obj *obj, const char *utf8_str);
 DLL_DECL int API_CALL chatllm_set_ai_prefix(struct chatllm_obj *obj, const char *utf8_str);
 
 /**

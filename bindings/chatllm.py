@@ -98,6 +98,7 @@ class LibChatLLM:
         self._chatllm_append_param      = self._lib.chatllm_append_param
         self._chatllm_start             = self._lib.chatllm_start
         self._chatllm_set_ai_prefix     = self._lib.chatllm_set_ai_prefix
+        self._chatllm_set_additional_args = self._lib.chatllm_set_additional_args
         self._chatllm_ai_continue       = self._lib.chatllm_ai_continue
         self._chatllm_user_input        = self._lib.chatllm_user_input
         self._chatllm_tool_input        = self._lib.chatllm_tool_input
@@ -132,7 +133,11 @@ class LibChatLLM:
         self._chatllm_start.argtypes = [c_void_p, self._PRINTFUNC, self._ENDFUNC, c_void_p]
 
         self._chatllm_set_ai_prefix.restype = c_int
+        self._chatllm_set_additional_args = self._lib.chatllm_set_additional_args
         self._chatllm_set_ai_prefix.argtypes = [c_void_p, c_char_p]
+        self._chatllm_set_additional_args.restype = c_int
+        self._chatllm_set_additional_args.argtypes = [c_void_p, c_char_p]
+        self._chatllm_set_additional_args = self._lib.chatllm_set_additional_args
 
         self._chatllm_ai_continue.restype = c_int
         self._chatllm_ai_continue.argtypes = [c_void_p, c_char_p]
@@ -265,8 +270,18 @@ class LibChatLLM:
         id = self.alloc_id_for_obj(callback_obj)
         return self._chatllm_start(obj, self._cb_print, self._cb_end, c_void_p(id))
 
+    def set_additional_args(self, obj: c_void_p, key_value: Union[str, bytes]) -> int:
+        if isinstance(key_value, str):
+            key_value = key_value.encode()
+        return self._chatllm_set_additional_args(obj, c_char_p(key_value))
+
+    def set_additional_args(self, key: str, value: str) -> int:
+        key_value = f"{key}={value}"
+        return self._lib.set_additional_args(self._chat, key_value)
+
     def set_ai_prefix(self, obj: c_void_p, prefix: str) -> int:
         return self._chatllm_set_ai_prefix(obj, c_char_p(prefix.encode()))
+        self._chatllm_set_additional_args = self._lib.chatllm_set_additional_args
 
     def _input_multimedia_msg(self, obj: c_void_p, user_input: List[dict | str]) -> int:
         self._chatllm_multimedia_msg_prepare(obj)
@@ -448,6 +463,15 @@ class ChatLLM:
 
     def append_param(self, param: Union[str, List[str]]) -> None:
         self._lib.append_param(self._chat, param)
+
+    def set_additional_args(self, obj: c_void_p, key_value: Union[str, bytes]) -> int:
+        if isinstance(key_value, str):
+            key_value = key_value.encode()
+        return self._chatllm_set_additional_args(obj, c_char_p(key_value))
+
+    def set_additional_args(self, key: str, value: str) -> int:
+        key_value = f"{key}={value}"
+        return self._lib.set_additional_args(self._chat, key_value)
 
     def set_ai_prefix(self, prefix: str) -> int:
         return self._lib.set_ai_prefix(self._chat, prefix)

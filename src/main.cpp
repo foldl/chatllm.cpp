@@ -1799,6 +1799,25 @@ int chatllm_async_start(struct chatllm_obj *obj, f_chatllm_print f_print, f_chat
     ASYNC_FUN_BODY(chatllm_start(obj, f_print, f_end, user_data));
 }
 
+int chatllm_set_additional_args(struct chatllm_obj *obj, const char *utf8_str)
+{
+    Chat *chat = reinterpret_cast<Chat *>(obj);
+    if (!chat->pipeline || !chat->pipeline->is_loaded()) {
+        return -1;
+    }
+    std::string str(utf8_str);
+    size_t eq_pos = str.find("=");
+    if (eq_pos == std::string::npos) {
+        return -2;
+    }
+    std::string key = str.substr(0, eq_pos);
+    std::string value = str.substr(eq_pos + 1);
+    std::map<std::string, std::string> args;
+    args[key] = value;
+    chat->pipeline->set_additional_args(args);
+    return 0;
+}
+
 int chatllm_set_ai_prefix(struct chatllm_obj *obj, const char *utf8_str)
 {
     Chat *chat = reinterpret_cast<Chat *>(obj);
