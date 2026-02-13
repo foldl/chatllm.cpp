@@ -287,7 +287,7 @@ namespace chatllm
                         BaseHistoryEncoder *qa_encoder = nullptr,
                         BaseHistoryEncoder *completion_encoder = nullptr);
 
-        virtual ~BaseTokenizer() = default;
+        virtual ~BaseTokenizer();
 
         virtual size_t load(tokenizer::DataReader *buffer, int n_vocab) = 0;
 
