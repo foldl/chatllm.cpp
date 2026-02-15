@@ -3508,7 +3508,8 @@ namespace chatllm::qwen::v3_forcedaligner
             auto &w = tok->cleaned_words[i];
             if (w.parent_id >= (int)tok->timestamps.size())
             {
-                CHATLLM_CHECK(w.parent_id == (int)tok->timestamps.size());
+                while (w.parent_id > (int)tok->timestamps.size())
+                    tok->timestamps.emplace_back(0.0, 0.0);
                 tok->timestamps.emplace_back(timestamps[2 * i + 0], timestamps[2 * i + 1]);
             }
             else
@@ -3517,6 +3518,9 @@ namespace chatllm::qwen::v3_forcedaligner
                 tok->timestamps.back().end = timestamps[2 * i + 1];
             }
         }
+
+        while (tok->timestamps.size() < tok->sentences.size())
+            tok->timestamps.emplace_back(0.0, 0.0);
 
         if (streamer)
         {
