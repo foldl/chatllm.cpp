@@ -79,6 +79,7 @@ namespace utils
 
     std::string load_file(const char *fn);
     bool save_as_bin_file(const void *data, size_t size, const char *filename);
+    bool save_array(const float *data, size_t size, const char *filename);
 
     std::string num2words(int value);
 

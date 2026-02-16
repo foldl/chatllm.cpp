@@ -9,6 +9,12 @@
 #include <thread>
 #include "basics.h"
 
+#if defined(_WIN64)
+    #define POPEN_MODE_READ         "rb"
+#else
+    #define POPEN_MODE_READ         "r"
+#endif
+
 namespace audio
 {
     struct mel_filter
@@ -46,7 +52,7 @@ namespace audio
 
         // Open pipe to ffmpeg process
         std::unique_ptr<FILE, decltype(&pclose)> pipe(
-            popen(oss.str().c_str(), "rb"),
+            popen(oss.str().c_str(), POPEN_MODE_READ),
             pclose
         );
 
@@ -314,7 +320,10 @@ namespace audio
         const int frame_step,
         const int n_threads,
         const mel_filter_bank & filters, mel & mel,
-        const stft &fft)
+        const stft &fft,
+        std::function<float (float)> range_compression,
+        std::function<void (float *fft_power_spectrum, int n_fft)> power_spectrum_pp,
+        const float filling)
     {
         std::vector<float> fft_in(frame_size, 0.0);
         std::vector<float> fft_out(frame_size * 2);
@@ -343,6 +352,8 @@ namespace audio
                 fft_out[j] = fft_out[2 * j + 0] * fft_out[2 * j + 0] + fft_out[2 * j + 1] * fft_out[2 * j + 1];
             }
 
+            power_spectrum_pp(fft_out.data(), n_fft);
+
             // mel spectrogram
             for (int j = 0; j < mel.n_mel; j++)
             {
@@ -362,7 +373,7 @@ namespace audio
                     sum +=  f.weights[k + 0] * fft_out[off + k + 0];
                 }
 
-                mel.data[j * mel.n_len + i] = log10f(std::max(1e-10f, sum));
+                mel.data[j * mel.n_len + i] = range_compression(sum);
             }
         }
 
@@ -370,44 +381,34 @@ namespace audio
         {
             for (int j = 0; j < mel.n_mel; j++)
             {
-                mel.data[j * mel.n_len + i] = -10.0f;
+                mel.data[j * mel.n_len + i] = filling;
             }
         }
     }
 
     // ref: https://github.com/openai/whisper/blob/main/whisper/audio.py#L110-L157
     static bool log_mel_spectrogram(
-            const float * samples,
-            int64_t n_samples,
+            const std::vector<float> &samples_padded,
+            int64_t pad_to_samples,
             const int   sample_rate,
             const int   frame_size,
             const int   frame_step,
-            const int   n_threads,
             const mel_filter_bank & filters,
             mel & mel,
-            int64_t pad_to_samples,
-            int reverse_prefix_length
+            int n_len,
+            std::function<float (float)> range_compression,
+            std::function<void (float *fft_power_spectrum, int n_fft)> power_spectrum_pp,
+            const float filling
         )
     {
+        const int n_threads = 4;
+
         stft fft(frame_size);
 
-        if (pad_to_samples < 1) pad_to_samples = n_samples;
-
-        // Calculate the length of padding
-        int64_t stage_2_pad = reverse_prefix_length;
-        n_samples = std::min(n_samples, pad_to_samples);
-
-        // Initialize a vector and copy data from C array to it.
-        std::vector<float> samples_padded;
-        samples_padded.resize(pad_to_samples + stage_2_pad);
-        std::copy(samples, samples + n_samples, samples_padded.begin() + stage_2_pad);
-
-        std::fill(samples_padded.begin() + n_samples + stage_2_pad, samples_padded.end(), 0.0f);
-        if (stage_2_pad > 0)
-            std::reverse_copy(samples + 1, samples + 1 + stage_2_pad, samples_padded.begin());
+        if (pad_to_samples < 1) pad_to_samples = samples_padded.size();
 
         mel.n_mel     = (int)filters.filters.size();
-        mel.n_len     = pad_to_samples / frame_step;
+        mel.n_len     = n_len;
         mel.data.resize(mel.n_mel * mel.n_len, 0.0f);
 
         {
@@ -416,15 +417,16 @@ namespace audio
             {
                 workers[iw] = std::thread(
                         log_mel_spectrogram_worker_thread, iw + 1, std::cref(samples_padded),
-                        n_samples + stage_2_pad, frame_size, frame_step, n_threads,
+                        pad_to_samples, frame_size, frame_step, n_threads,
                         std::cref(filters), std::ref(mel),
-                        fft
-                        );
+                        fft,
+                        range_compression, power_spectrum_pp, filling);
             }
 
             // main thread
-            log_mel_spectrogram_worker_thread(0, samples_padded, n_samples + stage_2_pad, frame_size, frame_step, n_threads, filters, mel,
-                fft);
+            log_mel_spectrogram_worker_thread(0, samples_padded, pad_to_samples, frame_size, frame_step, n_threads, filters, mel,
+                fft,
+                range_compression, power_spectrum_pp, filling);
 
             for (int iw = 0; iw < n_threads - 1; ++iw)
             {
@@ -432,56 +434,52 @@ namespace audio
             }
         }
 
-        // clamping and normalization
-        float mmax = std::accumulate(mel.data.begin(), mel.data.end(), -1e20f, [](auto a, auto b) { return std::max(a, b); });
-        mmax -= 8.0f;
-        for (auto &d : mel.data)
-        {
-            if (d < mmax)
-                d = mmax;
-
-            d = (d + 4.0f)/4.0f;
-        }
-
         return true;
     }
 
-    bool mel_spectrogram(const float *samples,
-        const int64_t n_samples,
-        const int64_t pad_to_samples,
-        const int sample_rate,
-        const int mel_feature_size,
-        const int fft_size,
-        const int hop_length,
-        std::vector<mel> & output,
-        int64_t frames_per_chunk)
+    void padding_samples_reverse_prefix_0_suffix(
+            const float * samples,
+            int64_t     n_samples,
+            int64_t     pad_to_samples,
+            int         reverse_prefix_length,
+            std::vector<float> &samples_padded
+        )
     {
-        mel_filter_bank filters;
+        if (pad_to_samples < 1) pad_to_samples = n_samples;
 
-        build_mel_filter_bank(filters, sample_rate, fft_size, mel_feature_size);
+        // Calculate the length of padding
+        int64_t stage_2_pad = reverse_prefix_length;
+        n_samples = std::min(n_samples, pad_to_samples);
 
-        const int N_FFT = fft_size;
-        const int HOP_LENGTH = hop_length;
+        // Initialize a vector and copy data from C array to it.
+        samples_padded.resize(pad_to_samples + stage_2_pad);
+        std::copy(samples, samples + n_samples, samples_padded.begin() + stage_2_pad);
 
-        mel out_full;
-        bool r = log_mel_spectrogram(
-                    samples,
-                    n_samples,
-                    sample_rate,
-                    N_FFT,
-                    HOP_LENGTH,
-                    4, // n_threads
-                    filters,
-                    out_full,
-                    pad_to_samples,
-                    N_FFT / 2
-        );
-        if (!r) return false;
+        std::fill(samples_padded.begin() + n_samples + stage_2_pad, samples_padded.end(), 0.0f);
+        if (stage_2_pad > 0)
+            std::reverse_copy(samples + 1, samples + 1 + stage_2_pad, samples_padded.begin());
+    }
 
+    void padding_samples_dual_reflect(
+            const float * samples,
+            int64_t     n_samples,
+            int         reverse_pad_length,
+            std::vector<float> &samples_padded
+        )
+    {
+        samples_padded.resize(n_samples + reverse_pad_length * 2);
+        std::copy(samples, samples + n_samples, samples_padded.begin() + reverse_pad_length);
+
+        std::reverse_copy(samples + 1, samples + 1 + reverse_pad_length, samples_padded.begin());
+        std::reverse_copy(samples + n_samples - 1 - reverse_pad_length, samples + n_samples - 1, samples_padded.begin() +  reverse_pad_length + n_samples);
+    }
+
+    static void mel_output(const mel &out_full, std::vector<mel> & output, int64_t frames_per_chunk)
+    {
         if (frames_per_chunk <= 0)
         {
             output.push_back(std::move(out_full));
-            return true;
+            return;
         }
 
         for (int64_t off = 0; off < out_full.n_len; off += frames_per_chunk)
@@ -501,6 +499,60 @@ namespace audio
 
             output.push_back(std::move(out_chunk));
         }
+    }
+
+    bool mel_spectrogram(const float *samples,
+        const int64_t n_samples,
+        const int64_t pad_to_samples,
+        const int sample_rate,
+        const int mel_feature_size,
+        const int fft_size,
+        const int hop_length,
+        std::vector<mel> & output,
+        int64_t frames_per_chunk)
+    {
+        mel_filter_bank filters;
+
+        build_mel_filter_bank(filters, sample_rate, fft_size, mel_feature_size);
+
+        auto range_compression = [](float sum) {
+            return log10f(std::max(1e-10f, sum));
+        };
+        auto power_spectrum_pp = [](float *fft_power, int n_fft) {};
+        const float filling = -10.0f;
+
+        const int N_FFT = fft_size;
+        const int HOP_LENGTH = hop_length;
+        std::vector<float> samples_padded;
+
+        padding_samples_reverse_prefix_0_suffix(samples, n_samples, pad_to_samples, N_FFT / 2, samples_padded);
+
+        mel out_full;
+        bool r = log_mel_spectrogram(
+                    samples_padded,
+                    pad_to_samples,
+                    sample_rate,
+                    N_FFT,
+                    HOP_LENGTH,
+                    filters,
+                    out_full,
+                    (int)((pad_to_samples > 0 ? pad_to_samples : n_samples) / HOP_LENGTH),
+                    range_compression, power_spectrum_pp, filling
+        );
+        if (!r) return false;
+
+        // clamping and normalization
+        float mmax = std::accumulate(out_full.data.begin(), out_full.data.end(), -1e20f, [](auto a, auto b) { return std::max(a, b); });
+        mmax -= 8.0f;
+        for (auto &d : out_full.data)
+        {
+            if (d < mmax)
+                d = mmax;
+
+            d = (d + 4.0f)/4.0f;
+        }
+
+        mel_output(out_full, output, frames_per_chunk);
 
         return true;
     }
@@ -513,6 +565,52 @@ namespace audio
     int64_t sample_len_for_mel_len(const int64_t n_mel, const int hop_length)
     {
         return n_mel * hop_length;
+    }
+
+    bool mel_spectrogram_dual_pad_reflect(const float *samples,
+        const int64_t n_samples,
+        const int sample_rate,
+        const int mel_feature_size,
+        const int fft_size,
+        const int hop_length,
+        std::vector<mel> & output,
+        int64_t frames_per_chunk)
+    {
+        mel_filter_bank filters;
+
+        build_mel_filter_bank(filters, sample_rate, fft_size, mel_feature_size);
+        auto range_compression = [](float sum) {
+            return logf(std::max(1e-5f, sum));
+        };
+        auto power_spectrum_pp = [](float *fft_power, int n_fft) {
+            for (int i = 0; i < n_fft; i++)
+                fft_power[i] = sqrt(fft_power[i]);
+        };
+        const float filling = logf(1e-5f);
+
+        const int N_FFT = fft_size;
+        const int HOP_LENGTH = hop_length;
+        std::vector<float> samples_padded;
+
+        padding_samples_dual_reflect(samples, n_samples, (N_FFT - HOP_LENGTH) / 2, samples_padded);
+
+        mel out_full;
+        bool r = log_mel_spectrogram(
+                    samples_padded,
+                    0,
+                    sample_rate,
+                    N_FFT,
+                    HOP_LENGTH,
+                    filters,
+                    out_full,
+                    1 + (int)((samples_padded.size() - N_FFT) / HOP_LENGTH),
+                    range_compression, power_spectrum_pp, filling
+        );
+        if (!r) return false;
+
+        mel_output(out_full, output, frames_per_chunk);
+
+        return true;
     }
 
     void test(void)

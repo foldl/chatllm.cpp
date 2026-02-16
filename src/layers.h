@@ -70,7 +70,15 @@ namespace chatllm
         ggml::tensor *transpose(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *concat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int dim);
 
+        // pad with zeros
         ggml::tensor *pad(ComputeContext *ctx, ggml::tensor *a,
+            int l0, int r0,
+            int l1 = 0, int r1 = 0,
+            int l2 = 0, int r2 = 0,
+            int l3 = 0, int r3 = 0
+        );
+
+        ggml::tensor *pad_reflect(ComputeContext *ctx, ggml::tensor *a,
             int l0, int r0,
             int l1 = 0, int r1 = 0,
             int l2 = 0, int r2 = 0,
@@ -436,6 +444,12 @@ namespace chatllm
     class ConvBase: public Block
     {
     public:
+        enum PaddingMode
+        {
+            Zeros,
+            Reflect,
+        };
+    public:
         ConvBase(InitContext *ctx, int64_t w_ne0, int64_t w_ne1, int64_t w_ne2, int64_t w_ne3,
             int64_t bias_dim);
         int64_t get_param_num(bool effective_only) const override;
@@ -452,6 +466,8 @@ namespace chatllm
                int dilation = 1, int groups = 1, bool bias = true);
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+        void set_pad_same(void);
+        void set_pad_mode(PaddingMode mode);
     protected:
         Conv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
                int dilation, int groups, int bias_dim);
@@ -463,6 +479,8 @@ namespace chatllm
         const int padding;
         const int dilation;
         const int groups;
+        bool pad_same = false;
+        PaddingMode padding_mode = PaddingMode::Zeros;
     };
 
     // Just like Torch:

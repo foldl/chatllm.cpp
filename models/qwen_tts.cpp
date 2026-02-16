@@ -1,5 +1,6 @@
 #include "qwen_tts.h"
 #include <string.h>
+#include "../src/audio_process.h"
 
 namespace chatllm::qwen::tts
 {
@@ -920,8 +921,354 @@ namespace chatllm::qwen::tts
         fc0.load(path + "linear_fc1.", loader);
         fc1.load(path + "linear_fc2.", loader);
     }
-}
 
+    TimeDelayNetBlock::TimeDelayNetBlock(InitContext *ctx,
+            const int in_channels,
+            const int out_channels,
+            const int kernel_size,
+            const int dilation):
+        Block(),
+        conv(ctx, in_channels, out_channels, kernel_size, 1, 0, dilation)
+    {
+        conv.set_pad_same();
+        conv.set_pad_mode(ConvBase::PaddingMode::Reflect);
+    }
+
+    ggml::tensor *TimeDelayNetBlock::forward(ComputeContext *ctx, ggml::tensor *inputs)
+    {
+        auto r = conv.forward(ctx, inputs);
+        r = ggml::act(ctx, ActFunc::RELU, r);
+        return r;
+    }
+
+    int64_t TimeDelayNetBlock::get_param_num(bool effective_only) const
+    {
+        return conv.get_param_num(effective_only);
+    }
+
+    void TimeDelayNetBlock::load(const std::string &path, TensorLoader *loader)
+    {
+        conv.load(path + "conv.", loader);
+    }
+
+    Res2NetBlock::Res2NetBlock(InitContext *ctx,
+        const int in_channels,
+        const int out_channels,
+        const int scale,
+        const int kernel_size,
+        const int dilation):
+        Block(),
+        scale(scale)
+    {
+        for (int i = 0; i < scale - 1; i++)
+        {
+            auto block = new TimeDelayNetBlock(ctx, in_channels / scale, out_channels / scale, kernel_size, dilation);
+            blocks.add_block(block);
+        }
+    }
+
+    ggml::tensor *Res2NetBlock::forward(ComputeContext *ctx, ggml::tensor *inputs)
+    {
+        ggml::tensor *outputs = nullptr;
+        ggml::tensor *output = nullptr;
+        const int64_t dim = ggml::get_dim(inputs, 1);
+        for (int i = 0; i < scale; i++)
+        {
+            auto hidden_part = ggml::view_4d(ctx, inputs,
+                ggml::get_dim(inputs, 0),
+                dim / scale,
+                ggml::get_dim(inputs, 2),
+                ggml::get_dim(inputs, 3),
+                ggml::row_size(inputs),
+                ggml::row_size(inputs) * ggml::get_dim(inputs, 1),
+                ggml::row_size(inputs) * ggml::get_dim(inputs, 1) * ggml::get_dim(inputs, 2),
+                ggml::row_size(inputs) * (dim / scale) * i);
+            if (0 == i)
+                output = hidden_part;
+            else if (1 == i)
+                output = blocks.blocks[i - 1]->forward(ctx, hidden_part);
+            else
+            {
+                output = ggml::add(ctx, output, hidden_part);
+                output = blocks.blocks[i - 1]->forward(ctx, output);
+            }
+            outputs = outputs != nullptr ? ggml::concat(ctx, outputs, output, 1) : output;
+        }
+        return outputs;
+    }
+
+    int64_t Res2NetBlock::get_param_num(bool effective_only) const
+    {
+        return blocks.get_param_num(effective_only);
+    }
+
+    void Res2NetBlock::load(const std::string &path, TensorLoader *loader)
+    {
+        blocks.load(path + "blocks.", loader);
+    }
+
+    SqueezeExcitationBlock::SqueezeExcitationBlock(InitContext *ctx,
+        const int in_channels,
+        const int se_channels,
+        const int out_channels):
+        Block(),
+        conv1(ctx, in_channels, se_channels, 1),
+        conv2(ctx, se_channels, out_channels, 1)
+    {
+        conv1.set_pad_same();
+        conv1.set_pad_mode(ConvBase::PaddingMode::Reflect);
+        conv2.set_pad_same();
+        conv2.set_pad_mode(ConvBase::PaddingMode::Reflect);
+    }
+
+    ggml::tensor *SqueezeExcitationBlock::forward(ComputeContext *ctx, ggml::tensor *inputs)
+    {
+        auto hidden_states_mean = ggml::mean(ctx, inputs);
+        hidden_states_mean = ggml::repeat(ctx, hidden_states_mean, inputs);
+        hidden_states_mean = conv1.forward(ctx, hidden_states_mean);
+        hidden_states_mean = ggml::act(ctx, ActFunc::RELU, hidden_states_mean);
+        hidden_states_mean = conv2.forward(ctx, hidden_states_mean);
+        hidden_states_mean = ggml::sigmoid(ctx, hidden_states_mean);
+        hidden_states_mean = ggml::mul(ctx, hidden_states_mean, inputs);
+        return hidden_states_mean;
+    }
+
+    int64_t SqueezeExcitationBlock::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += conv1.get_param_num(effective_only);
+        r += conv2.get_param_num(effective_only);
+        return r;
+    }
+
+    void SqueezeExcitationBlock::load(const std::string &path, TensorLoader *loader)
+    {
+        conv1.load(path + "conv1.", loader);
+        conv2.load(path + "conv2.", loader);
+    }
+
+    AttentiveStatisticsPooling::AttentiveStatisticsPooling(InitContext *ctx,
+        const int channels, const int attention_channels):
+        Block(),
+        tdnn(ctx, channels * 3, attention_channels, 1, 1),
+        conv(ctx, attention_channels, channels, 1)
+    {
+    }
+
+    void AttentiveStatisticsPooling::_compute_statistics(ComputeContext *ctx, ggml::tensor *x, ggml::tensor * &mean, ggml::tensor * &std)
+    {
+        const int seq_length    = (int)ggml::get_dim(x, 0);
+        const int total         = seq_length;
+
+        mean = ggml::sum_rows(ctx, x);
+        mean = ggml::scale(ctx, mean, 1.0f / total);
+
+        std = ggml::sub(ctx, x, mean);
+        std = ggml::square(ctx, std);
+        std = ggml::sum_rows(ctx, std);
+        std = ggml::scale(ctx, std, 1.0f / total);
+        std = ggml::sqrt(ctx, std);
+    }
+
+    void AttentiveStatisticsPooling::_compute_statistics(ComputeContext *ctx, ggml::tensor *x, ggml::tensor *m, ggml::tensor * &mean, ggml::tensor * &std)
+    {
+        const int seq_length    = (int)ggml::get_dim(x, 0);
+        const int total         = seq_length;
+
+        mean = ggml::mul(ctx, x, m);
+        mean = ggml::sum_rows(ctx, mean);
+
+        std = ggml::sub(ctx, x, mean);
+        std = ggml::square(ctx, std);
+        std = ggml::mul(ctx, std, m);
+        std = ggml::sum_rows(ctx, std);
+        std = ggml::sqrt(ctx, std);
+    }
+
+    ggml::tensor *AttentiveStatisticsPooling::forward(ComputeContext *ctx, ggml::tensor *inputs)
+    {
+        // Note: batch input not supported yet
+        CHATLLM_CHECK(ggml::n_dims(inputs) <= 2);
+
+        const int seq_length    = (int)ggml::get_dim(inputs, 0);
+        const int total         = seq_length;
+
+        ggml::tensor *mean = nullptr;
+        ggml::tensor *std  = nullptr;
+
+        _compute_statistics(ctx, inputs, mean, std);
+
+        mean = ggml::repeat(ctx, mean, seq_length);
+        std  = ggml::repeat(ctx, std,  seq_length);
+
+        auto attention = ggml::concat(ctx, inputs, mean, 1);
+        attention = ggml::concat(ctx, attention, std, 1);
+
+        // Apply layers
+        attention = tdnn.forward(ctx, attention);
+        attention = ggml::act(ctx, ActFunc::Tanh, attention);
+        attention = conv.forward(ctx, attention);
+
+        attention = ggml::soft_max(ctx, attention);
+
+        _compute_statistics(ctx, inputs, attention, mean, std);
+        auto pooled_stats = ggml::concat(ctx, mean, std, 1);
+
+        return pooled_stats;
+    }
+
+    int64_t AttentiveStatisticsPooling::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += tdnn.get_param_num(effective_only);
+        r += conv.get_param_num(effective_only);
+        return r;
+    }
+
+    void AttentiveStatisticsPooling::load(const std::string &path, TensorLoader *loader)
+    {
+        tdnn.load(path + "tdnn.", loader);
+        conv.load(path + "conv.", loader);
+    }
+
+    SqueezeExcitationRes2NetBlock::SqueezeExcitationRes2NetBlock(InitContext *ctx,
+        const int in_channels,
+        const int out_channels,
+        const int res2net_scale,
+        const int se_channels,
+        const int kernel_size,
+        const int dilation):
+        Block(),
+        tdnn1(ctx, in_channels,  out_channels, 1, 1),
+        tdnn2(ctx, out_channels, out_channels, 1, 1),
+        res2net_block(ctx, out_channels, out_channels, res2net_scale, kernel_size, dilation),
+        se_block(ctx, out_channels, se_channels, out_channels)
+    {
+    }
+
+    ggml::tensor *SqueezeExcitationRes2NetBlock::forward(ComputeContext *ctx, ggml::tensor *inputs)
+    {
+        auto residual = inputs;
+        auto hidden_state = inputs;
+        hidden_state = tdnn1.forward(ctx, hidden_state);
+        hidden_state = res2net_block.forward(ctx, hidden_state);
+        hidden_state = tdnn2.forward(ctx, hidden_state);
+        hidden_state = se_block.forward(ctx, hidden_state);
+        hidden_state = ggml::add(ctx, hidden_state, residual);
+        return hidden_state;
+    }
+
+    int64_t SqueezeExcitationRes2NetBlock::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += tdnn1.get_param_num(effective_only);
+        r += tdnn2.get_param_num(effective_only);
+        r += res2net_block.get_param_num(effective_only);
+        r += se_block.get_param_num(effective_only);
+        return r;
+    }
+
+    void SqueezeExcitationRes2NetBlock::load(const std::string &path, TensorLoader *loader)
+    {
+        tdnn1.load(path + "tdnn1.", loader);
+        tdnn2.load(path + "tdnn2.", loader);
+        res2net_block.load(path + "res2net_block.", loader);
+             se_block.load(path + "se_block.", loader);
+    }
+
+    Qwen3TTSSpeakerEncoderConfig::Qwen3TTSSpeakerEncoderConfig(const json::JSON &config)
+    {
+        if (config["mel_dim"].IsIntegral())
+            mel_dim             = (int)config["mel_dim"].ToInt();
+        if (config["enc_dim"].IsIntegral())
+            enc_dim             = (int)config["enc_dim"].ToInt();
+        if (config["enc_attention_channels"].IsIntegral())
+            enc_attention_channels  = (int)config["enc_attention_channels"].ToInt();
+        if (config["enc_res2net_scale"].IsIntegral())
+            enc_res2net_scale       = (int)config["enc_res2net_scale"].ToInt();
+        if (config["enc_se_channels"].IsIntegral())
+            enc_se_channels         = (int)config["enc_se_channels"].ToInt();
+        if (config["sample_rate"].IsIntegral())
+            sample_rate             = (int)config["sample_rate"].ToInt();
+
+        for (int i = 0; i < sizeof(enc_channels) / sizeof(enc_channels[0]); i++)
+        {
+            if (config["enc_channels"].IsArray())
+                enc_channels[i]             = (int)config["enc_channels"][i].ToInt();
+            if (config["enc_kernel_sizes"].IsArray())
+                enc_kernel_sizes[i]         = (int)config["enc_kernel_sizes"][i].ToInt();
+            if (config["enc_dilations"].IsArray())
+                enc_dilations[i]            = (int)config["enc_dilations"][i].ToInt();
+        }
+    }
+
+    Qwen3TTSSpeakerEncoder::Qwen3TTSSpeakerEncoder(InitContext *ctx, const Qwen3TTSSpeakerEncoderConfig &config):
+        Block(),
+        config(config),
+        ch_num(sizeof(config.enc_channels) / sizeof(config.enc_channels[0])),
+        mfa(ctx, config.enc_channels[ch_num - 1], config.enc_channels[ch_num - 1], config.enc_kernel_sizes[ch_num - 1], config.enc_dilations[ch_num - 1]),
+        asp(ctx, config.enc_channels[ch_num - 1], config.enc_attention_channels),
+        fc(ctx, config.enc_channels[ch_num - 1] * 2, config.enc_dim, 1)
+    {
+        blocks.add_block(new TimeDelayNetBlock(ctx,
+            config.mel_dim, config.enc_channels[0], config.enc_kernel_sizes[0], config.enc_dilations[0]));
+
+        for (int i = 1; i < ch_num - 1; i++)
+        {
+            blocks.add_block(new SqueezeExcitationRes2NetBlock(ctx,
+                config.enc_channels[i- 1],
+                config.enc_channels[i],
+                config.enc_res2net_scale,
+                config.enc_se_channels,
+                config.enc_kernel_sizes[i],
+                config.enc_dilations[i]));
+        }
+
+    }
+
+    ggml::tensor *Qwen3TTSSpeakerEncoder::forward(ComputeContext *ctx, ggml::tensor *inputs)
+    {
+        auto hidden_states = inputs;
+        ggml::tensor *hidden_states_list = nullptr;
+
+        inputs = ggml::dup(ctx, inputs);
+        ggml::set_output(inputs);
+        ggml::build_forward_expand(ctx, inputs);
+        for (int i = 0; i < (int)blocks.blocks.size(); i++)
+        {
+            hidden_states = blocks.blocks[i]->forward(ctx, hidden_states);
+            if (0 == i) continue;
+            hidden_states_list = hidden_states_list != nullptr ? ggml::concat(ctx, hidden_states_list, hidden_states, 1) : hidden_states;
+        }
+        hidden_states = mfa.forward(ctx, hidden_states_list);
+        hidden_states = asp.forward(ctx, hidden_states);
+        hidden_states =  fc.forward(ctx, hidden_states);
+
+        hidden_states = ggml::reshape(ctx, hidden_states,
+            ggml::get_dim(hidden_states, 0) * ggml::get_dim(hidden_states, 1),
+            ggml::get_dim(hidden_states, 2),
+            ggml::get_dim(hidden_states, 3));
+        return hidden_states;
+    }
+
+    int64_t Qwen3TTSSpeakerEncoder::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r = blocks.get_param_num(effective_only);
+        r =    mfa.get_param_num(effective_only);
+        r =    asp.get_param_num(effective_only);
+        r =     fc.get_param_num(effective_only);
+        return r;
+    }
+
+    void Qwen3TTSSpeakerEncoder::load(const std::string &path, TensorLoader *loader)
+    {
+        blocks.load(path + "blocks.", loader);
+           mfa.load(path + "mfa.", loader);
+           asp.load(path + "asp.", loader);
+            fc.load(path + "fc.", loader);
+    }
+}
 
 namespace chatllm::qwen::v3_tts
 {
@@ -959,9 +1306,12 @@ namespace chatllm::qwen::v3_tts
         std::string _build_ref_text(const std::string &text) const;
         std::string _build_instruct_text(const std::string &text) const;
     public:
-        std::string lanuage = "auto";
+        std::string language = "auto";
         std::string instruct = "";
         std::string speaker = "vivian";
+        std::string ref_text = "";
+        std::string ref_audio_file = "";
+        std::string voice_clone_mode = "xvec"; // xvec or icl
         CodecTokIds tok_ids;
     };
 
@@ -1034,6 +1384,9 @@ namespace chatllm::qwen::v3_tts
         bool project_text(const GenerationConfig &gen_config, const int *input_text_ids, const int id_num,
             ggml::type dtype, std::vector<uint8_t> &buf);
 
+        bool project_speaker_embedding(const GenerationConfig &gen_config, const std::vector<float> &pcm_samples,
+            ggml::type dtype, std::vector<uint8_t> &buf);
+
         void code_predict(const GenerationConfig &gen_config, Sampler *sampler, std::vector<int> &sequences,
             const float *past_hidden, const float *last_id_hidden);
 
@@ -1052,10 +1405,13 @@ namespace chatllm::qwen::v3_tts
 
         std::unique_ptr<Embedding>                                                       text_embedding;
 
+        std::unique_ptr<tts::Qwen3TTSSpeakerEncoder>                                     speaker_encoder;
+
     public:
         TensorGraphEvaluator eval;
         InitContext _ctx; // weight context
         bool loaded = false;
+        bool speaker_encoder_loaded = false;
         int embedding_dim = -1;
         const int code_block_size;
     };
@@ -1087,6 +1443,7 @@ namespace chatllm::qwen::v3_tts
         void inject_text_ids(const GenerationConfig &gen_config, const int *input_ids, const int num, std::vector<int> &mapped_ids);
         void map_text_ids(const GenerationConfig &gen_config, const std::vector<int> &input_ids, std::vector<int> &mapped_ids);
         void project_text_ids(const GenerationConfig &gen_config, const int *input_ids, const int num);
+        int  project_speaker_embedding(const GenerationConfig &gen_config, const char *file_name);
         void reset_token_ids(void);
         void prepare_ids(const GenerationConfig &gen_config,
             const std::vector<int> &input_ids,
@@ -1138,13 +1495,14 @@ namespace chatllm::qwen::v3_tts
         const int text_vocab_size   = (int)p["text_vocab_size"].ToInt();
 
         const size_t tensor_ovhd = ggml_tensor_overhead();
-        const size_t num_tensors = 400; // TODO: counting tensors (this is boring)
+        const size_t num_tensors = 600; // TODO: counting tensors (this is boring)
         const size_t ctx_size = num_tensors * tensor_ovhd;
         _ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         _ctx.dtype = dtype;
 
         speech_tokenizer.reset(new tts::Qwen3TTSTokenizerV2Model(&_ctx, q));
          text_projection.reset(new tts::Qwen3TTSTalkerResizeMLP(&_ctx, text_hidden_size, text_hidden_size, hidden_size, ActFunc::SILU, true));
+         speaker_encoder.reset(new tts::Qwen3TTSSpeakerEncoder(&_ctx, cfg["speaker_encoder_config"]));
           text_embedding.reset(new Embedding(&_ctx, text_vocab_size, text_hidden_size));
           code_predictor.reset(new tts::Qwen3TTSTalkerCodePredictorModelForConditionalGeneration(&_ctx, p["code_predictor_config"], hidden_size));
               codec_head.reset(new Linear(&_ctx, hidden_size, vocab_size, false));
@@ -1168,6 +1526,12 @@ namespace chatllm::qwen::v3_tts
           text_embedding->load("talker.model.text_embedding.", &loader);
           code_predictor->load("talker.code_predictor.", &loader);
               codec_head->load("talker.codec_head.", &loader);
+
+        if (loader.has_tensor("speaker_encoder.asp.conv.bias"))
+        {
+            speaker_encoder->load("speaker_encoder.", &loader);
+            speaker_encoder_loaded = true;
+        }
 
         loader.pop_allocator_manager();
 
@@ -1251,6 +1615,42 @@ namespace chatllm::qwen::v3_tts
         memcpy(decoded.data(), buf.data(), buf.size());
     }
 
+    bool TalkerGeneration::project_speaker_embedding(const GenerationConfig &gen_config, const std::vector<float> &pcm_samples,
+        ggml::type dtype, std::vector<uint8_t> &buf)
+    {
+        if (!speaker_encoder_loaded)
+            return false;
+
+        std::vector<audio::mel>     mel_chunks;
+
+        audio::mel_spectrogram_dual_pad_reflect(pcm_samples.data(), pcm_samples.size(),
+            tts::sample_rate,
+            128,
+            1024,
+            256,
+            mel_chunks, -1);
+
+        auto &mel = mel_chunks[0];
+
+        ggml::tensor *input = nullptr;
+
+        const auto make_graph = [this, &input, &mel](ComputeContext *ctx) -> ggml::tensor * {
+            input = ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F32, mel.n_len, mel.n_mel);
+            auto r = input;
+            r = speaker_encoder->forward(ctx, r);
+            r = ggml::view_1d(ctx, r, ggml::get_dim(r, 0), 0);
+            return r;
+        };
+        const auto write_input_data = [&input, &mel](ComputeContext *ctx) {
+            Backend::write_tensor_data(input, mel.data.data(), 0, mel.data.size() * sizeof(mel.data[0]));
+        };
+
+        std::vector<int64_t> shape;
+        eval.evaluate(gen_config, make_graph, write_input_data, dtype, shape, buf);
+
+        return true;
+    }
+
     bool TalkerGeneration::project_text(const GenerationConfig &gen_config, const int *input_text_ids, const int id_num,
             ggml::type dtype, std::vector<uint8_t> &buf)
     {
@@ -1289,9 +1689,12 @@ namespace chatllm::qwen::v3_tts
     void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        tok->lanuage  = utils::to_lower(utils::get_opt(args, "lanuage", tok->lanuage));
+        tok->language = utils::to_lower(utils::get_opt(args, "language", tok->language));
         tok->speaker  = utils::to_lower(utils::get_opt(args, "speaker", tok->speaker));
         tok->instruct =                 utils::get_opt(args, "instruct", tok->instruct);
+        tok->ref_audio_file =           utils::get_opt(args, "ref_audio_file", tok->ref_audio_file);
+        tok->ref_text       =           utils::get_opt(args, "ref_text", tok->ref_text);
+        tok->voice_clone_mode =         utils::get_opt(args, "voice_clone_mode", tok->voice_clone_mode);
     }
 
     bool ConditionalGeneration::load_more(const json::JSON &config)
@@ -1384,6 +1787,27 @@ namespace chatllm::qwen::v3_tts
         }
     }
 
+    int  ConditionalGeneration::project_speaker_embedding(const GenerationConfig &gen_config, const char *file_name)
+    {
+        std::vector<float> pcm_samples;
+        if (!audio::load(file_name, pcm_samples, tts::sample_rate))
+            return -1;
+
+        std::vector<uint8_t> buf;
+        auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
+        talker.project_speaker_embedding(gen_config, pcm_samples, ggml::type_of(emb->weight), buf);
+
+        CHATLLM_CHECK(buf.size() == ggml::row_size(emb->weight));
+
+        int r = projected_token_num;
+        projected_token_num += 1;
+
+        size_t offset = emb->get_base_nbytes() + r * ggml::row_size(emb->weight);
+        Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
+
+        return talker_vocab_size + r;
+    }
+
     void ConditionalGeneration::project_text_ids(const GenerationConfig &gen_config, const int *input_ids, const int num)
     {
         std::vector<uint8_t> buf;
@@ -1418,8 +1842,6 @@ namespace chatllm::qwen::v3_tts
             const int language_id,
             const int speaker_id)
     {
-        reset_token_ids();
-
         CHATLLM_CHECK(input_ids.size() >= 8);
         CHATLLM_CHECK(ref_ids.size() < 1) << "TODO: voice clone!";
 
@@ -1755,7 +2177,9 @@ namespace chatllm::qwen::v3_tts
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        sample_rate = 24000;
+        reset_token_ids();
+
+        sample_rate = tts::sample_rate;
         channels = 1;
 
         //test(gen_config, audio);
@@ -1768,12 +2192,29 @@ namespace chatllm::qwen::v3_tts
 
         tok->encode_instruct(instruct_ids);
 
-        int lang_id = codec_language_id.count(tok->lanuage) > 0 ? (codec_language_id.find(tok->lanuage))->second : -1;
-        const int s_id    = spk_id.count(tok->speaker) > 0 ? (spk_id.find(tok->speaker))->second : -1;
-        if ((tok->lanuage == "auto") || (tok->lanuage == "chinese"))
+        int lang_id = codec_language_id.count(tok->language) > 0 ? (codec_language_id.find(tok->language))->second : -1;
+        int s_id    = spk_id.count(tok->speaker) > 0 ? (spk_id.find(tok->speaker))->second : -1;
+        if ((tok->language == "auto") || (tok->language == "chinese"))
         {
             if (spk_dialect_id.count(tok->speaker) > 0)
                 lang_id = (spk_dialect_id.find(tok->speaker))->second;
+        }
+
+        if (tok->ref_audio_file.size() > 0)
+        {
+            if (tok->voice_clone_mode == "icl")
+            {
+                CHATLLM_CHECK(tok->ref_text.size() > 0) << "`ref_text` required for icl voice clone";
+                CHATLLM_CHECK(false) << "TODO: `icl` voice clone";
+            }
+            else
+            {
+                CHATLLM_CHECK(talker.speaker_encoder_loaded) << "`speaker_encoder` not loaded";
+
+                int id = project_speaker_embedding(gen_config, tok->ref_audio_file.c_str());
+                if (id >= 0)
+                    s_id = id;
+            }
         }
 
         generate_audio_codes(gen_config, input_ids, instruct_ids,

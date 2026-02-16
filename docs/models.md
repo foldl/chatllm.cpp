@@ -370,14 +370,17 @@ Please use `--format completion` for these models.
         Use `--set speaker /path/to/speaker.json` to select a speaker profile. [More info](https://github.com/edwko/OuteTTS/blob/main/docs/interface_usage.md#creating-custom-speaker-profiles).
 
 * Qwen3-TTS (`Qwen3TTSForConditionalGeneration`):
-    * [x] [1.7B-CustomVoice](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice/tree/0c0e3051f131929182e2c023b9537f8b1c68adfe), [1.7B-VoiceDesign](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign/tree/5ecdb67327fd37bb2e042aab12ff7391903235d3)
+    * [x] 12Hz-1.7B: [CustomVoice](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice/tree/0c0e3051f131929182e2c023b9537f8b1c68adfe), [VoiceDesign](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign/tree/5ecdb67327fd37bb2e042aab12ff7391903235d3), [Base](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base/tree/fd4b254389122332181a7c3db7f27e918eec64e3)
 
-    Note: Voice clone is not supported yet.
+    Note: `voice_clone_mode` only support "xvec" now.
 
     Additional options (Use `--set X Y` to change values):
-    * `lanuage`: default `auto`.
+    * `language`: default `auto`.
     * `speaker`: default `vivian`.
     * `instruct`: default "".
+    * `voice_clone_mode`: "xvec" or "icl". default "xvec".
+    * `ref_audio_file`: default "".
+    * `ref_text`: default "". Required for "icl" mode.
 
 ## Multimodal Models
 

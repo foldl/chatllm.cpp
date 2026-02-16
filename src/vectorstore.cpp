@@ -525,6 +525,19 @@ namespace utils
         return file.good();
     }
 
+    bool save_array(const float *data, size_t size, const char *filename)
+    {
+        FILE *f = fopen(filename, "w");
+        if (!f) return false;
+
+        for (size_t i = 0; i < size; i++)
+        {
+            fprintf(f, "[%3d] = %+3.18f\n", (int)i, data[i]);
+        }
+        fclose(f);
+        return true;
+    }
+
     std::string num2words(int value)
     {
         if (value < 0)

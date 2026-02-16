@@ -7,6 +7,8 @@
 
 namespace chatllm::qwen::tts
 {
+    const int sample_rate = 24000;
+
     class EuclideanCodebook : public Embedding
     {
     public:
@@ -392,5 +394,119 @@ namespace chatllm::qwen::tts
             TheMLP(ctx, hidden_size, intermediate_size, out_size, act, bias)
         {}
         void load(const std::string &path, TensorLoader *loader) override;
+    };
+
+    class TimeDelayNetBlock : public Block
+    {
+    public:
+        TimeDelayNetBlock(InitContext *ctx,
+            const int in_channels,
+            const int out_channels,
+            const int kernel_size,
+            const int dilation);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *inputs) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        Conv1D conv;
+    };
+
+    class Res2NetBlock : public Block
+    {
+    public:
+        Res2NetBlock(InitContext *ctx,
+            const int in_channels,
+            const int out_channels,
+            const int scale = 8,
+            const int kernel_size = 3,
+            const int dilation = 1);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *inputs) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        const int scale;
+        Sequential blocks;
+    };
+
+    class SqueezeExcitationBlock : public Block
+    {
+    public:
+        SqueezeExcitationBlock(InitContext *ctx,
+            const int in_channels,
+            const int se_channels,
+            const int out_channels);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *inputs) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        Conv1D conv1;
+        Conv1D conv2;
+    };
+
+    class AttentiveStatisticsPooling : public Block
+    {
+    public:
+        AttentiveStatisticsPooling(InitContext *ctx,
+            const int channels, const int attention_channels = 128);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *inputs) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    protected:
+        void _compute_statistics(ComputeContext *ctx, ggml::tensor *x, ggml::tensor * &mean, ggml::tensor * &std);
+        void _compute_statistics(ComputeContext *ctx, ggml::tensor *x, ggml::tensor *m, ggml::tensor * &mean, ggml::tensor * &std);
+    public:
+        const float eps = 1e-12f;
+        TimeDelayNetBlock   tdnn;
+        Conv1D              conv;
+    };
+
+    class SqueezeExcitationRes2NetBlock : public Block
+    {
+    public:
+        SqueezeExcitationRes2NetBlock(InitContext *ctx,
+            const int in_channels,
+            const int out_channels,
+            const int res2net_scale = 8,
+            const int se_channels   = 128,
+            const int kernel_size   = 1,
+            const int dilation      = 1);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *inputs) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        TimeDelayNetBlock   tdnn1;
+        TimeDelayNetBlock   tdnn2;
+        Res2NetBlock        res2net_block;
+        SqueezeExcitationBlock  se_block;
+    };
+
+    struct Qwen3TTSSpeakerEncoderConfig
+    {
+        int mel_dim                 = 128;
+        int enc_dim                 = 1024;
+        int enc_channels[5]         = {512, 512, 512, 512, 1536};
+        int enc_kernel_sizes[5]     = {5, 3, 3, 3, 1};
+        int enc_dilations[5]        = {1, 2, 3, 4, 1};
+        int enc_attention_channels  = 128;
+        int enc_res2net_scale       = 8;
+        int enc_se_channels         = 128;
+        int sample_rate             = tts::sample_rate;
+        Qwen3TTSSpeakerEncoderConfig(const json::JSON &config);
+    };
+
+    class Qwen3TTSSpeakerEncoder : public Block
+    {
+    public:
+        Qwen3TTSSpeakerEncoder(InitContext *ctx, const Qwen3TTSSpeakerEncoderConfig &config);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *inputs) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        const Qwen3TTSSpeakerEncoderConfig config;
+        const int ch_num;
+        Sequential                  blocks;
+        TimeDelayNetBlock           mfa;
+        AttentiveStatisticsPooling  asp;
+        Conv1D                      fc;
     };
 }
