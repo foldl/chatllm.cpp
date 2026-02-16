@@ -801,6 +801,10 @@ namespace chatllm::qwen::tts
             auto layer = new Qwen3TTSDecoderLayer(ctx, hidden_size, num_attention_heads, intermediate_size,
                 num_key_value_heads, max_length, head_dim);
 
+            layer->set_id(i);
+            if (ctx->dtype == ggml::type::GGML_TYPE_F16)
+                layer->mlp.set_prec(ggml::prec::GGML_PREC_F32);
+
             auto allocator = ctx->get_allocator();
             auto buf = allocator->alloc(layer->get_cache_size(), BackendBufAllocator::Usage::Matrix);
             layer->set_cache_buffer(buf);

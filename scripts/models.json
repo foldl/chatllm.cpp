@@ -3785,6 +3785,22 @@
             }
         }
     },
+    "nanbeige4.1": {
+        "brief": "Nanbeige4.1-3B is built upon Nanbeige4-3B-Base and represents an enhanced iteration of our previous reasoning model, Nanbeige4-3B-Thinking-2511.",
+        "default": "3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4182500896,
+                        "url": "chatllm_quantized_nanbeige/nanbeige4.1-3b.bin"
+                    }
+                }
+            }
+        }
+    },
     "glm-4.6v": {
         "brief": "GLM-4.6V series model includes two versions: GLM-4.6V (106B), a foundation model designed for cloud and high-performance cluster scenarios, and GLM-4.6V-Flash (9B), a lightweight model optimized for local deployment and low-latency applications.",
         "default": "flash",
@@ -4032,6 +4048,10 @@
                     "q8": {
                         "size": 1234409040,
                         "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-0.6b-base.bin"
+                    },
+                    "f16": {
+                        "size": 2174932560,
+                        "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-0.6b-base-f16.bin"
                     }
                 }
             },
@@ -4041,6 +4061,10 @@
                     "q8": {
                         "size": 1216672496,
                         "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-0.6b-customvoice.bin"
+                    },
+                    "f16": {
+                        "size": 2157196016,
+                        "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-0.6b-customvoice-f16.bin"
                     }
                 }
             },
@@ -4050,6 +4074,10 @@
                     "q8": {
                         "size": 2314950384,
                         "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-1.7b-base.bin"
+                    },
+                    "f16": {
+                        "size": 4203124464,
+                        "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-1.7b-base-f16.bin"
                     }
                 }
             },
@@ -4059,6 +4087,10 @@
                     "q8": {
                         "size": 2290918288,
                         "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-1.7b-customvoice.bin"
+                    },
+                    "f16": {
+                        "size": 4179092368,
+                        "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-1.7b-customvoice-f16.bin"
                     }
                 }
             },
