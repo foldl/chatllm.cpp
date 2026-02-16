@@ -4020,5 +4020,57 @@
                 }
             }
         }
+    },
+    "qwen3-tts": {
+        "brief": "Qwen3-TTS covers 10 major languages (Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, and Italian) as well as multiple dialectal voice profiles to meet global application needs.",
+        "default": "0.6b-customvoice",
+        "license": "Apache License 2.0",
+        "variants": {
+            "0.6b-base": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1234409040,
+                        "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-0.6b-base.bin"
+                    }
+                }
+            },
+            "0.6b-customvoice": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1216672496,
+                        "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-0.6b-customvoice.bin"
+                    }
+                }
+            },
+            "1.7b-base": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2314950384,
+                        "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-1.7b-base.bin"
+                    }
+                }
+            },
+            "1.7b-customvoice": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2290918288,
+                        "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-1.7b-customvoice.bin"
+                    }
+                }
+            },
+            "1.7b-voicedesign": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2290917936,
+                        "url": "chatllm_quantized_qwen3/qwen3-tts-12hz-1.7b-voicedesign.bin"
+                    }
+                }
+            }
+        }
     }
 }
