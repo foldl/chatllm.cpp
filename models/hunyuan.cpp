@@ -1,10 +1,12 @@
 #include "hunyuan.h"
 #include <numeric>
 #include "qwen.h"
+#include "deepseek.h"
 
 namespace chatllm
 {
     const int MODEL_TYPE_WEDLM            = 0x1f03;
+    const int MODEL_TYPE_YOUTU            = 0x1f04;
 }
 
 namespace chatllm::hunyuan::dense
@@ -917,10 +919,152 @@ namespace chatllm::hunyuan::wedlm
     }
 }
 
+namespace chatllm::hunyuan::youtu
+{
+    struct Config : public BaseConfig
+    {
+        int num_key_value_heads;
+        int kv_lora_rank;
+        int q_lora_rank;
+        int qk_nope_head_dim;
+        int qk_rope_head_dim;
+        int v_head_dim;
+        int tie_word_embeddings;
+
+        float rope_theta;
+    };
+
+    class ChatHistoryEncoder : public BaseHistoryEncoder
+    {
+    public:
+        void append_sys_prompt(std::vector<int> &ids) const override;
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public BaseTokenizer
+    {
+    public:
+        Tokenizer(const Config &config);
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
+
+    public:
+        int user_token_id;
+        int assistant_token_id;
+    };
+
+    Tokenizer::Tokenizer(const Config &config):
+        BaseTokenizer(config, &_chat_encoder)
+    {
+    }
+
+    size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
+    {
+        tp = new tokenizer::BPEProcessor2(
+            {
+                "[\r\n]",
+                "\\s?\\p{L}+",
+                "\\s?\\p{P}+",
+                "[一-龥ࠀ-一가-퟿]+",
+                "\\p{N}",
+            }
+        );
+        size_t size = tp->Load(buffer, n_vocab);
+
+        std::vector<int> ids;
+        tp->Encode("<|User|><|Assistant|><think></think>", &ids);
+
+        CHATLLM_CHECK(ids.size() == 4) << "tokenizer error";
+
+        user_token_id = ids[0];
+        assistant_token_id = ids[1];
+        tp->OverrideTokenDecoding(ids[2], "<think>");
+        tp->OverrideTokenDecoding(ids[3], "</think>");
+        return size;
+    }
+
+    void ChatHistoryEncoder::append_sys_prompt(std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(tok->bos_token_id);
+        if (tok->get_system_prompt().size() > 0)
+            tok->encode(tok->get_system_prompt(), ids);
+    }
+
+    void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        append_ai_opening(round_idx, ids);
+        tok->encode(ai, ids);
+        ids.push_back(tok->eos_token_id);
+    }
+
+    void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(tok->user_token_id);
+        tok->encode(user, ids);
+        ids.push_back(tok->eos_token_id);
+    }
+
+    void ChatHistoryEncoder::append_ai_opening(int round_idx, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        ids.push_back(tok->assistant_token_id);
+    }
+
+    class ConditionalGeneration : public BaseModelForConditionalGeneration
+    {
+    private:
+        typedef BaseModelForConditionalGeneration Base;
+        typedef Model<Config, Embedding, RMSNorm, deepseek::v2_light::DeepSeek2Block, int, int, int, int, int, int, int, int, int, int, bool> ModelClass;
+    public:
+
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+            : ConditionalGeneration(config, runtime_config, (ModelType)MODEL_TYPE_YOUTU, config.q_lora_rank)
+        {}
+
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int q_lora_rank)
+            : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2),
+              config(config)
+        {
+            const size_t tensor_ovhd = ggml_tensor_overhead();
+            const size_t num_tensors = 2 + config.num_hidden_layers * 17;
+            const size_t ctx_size = num_tensors * tensor_ovhd;
+            w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+            w_ctx_.dtype = config.dtype;
+
+            transformer = new ModelClass(&w_ctx_, config, nullptr,
+                                        config.hidden_size, config.num_attention_heads, config.intermediate_size,
+                                        config.num_key_value_heads, config.max_length,
+                                        q_lora_rank, config.kv_lora_rank, config.qk_rope_head_dim, config.qk_nope_head_dim, config.v_head_dim,
+                                        false);
+
+            for (int i = 0; i < config.num_hidden_layers; i++)
+            {
+                auto layer = &get_typed_transformer<ModelClass>()->layers[i];
+                layer->attention.freq_base = config.rope_theta;
+                layer->attention.rope_mode = RoPEMode::Interleaved;
+                layer->attention.set_prec(ggml::prec::GGML_PREC_F32);
+            }
+
+            w_ctx_.check_used_mem_size(true);
+        }
+
+    public:
+        Config config;
+    };
+}
+
 namespace chatllm
 {
     REGISTER_MODEL_LOADER(HUNYUAN_DENSE,         hunyuan::dense, 1);
     REGISTER_MODEL_LOADER(HUNYUAN_DENSE_V1,      hunyuan::dense_v1, 1);
     REGISTER_MODEL_LOADER(HUNYUAN_MOE_V1,        hunyuan::moe_v1, 1);
     REGISTER_MODEL_LOADER(WEDLM,                 hunyuan::wedlm, 1);
+    REGISTER_MODEL_LOADER(YOUTU,                 hunyuan::youtu, 1);
 }

@@ -308,6 +308,9 @@
 
     Note: Tokenizer's behavior is not 100% identical.
 
+* Youtu (`YoutuForCausalLM`)
+    * [x] [2B](https://huggingface.co/tencent/Youtu-LLM-2B/tree/5e3c3cdece8d5ba16a5c24c8a9fc020561ab096e)
+
 * Zhinao (`ZhinaoForCausalLM`)
     * [x] [Chat-7B-4K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-4K), [Chat-7B-32K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-32K), [Chat-7B-360K](https://huggingface.co/qihoo360/360Zhinao-7B-Chat-360K)
 

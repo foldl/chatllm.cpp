@@ -202,6 +202,7 @@ class ModelType(Enum):
     HunYuanMoEV1    = 0x1f01
     HunYuanDenseV1  = 0x1f02
     WeDLM           = 0x1f03
+    Youtu           = 0x1f04
 
     MoonLight       = 0x2000
 
@@ -2585,7 +2586,7 @@ class MiniCPM3Converter(BaseConverter):
             tensor: torch.Tensor = state_dict[name]
 
             if name == 'model.embed_tokens.weight':
-                new_dict[name] = tensor * config.scale_emb
+                new_dict[name] = tensor * config.scale_emb if config.scale_emb is not None else tensor
             elif name.endswith('kv_a_proj_with_mqa.weight'):
 
                 w_d_kv, w_k_pe = torch.split(
@@ -8931,6 +8932,58 @@ class StepVLConverter(BaseConverter):
 
         return weight_names
 
+class YoutuConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Youtu
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        return MiniCPM3Converter.state_dict_pp(config, state_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.rope_interleave
+        assert config.hidden_act == 'silu', "hidden_act must be silu"
+        if config.rope_parameters is not None:
+            assert config.rope_parameters['rope_type'] == 'default'
+            rope_theta = config.rope_parameters['rope_theta']
+        else:
+            rope_theta = config.rope_theta
+        config.v_head_dim = config.hidden_size // config.num_attention_heads
+
+        config_values = [
+            ggml_type.value,
+            config.vocab_size,
+            config.hidden_size,
+            config.num_attention_heads,
+            config.num_hidden_layers,
+            config.intermediate_size,
+            config.max_position_embeddings,
+            config.bos_token_id if config.bos_token_id is not None else -1,
+            config.eos_token_id if config.eos_token_id is not None else -1,
+            config.pad_token_id if config.pad_token_id is not None else -1,
+            config.sep_token_id if config.sep_token_id is not None else -1,
+            config.num_key_value_heads,
+            config.kv_lora_rank,
+            config.q_lora_rank,
+            config.qk_nope_head_dim,
+            config.qk_rope_head_dim,
+            config.v_head_dim,
+            config.tie_word_embeddings,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        config_values = [
+            rope_theta
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        assert config.tie_word_embeddings
+        weight_names = MiniCPM3Converter.get_weight_names(config)
+
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -9591,6 +9644,8 @@ def main():
         StepVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Qwen3TTSForConditionalGeneration':
         Qwen3TTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'YoutuForCausalLM':
+        YoutuConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
