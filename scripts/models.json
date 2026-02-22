@@ -4104,5 +4104,37 @@
                 }
             }
         }
+    },
+    "youtu": {
+        "brief": "Youtu-LLM is a new, small, yet powerful LLM, contains only 1.96B parameters, supports 128k long context, and has native agentic talents.",
+        "default": "2b",
+        "license": "https://huggingface.co/tencent/Youtu-LLM-2B/blob/main/LICENSE.txt",
+        "variants": {
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2088090576,
+                        "url": "chatllm_quantized_hunyuan/youtu-llm-2b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "youtu-vl": {
+        "brief": "Youtu-VL: a lightweight 4B VLM built on Youtu-LLM, pioneering VLUAS to improve visual perception and multimodal understanding.",
+        "default": "4b",
+        "license": "https://huggingface.co/tencent/Youtu-VL-4B-Instruct/blob/main/LICENSE.txt",
+        "variants": {
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 5808793552,
+                        "url": "chatllm_quantized_hunyuan/youtu-vl-4b-it.bin"
+                    }
+                }
+            }
+        }
     }
 }

@@ -26,6 +26,7 @@ namespace vision
         PatchesLeftRightDown_ChannelsRGB_PixelsLeftRightDown,
 
         PatchesLeftRightDown_MergeN_ChannelsRGB_PixelsLeftRightDown,
+        PatchesLeftRightDown_MergeN_PixelsLeftRightDown_ChannelsRGB,
 
         // patches-left-right-down pixels-left-right-down channels-rgb
         // [patch0, patch1, ...,    // row0: left --> right

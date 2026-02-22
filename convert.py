@@ -273,6 +273,7 @@ class ModelType(Enum):
     GLM4V                   = ModelTypeTagChatImageVideoIn + 0x0000040
     KimiVL                  = ModelTypeTagChatImageVideoIn + 0x0000100
     SmolVLM                 = ModelTypeTagChatImageVideoIn + 0x0000200
+    YoutuVL                 = ModelTypeTagChatImageVideoIn + 0x0000220
 
     MiniCPM_O               = ModelTypeTagChatImageVideoAudioInAudioOut + 0x0000001
 
@@ -2597,7 +2598,6 @@ class MiniCPM3Converter(BaseConverter):
             elif name.endswith('kv_a_layernorm.weight'):
                 new_dict[name.replace('kv_a_layernorm.weight', 'kv_norm.weight')] = tensor
             elif name.endswith('kv_b_proj.weight'):
-
                 v = tensor.reshape(config.num_attention_heads, config.qk_nope_head_dim + config.v_head_dim, config.kv_lora_rank)
                 u_k_nope_proj = v[:, :config.qk_nope_head_dim, :].reshape(config.num_attention_heads * config.qk_nope_head_dim, config.kv_lora_rank)
                 u_v_proj = v[:, config.qk_nope_head_dim:, :].reshape(config.num_attention_heads * config.v_head_dim, config.kv_lora_rank)
@@ -8948,7 +8948,8 @@ class YoutuConverter(BaseConverter):
             rope_theta = config.rope_parameters['rope_theta']
         else:
             rope_theta = config.rope_theta
-        config.v_head_dim = config.hidden_size // config.num_attention_heads
+        if config.v_head_dim is None:
+            config.v_head_dim = config.hidden_size // config.num_attention_heads
 
         config_values = [
             ggml_type.value,
@@ -8981,6 +8982,75 @@ class YoutuConverter(BaseConverter):
     def get_weight_names(config):
         assert config.tie_word_embeddings
         weight_names = MiniCPM3Converter.get_weight_names(config)
+
+        return weight_names
+
+class YoutuVLConverter(BaseConverter):
+    MODEL_TYPE = ModelType.YoutuVL
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+        llm_dict = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if not name.startswith('siglip2.'):
+                llm_dict[name] = tensor
+                continue
+
+            new_name: str = name
+            new_name = new_name.replace('siglip2.vision_model.encoder.', 'visual.')
+            new_name = new_name.replace('siglip2.vision_model.', 'visual.')
+            new_name = new_name.replace('.out_proj.', '.o_proj.')
+            new_name = new_name.replace('.mlp.fc1.', '.mlp.fc0.')
+            new_name = new_name.replace('.mlp.fc2.', '.mlp.fc1.')
+            new_dict[new_name] = tensor
+
+        llm_dict = YoutuConverter.state_dict_pp(config, llm_dict)
+        new_dict.update(llm_dict)
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        YoutuConverter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        assert config.tie_word_embeddings
+        weight_names = MiniCPM3Converter.get_weight_names(config)
+
+        for i in range(config.vision_config['num_hidden_layers']):
+            weight_names += [
+                f"visual.layers.{i}.self_attn.q_proj.bias",
+                f"visual.layers.{i}.self_attn.q_proj.weight",
+                f"visual.layers.{i}.self_attn.k_proj.bias",
+                f"visual.layers.{i}.self_attn.k_proj.weight",
+                f"visual.layers.{i}.self_attn.v_proj.bias",
+                f"visual.layers.{i}.self_attn.v_proj.weight",
+                f"visual.layers.{i}.self_attn.o_proj.bias",
+                f"visual.layers.{i}.self_attn.o_proj.weight",
+                f"visual.layers.{i}.mlp.fc0.bias",
+                f"visual.layers.{i}.mlp.fc0.weight",
+                f"visual.layers.{i}.mlp.fc1.bias",
+                f"visual.layers.{i}.mlp.fc1.weight",
+                f"visual.layers.{i}.layer_norm1.bias",
+                f"visual.layers.{i}.layer_norm1.weight",
+                f"visual.layers.{i}.layer_norm2.bias",
+                f"visual.layers.{i}.layer_norm2.weight",
+            ]
+
+        weight_names += [
+            "visual.post_layernorm.bias",
+            "visual.post_layernorm.weight",
+            "merger.ln_q.weight",
+            "merger.mlp.0.bias",
+            "merger.mlp.0.weight",
+            "merger.mlp.2.bias",
+            "merger.mlp.2.weight",
+            "visual.embeddings.patch_embedding.bias",
+            "visual.embeddings.patch_embedding.weight",
+        ]
 
         return weight_names
 
@@ -9646,6 +9716,8 @@ def main():
         Qwen3TTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'YoutuForCausalLM':
         YoutuConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'YoutuVLForConditionalGeneration':
+        YoutuVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

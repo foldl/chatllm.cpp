@@ -989,14 +989,13 @@ namespace chatllm
             {
                 CHATLLM_THROW << "tensor number mismatch: " << get_used_mem() / ggml::tensor_overhead()
                               << " + " << extra_tensors
-                              << " (used) vs "  << get_mem_size() / ggml::tensor_overhead();;
+                              << " (used) vs "  << get_mem_size() / ggml::tensor_overhead();
             }
             else
             {
                 CHATLLM_THROW << "tensor number mismatch: " << get_used_mem() / ggml::tensor_overhead()
-                              << " (used) vs "  << get_mem_size() / ggml::tensor_overhead();;
+                              << " (used) vs "  << get_mem_size() / ggml::tensor_overhead();
             }
-
         }
         return r;
     }

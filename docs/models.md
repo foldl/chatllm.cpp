@@ -445,6 +445,9 @@ Please use `--format completion` for these models.
     * `do-pan-and-scan`: default 1 (i.e. true). Set to `0` to use only a global view to reduce the compute.
     * `native-resolution`: default 0 (i.e. false). This model can support native resolution _mathematically_ without pan and scan. (for experiment only)
 
+* Youtu-VL (`YoutuVLForConditionalGeneration`)
+    * [x] [4B-Instruct](https://huggingface.co/tencent/Youtu-VL-4B-Instruct/tree/8d30a0e49662a1d628a472b12df264dbcd768753)
+
 ## OCR Models
 
 * dots.ocr (`DotsOCRForCausalLM`)

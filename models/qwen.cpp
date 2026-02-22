@@ -1366,9 +1366,9 @@ namespace chatllm::qwen::vit
         :
         GRAPH_SIZE(GRAPH_SIZE), _ctx(&backend_context),
         n_threads(runtime_config.n_threads),
-        vis_config(),
         max_patches(max_patches)
     {
+        memset(&vis_config, 0, sizeof(vis_config));
         _ctx.cache_dtype = runtime_config.cache_type;
         model_gpu_layers = BackendContext::get_ngl_of_model(runtime_config.model_gpu_layers, "vis");
     }

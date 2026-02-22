@@ -714,6 +714,38 @@ namespace vision
                 }
             }
             break;
+        case PatchesFormat::PatchesLeftRightDown_MergeN_PixelsLeftRightDown_ChannelsRGB:
+            {
+                CHATLLM_CHECK((params.merge_kernel_size[0] > 1) || (params.merge_kernel_size[1] > 1));
+                int64_t idx = 0;
+                for (int i = 0; i <= height - patch_size * params.merge_kernel_size[1]; i += patch_size * params.merge_kernel_size[1])
+                {
+                    for (int j = 0; j <= width - patch_size * params.merge_kernel_size[0]; j += patch_size * params.merge_kernel_size[0])
+                    {
+                        for (int ii = 0; ii < params.merge_kernel_size[1]; ii++)
+                        {
+                            const int i_m = i + ii * patch_size;
+                            for (int jj = 0; jj < params.merge_kernel_size[0]; jj++)
+                            {
+                                const int j_m = j + jj * patch_size;
+
+                                for (int k = 0; k < patch_size; k++)
+                                {
+                                    for (int l = 0; l < patch_size; l++)
+                                    {
+                                        for (int c = 0; c < 3; c++)
+                                        {
+                                            int pixel_id = (i_m + k) * width + (j_m + l);
+                                            arranged[idx++] = rgb_pixels[pixel_id * 3 + c];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            break;
         case PatchesLeftRightDown_PixelsLeftRightDown_ChannelsRGB:
             {
                 int64_t idx = 0;
