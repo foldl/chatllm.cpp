@@ -562,6 +562,17 @@ class ChatLLM:
     def load_session(self, file_name: str) -> str:
         return self._lib.load_session(self._chat, file_name)
 
+    def destroy(self) -> int:
+        if hasattr(self, "_chat") and self._chat:
+            if self.is_generating: self.abort()
+            obj_id = LibChatLLM._obj2id.get(self)
+            if obj_id is not None:
+                LibChatLLM._obj2id.pop(self, None)
+                LibChatLLM._id2obj.pop(obj_id, None)
+            self._lib.destroy(self._chat)
+            self._chat = None
+        return 0
+
     def callback_print_reference(self, s: str) -> None:
         self.references.append(s)
 

@@ -319,6 +319,14 @@ namespace chatllm
         PreludeCacheDisable(void): disabler(new BlockParams::DisableCache())
         {
         }
+        virtual ~PreludeCacheDisable()
+        {
+            if (disabler)
+            {
+                delete disabler;
+                disabler = nullptr;
+            }
+        }
     protected:
         BlockParams::DisableCache *disabler;
     };
@@ -1439,7 +1447,7 @@ namespace chatllm
               sinks(BlockParams::CoreAttentionUseSinks::get() > 0 ?
                     ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, BlockParams::CoreAttentionUseSinks::get())
                     : nullptr),
-              pos_helper(helper ? helper : &def_pos_helper)
+              pos_helper(helper ? helper : new BaseTensorPosHelper(max_length))
         {
             allocate_pos_tensor(ctx);
         }
