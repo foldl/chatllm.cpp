@@ -82,6 +82,7 @@ set(core_files src/backend.cpp
     models/falcon.cpp
     models/gemma.cpp
     models/gigachat.cpp
+    models/glm_vl.cpp
     models/gpt.cpp
     models/granite.cpp
     models/groq.cpp

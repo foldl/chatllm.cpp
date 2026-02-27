@@ -125,6 +125,19 @@ namespace chatllm::glm::v4
         float rope_ratio;
     };
 
+    class ChatHistoryEncoder : public BaseHistoryEncoder
+    {
+    public:
+        void append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const override;
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+        void append_sys_prompt(std::vector<int> &ids) const override;
+        void append_ai_opening(int round_idx, std::vector<int> &ids) const override;
+    protected:
+        void append_role_tok(std::vector<int> &ids, int role_tok) const;
+    public:
+        bool add_nl_token = true;
+    };
+
     class Tokenizer : public v3::Tokenizer
     {
     public:
@@ -170,6 +183,28 @@ namespace chatllm::glm::glm4_0414
         int think_open_token_id;
         int think_close_token_id;
     };
+
+    class GLM4SelfAttention : public RoPESelfAttention<BaseAttention>
+    {
+    public:
+        GLM4SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
+            : RoPESelfAttention<BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias)
+        {
+        }
+    };
+
+    class GLM4Block : public LMBlock4<RMSNorm, GLM4SelfAttention, RMSNorm, RMSNorm, SiLUMLP, RMSNorm>
+    {
+    public:
+        GLM4Block(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int intermediate_size,
+                  int max_length, bool qkv_bias, bool o_bias)
+            : LMBlock4(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length, qkv_bias, o_bias)
+        {
+            mlp.set_prec(ggml::prec::GGML_PREC_F32);
+        }
+    };
+
+    typedef Model<Config, Embedding, RMSNorm, GLM4Block, int, int, int, int, int, bool, bool> ModelClass;
 
     class ConditionalGeneration : public BaseModelForConditionalGeneration
     {

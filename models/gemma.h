@@ -290,11 +290,11 @@ namespace chatllm::gemma::v3
         std::string target_lang_code = "en";
     };
 
-    template <int sliding_window_len> class Gemma3SWASelfAttention : public QKNormedAttention<RMSNorm, SlidingWindowAttentionImpl<sliding_window_len>>
+    template <int sliding_window_len> class Gemma3SWASelfAttention : public QKNormedRoPEAttention<RMSNorm, SlidingWindowAttentionImpl<sliding_window_len>>
     {
     public:
         Gemma3SWASelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
-            : QKNormedAttention<RMSNorm, SlidingWindowAttentionImpl<sliding_window_len>>
+            : QKNormedRoPEAttention<RMSNorm, SlidingWindowAttentionImpl<sliding_window_len>>
                 (ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
     };
 
@@ -307,11 +307,11 @@ namespace chatllm::gemma::v3
         {}
     };
 
-    class Gemma3FullSelfAttention : public QKNormedAttention<RMSNorm, BaseAttention>
+    class Gemma3FullSelfAttention : public QKNormedRoPEAttention<RMSNorm, BaseAttention>
     {
     public:
         Gemma3FullSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
-            : QKNormedAttention<RMSNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
+            : QKNormedRoPEAttention<RMSNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
     };
 
     class Gemma3FullBlock : public LMBlock4<RMSNorm, Gemma3FullSelfAttention, RMSNorm, RMSNorm, GELUMLP, RMSNorm>

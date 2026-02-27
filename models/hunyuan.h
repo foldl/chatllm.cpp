@@ -31,13 +31,13 @@ namespace chatllm::hunyuan::dense
         int extra_token_ids[5];
     };
 
-    class HunyuanSelfAttention : public QKNormedAttention<RMSNormInplace, BaseAttention>
+    class HunyuanSelfAttention : public QKNormedRoPEAttention<RMSNormInplace, BaseAttention>
     {
     public:
         HunyuanSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-            : QKNormedAttention<RMSNormInplace, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
+            : QKNormedRoPEAttention<RMSNormInplace, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false) {}
         HunyuanSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
-            : QKNormedAttention<RMSNormInplace, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
+            : QKNormedRoPEAttention<RMSNormInplace, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false) {}
     };
 
     class HunyuanBlock : public LMBlock1<RMSNorm, HunyuanSelfAttention, RMSNorm, SiLUMLP>

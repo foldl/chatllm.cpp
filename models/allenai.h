@@ -32,11 +32,11 @@ namespace chatllm::allenai::moe
         }
     };
 
-    class OLSelfAttention : public RoPESelfAttention<BaseNormedAttention>
+    class OLSelfAttention : public RoPESelfAttention<BaseNormedAttention<RMSNorm, BaseAttention>>
     {
     public:
         OLSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length)
-            : RoPESelfAttention<BaseNormedAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
+            : RoPESelfAttention<BaseNormedAttention<RMSNorm, BaseAttention>>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, false, false)
         {}
     };
 

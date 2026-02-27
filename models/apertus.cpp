@@ -156,11 +156,11 @@ namespace chatllm::apertus
         ids.push_back(tok->user_token_id);
     }
 
-    class SelfAttention : public QKNormedAttention<RMSNorm, BaseAttention>
+    class SelfAttention : public QKNormedRoPEAttention<RMSNorm, BaseAttention>
     {
     public:
         SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
-            : QKNormedAttention<RMSNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false)
+            : QKNormedRoPEAttention<RMSNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false)
         {
             freq_factors = ggml::new_tensor_1d(ctx, GGML_TYPE_F32, head_dim / 2);
             ctx->get_allocator()->alloc(freq_factors);

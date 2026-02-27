@@ -1873,7 +1873,7 @@ namespace chatllm::qwen::v2_5_vl
 namespace chatllm::qwen::v3
 {
     QWen3SelfAttention::QWen3SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length)
-        : QKNormedAttention<RMSNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false)
+        : QKNormedRoPEAttention<RMSNorm, BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, false, false)
     {
 
     }
