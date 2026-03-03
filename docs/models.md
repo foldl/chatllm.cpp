@@ -460,6 +460,9 @@ Please use `--format completion` for these models.
 * Nanonets-OCR2 (`Qwen2VLForConditionalGeneration`, `Qwen2_5_VLForConditionalGeneration`)
     * [x] OCR2: [3B](https://huggingface.co/nanonets/Nanonets-OCR2-3B/tree/d0368059ad151ce9e38f526890cfd4f27b28be65), [1.5B](https://huggingface.co/nanonets/Nanonets-OCR2-1.5B-exp/tree/306a9b2a65672a3dbebd9bce9a9373a9a18674a2)
 
+* GLM-OCR (`GlmOcrForConditionalGeneration`)
+    * [x] [0.7B](https://huggingface.co/zai-org/GLM-OCR/tree/677c6baa60442a451f8a8c7eabdfab32d9801a0b)
+
 ## ASR Models
 
 * GLM-ASR (`GlmAsrForConditionalGeneration`)

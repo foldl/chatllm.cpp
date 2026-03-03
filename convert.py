@@ -263,6 +263,7 @@ class ModelType(Enum):
     DotsOCR                 = ModelTypeTagChatImageIn + 0x0000020
     Mistral3                = ModelTypeTagChatImageIn + 0x0000030
     StepVL                  = ModelTypeTagChatImageIn + 0x0000040
+    GLM_OCR                 = ModelTypeTagChatImageIn + 0x0000050
 
     Qwen2Audio              = ModelTypeTagChatAudioIn + 0x0000001
     Qwen3ForcedAligner      = ModelTypeTagChatAudioIn + 0x0000002
@@ -3972,6 +3973,7 @@ class GLM4Converter(BaseConverter):
 
 class GLM4VConverter(BaseConverter):
     MODEL_TYPE = ModelType.GLM4V
+    ASSERT_HEAD_DIM = True
 
     @classmethod
     def state_dict_pp(cls, config, state_dict):
@@ -3987,7 +3989,7 @@ class GLM4VConverter(BaseConverter):
                     r[name.replace('gate_up_proj.weight', 'up_proj.weight')]   = part(tensor, 1, 2).contiguous()
                 elif ('.k_proj.' in name) or ('.q_proj.' in name):
                     rope_dim = GLM4VConverter.rope_dim
-                    head_dim = GLM4VConverter.txt_config.hidden_size // GLM4VConverter.txt_config.num_attention_heads
+                    head_dim = GLM4VConverter.txt_config.head_dim
                     r[name] = permute_pair_rope_nope(tensor, tensor.shape[0] // head_dim, rope_dim)
                 else:
                     r[name] = tensor
@@ -4020,11 +4022,16 @@ class GLM4VConverter(BaseConverter):
     def dump_config(f, config, ggml_type):
         GLM4VConverter.txt_config = AttributeDict(config.text_config)
         txt_config = GLM4VConverter.txt_config
-        assert txt_config.attention_bias
+
         if isinstance(txt_config.eos_token_id, list):
             txt_config.eos_token_id = txt_config.eos_token_id[0]
 
-        head_dim = txt_config.hidden_size // txt_config.num_attention_heads
+        if 'head_dim' not in txt_config:
+            txt_config.head_dim = txt_config.hidden_size // txt_config.num_attention_heads
+        head_dim = txt_config.head_dim
+
+        if GLM4VConverter.ASSERT_HEAD_DIM:
+            assert head_dim == txt_config.hidden_size // txt_config.num_attention_heads
 
         rope_dim = int(txt_config.rope_parameters["partial_rotary_factor"] * head_dim)
         GLM4VConverter.rope_dim = rope_dim
@@ -4074,6 +4081,68 @@ class GLM4VConverter(BaseConverter):
     def get_weight_names(config):
         weights  = GLM4Converter.get_weight_names(GLM4VConverter.txt_config)
         weights += GLM4VConverter.get_vit_weight_names(config.vision_config['depth'])
+        return weights
+
+class GLMOCRConverter(BaseConverter):
+    MODEL_TYPE = ModelType.GLM_OCR
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        return GLM4VConverter.state_dict_pp(config, state_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        print("WARNING: MTP not supported!")
+        GLM4VConverter.ASSERT_HEAD_DIM = False
+
+        GLM4VConverter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            GLM4VConverter.txt_config.head_dim
+        ]
+        f.write(struct.pack("<i", *config_values))
+
+    @staticmethod
+    def get_vit_weight_names(num_layer):
+        weight_names = ["visual.downsample.weight",
+                        "visual.downsample.bias",
+                        "visual.merger.gate_proj.weight",
+                        "visual.merger.up_proj.weight",
+                        "visual.merger.down_proj.weight",
+                        "visual.merger.proj.weight",
+                        "visual.merger.post_projection_norm.weight",
+                        "visual.merger.post_projection_norm.bias",
+                        "visual.patch_embed.proj.0.weight",
+                        "visual.patch_embed.proj.bias",
+                        "visual.patch_embed.proj.1.weight",
+                        "visual.post_layernorm.weight"]
+        for i in range(num_layer):
+            weight_names += [
+                    f"visual.layers.{i}.norm1.weight",
+                    f"visual.layers.{i}.norm2.weight",
+                    f"visual.layers.{i}.attn.q_proj.weight",
+                    f"visual.layers.{i}.attn.k_proj.weight",
+                    f"visual.layers.{i}.attn.v_proj.weight",
+                    f"visual.layers.{i}.attn.o_proj.weight",
+                    f"visual.layers.{i}.attn.q_norm.weight",
+                    f"visual.layers.{i}.attn.k_norm.weight",
+                    f"visual.layers.{i}.mlp.gate_proj.weight",
+                    f"visual.layers.{i}.mlp.up_proj.weight",
+                    f"visual.layers.{i}.mlp.down_proj.weight",
+                    f"visual.layers.{i}.attn.q_proj.bias",
+                    f"visual.layers.{i}.attn.k_proj.bias",
+                    f"visual.layers.{i}.attn.v_proj.bias",
+                    f"visual.layers.{i}.attn.o_proj.bias",
+                    f"visual.layers.{i}.mlp.gate_proj.bias",
+                    f"visual.layers.{i}.mlp.up_proj.bias",
+                    f"visual.layers.{i}.mlp.down_proj.bias",
+            ]
+        return weight_names
+
+    @staticmethod
+    def get_weight_names(config):
+        weights  = GLM4Converter.get_weight_names(GLM4VConverter.txt_config)
+        weights += GLMOCRConverter.get_vit_weight_names(config.vision_config['depth'])
         return weights
 
 class Phi2Converter(BaseConverter):
@@ -9694,6 +9763,8 @@ def main():
         DotsOCRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch.endswith('Glm4vForConditionalGeneration'):
         GLM4VConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch.endswith('GlmOcrForConditionalGeneration'):
+        GLMOCRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MegrezMoeForCausalLM':
         MegrezMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'OuroForCausalLM':

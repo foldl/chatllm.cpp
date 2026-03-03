@@ -1148,22 +1148,16 @@ namespace chatllm::qwen::vit
         }
     }
 
-    class TensorPosHelper2D : public BaseTensorPosHelper
+    TensorPosHelper2D::TensorPosHelper2D(int max_length)
+        : BaseTensorPosHelper(max_length * 4)
     {
-    public:
-        TensorPosHelper2D(int max_length)
-            : BaseTensorPosHelper(max_length * 4)
-        {
-        }
+    }
 
-        void prepare_pos_tensor(ComputeContext *ctx, ggml::tensor *pos, const int n_past, const int qlen) override
-        {
-            pos->ne[0] = helper->length * 4;
-            Backend::write_tensor_data(pos, helper->v_pos.data(), 0, pos->ne[0] * sizeof(v_pos[0]));
-        }
-    public:
-        TensorPosHelper *helper;
-    };
+    void TensorPosHelper2D::prepare_pos_tensor(ComputeContext *ctx, ggml::tensor *pos, const int n_past, const int qlen)
+    {
+        pos->ne[0] = helper->length * 4;
+        Backend::write_tensor_data(pos, helper->v_pos.data(), 0, pos->ne[0] * sizeof(v_pos[0]));
+    }
 
     bool ViTParams::_is_full_attention = false;
 
@@ -1182,62 +1176,13 @@ namespace chatllm::qwen::vit
     {}
 
     ViTSelfAttention::ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool use_bias)
-        : TensorPosHelperPrelude(new TensorPosHelper2D(max_length)),
-          RoPESelfAttention<BaseCachelessAttention>(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, use_bias, use_bias),
-          full_attention(ViTParams::is_full_attention())
+        : ViTSelfAttention(ctx, hidden_size, num_attention_heads, max_length, use_bias, ViTParams::is_full_attention())
     {
-        mask = full_attention ? nullptr : ggml::new_tensor_2d(ctx, GGML_TYPE_F32, max_length, max_length);
-        TensorPosHelperPrelude::done();
-
-        causal = false;
-
-        CHATLLM_CHECK(rope_dim % 4 == 0);
-
-        if (mask)
-            ctx->get_allocator()->alloc(mask);
     }
 
-    void ViTSelfAttention::set_pos_helper(TensorPosHelper *helper)
+    ViTSelfAttention::ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool use_bias, bool full_attention)
+        : GenericViTSelfAttention2D<BaseCachelessAttention>(ctx, hidden_size, num_attention_heads, max_length, use_bias, full_attention)
     {
-        TensorPosHelper2D *h = (TensorPosHelper2D *)pos_helper.get();
-        h->helper = helper;
-    }
-
-    ggml::tensor *ViTSelfAttention::apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size) const
-    {
-        // ggml shape of hidden: [head_size, heads, qlen]
-        int sections[4] = {rope_dim / 4, rope_dim / 4, 0, 0};
-
-        hidden = ggml::rope_ext_inplace(ctx, hidden, pos, freq_factors, rope_dim / 2, GGML_ROPE_TYPE_VISION, n_original_ctx,
-                            freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow,
-                            sections);
-
-        return hidden;
-    }
-
-    ggml::tensor *ViTSelfAttention::apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const
-    {
-        k = apply_2d_rope(ctx, k, hidden_size);
-        return k;
-    }
-
-    ggml::tensor *ViTSelfAttention::apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const
-    {
-        q = apply_2d_rope(ctx, q, hidden_size);
-        return q;
-    }
-
-    // TODO: OPTIMIZATION: use window attention, but not mask
-    ggml::tensor *ViTSelfAttention::attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
-                                            ggml::tensor *attn_scores)
-    {
-        const int head_size = hidden_size / num_attention_heads;
-
-        ggml::tensor* sub_mask = mask ? ggml::view_2d(ctx, mask, qlen, qlen,
-            qlen * ggml::element_size(mask), 0) : nullptr;
-
-        ggml::tensor * attn_probs = ggml::soft_max_ext(ctx, attn_scores, sub_mask, 1.f / sqrtf((float)head_size), 0.0f);
-        return attn_probs;
     }
 
     MLP::MLP(InitContext *ctx, int hidden_size, int intermediate_size, int output_size)

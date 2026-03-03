@@ -187,8 +187,8 @@ namespace chatllm::glm::glm4_0414
     class GLM4SelfAttention : public RoPESelfAttention<BaseAttention>
     {
     public:
-        GLM4SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
-            : RoPESelfAttention<BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias)
+        GLM4SelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length, bool qkv_bias, bool o_bias)
+            : RoPESelfAttention<BaseAttention>(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias)
         {
         }
     };
@@ -197,20 +197,20 @@ namespace chatllm::glm::glm4_0414
     {
     public:
         GLM4Block(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int intermediate_size,
-                  int max_length, bool qkv_bias, bool o_bias)
-            : LMBlock4(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length, qkv_bias, o_bias)
+                  int head_dim, int max_length, bool qkv_bias, bool o_bias)
+            : LMBlock4(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length, qkv_bias, o_bias)
         {
             mlp.set_prec(ggml::prec::GGML_PREC_F32);
         }
     };
 
-    typedef Model<Config, Embedding, RMSNorm, GLM4Block, int, int, int, int, int, bool, bool> ModelClass;
+    typedef Model<Config, Embedding, RMSNorm, GLM4Block, int, int, int, int, int, int, bool, bool> ModelClass;
 
     class ConditionalGeneration : public BaseModelForConditionalGeneration
     {
     public:
         ConditionalGeneration() = default;
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GLM4);
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GLM4, int head_dim = -1);
 
         void load(ModelLoader &loader) override;
 

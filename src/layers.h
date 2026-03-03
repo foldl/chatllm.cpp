@@ -989,6 +989,10 @@ namespace chatllm
                   int max_length, bool qkv_bias, bool o_bias)
             : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias) {}
 
+        LMAttentionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int head_dim, int max_length, bool qkv_bias, bool o_bias)
+            : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias) {}
+
         void shift_cache(int shift, int total) override
         {
             attention.shift_cache(shift, total);
@@ -1321,6 +1325,15 @@ namespace chatllm
         LMBlock4(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
                   int max_length, bool qkv_bias, bool o_bias)
             : Base(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, max_length, qkv_bias, o_bias),
+              pre_attention_layernorm(ctx, hidden_size),
+              post_attention_layernorm(ctx, hidden_size),
+              pre_mlp_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, intermediate_size),
+              post_mlp_layernorm(ctx, hidden_size) {}
+
+        LMBlock4(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
+                  int head_dim, int max_length, bool qkv_bias, bool o_bias)
+            : Base(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length, qkv_bias, o_bias),
               pre_attention_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               pre_mlp_layernorm(ctx, hidden_size),
@@ -3234,6 +3247,14 @@ namespace chatllm
 
         QKNormedAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int max_length, bool qkv_bias, bool o_bias)
             : BaseAttn(ctx, hidden_size, num_attention_heads, num_kv_heads, max_length, qkv_bias, o_bias),
+              k_layernorm(ctx, hidden_size / num_attention_heads),
+              q_layernorm(ctx, hidden_size / num_attention_heads),
+              post_norm(false)
+        {
+        }
+
+        QKNormedAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool qkv_bias, bool o_bias)
+            : BaseAttn(ctx, hidden_size, num_attention_heads, max_length, qkv_bias, o_bias),
               k_layernorm(ctx, hidden_size / num_attention_heads),
               q_layernorm(ctx, hidden_size / num_attention_heads),
               post_norm(false)

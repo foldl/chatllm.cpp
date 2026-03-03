@@ -447,23 +447,85 @@ namespace chatllm::qwen
             static bool _is_full_attention;
         };
 
-        class ViTSelfAttention : public TensorPosHelperPrelude, public RoPESelfAttention<BaseCachelessAttention>
+        class TensorPosHelper2D : public BaseTensorPosHelper
         {
         public:
-            ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length);
-            ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool use_bias);
-            void set_pos_helper(TensorPosHelper *helper);
+            TensorPosHelper2D(int max_length);
+            void prepare_pos_tensor(ComputeContext *ctx, ggml::tensor *pos, const int n_past, const int qlen) override;
+        public:
+            TensorPosHelper *helper;
+        };
+
+        template<class BaseAttn> class GenericViTSelfAttention2D : public TensorPosHelperPrelude, public RoPESelfAttention<BaseAttn>
+        {
+        public:
+            typedef RoPESelfAttention<BaseAttn> Base;
+            GenericViTSelfAttention2D(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool use_bias, bool full_attention):
+                TensorPosHelperPrelude(new TensorPosHelper2D(max_length)),
+                Base(ctx, hidden_size, num_attention_heads, num_attention_heads, max_length, use_bias, use_bias),
+                full_attention(full_attention)
+            {
+                Base::mask = full_attention ? nullptr : ggml::new_tensor_2d(ctx, GGML_TYPE_F32, max_length, max_length);
+                TensorPosHelperPrelude::done();
+
+                Base::causal = false;
+
+                CHATLLM_CHECK(Base::rope_dim % 4 == 0);
+
+                if (Base::mask)
+                    ctx->get_allocator()->alloc(Base::mask);
+            }
+            void set_pos_helper(TensorPosHelper *helper)
+            {
+                TensorPosHelper2D *h = (TensorPosHelper2D *)Base::pos_helper.get();
+                h->helper = helper;
+            }
         protected:
-            ggml::tensor *apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size) const;
-            ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override;
-            ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override;
+            ggml::tensor *apply_2d_rope(ComputeContext *ctx, ggml::tensor *hidden, int hidden_size) const
+            {
+                // ggml shape of hidden: [head_size, heads, qlen]
+                int sections[4] = {Base::rope_dim / 4, Base::rope_dim / 4, 0, 0};
+
+                hidden = ggml::rope_ext_inplace(ctx, hidden, Base::pos, Base::freq_factors, Base::rope_dim / 2, GGML_ROPE_TYPE_VISION, Base::n_original_ctx,
+                                    Base::freq_base, Base::freq_scale, Base::ext_factor, Base::attn_factor, Base::beta_fast, Base::beta_slow,
+                                    sections);
+
+                return hidden;
+            }
+            ggml::tensor *apply_pos_embedding_k(ComputeContext *ctx, ggml::tensor *k, int hidden_size, int qlen, ggml::tensor * past) const override
+            {
+                k = apply_2d_rope(ctx, k, hidden_size);
+                return k;
+            }
+            ggml::tensor *apply_pos_embedding_q(ComputeContext *ctx, ggml::tensor *q, int hidden_size, int qlen, ggml::tensor * past) const override
+            {
+                q = apply_2d_rope(ctx, q, hidden_size);
+                return q;
+            }
 
             ggml::tensor *attn_scores_to_probs(ComputeContext *ctx, int hidden_size, const int n_past, const int qlen,
-                                            ggml::tensor *attn_scores) override;
+                                            ggml::tensor *attn_scores) override
+            {
+                const int head_size = hidden_size / Base::num_attention_heads;
+
+                ggml::tensor* sub_mask = Base::mask ? ggml::view_2d(ctx, Base::mask, qlen, qlen,
+                    qlen * ggml::element_size(Base::mask), 0) : nullptr;
+
+                ggml::tensor * attn_probs = ggml::soft_max_ext(ctx, attn_scores, sub_mask, 1.f / sqrtf((float)head_size), 0.0f);
+                return attn_probs;
+            }
         public:
             int grid_w = 0;
             int grid_h = 0;
             const bool full_attention;
+        };
+
+        class ViTSelfAttention : public GenericViTSelfAttention2D<BaseCachelessAttention>
+        {
+        public:
+            ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length);
+            ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool use_bias);
+            ViTSelfAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int max_length, bool use_bias, bool full_attention);
         };
 
         class MLP : public TheMLP

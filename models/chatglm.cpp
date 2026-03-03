@@ -680,7 +680,7 @@ namespace chatllm::glm::glm4_0414
         return r;
     }
 
-    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int head_dim)
         : BaseModelForConditionalGeneration(type, config, runtime_config), config(config)
     {
         const size_t tensor_ovhd = ggml_tensor_overhead();
@@ -689,10 +689,12 @@ namespace chatllm::glm::glm4_0414
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
+        if (head_dim < 0) head_dim = config.hidden_size / config.num_attention_heads;
+
         transformer = new ModelClass(
                             &w_ctx_, config, false,
                             config.hidden_size, config.num_attention_heads, config.num_key_value_heads,
-                            config.intermediate_size, config.max_length, config.use_attention_bias != 0, false);
+                            config.intermediate_size, head_dim, config.max_length, config.use_attention_bias != 0, false);
 
         for (int i = 0; i < config.num_hidden_layers; i++)
         {

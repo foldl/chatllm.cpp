@@ -35,6 +35,7 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
+* 2026-03-03: GLM-OCR
 * 2026-02-22: Youtu-VL
 * 2026-02-18: Youtu-LLM
 * 2026-02-16: Voice Clone with Qwen3-TTS
