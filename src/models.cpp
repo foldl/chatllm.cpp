@@ -925,6 +925,15 @@ namespace chatllm
             layer_ids.push_back(i);
     }
 
+    BaseModelForConditionalGeneration::~BaseModelForConditionalGeneration()
+    {
+        if (transformer)
+        {
+            delete transformer;
+            transformer = nullptr;
+        }
+    }
+
     void BaseModelForConditionalGeneration::set_layer_ids(const std::vector<int> &ids)
     {
         CHATLLM_CHECK((int)ids.size() == config_.num_hidden_layers) << "length(layer_ids) must be " << config_.num_hidden_layers;
