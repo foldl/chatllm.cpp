@@ -1203,6 +1203,8 @@ namespace chatllm
         //printf("before_initial_run 1\n");
         //backend_context.show_buffer_sizes();
 
+        before_run_model(nullptr, ids_count, gen_config, past);
+
         ForwardContext ctx(&backend_context);
         ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
         ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
@@ -1232,6 +1234,11 @@ namespace chatllm
         return run_model(input_ids.data(), (int)input_ids.size(), gen_config, past, output);
     }
 
+    void BaseModelForConditionalGeneration::before_run_model(const int *input_ids, const int ids_count,
+                               const GenerationConfig &gen_config,
+                               int past)
+    {}
+
     bool BaseModelForConditionalGeneration::run_model(const int *input_ids, const int ids_count,
                             const GenerationConfig &gen_config,
                             int past,
@@ -1246,6 +1253,8 @@ namespace chatllm
             if (!before_initial_run(ids_count, gen_config, past))
                 return false;
         }
+
+        before_run_model(input_ids, ids_count, gen_config, past);
 
         ForwardContext ctx(&backend_context);
         ctx.user_options = w_ctx_.user_options;

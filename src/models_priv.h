@@ -437,6 +437,9 @@ namespace chatllm
             int past,
             std::vector<float> &output);
 
+        virtual void before_run_model(const int *input_ids, const int ids_count,
+                               const GenerationConfig &gen_config,
+                               int past);
         virtual bool run_model(const int *input_ids, const int ids_count,
                                const GenerationConfig &gen_config,
                                int past,

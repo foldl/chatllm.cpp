@@ -694,6 +694,26 @@ namespace chatllm::qwen
             double fps = 2.0f;
         };
 
+        class TensorPosHelper3D : public BaseTensorPosHelper
+        {
+        public:
+            TensorPosHelper3D(int max_length, int image_id_start);
+
+            ggml::tensor *allocate_pos_tensor(InitContext *ctx) override;
+
+            int build_3d_pos(const int *input_ids,
+                const int length,
+                const std::vector<ImageGridSize> &images_grid,
+                const int image_id_start,
+                const int token_n_inc,
+                const int token_time);
+
+            void prepare_pos_tensor(ComputeContext *ctx, ggml::tensor *pos, const int n_past, const int qlen) override;
+        protected:
+            const int original_length;
+            const int image_id_start;
+        };
+
         class ExtendEmbedding
         {
         public:
@@ -822,4 +842,14 @@ namespace chatllm::qwen
             ggml::tensor *yes_no_ids = nullptr;
         };
     }
+}
+
+namespace chatllm::qwen::v3_vl
+{
+    class Tokenizer : public v2_5_vl::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config);
+        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder);
+    };
 }

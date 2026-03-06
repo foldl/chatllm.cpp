@@ -1510,34 +1510,18 @@ namespace chatllm::qwen::v2_5_vl
 
     class ConditionalGeneration;
 
-    class TensorPosHelper3D : public BaseTensorPosHelper
+    TensorPosHelper3D::TensorPosHelper3D(int max_length, int image_id_start)
+        : BaseTensorPosHelper(max_length * 4),
+            original_length(max_length), image_id_start(image_id_start)
     {
-    public:
-        TensorPosHelper3D(int max_length, int image_id_start)
-            : BaseTensorPosHelper(max_length * 4),
-              original_length(max_length), image_id_start(image_id_start)
-        {
-        }
+    }
 
-        ggml::tensor *allocate_pos_tensor(InitContext *ctx) override
-        {
-            ggml::tensor *r = ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length);
-            ctx->get_allocator()->alloc(r);
-            return r;
-        }
-
-        int build_3d_pos(const int *input_ids,
-            const int length,
-            const std::vector<ImageGridSize> &images_grid,
-            const int image_id_start,
-            const int token_n_inc,
-            const int token_time);
-
-        void prepare_pos_tensor(ComputeContext *ctx, ggml::tensor *pos, const int n_past, const int qlen) override;
-    protected:
-        const int original_length;
-        const int image_id_start;
-    };
+    ggml::tensor *TensorPosHelper3D::allocate_pos_tensor(InitContext *ctx)
+    {
+        ggml::tensor *r = ggml::new_tensor_1d(ctx, GGML_TYPE_I32, max_length);
+        ctx->get_allocator()->alloc(r);
+        return r;
+    }
 
     class ConditionalGeneration : public TensorPosHelperPrelude, public ExtendEmbedding, public v2::ConditionalGeneration
     {
@@ -1585,7 +1569,7 @@ namespace chatllm::qwen::v2_5_vl
         int i = 0;
         while (i < length)
         {
-            if (input_ids[i] < image_id_start)
+            if ((nullptr == input_ids) || (input_ids[i] < image_id_start))
             {
                 p_t[i] = t;
                 p_h[i] = t;
@@ -2496,14 +2480,10 @@ namespace chatllm::qwen::v3_vl
 
     static ChatHistoryEncoder _chat_encoder;
 
-    class Tokenizer : public v2_5_vl::Tokenizer
-    {
-    public:
-        Tokenizer(const BaseConfig &config) : Tokenizer(config, &_chat_encoder)
-        {}
-        Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder) : v2_5_vl::Tokenizer(config, encoder)
-        {}
-    };
+    Tokenizer::Tokenizer(const BaseConfig &config) : Tokenizer(config, &_chat_encoder)
+    {}
+    Tokenizer::Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder) : v2_5_vl::Tokenizer(config, encoder)
+    {}
 
     class ConditionalGeneration;
 

@@ -1019,6 +1019,51 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::sum(ComputeContext *ctx, ggml::tensor *a, int dim)
+    {
+        if (dim == 0) return sum_rows(ctx, a);
+        int axis0 = 0;
+        int axis1 = 1;
+        int axis2 = 2;
+        int axis3 = 3;
+        int64_t ne0 = ggml::get_dim(a, 0);
+        int64_t ne1 = ggml::get_dim(a, 1);
+        int64_t ne2 = ggml::get_dim(a, 2);
+        int64_t ne3 = ggml::get_dim(a, 3);
+        switch (dim)
+        {
+        case 1:
+            axis0 = 1;
+            axis1 = 0;
+            ne1 = ne2;
+            ne2 = ne3;
+            ne3 = 1;
+            break;
+        case 2:
+            axis0 = 2;
+            axis2 = 0;
+            ne2 = ne3;
+            ne3 = 1;
+            break;
+        default:
+            axis0 = 3;
+            axis3 = 0;
+            ne3 = 1;
+            break;
+        }
+
+        a = ggml::permute(ctx, a, axis0, axis1, axis2, axis3);
+        // PERFORMANCE: make sum_rows happy.
+        if (ggml::type_of(a) != ggml::type::GGML_TYPE_F32)
+            a = ggml::cast(ctx, a, ggml::type::GGML_TYPE_F32);
+        else
+            a = ggml::cont(ctx, a);
+        a = ggml::sum_rows(ctx, a);
+        a = ggml::permute(ctx, a, axis0, axis1, axis2, axis3);
+        a = ggml::reshape(ctx, a, ne0, ne1, ne2, ne3);
+        return a;
+    }
+
     ggml::tensor *ggml::mean(ComputeContext *ctx, ggml::tensor *a)
     {
         ggml::tensor *tensor = ggml_mean(ctx->get_ctx(), a);
@@ -1070,6 +1115,8 @@ namespace chatllm
 
     ggml::tensor *ggml::cast(ComputeContext *ctx, ggml::tensor *a, ggml::type type)
     {
+        if (ggml::type_of(a) == type) return a;
+
         ggml::tensor *tensor = ggml_cast(ctx->get_ctx(), a, type);
         ctx->cb_op_tensor(tensor);
         return tensor;
@@ -1087,6 +1134,17 @@ namespace chatllm
         ggml::tensor *tensor = ggml_concat(ctx->get_ctx(), a, b, dim);
         ctx->cb_op_tensor(tensor);
         return tensor;
+    }
+
+    ggml::tensor *ggml::concat(ComputeContext *ctx, std::vector<ggml::tensor *> tensors, int dim)
+    {
+        // TODO: waiting for ggml new OP
+        auto r = tensors[0];
+        for (int i = 1; i < (int)tensors.size(); i++)
+        {
+            r = ggml::concat(ctx, r, tensors[i], dim);
+        }
+        return r;
     }
 
     ggml::tensor *ggml::pad(ComputeContext *ctx, ggml::tensor *a,
@@ -1191,6 +1249,13 @@ namespace chatllm
 
         return custom(ctx, ggml_custom_logsumexp, GGML_MAX_N_THREADS, nullptr, inputs, ggml::type::GGML_TYPE_F32,
             1, ggml::get_dim(a, 1), ggml::get_dim(a, 2), ggml::get_dim(a, 3));
+    }
+
+    ggml::tensor *ggml::softplus(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_softplus(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
     }
 
     ggml::tensor *ggml::categorical_entropy(ComputeContext *ctx, ggml::tensor *probs, ggml::tensor *logits)

@@ -271,6 +271,7 @@ class ModelType(Enum):
     Qwen2_5VL               = ModelTypeTagChatImageVideoIn + 0x0000001
     Qwen2_VL                = ModelTypeTagChatImageVideoIn + 0x0000002
     Qwen3_VL                = ModelTypeTagChatImageVideoIn + 0x0000003
+    Qwen3_5                 = ModelTypeTagChatImageVideoIn + 0x0000004
     GLM4V                   = ModelTypeTagChatImageVideoIn + 0x0000040
     KimiVL                  = ModelTypeTagChatImageVideoIn + 0x0000100
     SmolVLM                 = ModelTypeTagChatImageVideoIn + 0x0000200
@@ -5642,6 +5643,218 @@ class Qwen3VLConverter(BaseConverter):
 
         return weight_names
 
+class QWen3_5Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Qwen3_5
+
+    layer_is_la = []
+    has_lm_head = True
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        state_dict = Qwen3VLConverter.state_dict_pp(config, state_dict)
+        r = {}
+        for k in state_dict:
+            name: str = k
+            tensor: torch.Tensor = state_dict[name]
+            if name.endswith('.self_attn.q_proj.weight'):
+                head_dim = QWen3_5Converter.txt_config.head_dim
+                q, g = torch.chunk(tensor.view(-1, head_dim * 2, tensor.shape[1]), 2, dim=1)
+                r[name] = q.contiguous().view(-1, tensor.shape[1])
+                r[name.replace('.q_proj.', '.gate_proj.')] = g.contiguous().view(-1, tensor.shape[1])
+            elif (name == "model.norm.weight") or   \
+                name.endswith('.input_layernorm.weight') or name.endswith('.post_attention_layernorm.weight') or \
+                name.endswith('.self_attn.q_norm.weight') or name.endswith('.self_attn.k_norm.weight'):
+                r[name] = 1.0 + tensor
+            else:
+                r[name] = tensor
+        return r
+
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MAX_LAYERS = 128
+        QWen3_5Converter.txt_config = AttributeDict(config.text_config)
+        txt_config = QWen3_5Converter.txt_config
+        assert not txt_config.attention_bias
+        assert txt_config.rope_parameters['mrope_interleaved']
+        assert txt_config.mlp_only_layers == []
+        assert not txt_config.mtp_use_dedicated_embeddings
+
+        if txt_config.moe_intermediate_size is None:
+            txt_config.moe_intermediate_size = -1
+        if txt_config.num_experts is None:
+            txt_config.num_experts = -1
+        if txt_config.num_experts_per_tok is None:
+            txt_config.num_experts_per_tok = -1
+        if txt_config.router_aux_loss_coef is None:
+            txt_config.router_aux_loss_coef = -1.0
+        if txt_config.shared_expert_intermediate_size is None:
+            txt_config.shared_expert_intermediate_size = -1
+        if txt_config.intermediate_size is None:
+            txt_config.intermediate_size = -1
+
+        def is_la(layer_idx):
+            nonlocal txt_config
+            if layer_idx >= txt_config.num_hidden_layers: return 0
+
+            return 1 if txt_config.layer_types[layer_idx] == "linear_attention" else 0
+
+        QWen3_5Converter.layer_is_la = [is_la(i) for i in range(MAX_LAYERS)]
+
+        # emulate params for llama
+        dump_llama_like_config(f, txt_config, ggml_type)
+
+        config_values = [
+            txt_config.num_key_value_heads,
+            1 if txt_config.attn_output_gate else 0,
+            txt_config.linear_conv_kernel_dim,
+            txt_config.linear_key_head_dim,
+            txt_config.linear_num_key_heads,
+            txt_config.linear_num_value_heads,
+            txt_config.linear_value_head_dim,
+            txt_config.head_dim,
+            txt_config.rope_parameters['rope_theta'],
+            int(txt_config.rope_parameters['partial_rotary_factor'] * txt_config.head_dim),
+            txt_config.rope_parameters['mrope_section'][0],
+            txt_config.rope_parameters['mrope_section'][1],
+            txt_config.rope_parameters['mrope_section'][2],
+            0,
+            txt_config.moe_intermediate_size,
+            txt_config.shared_expert_intermediate_size,
+            txt_config.num_experts_per_tok,
+            txt_config.num_experts,
+            1 if txt_config.tie_word_embeddings else 0,
+            txt_config.mtp_num_hidden_layers,
+            txt_config.router_aux_loss_coef,
+        ]
+        f.write(struct.pack("<iiiiiiiifiiiiiiiiiiif", *config_values))
+        f.write(struct.pack("<" + "i" * len(QWen3_5Converter.layer_is_la), *QWen3_5Converter.layer_is_la))
+
+
+    @staticmethod
+    def get_one_layer_weight_names(prefix: str, num_experts: int, is_la: bool):
+        weight_names = [
+            f"{prefix}.input_layernorm.weight",
+            f"{prefix}.post_attention_layernorm.weight",
+        ]
+
+        if num_experts > 0:
+            for i in range(num_experts):
+                weight_names += [
+                    f"{prefix}.mlp.experts.{i}.gate_proj.weight",
+                    f"{prefix}.mlp.experts.{i}.up_proj.weight",
+                    f"{prefix}.mlp.experts.{i}.down_proj.weight",
+                ]
+
+            weight_names += [
+                f"{prefix}.mlp.gate.weight",
+                f"{prefix}.mlp.shared_expert.gate_proj.weight",
+                f"{prefix}.mlp.shared_expert.up_proj.weight",
+                f"{prefix}.mlp.shared_expert.down_proj.weight",
+                f"{prefix}.mlp.shared_expert_gate.weight",
+            ]
+        else:
+            weight_names += [
+                f"{prefix}.mlp.down_proj.weight",
+                f"{prefix}.mlp.gate_proj.weight",
+                f"{prefix}.mlp.up_proj.weight",
+            ]
+
+        if is_la:
+            weight_names += [
+                f"{prefix}.linear_attn.A_log",
+                f"{prefix}.linear_attn.conv1d.weight",
+                f"{prefix}.linear_attn.dt_bias",
+                f"{prefix}.linear_attn.in_proj_a.weight",
+                f"{prefix}.linear_attn.in_proj_b.weight",
+                f"{prefix}.linear_attn.in_proj_qkv.weight",
+                f"{prefix}.linear_attn.in_proj_z.weight",
+                f"{prefix}.linear_attn.norm.weight",
+                f"{prefix}.linear_attn.out_proj.weight",
+            ]
+        else:
+            weight_names += [
+                f"{prefix}.self_attn.k_proj.weight",
+                f"{prefix}.self_attn.k_norm.weight",
+                f"{prefix}.self_attn.q_proj.weight",
+                f"{prefix}.self_attn.q_norm.weight",
+                f"{prefix}.self_attn.v_proj.weight",
+                f"{prefix}.self_attn.o_proj.weight",
+                f"{prefix}.self_attn.gate_proj.weight",
+            ]
+
+        return weight_names
+
+    @staticmethod
+    def get_weight_names(config):
+        txt_config = QWen3_5Converter.txt_config
+
+        weight_names = ["model.embed_tokens.weight"]
+
+        for i in range(txt_config.num_hidden_layers):
+
+            weight_names += QWen3_5Converter.get_one_layer_weight_names(f"model.layers.{i}",
+                txt_config.num_experts,
+                QWen3_5Converter.layer_is_la[i]
+            )
+
+        weight_names += [
+            "model.norm.weight"
+        ]
+
+        if txt_config.mtp_num_hidden_layers > 0:
+            weight_names += [
+                "mtp.fc.weight",
+                "mtp.norm.weight",
+                "mtp.pre_fc_norm_embedding.weight",
+                "mtp.pre_fc_norm_hidden.weight",
+            ]
+            for i in range(txt_config.mtp_num_hidden_layers):
+                weight_names += QWen3_5Converter.get_one_layer_weight_names(f"mtp.layers.{i}",
+                    txt_config.num_experts,
+                    False
+                )
+
+        if QWen3_5Converter.has_lm_head and (not txt_config.tie_word_embeddings):
+            weight_names += [
+                "lm_head.weight"
+            ]
+
+        for i in range(config.vision_config['depth']):
+            weight_names += [
+                f"visual.blocks.{i}.attn.proj.bias",
+                f"visual.blocks.{i}.attn.proj.weight",
+                f"visual.blocks.{i}.attn.q_proj.bias",
+                f"visual.blocks.{i}.attn.q_proj.weight",
+                f"visual.blocks.{i}.attn.k_proj.bias",
+                f"visual.blocks.{i}.attn.k_proj.weight",
+                f"visual.blocks.{i}.attn.v_proj.bias",
+                f"visual.blocks.{i}.attn.v_proj.weight",
+                f"visual.blocks.{i}.mlp.fc0.bias",
+                f"visual.blocks.{i}.mlp.fc0.weight",
+                f"visual.blocks.{i}.mlp.fc1.bias",
+                f"visual.blocks.{i}.mlp.fc1.weight",
+                f"visual.blocks.{i}.norm1.bias",
+                f"visual.blocks.{i}.norm1.weight",
+                f"visual.blocks.{i}.norm2.bias",
+                f"visual.blocks.{i}.norm2.weight",
+            ]
+
+        weight_names += [
+                "visual.merger.mlp.fc0.bias",
+                "visual.merger.mlp.fc0.weight",
+                "visual.merger.mlp.fc1.bias",
+                "visual.merger.mlp.fc1.weight",
+                "visual.merger.norm.bias",
+                "visual.merger.norm.weight",
+                "visual.patch_embed.proj.0.weight",
+                "visual.patch_embed.proj.1.weight",
+                "visual.patch_embed.proj.bias",
+                "visual.pos_embed.weight",
+            ]
+
+        return weight_names
+
 class Qwen3TTSConverter(BaseConverter):
     MODEL_TYPE = ModelType.Qwen3_TTS
 
@@ -9275,7 +9488,7 @@ def load_some_model(path: Path, fallback_files: list[Path] = []) -> List[Path]:
         globs = ["model-*-of-*.safetensors", "consolidated.*.pth",
                  "pytorch_model-*-of-*.bin", "pytorch_model_*-of-*.bin",
                  "pytorch_model.bin", "model.safetensors", "*.pt", "consolidated.safetensors", "consolidated.pth",
-                 "model-*.safetensors"]
+                 "model-*.safetensors", "model.safetensors-*.safetensors"]
         for glob in globs:
             files = list(path.glob(glob))
             if len(files) > 0:
@@ -9604,6 +9817,8 @@ def main():
         if config['thinker_config']['model_type'] == 'qwen3_forced_aligner':
             Qwen3ASRConverter.MODEL_TYPE = ModelType.Qwen3ForcedAligner
         Qwen3ASRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Qwen3_5ForConditionalGeneration':
+        QWen3_5Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'KimiVLForConditionalGeneration':
         KimiVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen':

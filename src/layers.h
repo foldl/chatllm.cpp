@@ -69,6 +69,7 @@ namespace chatllm
 
         ggml::tensor *transpose(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *concat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, int dim);
+        ggml::tensor *concat(ComputeContext *ctx, std::vector<ggml::tensor *> tensors, int dim);
 
         // pad with zeros
         ggml::tensor *pad(ComputeContext *ctx, ggml::tensor *a,
@@ -107,6 +108,7 @@ namespace chatllm
         ggml::tensor *int_div(ComputeContext *ctx, ggml::tensor *a, int b);
 
         ggml::tensor *sum_rows(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *sum(ComputeContext *ctx, ggml::tensor *a, int dim);
         ggml::tensor *mean(ComputeContext *ctx, ggml::tensor *a);
 
         ggml::tensor *sin(ComputeContext *ctx, ggml::tensor *a);
@@ -218,6 +220,7 @@ namespace chatllm
         ggml::tensor *xielu(ComputeContext *ctx, ggml::tensor *input, float alpha_n, float alpha_p, float beta, float eps);
 
         ggml::tensor *logsumexp(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *softplus(ComputeContext *ctx, ggml::tensor *a);
 
         // accept either probs or logits, but not both
         ggml::tensor *categorical_entropy(ComputeContext *ctx, ggml::tensor *probs, ggml::tensor *logits);
@@ -946,6 +949,8 @@ namespace chatllm
         Linear dense_4h_to_h;
     };
 
+    struct TypeLinearAttention {};
+
     template <class AttentionBlock> class LMAttentionBlock : public Block
     {
         public:
@@ -992,6 +997,9 @@ namespace chatllm
         LMAttentionBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads,
                   int head_dim, int max_length, bool qkv_bias, bool o_bias)
             : attention(ctx, hidden_size, num_attention_heads, num_kv_heads, head_dim, max_length, qkv_bias, o_bias) {}
+
+        LMAttentionBlock(InitContext *ctx, TypeLinearAttention _, int hidden_size, int conv_kernel_dim, int num_key_heads, int num_value_heads, int key_head_dim, int value_head_dim)
+            : attention(ctx, hidden_size, conv_kernel_dim, num_key_heads, num_value_heads, key_head_dim, value_head_dim) {}
 
         void shift_cache(int shift, int total) override
         {
@@ -1119,6 +1127,13 @@ namespace chatllm
             : Base(ctx, hidden_size, num_attention_heads, intermediate_size,
                   num_kv_heads, max_length,
                   q_lora_rank, kv_lora_rank, rope_dim, qk_nope_head_dim, v_head_dim, use_bias),
+              input_layernorm(ctx, hidden_size),
+              post_attention_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, intermediate_size) {}
+
+        LMBlock1(InitContext *ctx, TypeLinearAttention _, int hidden_size, int intermediate_size,
+                  int conv_kernel_dim, int num_key_heads, int num_value_heads, int key_head_dim, int value_head_dim)
+            : Base(ctx, _, hidden_size, conv_kernel_dim, num_key_heads, num_value_heads, key_head_dim, value_head_dim),
               input_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}

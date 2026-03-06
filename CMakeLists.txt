@@ -115,6 +115,7 @@ set(core_files src/backend.cpp
     models/qwen.cpp
     models/qwen_asr.cpp
     models/qwen_tts.cpp
+    models/qwen3_5.cpp
     models/reka.cpp
     models/rnj.cpp
     models/seed.cpp
