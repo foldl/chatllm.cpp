@@ -709,9 +709,14 @@ namespace chatllm::qwen
                 const int token_time);
 
             void prepare_pos_tensor(ComputeContext *ctx, ggml::tensor *pos, const int n_past, const int qlen) override;
+            void set_input_ids_offset(int offset);
         protected:
             const int original_length;
             const int image_id_start;
+            std::vector<int> v_t;
+            std::vector<int> v_h;
+            std::vector<int> v_w;
+            int offset = 0;
         };
 
         class ExtendEmbedding
@@ -842,6 +847,97 @@ namespace chatllm::qwen
             ggml::tensor *yes_no_ids = nullptr;
         };
     }
+}
+
+namespace chatllm::qwen::v3_vl::vit
+{
+    struct Config : qwen::vit::BaseConfig
+    {
+        int num_position_embeddings;
+        int out_hidden_size;
+
+        int num_deepstack_layers;
+        int deepstack_visual_indexes[qwen::vit::VIT_MAX_LAYERS];
+    };
+
+    class PatchEmbedding : public Block
+    {
+    public:
+        PatchEmbedding(InitContext *ctx, const Config &config);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input0, ggml::tensor *input1, int grid_h, int grid_w);
+
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        const int merge_size;
+        const int max_patches;
+        const int ref_w;
+        const int ref_h;
+        Conv2D                  proj0;
+        Conv2D                  proj1;
+        ggml::tensor           *proj_bias;
+        Embedding               pos_emb;
+    };
+
+    class MultiModalProjector : public Block
+    {
+    public:
+        MultiModalProjector(InitContext *ctx, int hidden_size, int spatial_merge_size, int lm_hidden_size, bool use_postshuffle_norm);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *image_features, int grid_h, int grid_w) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        const bool          use_postshuffle_norm;
+        const int           hidden_size;
+        LayerNorm           pre_norm;
+        qwen::vit::MLP      mlp;
+    };
+
+    class VisionTransformer : public Block
+    {
+    public:
+        typedef LMBlock1<LayerNorm, qwen::vit::ViTSelfAttention, LayerNorm, qwen::vit::MLP> LayerBlock;
+        VisionTransformer(InitContext *ctx, const Config &config, int lm_hidden_size, int max_image_num = 1);
+
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w) override;
+        bool is_loaded(void) const;
+        void reset(void);
+        ggml::tensor *get_deespstack_input_for_llm_layer(ComputeContext *ctx, ggml::tensor *input_ids, const int layer_id);
+    public:
+        PatchEmbedding embeddings;
+        std::vector<std::unique_ptr<LayerBlock>> layers;
+        std::vector<std::unique_ptr<Block>> multi_modal_projectors;
+        std::unique_ptr<qwen::vit::TensorPosHelper> pos_helper;
+        std::vector<Embedding> deepstack_visual_embeds; // 1 + llm_hidden_size * patch_num * num_layers
+                                                        // [0] is all zero
+    protected:
+        const int lm_hidden_size;
+        bool loaded;
+        std::vector<int> deepstack_feature_index;
+        int ds_emb_offset;
+    };
+
+    class VisualEmbeddingGeneration
+    {
+    public:
+        VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, int max_llm_tokens, size_t GRAPH_SIZE = 4096);
+        bool load(ModelLoader &loader);
+        bool load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config);
+        void generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf);
+        VisionTransformer *get_model(void) const;
+    protected:
+        bool run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &image, std::vector<uint8_t> &buf);
+
+    protected:
+        const int max_llm_tokens;
+        std::unique_ptr<VisionTransformer> vis_model;
+        TensorGraphEvaluator eval;
+        InitContext _ctx; // weight context
+    public:
+        Config vis_config;
+    };
 }
 
 namespace chatllm::qwen::v3_vl

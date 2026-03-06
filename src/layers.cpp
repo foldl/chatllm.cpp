@@ -689,19 +689,45 @@ namespace chatllm
 
     ggml::tensor *ggml::repeat_interleave(ComputeContext *ctx, ggml::tensor *a, int repeat, int dim)
     {
-        CHATLLM_CHECK(dim == 0) << "only works for dim=0 now";
         CHATLLM_CHECK(a->ne[3] == 1) << "too many dimensions";
 
         if (repeat <= 1) return a;
 
-        ggml::tensor *b = ggml::new_tensor_4d(ctx, ggml::type_of(a), repeat * a->ne[0], a->ne[1], a->ne[2], a->ne[3]);
-        ggml::tensor *r = ggml::repeat(ctx, a, b);
-        r = reshape_4d(ctx, r, a->ne[0], repeat,  a->ne[1], a->ne[2]);
-        r = permute(ctx, r, 1, 0, 2, 3);
-        r = cont(ctx, r);
-        r = reshape_3d(ctx, r, a->ne[0] * repeat, a->ne[1], a->ne[2]);
+        if (0 == dim)
+        {
+            ggml::tensor *r = ggml::repeat(ctx, a, repeat * a->ne[0], a->ne[1], a->ne[2]);
+            r = reshape_4d(ctx, r, a->ne[0], repeat, a->ne[1], a->ne[2]);
+            r = permute(ctx, r, 1, 0, 2, 3);
+            r = cont(ctx, r);
+            r = reshape_3d(ctx, r, a->ne[0] * repeat, a->ne[1], a->ne[2]);
 
-        return r;
+            return r;
+        }
+        else if (1 == dim)
+        {
+            ggml::tensor *r = ggml::repeat(ctx, a, a->ne[0], repeat * a->ne[1], a->ne[2]);
+            r = reshape_4d(ctx, r, a->ne[0], a->ne[1], repeat, a->ne[2]);
+            r = permute(ctx, r, 0, 2, 1, 3);
+            r = cont(ctx, r);
+            r = reshape_3d(ctx, r, a->ne[0], repeat * a->ne[1], a->ne[2]);
+
+            return r;
+        }
+        else if (2 == dim)
+        {
+            ggml::tensor *r = ggml::repeat(ctx, a, a->ne[0], a->ne[1], repeat * a->ne[2]);
+            r = reshape_4d(ctx, r, a->ne[0], a->ne[1], a->ne[2], repeat);
+            r = permute(ctx, r, 0, 1, 3, 2);
+            r = cont(ctx, r);
+            r = reshape_3d(ctx, r, a->ne[0], a->ne[1], repeat * a->ne[2]);
+
+            return r;
+        }
+        else
+        {
+            CHATLLM_CHECK(false) << "unsupported dim = " << dim;
+            return nullptr;
+        }
     }
 
     ggml::tensor *ggml::permute(ComputeContext *ctx, ggml::tensor *a, int axis0, int axis1, int axis2, int axis3)

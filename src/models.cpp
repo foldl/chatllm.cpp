@@ -1248,10 +1248,11 @@ namespace chatllm
         if (!initial_run)
         {
             initial_run = true;
-            int past = gen_config.max_length / transformer->get_reserved_batch_size() - ids_count;
-            if (past < 0) past = 0;
-            if (!before_initial_run(ids_count, gen_config, past))
+            n_past = gen_config.max_length / transformer->get_reserved_batch_size() - ids_count;
+            if (n_past < 0) n_past = 0;
+            if (!before_initial_run(ids_count, gen_config, n_past))
                 return false;
+            n_past = 0;
         }
 
         before_run_model(input_ids, ids_count, gen_config, past);

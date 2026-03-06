@@ -37,9 +37,10 @@ namespace chatllm::qwen::v3_5
     class Prelude
     {
     public:
-        Prelude(const Config &config):
+        Prelude(const Config &config, int n = 2048):
             pos_helper(config.max_length, config.vocab_size),
-            helper_prelude(new TensorPosHelperPrelude(&pos_helper))
+            helper_prelude(new TensorPosHelperPrelude(&pos_helper)),
+            pad_arg(new BlockParams::PadEmbedding(n, n))
         {
             old_rms_eps = BlockParams::Epsilon::rms_norm;
             BlockParams::Epsilon::rms_norm = 1e-6f;
@@ -49,11 +50,13 @@ namespace chatllm::qwen::v3_5
         {
             BlockParams::Epsilon::rms_norm = old_rms_eps;
             helper_prelude.reset(nullptr);
+            pad_arg.reset(nullptr);
         }
     protected:
         float old_rms_eps = 0.0f;
         qwen::v2_5_vl::TensorPosHelper3D pos_helper;
         std::unique_ptr<TensorPosHelperPrelude> helper_prelude;
+        std::unique_ptr<BlockParams::PadEmbedding> pad_arg;
     };
 
     class ConditionalGeneration : public Prelude, public BaseModelForConditionalGeneration
@@ -65,17 +68,25 @@ namespace chatllm::qwen::v3_5
             ModelType type = (ModelType)MODEL_TYPE_QWEN3_5, int vocab_size = -1);
         void load(ModelLoader &loader) override;
         void before_run_model(const int *input_ids, const int ids_count, const GenerationConfig &gen_config, int past) override;
+        bool load_more(const json::JSON &config) override;
+        void set_additional_args(const std::map<std::string, std::string> &args) override;
+        int64_t get_param_num(bool effective_only) const;
+        void before_generate(const GenerationConfig &gen_config) override;
+        void set_tokenizer(BaseTokenizer *tokenizer) override;
+    protected:
+        bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override;
     private:
         int get_sparse_layer_num();
         int get_la_layer_num();
-
         Block *create_layer(InitContext *ctx, int layer_index);
-
     public:
         const Config config;
+        std::vector<int> v_pos;
     private:
         std::vector<v2_5_vl::ImageGridSize> images_grid;
         int token_time = 0;
+        qwen::v3_vl::vit::VisualEmbeddingGeneration visual;
+        bool vit_loaded = false;
     };
 
     class QwenGatedAttention : public QKNormedRoPEAttention<RMSNorm, BaseAttention>
@@ -234,7 +245,7 @@ namespace chatllm::qwen::v3_5
         key_dim(key_head_dim * num_key_heads),
         value_dim(value_head_dim * num_value_heads),
         num_v_heads(num_value_heads), num_k_heads(num_key_heads),
-        state(ggml::new_tensor_3d(ctx, ggml::type::GGML_TYPE_F32, head_v_dim, head_k_dim, num_k_heads)), // PERFORMANCE: F32 to make scale/out_proj happy
+        state(ggml::new_tensor_3d(ctx, ggml::type::GGML_TYPE_F32, head_v_dim, head_k_dim, num_v_heads)), // PERFORMANCE: F32 to make scale/out_proj happy
         conv1d(ctx, key_dim * 2 + value_dim, key_dim * 2 + value_dim, conv_kernel_dim, 1, 1, key_dim * 2 + value_dim, false),
         dt_bias(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, num_value_heads)),
         A_log(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, num_value_heads)),
@@ -414,8 +425,8 @@ namespace chatllm::qwen::v3_5
         value = ggml::reshape(ctx, value, head_v_dim, ggml::get_dim(value, 0) / head_v_dim, ggml::get_dim(value, 1), ggml::get_dim(value, 2));
 
         const int repeat = num_v_heads / num_k_heads;
-        key   = ggml::repeat_interleave(ctx, key,   repeat, 0);
-        query = ggml::repeat_interleave(ctx, query, repeat, 0);
+        key   = ggml::repeat_interleave(ctx, key,   repeat, 1);
+        query = ggml::repeat_interleave(ctx, query, repeat, 1);
 
         auto beta = calc_beta(ctx, input);
         auto g    = calc_g   (ctx, input);
@@ -452,8 +463,10 @@ namespace chatllm::qwen::v3_5
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int vocab_size):
         Prelude(config),
-        BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
-        config(config)
+        BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 10),
+        config(config),
+        token_time(0),
+        visual(runtime_config, pad_arg->get())
     {
         const size_t tensor_ovhd = ggml_tensor_overhead();
         const int sparse_layers = get_sparse_layer_num();
@@ -481,7 +494,7 @@ namespace chatllm::qwen::v3_5
         w_ctx_.check_used_mem_size(true);
         Prelude::done();
 
-        batch_input = 5;
+        batch_input = 9;
     }
 
     int ConditionalGeneration::get_sparse_layer_num()
@@ -533,21 +546,95 @@ namespace chatllm::qwen::v3_5
             {".self_attn.out_proj.",                ".linear_attn.out_proj."},
         });
         BaseModelForConditionalGeneration::load(loader);
+
+        loader.clear_tensor_name_translations();
+        loader.add_tensor_name_translations({
+            {".self_attn.",                 ".attn."},
+            {".o_proj.",                    ".proj."},
+            {".input_layernorm.",           ".norm1."},
+            {".post_attention_layernorm.",  ".norm2."},
+            {"visual.patch_embed.pos_embed.weight",            "visual.pos_embed.weight"},
+        });
+
+        if (vit_loaded)
+            vit_loaded = visual.load(loader);
     }
 
     void ConditionalGeneration::before_run_model(const int *input_ids, const int ids_count, const GenerationConfig &gen_config, int past)
     {
+        const int round_past = n_past + n_past_offset;
+        pos_helper.set_input_ids_offset(past - round_past);
+    }
+
+    bool ConditionalGeneration::load_more(const json::JSON &config)
+    {
+        bool r = BaseModelForConditionalGeneration::load_more(config);
+        vit_loaded = visual.load_more(this->config.dtype, this->config.hidden_size, config);
+        return r;
+    }
+
+    void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->video_max_frames       = utils::get_opt(args, "video_max_frames", tok->video_max_frames);
+        tok->fps                    = utils::get_opt(args, "fps", tok->fps);
+    }
+
+    int64_t ConditionalGeneration::get_param_num(bool effective_only) const
+    {
+        int64_t r = BaseModelForConditionalGeneration::get_param_num(effective_only);
+        if (vit_loaded)
+            r += visual.get_model()->get_param_num(effective_only);
+        return r;
+    }
+
+    bool ConditionalGeneration::generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits)
+    {
         const int image_id_start = config.vocab_size;
-        const int length = ids_count;
+        const int length = (int)input_ids.size();
 
         // TODO:
         int token_n_inc = 1;
 
-        if ((past == 0) && (n_past_offset == 0))
+        if ((n_past == 0) && (n_past_offset == 0))
             token_time = 0;
 
-        token_time = pos_helper.build_3d_pos(input_ids, length,
+        token_time = pos_helper.build_3d_pos(input_ids.data(), length,
             images_grid, image_id_start, token_n_inc, token_time);
+
+        auto r = BaseModelForConditionalGeneration::generate_next_token(input_ids, gen_config, lm_logits);
+
+        return r;
+    }
+
+    void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
+    {
+        std::vector<uint8_t> buf;
+        images_grid.clear();
+        for (auto &mm : tokenizer->media_emb)
+        {
+            images_grid.emplace_back(mm.grid_width / visual.vis_config.spatial_merge_size,
+                                     mm.grid_height / visual.vis_config.spatial_merge_size);
+        }
+
+        auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
+        visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
+        if (buf.size() < 1) return;
+
+        size_t offset = emb->get_base_nbytes();
+        Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
+    }
+
+    void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        BaseModelForConditionalGeneration::set_tokenizer(tokenizer);
+        if (vit_loaded)
+        {
+            auto encoder = dynamic_cast<v2_5_vl::ChatHistoryEncoder *>(tok->get_chat_encoder());
+            encoder->vis_config = &visual.vis_config;
+            encoder->vit_loaded = true;
+        }
     }
 }
 
