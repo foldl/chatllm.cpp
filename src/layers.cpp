@@ -1920,6 +1920,12 @@ namespace chatllm
         loader->read_tensor(path + "weight", weight);
     }
 
+    void RMSNormWeightPlus1::load(const std::string &path, TensorLoader *loader)
+    {
+        RMSNorm::load(path, loader);
+        loader->map_tensor_element(weight, [](float v) { return v + 1.0f; });
+    }
+
     ggml::tensor *L2Norm::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         ggml::tensor *output = inplace ? ggml::rms_norm_inplace(ctx, input, eps) : ggml::rms_norm(ctx, input, eps);
@@ -2791,6 +2797,49 @@ namespace chatllm
         CHATLLM_CHECK(rope_dim == factor_len * 2) << "factor_len mismatch!";
 
         Backend::write_tensor_data(freq_factors, factors);
+    }
+
+    BaseCombinedMLP::BaseCombinedMLP(InitContext *ctx, Block *mlp1, Block *mlp2)
+        :  mlp1(mlp1), mlp2(mlp2)
+    {}
+
+    ggml::tensor *BaseCombinedMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
+    {
+        ggml::tensor *r1 = mlp1->forward(ctx, hidden_states);
+        r1 = ggml::dup(ctx, r1);
+        ggml::tensor *r2 = mlp2->forward(ctx, hidden_states);
+        ggml::tensor *r = ggml::add(ctx, r1, r2);
+        return r;
+    }
+
+    ggml::tensor *BaseCombinedMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *hidden_states2)
+    {
+        ggml::tensor *r1 = mlp1->forward(ctx, hidden_states, hidden_states2);
+        ggml::tensor *r2 = mlp2->forward(ctx, hidden_states);
+        ggml::tensor *r = ggml::add(ctx, r1, r2);
+        return r;
+    }
+
+    int64_t BaseCombinedMLP::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += mlp1->get_param_num(effective_only);
+        r += mlp2->get_param_num(effective_only);
+        return r;
+    }
+
+    void BaseCombinedMLP::set_id(int id)
+    {
+        Block::set_id(id);
+        mlp1->set_id(id);
+        mlp2->set_id(id);
+    }
+
+    void BaseCombinedMLP::load(const std::string &path, TensorLoader *loader)
+    {
+        Block::load(path, loader);
+        mlp1->load(path + "mlp1.", loader);
+        mlp2->load(path + "mlp2.", loader);
     }
 
     MultiMLP::MultiMLP(InitContext *ctx, int hidden_size, int intermediate_size, int num_local_experts, int num_experts_per_tok,

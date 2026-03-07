@@ -831,6 +831,13 @@ namespace chatllm
         const bool inplace;
     };
 
+    class RMSNormWeightPlus1 : public RMSNorm
+    {
+    public:
+        using RMSNorm::RMSNorm;
+        void load(const std::string &path, TensorLoader *loader) override;
+    };
+
     class L2Norm : public Block
     {
     public:
@@ -1137,6 +1144,14 @@ namespace chatllm
               input_layernorm(ctx, hidden_size),
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, intermediate_size) {}
+
+        LMBlock1(InitContext *ctx, TypeLinearAttention _, int hidden_size, int intermediate_size,
+                  int mlp_intermediate_size1, int mlp_intermediate_size2,
+                  int conv_kernel_dim, int num_key_heads, int num_value_heads, int key_head_dim, int value_head_dim)
+            : Base(ctx, _, hidden_size, conv_kernel_dim, num_key_heads, num_value_heads, key_head_dim, value_head_dim),
+              input_layernorm(ctx, hidden_size),
+              post_attention_layernorm(ctx, hidden_size),
+              mlp(ctx, hidden_size, mlp_intermediate_size1, mlp_intermediate_size2) {}
 
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override
@@ -2469,61 +2484,42 @@ namespace chatllm
         Linear gate;
     };
 
-    template<class MLP1, class MLP2> class CombinedMLP : public Block
+    class BaseCombinedMLP : public Block
+    {
+    protected:
+        BaseCombinedMLP(InitContext *ctx, Block *mlp1, Block *mlp2);
+
+    public:
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *hidden_states2) override;
+
+        int64_t get_param_num(bool effective_only) const override;
+        void set_id(int id) override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    protected:
+        std::unique_ptr<Block> mlp1;
+        std::unique_ptr<Block> mlp2;
+    };
+
+    template<class MLP1, class MLP2> class CombinedMLP : public BaseCombinedMLP
     {
     public:
         CombinedMLP(InitContext *ctx, int hidden_size, int intermediate_size1, int intermediate_size2)
-            :  mlp1(ctx, hidden_size, intermediate_size1),
-               mlp2(ctx, hidden_size, intermediate_size2)
+            :  BaseCombinedMLP(ctx, new MLP1(ctx, hidden_size, intermediate_size1),
+                                    new MLP2(ctx, hidden_size, intermediate_size2)),
+               mlp1(*dynamic_cast<MLP1 *>(BaseCombinedMLP::mlp1.get())),
+               mlp2(*dynamic_cast<MLP2 *>(BaseCombinedMLP::mlp2.get()))
         {}
 
         CombinedMLP(InitContext *ctx, int hidden_size, int intermediate_size1, int intermediate_size2, bool mlp1_use_bias)
-            :  mlp1(ctx, hidden_size, intermediate_size1, mlp1_use_bias),
-               mlp2(ctx, hidden_size, intermediate_size2)
+            :  BaseCombinedMLP(ctx, new MLP1(ctx, hidden_size, intermediate_size1, mlp1_use_bias),
+                                    new MLP2(ctx, hidden_size, intermediate_size2)),
+               mlp1(*dynamic_cast<MLP1 *>(BaseCombinedMLP::mlp1.get())),
+               mlp2(*dynamic_cast<MLP2 *>(BaseCombinedMLP::mlp2.get()))
         {}
-
-        using Block::forward;
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override
-        {
-            ggml::tensor *r1 = mlp1.forward(ctx, hidden_states);
-            ggml::tensor *r2 = mlp2.forward(ctx, hidden_states);
-            ggml::tensor *r = ggml::add(ctx, r1, r2);
-            return r;
-        }
-
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *hidden_states2) override
-        {
-            ggml::tensor *r1 = mlp1.forward(ctx, hidden_states, hidden_states2);
-            ggml::tensor *r2 = mlp2.forward(ctx, hidden_states);
-            ggml::tensor *r = ggml::add(ctx, r1, r2);
-            return r;
-        }
-
-        int64_t get_param_num(bool effective_only) const override
-        {
-            int64_t r = 0;
-            r += mlp1.get_param_num(effective_only);
-            r += mlp2.get_param_num(effective_only);
-            return r;
-        }
-
-        void set_id(int id) override
-        {
-            Block::set_id(id);
-            mlp1.set_id(id);
-            mlp2.set_id(id);
-        }
-
-        void load(const std::string &path, TensorLoader *loader) override
-        {
-            Block::load(path, loader);
-            mlp1.load(path + "mlp1.", loader);
-            mlp2.load(path + "mlp2.", loader);
-        }
-
     public:
-        MLP1 mlp1;
-        MLP2 mlp2;
+        MLP1 &mlp1;
+        MLP2 &mlp2;
     };
 
     class MultiMLP : public Block

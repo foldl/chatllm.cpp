@@ -1359,6 +1359,41 @@ namespace chatllm
         data->assign_to(tensor);
     }
 
+    void TensorLoader::map_tensor_element(ggml::tensor *tensor, std::function<float (float)> f)
+    {
+        std::vector<uint8_t> buf;
+        std::vector<float> elements;
+        elements.resize(ggml::nelements(tensor));
+        if (ggml::type_of(tensor) != ggml::type::GGML_TYPE_F32)
+        {
+            buf.resize(ggml::nbytes(tensor));
+            Backend::read_tensor_data(tensor, buf.data());
+            ggml::to_float(ggml::type_of(tensor), buf.data(), elements.data(), ggml::get_dim(tensor, 0), ggml::nrows(tensor));
+        }
+        else
+        {
+            Backend::read_tensor_data(tensor, elements.data());
+        }
+
+        const auto row_size = ggml::get_dim(tensor, 0);
+
+        utils::parallel_for(0, ggml::nrows(tensor), [f, row_size, &elements](int64_t nth) {
+            float *p = &elements[nth * row_size];
+            for (int i = 0; i < row_size; i++)
+                p[i] = f(p[i]);
+        });
+
+        if (ggml::type_of(tensor) != ggml::type::GGML_TYPE_F32)
+        {
+            ggml::from_float(ggml::type_of(tensor), elements.data(), buf.data(), ggml::get_dim(tensor, 0), ggml::nrows(tensor));
+            Backend::write_tensor_data(tensor, buf.data());
+        }
+        else
+        {
+            Backend::write_tensor_data(tensor, elements.data());
+        }
+    }
+
     void ModelLoader::load_all_tensors(void)
     {
         if (tensor_dict.size() > 0) return;

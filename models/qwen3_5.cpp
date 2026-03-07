@@ -89,10 +89,10 @@ namespace chatllm::qwen::v3_5
         bool vit_loaded = false;
     };
 
-    class QwenGatedAttention : public QKNormedRoPEAttention<RMSNorm, BaseAttention>
+    class QwenGatedAttention : public QKNormedRoPEAttention<RMSNormWeightPlus1, BaseAttention>
     {
     public:
-        typedef QKNormedRoPEAttention<RMSNorm, BaseAttention> Base;
+        typedef QKNormedRoPEAttention<RMSNormWeightPlus1, BaseAttention> Base;
         QwenGatedAttention(InitContext *ctx, int hidden_size, int num_attention_heads, int num_kv_heads, int head_dim, int max_length);
         int64_t get_param_num(bool effective_only) const override;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int n_past) override;
@@ -485,7 +485,7 @@ namespace chatllm::qwen::v3_5
 
         transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
             vocab_size <= 0 ? create_embedding<Embedding>(&w_ctx_, config) : create_embedding<Embedding>(&w_ctx_, vocab_size, config.hidden_size),
-            create_final_norm<RMSNorm>(&w_ctx_, config),
+            create_final_norm<RMSNormWeightPlus1>(&w_ctx_, config),
             config.tie_word_embeddings ? (Block *)nullptr : create_lm_head(&w_ctx_, config, false),
             [&](InitContext *ctx, int layer_index) {
                 return create_layer(ctx, layer_index);
@@ -509,26 +509,79 @@ namespace chatllm::qwen::v3_5
         return r;
     }
 
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class QWenSparseMoE : public BaseSparseMLP
+    {
+    public:
+        QWenSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
+            : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, false)
+        {
+        }
+    };
+
     Block *ConditionalGeneration::create_layer(InitContext *ctx, int layer_index)
     {
-        CHATLLM_CHECK(config.num_experts < 0) << "TODO: MoE";
-
-        if (config.layer_is_la[layer_index])
+        if (config.num_experts <= 0)
         {
-            typedef LMBlock1<RMSNorm, QwenGatedDeltaNet, RMSNorm, SiLUMLP> Layer;
-            auto layer = new Layer(ctx, TypeLinearAttention(), config.hidden_size, config.intermediate_size,
-                config.linear_conv_kernel_dim, config.linear_num_key_heads, config.linear_num_value_heads, config.linear_key_head_dim, config.linear_value_head_dim);
-            return layer;
+            if (config.layer_is_la[layer_index])
+            {
+                typedef LMBlock1<RMSNormWeightPlus1, QwenGatedDeltaNet, RMSNormWeightPlus1, SiLUMLP> Layer;
+                auto layer = new Layer(ctx, TypeLinearAttention(), config.hidden_size, config.intermediate_size,
+                    config.linear_conv_kernel_dim, config.linear_num_key_heads, config.linear_num_value_heads, config.linear_key_head_dim, config.linear_value_head_dim);
+                return layer;
+            }
+            else
+            {
+                typedef LMBlock1<RMSNormWeightPlus1, QwenGatedAttention, RMSNormWeightPlus1, SiLUMLP> Layer;
+                auto layer = new Layer(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size, config.num_key_value_heads, config.head_dim, config.max_length);
+                layer->attention.mrope_sections = config.mrope_sections;
+                layer->attention.rope_mode      = RoPEMode::IMROPE;
+                layer->attention.rope_dim       = config.rope_dim;
+                layer->attention.freq_base      = config.rope_theta;
+                return layer;
+            }
         }
         else
         {
-            typedef LMBlock1<RMSNorm, QwenGatedAttention, RMSNorm, SiLUMLP> Layer;
-            auto layer = new Layer(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size, config.num_key_value_heads, config.head_dim, config.max_length);
-            layer->attention.mrope_sections = config.mrope_sections;
-            layer->attention.rope_mode      = RoPEMode::IMROPE;
-            layer->attention.rope_dim       = config.rope_dim;
-            layer->attention.freq_base      = config.rope_theta;
-            return layer;
+            typedef GatedMLP<SiLUMLP> QWenGatedMLP;
+
+            if (config.layer_is_la[layer_index])
+            {
+                if ((config.num_experts == 256) && (config.num_experts_per_tok == 8))
+                {
+                    typedef CombinedMLP<QWenSparseMoE<256, 8>, QWenGatedMLP> QWenMoEMLP;
+                    typedef LMBlock1<RMSNormWeightPlus1, QwenGatedDeltaNet, RMSNormWeightPlus1, QWenMoEMLP> Layer;
+                    auto layer = new Layer(ctx, TypeLinearAttention(), config.hidden_size, config.intermediate_size,
+                        config.moe_intermediate_size, config.shared_expert_intermediate_size,
+                        config.linear_conv_kernel_dim, config.linear_num_key_heads, config.linear_num_value_heads, config.linear_key_head_dim, config.linear_value_head_dim);
+                    return layer;
+                }
+                else
+                {
+                    CHATLLM_CHECK(false) << "unsupported MoE param: " << config.num_experts << ", " << config.num_experts_per_tok;
+                    return nullptr;
+                }
+            }
+            else
+            {
+                if ((config.num_experts == 256) && (config.num_experts_per_tok == 8))
+                {
+                    typedef CombinedMLP<QWenSparseMoE<256, 8>, QWenGatedMLP> QWenMoEMLP;
+                    typedef LMBlock1<RMSNormWeightPlus1, QwenGatedAttention, RMSNormWeightPlus1, QWenMoEMLP> Layer;
+                    auto layer = new Layer(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
+                        config.moe_intermediate_size, config.shared_expert_intermediate_size,
+                        config.num_key_value_heads, config.head_dim, config.max_length);
+                    layer->attention.mrope_sections = config.mrope_sections;
+                    layer->attention.rope_mode      = RoPEMode::IMROPE;
+                    layer->attention.rope_dim       = config.rope_dim;
+                    layer->attention.freq_base      = config.rope_theta;
+                    return layer;
+                }
+                else
+                {
+                    CHATLLM_CHECK(false) << "unsupported MoE param: " << config.num_experts << ", " << config.num_experts_per_tok;
+                    return nullptr;
+                }
+            }
         }
     }
 
@@ -544,7 +597,11 @@ namespace chatllm::qwen::v3_5
             {".self_attn.in_proj_qkv.",             ".linear_attn.in_proj_qkv."},
             {".self_attn.norm.",                    ".linear_attn.norm."},
             {".self_attn.out_proj.",                ".linear_attn.out_proj."},
+            {".mlp.mlp1.",                          ".mlp."},
+            {".mlp.mlp2.gate.",                     ".mlp.shared_expert_gate."},
+            {".mlp.mlp2.",                          ".mlp.shared_expert."},
         });
+
         BaseModelForConditionalGeneration::load(loader);
 
         loader.clear_tensor_name_translations();

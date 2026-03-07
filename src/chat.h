@@ -753,6 +753,8 @@ namespace chatllm
                         ggml::tensor *tensor) override;
         void read_scaler(const std::string &name, float *value) override;
 
+        void map_tensor_element(ggml::tensor *tensor, std::function<float (float)> f);
+
         bool has_tensor(const std::string &name) const override;
 
         void load_all_tensors(void);

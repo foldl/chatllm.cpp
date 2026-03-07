@@ -91,7 +91,8 @@ namespace chatllm
                     printf("[%3d] = %+3.18f\n", (int)i, t);
                     //printf("[%3d] = %08x\n", (int)i, *(uint32_t *)(p + i));
                 }
-                if (flag) exit(-1);
+                if (flag)
+                    exit(-1);
             }
             break;
         case GGML_TYPE_I32:
@@ -126,7 +127,8 @@ namespace chatllm
 
                     printf("[%3d] = %+3.18f\n", (int)i,  ggml_fp16_to_fp32(p[i]));
                 }
-                if (flag) exit(-1);
+                if (flag)
+                    exit(-1);
             }
             break;
         case GGML_TYPE_Q8_0:
@@ -181,13 +183,13 @@ namespace chatllm
 
         if (dbg_w)
         {
-            printf("\n--------------- dbg_w");
+            printf("\n#-------------- dbg_w");
             print_tensor(dbg_w);
 
             dbg_w = nullptr;
         }
 
-        printf("\n--------------- %s", it->second.c_str());
+        printf("\n#-------------- %s", it->second.c_str());
         bool full = true;
         print_tensor(tensor, 0, full);
 

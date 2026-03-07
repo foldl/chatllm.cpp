@@ -4,6 +4,7 @@
 #include <memory>
 #include <map>
 #include <string>
+#include <functional>
 
 #include "ggml-backend.h"
 
@@ -80,6 +81,7 @@ namespace chatllm
                         ggml::tensor *tensor) = 0;
         virtual void read_scaler(const std::string &name, float *value) = 0;
         virtual bool has_tensor(const std::string &name) const = 0;
+        static void map_tensor_element(ggml::tensor *tensor, std::function<float (float)> f);
     };
 
     // Is `ggml_backend_buffer_type_t` a good name?

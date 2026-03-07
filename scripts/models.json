@@ -4152,5 +4152,65 @@
                 }
             }
         }
+    },
+    "glm-ocr": {
+        "brief": "GLM-OCR is a multimodal OCR model for complex document understanding, built on the GLM-V encoder–decoder architecture.",
+        "default": "0.9b",
+        "license": "MIT",
+        "variants": {
+            "0.9b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1187511024,
+                        "url": "chatllm_quantized_glm/glm-ocr.bin"
+                    }
+                }
+            }
+        }
+    },
+    "qwen3.5": {
+        "brief": "Qwen 3.5 is a family of open-source multimodal models that delivers exceptional utility and performance.",
+        "default": "0.8b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "0.8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 938351648,
+                        "url": "chatllm_quantized_qwen3.5/qwen3.5-0.8b.bin"
+                    }
+                }
+            },
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2427658976,
+                        "url": "chatllm_quantized_qwen3.5/qwen3.5-2b.bin"
+                    }
+                }
+            },
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4963107408,
+                        "url": "chatllm_quantized_qwen3.5/qwen3.5-4b.bin"
+                    }
+                }
+            },
+            "9b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 10394664000,
+                        "url": "chatllm_quantized_qwen3.5/qwen3.5-9b.bin"
+                    }
+                }
+            }
+        }
     }
+
 }

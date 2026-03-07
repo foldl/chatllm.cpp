@@ -424,7 +424,7 @@ Please use `--format completion` for these models.
     [8B-Reasoning-2512](https://huggingface.co/mistralai/Ministral-3-8B-Reasoning-2512/tree/f511871f6402ba68dadfb42a94a7a7e13499fd65)
     * [x] Devstral-Small-2: [24B-Instruct-2512](https://huggingface.co/mistralai/Devstral-Small-2-24B-Instruct-2512/tree/8d27a0d2120f1563c11dc91d494e99f9678ecf79)
 
-* Qwen (`Qwen2AudioForConditionalGeneration`, `Qwen2VLForConditionalGeneration`, `Qwen2_5_VLForConditionalGeneration`, `Qwen3VLForConditionalGeneration`, `Qwen3VLMoeForConditionalGeneration`)
+* Qwen (`Qwen2AudioForConditionalGeneration`, `Qwen2VLForConditionalGeneration`, `Qwen2_5_VLForConditionalGeneration`, `Qwen3VLForConditionalGeneration`, `Qwen3VLMoeForConditionalGeneration`, `Qwen3_5ForConditionalGeneration`, `Qwen3_5MoeForConditionalGeneration`)
     * [x] Qwen2-Audio: [7B-Instruct](https://huggingface.co/Qwen/Qwen2-Audio-7B-Instruct/tree/0a095220c30b7b31434169c3086508ef3ea5bf0a)
     * [x] Qwen2-VL: [2B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/tree/895c3a49bc3fa70a340399125c650a463535e71c), [7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/tree/eed13092ef92e448dd6875b2a00151bd3f7db0ac)
     * [x] Qwen2.5-VL: [3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/tree/66285546d2b821cf421d4f5eb2576359d3770cd3), [7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/tree/cc594898137f460bfe9f0759e9844b3ce807cfb5)
@@ -433,6 +433,10 @@ Please use `--format completion` for these models.
     * [x] Qwen3-VL: [2B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct/tree/89644892e4d85e24eaac8bacfd4f463576704203),
     [4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct/tree/ebb281ec70b05090aa6165b016eac8ec08e71b17),
     [A3B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct/tree/9c4b90e1e4ba969fd3b5378b57d966d725f1b86c), etc
+    * [x] Qwen3.5: [0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B/tree/2fc06364715b967f1860aea9cf38778875588b17),
+    [2B](https://huggingface.co/Qwen/Qwen3.5-2B/tree/15852e8c16360a2fea060d615a32b45270f8a8fc),
+    [4B](https://huggingface.co/Qwen/Qwen3.5-4B/tree/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a),
+    [9B](https://huggingface.co/Qwen/Qwen3.5-9B/tree/c202236235762e1c871ad0ccb60c8ee5ba337b9a)
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
     * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)
@@ -461,7 +465,7 @@ Please use `--format completion` for these models.
     * [x] OCR2: [3B](https://huggingface.co/nanonets/Nanonets-OCR2-3B/tree/d0368059ad151ce9e38f526890cfd4f27b28be65), [1.5B](https://huggingface.co/nanonets/Nanonets-OCR2-1.5B-exp/tree/306a9b2a65672a3dbebd9bce9a9373a9a18674a2)
 
 * GLM-OCR (`GlmOcrForConditionalGeneration`)
-    * [x] [0.7B](https://huggingface.co/zai-org/GLM-OCR/tree/677c6baa60442a451f8a8c7eabdfab32d9801a0b)
+    * [x] [0.9B](https://huggingface.co/zai-org/GLM-OCR/tree/677c6baa60442a451f8a8c7eabdfab32d9801a0b)
 
 ## ASR Models
 

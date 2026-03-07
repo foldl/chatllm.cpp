@@ -5531,6 +5531,41 @@ class Qwen3VLConverter(BaseConverter):
     MODEL_TYPE = ModelType.Qwen3_VL
 
     @classmethod
+    def vis_state_dict_pp(cls, config, state_dict):
+        r = {}
+        for k in state_dict: # name: str
+            name: str = k
+            tensor: torch.Tensor = state_dict[name]
+
+            name = name.replace('model.visual.', 'visual.')
+
+            if name.startswith('model'):
+                r[name] = tensor
+                continue
+
+            if name == 'visual.patch_embed.proj.weight':
+                shape = tensor.shape
+                assert len(shape) == 5
+                assert shape[2] == 2
+                r[name.replace('proj.weight', 'proj.0.weight')] = tensor[:, :, 0, :, :]
+                r[name.replace('proj.weight', 'proj.1.weight')] = tensor[:, :, 1, :, :]
+            elif name.endswith('.attn.qkv.bias') or name.endswith('.attn.qkv.weight'):
+                #print(f'shape: {name} = {tensor.shape}')
+                num_heads = config.vision_config['hidden_size']
+                q, k, v = tensor.split([num_heads, num_heads, num_heads], dim=0)
+                r[name.replace('.attn.qkv.', '.attn.q_proj.')] = q
+                r[name.replace('.attn.qkv.', '.attn.k_proj.')] = k
+                r[name.replace('.attn.qkv.', '.attn.v_proj.')] = v
+            else:
+                name = name.replace('.mlp.linear_fc1.', '.mlp.fc0.')
+                name = name.replace('.mlp.linear_fc2.', '.mlp.fc1.')
+                name = name.replace('.linear_fc1.', '.mlp.fc0.')
+                name = name.replace('.linear_fc2.', '.mlp.fc1.')
+                r[name] = tensor
+
+        return r
+
+    @classmethod
     def state_dict_pp(cls, config, state_dict):
         r = {}
         for k in state_dict: # name: str
@@ -5556,28 +5591,9 @@ class Qwen3VLConverter(BaseConverter):
                     r[name] = tensor
                 continue
 
-            name = name.replace('model.visual.', 'visual.')
+            r[name] = tensor
 
-            if name == 'visual.patch_embed.proj.weight':
-                shape = tensor.shape
-                assert len(shape) == 5
-                assert shape[2] == 2
-                r[name.replace('proj.weight', 'proj.0.weight')] = tensor[:, :, 0, :, :]
-                r[name.replace('proj.weight', 'proj.1.weight')] = tensor[:, :, 1, :, :]
-            elif name.endswith('.attn.qkv.bias') or name.endswith('.attn.qkv.weight'):
-                #print(f'shape: {name} = {tensor.shape}')
-                num_heads = config.vision_config['hidden_size']
-                q, k, v = tensor.split([num_heads, num_heads, num_heads], dim=0)
-                r[name.replace('.attn.qkv.', '.attn.q_proj.')] = q
-                r[name.replace('.attn.qkv.', '.attn.k_proj.')] = k
-                r[name.replace('.attn.qkv.', '.attn.v_proj.')] = v
-            else:
-                name = name.replace('.mlp.linear_fc1.', '.mlp.fc0.')
-                name = name.replace('.mlp.linear_fc2.', '.mlp.fc1.')
-                name = name.replace('.linear_fc1.', '.mlp.fc0.')
-                name = name.replace('.linear_fc2.', '.mlp.fc1.')
-                r[name] = tensor
-
+        r = Qwen3VLConverter.vis_state_dict_pp(config, r)
         return r
 
     @staticmethod
@@ -5651,20 +5667,39 @@ class QWen3_5Converter(BaseConverter):
 
     @classmethod
     def state_dict_pp(cls, config, state_dict):
-        state_dict = Qwen3VLConverter.state_dict_pp(config, state_dict)
+        state_dict = Qwen3VLConverter.vis_state_dict_pp(config, state_dict)
         r = {}
         for k in state_dict:
             name: str = k
             tensor: torch.Tensor = state_dict[name]
-            if name.endswith('.self_attn.q_proj.weight'):
+            if name.startswith('model.language_model.'):
+                name = name.replace('model.language_model.', 'model.')
+                if name.endswith('experts.down_proj'):
+                    shape = tensor.shape
+                    for j in range(shape[0]):
+                        kkk = name.replace('mlp.experts.down_proj', f'mlp.experts.{j}.down_proj.weight')
+                        r[kkk] = tensor[j].contiguous()
+                elif name.endswith('experts.gate_up_proj'):
+                    shape = tensor.shape
+                    gate = tensor[:, : shape[1] // 2, :]
+                    up   = tensor[:, shape[1] // 2 :, :]
+                    for j in range(shape[0]):
+                        kkk = name.replace('experts.gate_up_proj', f'experts.{j}.gate_proj.weight')
+                        r[kkk] = gate[j].contiguous()
+                        kkk = name.replace('experts.gate_up_proj', f'experts.{j}.up_proj.weight')
+                        r[kkk] = up[j].contiguous()
+                elif name.endswith('.self_attn.q_proj.weight'):
+                    head_dim = QWen3_5Converter.txt_config.head_dim
+                    q, g = torch.chunk(tensor.view(-1, head_dim * 2, tensor.shape[1]), 2, dim=1)
+                    r[name] = q.contiguous().view(-1, tensor.shape[1])
+                    r[name.replace('.q_proj.', '.gate_proj.')] = g.contiguous().view(-1, tensor.shape[1])
+                else:
+                    r[name] = tensor
+            elif name.startswith("mtp.") and name.endswith('.self_attn.q_proj.weight'):
                 head_dim = QWen3_5Converter.txt_config.head_dim
                 q, g = torch.chunk(tensor.view(-1, head_dim * 2, tensor.shape[1]), 2, dim=1)
                 r[name] = q.contiguous().view(-1, tensor.shape[1])
                 r[name.replace('.q_proj.', '.gate_proj.')] = g.contiguous().view(-1, tensor.shape[1])
-            elif (name == "model.norm.weight") or   \
-                name.endswith('.input_layernorm.weight') or name.endswith('.post_attention_layernorm.weight') or \
-                name.endswith('.self_attn.q_norm.weight') or name.endswith('.self_attn.k_norm.weight'):
-                r[name] = 1.0 + tensor
             else:
                 r[name] = tensor
         return r
@@ -9817,7 +9852,7 @@ def main():
         if config['thinker_config']['model_type'] == 'qwen3_forced_aligner':
             Qwen3ASRConverter.MODEL_TYPE = ModelType.Qwen3ForcedAligner
         Qwen3ASRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
-    elif arch == 'Qwen3_5ForConditionalGeneration':
+    elif arch in ['Qwen3_5ForConditionalGeneration', 'Qwen3_5MoeForConditionalGeneration']:
         QWen3_5Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'KimiVLForConditionalGeneration':
         KimiVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
