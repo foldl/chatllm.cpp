@@ -308,11 +308,13 @@ namespace chatllm
         class DisableCache
         {
         public:
-            DisableCache();
+            DisableCache(bool disabled = true);
             ~DisableCache();
             static bool is_disabled(void);
         protected:
             static bool disabled;
+        private:
+            bool state;
         };
 
         class FlashAttention
@@ -1381,6 +1383,30 @@ namespace chatllm
         MLPBlock mlp;
     };
 
+    class LMBlock4Forward
+    {
+    public:
+        LMBlock4Forward(Block *pre_attention_layernorm,
+                        Block *attention,
+                        Block *post_attention_layernorm,
+                        Block *pre_mlp_layernorm,
+                        Block *mlp,
+                        Block *post_mlp_layernorm,
+                        int id);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past);
+        int64_t get_param_num(bool effective_only);
+        void set_id(int id);
+        void load(const std::string &path, TensorLoader *loader);
+    protected:
+        const int id;
+        Block *pre_attention_layernorm;
+        Block *attention;
+        Block *post_attention_layernorm;
+        Block *pre_mlp_layernorm;
+        Block *mlp;
+        Block *post_mlp_layernorm;
+    };
+
     template <class PreAttnNormBlock,
               class AttentionBlock,
               class PostAttnNormBlock,
@@ -1440,54 +1466,39 @@ namespace chatllm
         using Block::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override
         {
-            ggml::tensor *residual = hidden_states;
-
-            hidden_states = pre_attention_layernorm.forward(ctx, hidden_states);
-            hidden_states = Base::attention.forward(ctx, hidden_states, n_past);
-            hidden_states = post_attention_layernorm.forward(ctx, hidden_states);
-
-            hidden_states = ggml::add(ctx, residual, hidden_states);
-            residual = hidden_states;
-
-            hidden_states = pre_mlp_layernorm.forward(ctx, hidden_states);
-            hidden_states = mlp.forward(ctx, hidden_states);
-            hidden_states = post_mlp_layernorm.forward(ctx, hidden_states);
-
-            hidden_states = ggml::add(ctx, residual, hidden_states);
-
+            LMBlock4Forward eval(&pre_attention_layernorm, &(Base::attention), &post_attention_layernorm, &pre_mlp_layernorm, &mlp, &post_mlp_layernorm, Base::get_id());
+            hidden_states = eval.forward(ctx, hidden_states, n_past);
             return hidden_states;
         }
 
         int64_t get_param_num(bool effective_only) const override
         {
+            LMBlock4Forward eval((Block *)&pre_attention_layernorm,
+                                 (Block *)&(Base::attention),
+                                 (Block *)&post_attention_layernorm,
+                                 (Block *)&pre_mlp_layernorm,
+                                 (Block *)&mlp,
+                                 (Block *)&post_mlp_layernorm, Base::get_id());
+
             int64_t r = Base::get_param_num(effective_only);
-            r += pre_attention_layernorm.get_param_num(effective_only);
-            r += post_attention_layernorm.get_param_num(effective_only);
-            r += pre_mlp_layernorm.get_param_num(effective_only);
-            r += mlp.get_param_num(effective_only);
-            r += post_mlp_layernorm.get_param_num(effective_only);
+            r += eval.get_param_num(effective_only);
             return r;
         }
 
         void set_id(int id) override
         {
-            Base::set_id(id);
+            LMBlock4Forward eval(&pre_attention_layernorm, &(Base::attention), &post_attention_layernorm, &pre_mlp_layernorm, &mlp, &post_mlp_layernorm, Base::get_id());
 
-            pre_attention_layernorm.set_id(id);
-            post_attention_layernorm.set_id(id);
-            pre_mlp_layernorm.set_id(id);
-            mlp.set_id(id);
-            post_mlp_layernorm.set_id(id);
+            Base::set_id(id);
+            eval.set_id(id);
         }
 
         void load(const std::string &path, TensorLoader *loader) override
         {
+            LMBlock4Forward eval(&pre_attention_layernorm, &(Base::attention), &post_attention_layernorm, &pre_mlp_layernorm, &mlp, &post_mlp_layernorm, Base::get_id());
+
             Base::load(path, loader);
-            pre_attention_layernorm.load(path + "pre_attention_layernorm.", loader);
-            post_attention_layernorm.load(path + "post_attention_layernorm.", loader);
-            pre_mlp_layernorm.load(path + "pre_mlp_layernorm.", loader);
-            mlp.load(path + "mlp.", loader);
-            post_mlp_layernorm.load(path + "post_mlp_layernorm.", loader);
+            eval.load(path, loader);
         }
 
     public:

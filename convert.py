@@ -58,7 +58,8 @@ class ChatModelAP(IntEnum):
 ModelTypeTagChatImageIn = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value) >> 1) << 24
 ModelTypeTagChatAudioIn = ((ChatModelAP.Text.value + ChatModelAP.AudioInput.value) >> 1) << 24
 ModelTypeTagChatImageVideoIn = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value) >> 1) << 24
-ModelTypeTagChatImageVideoAudioInAudioOut = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value + ChatModelAP.AudioInput.value + ChatModelAP.AudioOutput.value) >> 1) << 24
+ModelTypeTagChatImageVideoAudioIn           = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value + ChatModelAP.AudioInput.value) >> 1) << 24
+ModelTypeTagChatImageVideoAudioInAudioOut   = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.VideoInput.value + ChatModelAP.AudioInput.value + ChatModelAP.AudioOutput.value) >> 1) << 24
 ModelTypeTagChatImageInImageOut = ((ChatModelAP.Text.value + ChatModelAP.ImageInput.value + ChatModelAP.ImageOutput.value) >> 1) << 24
 
 ModelTypeTagEmbText             = (ModelPurpose.Emb.value << 20)    | ((ChatModelAP.Text.value) << 23)
@@ -278,6 +279,8 @@ class ModelType(Enum):
     SmolVLM                 = ModelTypeTagChatImageVideoIn + 0x0000200
     YoutuVL                 = ModelTypeTagChatImageVideoIn + 0x0000220
     PenguinVL               = ModelTypeTagChatImageVideoIn + 0x0000221
+
+    Gemma4                  = ModelTypeTagChatImageVideoAudioIn + 0x0000001
 
     MiniCPM_O               = ModelTypeTagChatImageVideoAudioInAudioOut + 0x0000001
 
@@ -6608,6 +6611,118 @@ class Gemma3Converter(BaseConverter):
 
         return weight_names
 
+class Gemma4Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Gemma4
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        if name == 'model.embed_tokens.weight':
+            return tensor * (config.hidden_size ** 0.5)
+        elif name == "model.embed_tokens_per_layer.weight":
+            return tensor * (config.hidden_size_per_layer_input ** 0.5)
+        else:
+            return tensor
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+
+        new_dict = {}
+        for k in state_dict:
+            kk: str = k
+            t: torch.Tensor = state_dict[kk]
+            if kk.startswith('model.language_model.'):
+                kk = kk.replace('model.language_model.', 'model.')
+
+                t = Gemma4Converter.pp(Gemma4Converter.txt_config, kk, t)
+                new_dict[kk] = t
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MAX_LAYERS = 128
+
+        txt_config = AttributeDict(config.text_config)
+        Gemma4Converter.txt_config = txt_config
+
+        assert not txt_config.attention_bias, 'attention_bias must == False'
+        assert txt_config.hidden_activation == 'gelu_pytorch_tanh', "hidden_activation must  == 'gelu_pytorch_tanh'"
+        assert txt_config.num_hidden_layers <= MAX_LAYERS
+        assert txt_config.tie_word_embeddings
+        assert txt_config.vocab_size == txt_config.vocab_size_per_layer_input
+
+        layer_is_swa = [0] * MAX_LAYERS
+        for i in range(txt_config.num_hidden_layers):
+            layer_is_swa[i] = 1 if txt_config.layer_types[i] == 'sliding_attention' else 0
+
+        # fake it for LlamaConverter
+        txt_config.hidden_act = 'silu'
+        dump_llama_like_config(f, txt_config, ggml_type)
+        config_values = [
+            1 if txt_config.attention_k_eq_v else 0,
+            txt_config.global_head_dim,
+            txt_config.head_dim,
+            txt_config.hidden_size_per_layer_input,
+            txt_config.moe_intermediate_size if txt_config.enable_moe_block else -1,
+            txt_config.num_experts if txt_config.enable_moe_block else -1,
+            txt_config.num_global_key_value_heads if txt_config.num_global_key_value_heads is not None else -1,
+            txt_config.num_key_value_heads,
+            txt_config.num_kv_shared_layers,
+            txt_config.sliding_window,
+            txt_config.top_k_experts if txt_config.enable_moe_block else -1,
+            1 if txt_config.use_double_wide_mlp else 0,
+        ] + layer_is_swa
+
+        print(config_values)
+        f.write(struct.pack("i" * len(config_values), *config_values))
+
+        config_values = [
+            txt_config.final_logit_softcapping,
+            txt_config.rope_parameters['full_attention']['partial_rotary_factor'],
+            txt_config.rope_parameters['full_attention']['rope_theta'],
+            txt_config.rope_parameters['sliding_attention']['rope_theta'],
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        if Gemma4Converter.txt_config.hidden_size_per_layer_input > 0:
+            weight_names += [
+                "model.embed_tokens_per_layer.weight",
+                "model.per_layer_model_projection.weight",
+                "model.per_layer_projection_norm.weight",
+            ]
+        for i in range(Gemma4Converter.txt_config.num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.layer_scalar",
+                f"model.layers.{i}.mlp.down_proj.weight",
+                f"model.layers.{i}.mlp.gate_proj.weight",
+                f"model.layers.{i}.mlp.up_proj.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.post_feedforward_layernorm.weight",
+                f"model.layers.{i}.pre_feedforward_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_norm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_norm.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+            ]
+            if Gemma4Converter.txt_config.hidden_size_per_layer_input > 0:
+                weight_names += [
+                    f"model.layers.{i}.per_layer_input_gate.weight",
+                    f"model.layers.{i}.per_layer_projection.weight",
+                    f"model.layers.{i}.post_per_layer_input_norm.weight",
+                ]
+
+        weight_names += [
+            "model.norm.weight",
+        ]
+
+        return weight_names
+
 class RNJ_1Converter(BaseConverter):
     MODEL_TYPE = ModelType.RNJ_1
 
@@ -10066,6 +10181,8 @@ def main():
         if config.vision_config is not None:
             Gemma3Converter.MODEL_TYPE = ModelType.Gemma3Vis
         Gemma3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Gemma4ForConditionalGeneration':
+        Gemma4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'CohereForCausalLM':
         CohereCommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Cohere2ForCausalLM':

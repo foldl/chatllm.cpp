@@ -1481,14 +1481,14 @@ namespace chatllm
         OverrideKProjBiased::active = false;
     }
 
-    BlockParams::DisableCache::DisableCache()
+    BlockParams::DisableCache::DisableCache(bool disabled): state(DisableCache::disabled)
     {
-        DisableCache::disabled = true;
+        DisableCache::disabled = disabled;
     }
 
     BlockParams::DisableCache::~DisableCache()
     {
-        DisableCache::disabled = false;
+        DisableCache::disabled = state;
     }
 
     BlockParams::FlashAttention::FlashAttention(const std::string &mode)
@@ -2583,6 +2583,71 @@ namespace chatllm
         return hidden_states;
     }
 
+    LMBlock4Forward::LMBlock4Forward(Block *pre_attention_layernorm,
+                    Block *attention,
+                    Block *post_attention_layernorm,
+                    Block *pre_mlp_layernorm,
+                    Block *mlp,
+                    Block *post_mlp_layernorm,
+                    int id):
+        id(id),
+        pre_attention_layernorm(pre_attention_layernorm),
+        attention(attention),
+        post_attention_layernorm(post_attention_layernorm),
+        pre_mlp_layernorm(pre_mlp_layernorm),
+        mlp(mlp),
+        post_mlp_layernorm(post_mlp_layernorm)
+    {}
+
+    ggml::tensor *LMBlock4Forward::forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past)
+    {
+        ggml::tensor *residual = hidden_states;
+
+        hidden_states = pre_attention_layernorm->forward(ctx, hidden_states);
+        hidden_states = attention->forward(ctx, hidden_states, n_past);
+        hidden_states = post_attention_layernorm->forward(ctx, hidden_states);
+
+        hidden_states = ggml::add(ctx, residual, hidden_states);
+        residual = hidden_states;
+
+        hidden_states = pre_mlp_layernorm->forward(ctx, hidden_states);
+        hidden_states = mlp->forward(ctx, hidden_states);
+        hidden_states = post_mlp_layernorm->forward(ctx, hidden_states);
+
+        hidden_states = ggml::add(ctx, residual, hidden_states);
+
+        return hidden_states;
+    }
+
+    int64_t LMBlock4Forward::get_param_num(bool effective_only)
+    {
+        int64_t r = 0;
+        r += pre_attention_layernorm->get_param_num(effective_only);
+        r += post_attention_layernorm->get_param_num(effective_only);
+        r += pre_mlp_layernorm->get_param_num(effective_only);
+        r += mlp->get_param_num(effective_only);
+        r += post_mlp_layernorm->get_param_num(effective_only);
+        return r;
+    }
+
+    void LMBlock4Forward::set_id(int id)
+    {
+        pre_attention_layernorm->set_id(id);
+        post_attention_layernorm->set_id(id);
+        pre_mlp_layernorm->set_id(id);
+        mlp->set_id(id);
+        post_mlp_layernorm->set_id(id);
+    }
+
+    void LMBlock4Forward::load(const std::string &path, TensorLoader *loader)
+    {
+        pre_attention_layernorm->load(path + "pre_attention_layernorm.", loader);
+        post_attention_layernorm->load(path + "post_attention_layernorm.", loader);
+        pre_mlp_layernorm->load(path + "pre_mlp_layernorm.", loader);
+        mlp->load(path + "mlp.", loader);
+        post_mlp_layernorm->load(path + "post_mlp_layernorm.", loader);
+    }
+
     BaseTensorPosHelper::BaseTensorPosHelper(int max_length)
         : max_length(max_length)
     {}
@@ -3020,7 +3085,7 @@ namespace chatllm
 
     void BaseBaseSlidingWindowAttentionPartialCache::save_to_cache(ComputeContext *ctx, const int n_past, const int qlen, ggml::tensor *k, ggml::tensor *v)
     {
-        CHATLLM_CHECK(qlen == 1)  << "qlen must be 1";
+        CHATLLM_CHECK(qlen < sliding_window_len)  << "qlen must be < sliding_window_len";
 
         {
             const int write_offset = cache_offset + n_past;

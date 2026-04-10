@@ -1412,6 +1412,7 @@ namespace chatllm
 
             // read and check tensor shape
             int ndim = read_basic<int>();
+            CHATLLM_CHECK(ndim <= ggml::max_dims());
             for (int i = ndim - 1; i >= 0; i--)
             {
                 int dim_size = read_basic<int>();

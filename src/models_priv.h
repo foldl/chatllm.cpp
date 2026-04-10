@@ -13,6 +13,7 @@ namespace chatllm
     #define MODEL_TYPE_TAG_ChatImageIn                              MAKE_TYPE_TAG(ModelPurpose::Chat, ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput)
     #define MODEL_TYPE_TAG_ChatAudioIn                              MAKE_TYPE_TAG(ModelPurpose::Chat, ChatModelAccessPoint::Text + ChatModelAccessPoint::AudioInput)
     #define MODEL_TYPE_TAG_ChatImageInVideoIn                       MAKE_TYPE_TAG(ModelPurpose::Chat, ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::VideoInput)
+    #define MODEL_TYPE_TAG_ChatImageInVideoInAudioIn                MAKE_TYPE_TAG(ModelPurpose::Chat, ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::VideoInput + ChatModelAccessPoint::AudioInput)
     #define MODEL_TYPE_TAG_ChatImageInVideoInAudioInAudioOut        MAKE_TYPE_TAG(ModelPurpose::Chat, ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::VideoInput + ChatModelAccessPoint::AudioInput + ChatModelAccessPoint::AudioOutput)
     #define MODEL_TYPE_TAG_ChatImageInImageOut                      MAKE_TYPE_TAG(ModelPurpose::Chat, ChatModelAccessPoint::Text + ChatModelAccessPoint::ImageInput + ChatModelAccessPoint::ImageOutput)
 
@@ -226,6 +227,8 @@ namespace chatllm
         MODEL_TYPE_KIMI_VL          = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x00100,
         MODEL_TYPE_SMOL_VLM         = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x00200,
         MODEL_TYPE_YOUTU_VL         = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x00220,
+
+        MODEL_TYPE_GEMMA4           = MODEL_TYPE_TAG_ChatImageInVideoInAudioIn + 0x00001,
 
         MODEL_TYPE_JANUS_PRO        = MODEL_TYPE_TAG_ChatImageInImageOut + 0x00001,
 
