@@ -467,6 +467,11 @@ BPEProcessor2::BPEProcessor2(std::vector<std::string> regex_exprs):
     this->regex_exprs = regex_exprs;
 }
 
+void BPEProcessor2::SetDecoderType(DecoderType dec_type)
+{
+    this->dec_type = dec_type;
+}
+
 size_t BPEProcessor2::Load(DataReader *data_reader, int n_vocab)
 {
     Reader reader(data_reader);
@@ -652,6 +657,8 @@ int BPEProcessor2::DoEncode2(const std::string &input,
     if (input.size() < 1) return 0;
 
     std::vector<std::string> bpe_encoded_words = unicode_regex_split(input, regex_exprs);
+    if (dec_type == DecoderType::ByteLevel)
+        bpe_encoded_words = unicode_byte_encoding_process(bpe_encoded_words);
 
     llm_bpe_tokenizer tokenizer(vocab_);
     tokenizer.tokenize(*ids, bpe_encoded_words);
@@ -844,7 +851,14 @@ const std::string BPEProcessor2::IdToPiece(int id) const
     if (vocab_.is_normal_token(id))
     {
         std::string result = vocab_.id_to_token[id].tok;
-        return _decode_text(result);
+        switch (dec_type)
+        {
+        case DecoderType::ByteLevel:
+            return _decode_text(result);
+
+        default:
+            return result;
+        }
     }
     else if (vocab_.is_control_token(id))
     {

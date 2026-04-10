@@ -153,7 +153,7 @@ static inline std::wstring unicode_wstring_from_utf8(const std::string & s) {
     return conv.from_bytes(s);
 }
 
-static std::vector<std::string> unicode_byte_encoding_process(const std::vector<std::string> & bpe_words) {
+std::vector<std::string> unicode_byte_encoding_process(const std::vector<std::string> & bpe_words) {
     std::vector<std::string> bpe_encoded_words;
     for (const auto & word : bpe_words) {
         std::string text_utf;
@@ -767,7 +767,7 @@ std::vector<std::string> unicode_regex_split(const std::string & text, const std
         start += offset;
     }
 
-    return unicode_byte_encoding_process(bpe_words);
+    return bpe_words;
 }
 
 static inline bool in_range(char32_t cp, char32_t lo, char32_t hi) {
