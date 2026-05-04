@@ -70,7 +70,7 @@ namespace chatllm::qwen::v3_5
         void before_run_model(const int *input_ids, const int ids_count, const GenerationConfig &gen_config, int past) override;
         bool load_more(const json::JSON &config) override;
         void set_additional_args(const std::map<std::string, std::string> &args) override;
-        int64_t get_param_num(bool effective_only) const;
+        int64_t get_param_num(bool effective_only) const override;
         void before_generate(const GenerationConfig &gen_config) override;
         void set_tokenizer(BaseTokenizer *tokenizer) override;
     protected:

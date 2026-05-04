@@ -6630,12 +6630,21 @@ class Gemma4Converter(BaseConverter):
         for k in state_dict:
             kk: str = k
             t: torch.Tensor = state_dict[kk]
-            if kk.startswith('model.language_model.'):
+            if kk == 'model.embed_audio.embedding_projection.weight':
+                new_dict['audio.embedding_projection.weight'] = t
+            elif kk == 'model.embed_vision.embedding_projection.weight':
+                new_dict['visual.embedding_projection.weight'] = t
+            elif kk.startswith('model.language_model.'):
                 kk = kk.replace('model.language_model.', 'model.')
-
                 t = Gemma4Converter.pp(Gemma4Converter.txt_config, kk, t)
                 new_dict[kk] = t
-
+            elif kk.startswith('model.vision_tower.encoder.layers.'):
+                kk = kk.replace('model.vision_tower.encoder.layers.', 'visual.blocks.')
+                kk = kk.replace('.linear.weight', '.weight')
+                new_dict[kk] = t
+            elif kk.startswith('model.vision_tower.'):
+                kk = kk.replace('model.vision_tower.', 'visual.')
+                new_dict[kk] = t
         return new_dict
 
     @staticmethod
@@ -6685,6 +6694,60 @@ class Gemma4Converter(BaseConverter):
         f.write(struct.pack("<" + "f" * len(config_values), *config_values))
 
     @staticmethod
+    def get_vis_weight_names(config):
+        weight_names = ["visual.patch_embedder.input_proj.weight",
+                        "visual.patch_embedder.position_embedding_table",
+                        "visual.embedding_projection.weight"]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"visual.blocks.{i}.input_layernorm.weight",
+                f"visual.blocks.{i}.mlp.down_proj.weight",
+                f"visual.blocks.{i}.mlp.gate_proj.weight",
+                f"visual.blocks.{i}.mlp.up_proj.weight",
+                f"visual.blocks.{i}.post_attention_layernorm.weight",
+                f"visual.blocks.{i}.post_feedforward_layernorm.weight",
+                f"visual.blocks.{i}.pre_feedforward_layernorm.weight",
+                f"visual.blocks.{i}.self_attn.k_norm.weight",
+                f"visual.blocks.{i}.self_attn.k_proj.weight",
+                f"visual.blocks.{i}.self_attn.o_proj.weight",
+                f"visual.blocks.{i}.self_attn.q_norm.weight",
+                f"visual.blocks.{i}.self_attn.q_proj.weight",
+                f"visual.blocks.{i}.self_attn.v_proj.weight",
+            ]
+            if config.use_clipped_linears:
+                weight_names += [
+                    f"visual.blocks.{i}.mlp.down_proj.input_max",
+                    f"visual.blocks.{i}.mlp.down_proj.input_min",
+                    f"visual.blocks.{i}.mlp.down_proj.output_max",
+                    f"visual.blocks.{i}.mlp.down_proj.output_min",
+                    f"visual.blocks.{i}.mlp.gate_proj.input_max",
+                    f"visual.blocks.{i}.mlp.gate_proj.input_min",
+                    f"visual.blocks.{i}.mlp.gate_proj.output_max",
+                    f"visual.blocks.{i}.mlp.gate_proj.output_min",
+                    f"visual.blocks.{i}.mlp.up_proj.input_max",
+                    f"visual.blocks.{i}.mlp.up_proj.input_min",
+                    f"visual.blocks.{i}.mlp.up_proj.output_max",
+                    f"visual.blocks.{i}.mlp.up_proj.output_min",
+                    f"visual.blocks.{i}.self_attn.k_proj.input_max",
+                    f"visual.blocks.{i}.self_attn.k_proj.input_min",
+                    f"visual.blocks.{i}.self_attn.k_proj.output_max",
+                    f"visual.blocks.{i}.self_attn.k_proj.output_min",
+                    f"visual.blocks.{i}.self_attn.o_proj.input_max",
+                    f"visual.blocks.{i}.self_attn.o_proj.input_min",
+                    f"visual.blocks.{i}.self_attn.o_proj.output_max",
+                    f"visual.blocks.{i}.self_attn.o_proj.output_min",
+                    f"visual.blocks.{i}.self_attn.q_proj.input_max",
+                    f"visual.blocks.{i}.self_attn.q_proj.input_min",
+                    f"visual.blocks.{i}.self_attn.q_proj.output_max",
+                    f"visual.blocks.{i}.self_attn.q_proj.output_min",
+                    f"visual.blocks.{i}.self_attn.v_proj.input_max",
+                    f"visual.blocks.{i}.self_attn.v_proj.input_min",
+                    f"visual.blocks.{i}.self_attn.v_proj.output_max",
+                    f"visual.blocks.{i}.self_attn.v_proj.output_min",
+                ]
+        return weight_names
+
+    @staticmethod
     def get_weight_names(config):
         weight_names = ["model.embed_tokens.weight"]
         if Gemma4Converter.txt_config.hidden_size_per_layer_input > 0:
@@ -6693,7 +6756,13 @@ class Gemma4Converter(BaseConverter):
                 "model.per_layer_model_projection.weight",
                 "model.per_layer_projection_norm.weight",
             ]
+
+        first_kv_shared_layer_idx = Gemma4Converter.txt_config.num_hidden_layers - Gemma4Converter.txt_config.num_kv_shared_layers
+        attention_k_eq_v          = Gemma4Converter.txt_config.attention_k_eq_v
         for i in range(Gemma4Converter.txt_config.num_hidden_layers):
+            is_kv_shared_layer  = i >= first_kv_shared_layer_idx > 0
+            is_sliding          = Gemma4Converter.txt_config.layer_types[i] == "sliding_attention"
+            use_alternative_attention = attention_k_eq_v and not is_sliding
             weight_names += [
                 f"model.layers.{i}.input_layernorm.weight",
                 f"model.layers.{i}.layer_scalar",
@@ -6703,13 +6772,20 @@ class Gemma4Converter(BaseConverter):
                 f"model.layers.{i}.post_attention_layernorm.weight",
                 f"model.layers.{i}.post_feedforward_layernorm.weight",
                 f"model.layers.{i}.pre_feedforward_layernorm.weight",
-                f"model.layers.{i}.self_attn.k_norm.weight",
-                f"model.layers.{i}.self_attn.k_proj.weight",
                 f"model.layers.{i}.self_attn.o_proj.weight",
                 f"model.layers.{i}.self_attn.q_norm.weight",
                 f"model.layers.{i}.self_attn.q_proj.weight",
-                f"model.layers.{i}.self_attn.v_proj.weight",
             ]
+            if not is_kv_shared_layer:
+                weight_names += [
+                    f"model.layers.{i}.self_attn.k_norm.weight",
+                    f"model.layers.{i}.self_attn.k_proj.weight",
+                ]
+                if not use_alternative_attention:
+                    weight_names += [
+                        f"model.layers.{i}.self_attn.v_proj.weight",
+                    ]
+
             if Gemma4Converter.txt_config.hidden_size_per_layer_input > 0:
                 weight_names += [
                     f"model.layers.{i}.per_layer_input_gate.weight",
@@ -6720,6 +6796,8 @@ class Gemma4Converter(BaseConverter):
         weight_names += [
             "model.norm.weight",
         ]
+
+        weight_names += Gemma4Converter.get_vis_weight_names(AttributeDict(config.vision_config))
 
         return weight_names
 

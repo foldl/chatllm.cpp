@@ -174,6 +174,15 @@ namespace chatllm
                                             float attn_factor, float beta_fast, float beta_slow,
                                             const int *sections = nullptr);
 
+        // rope is apply on [0..head_dim//2], [head/dim/2..] respectively
+        // this differs from GGML_ROPE_TYPE_VISION
+        // `pos` has a similar shape for `GGML_ROPE_TYPE_VISION`
+        // ggml shape of `a`: [head_size, heads, qlen, 1]
+        ggml::tensor *rope_2d_inplace(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *pos, ggml::tensor *freq_factors,
+                                            int   n_dims, int n_ctx_orig,
+                                            float freq_base, float freq_scale, float ext_factor,
+                                            float attn_factor, float beta_fast, float beta_slow);
+
         ggml::tensor *soft_max(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *soft_max_inplace(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *soft_max_ext(ComputeContext *ctx,  ggml::tensor *a,  ggml::tensor *mask, float scale, float max_bias);
@@ -194,6 +203,13 @@ namespace chatllm
 
         ggml::tensor *clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max);
         ggml::tensor *avg_pool_2d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride, float padding = 0.0f);
+        ggml::tensor *avg_pool_2d(ComputeContext *ctx, ggml::tensor *a,
+            int                   k0,
+            int                   k1,
+            int                   s0,
+            int                   s1,
+            float                 p0 = 0.0f,
+            float                 p1 = 0.0f);
         ggml::tensor *avg_pool_1d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride,   int padding = 0);
 
         ggml::tensor *abs(ComputeContext *ctx, ggml::tensor *a);
@@ -704,15 +720,25 @@ namespace chatllm
         int64_t get_param_num(bool effective_only) const override
         {
             int64_t r = ggml::nelements(weight);
-            if (bias) r += ggml::nelements(bias);
+            if (bias)       r += ggml::nelements(bias);
+            if (do_clip)    r += 4;
             return r;
         }
 
         void load(const std::string &path, TensorLoader *loader) override;
 
+        void enable_clipping(void)
+        {
+            do_clip = true;
+        }
+
     public:
         ggml::tensor *weight; // [out_features, in_features]
         ggml::tensor *bias;   // [out_features]
+    protected:
+        float clip_input[2]  = {0.0f, 0.0f};
+        float clip_output[2] = {0.0f, 0.0f};
+        bool  do_clip = false;
     };
 
     class MultiLinear : public Block
@@ -892,8 +918,8 @@ namespace chatllm
         RMSNorm() : weight(nullptr), inplace(false) {}
         RMSNorm(InitContext *ctx, int normalized_shape) : RMSNorm(ctx, normalized_shape, false) {}
     protected:
-        RMSNorm(InitContext *ctx, int normalized_shape, bool inplace)
-            : weight(ggml::new_tensor_1d(ctx, GGML_TYPE_F32, normalized_shape)),
+        RMSNorm(InitContext *ctx, int normalized_shape, bool inplace, bool with_scale = true)
+            : weight(with_scale ? ggml::new_tensor_1d(ctx, GGML_TYPE_F32, normalized_shape) : nullptr),
               eps(BlockParams::Epsilon::rms_norm),
               inplace(inplace) {}
     public:
@@ -902,7 +928,7 @@ namespace chatllm
 
         int64_t get_param_num(bool effective_only) const override
         {
-            return ggml::nelements(weight);
+            return weight ? ggml::nelements(weight) : 0;
         }
 
         void load(const std::string &path, TensorLoader *loader) override;
@@ -911,6 +937,14 @@ namespace chatllm
         ggml::tensor *weight;
         float eps;
         const bool inplace;
+    };
+
+    class RMSNormNoScale : public RMSNorm
+    {
+    public:
+        RMSNormNoScale(InitContext *ctx, int normalized_shape, bool inplace = false):
+            RMSNorm(ctx, normalized_shape, inplace, false)
+        {}
     };
 
     class RMSNormWeightPlus1 : public RMSNorm
@@ -2184,7 +2218,7 @@ namespace chatllm
             int64_t r = 0;
             r += gate_proj.get_param_num(effective_only);
             r += down_proj.get_param_num(effective_only);
-            r += up_proj.get_param_num(effective_only);
+            r +=   up_proj.get_param_num(effective_only);
             return r;
         }
 
@@ -2195,6 +2229,13 @@ namespace chatllm
         }
 
         void load(const std::string &path, TensorLoader *loader) override;
+
+        void enable_clipping(void)
+        {
+            gate_proj.enable_clipping();
+            down_proj.enable_clipping();
+              up_proj.enable_clipping();
+        }
 
     public:
         Linear gate_proj;

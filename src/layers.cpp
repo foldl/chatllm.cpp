@@ -514,7 +514,21 @@ namespace chatllm
 
     ggml::tensor *ggml::avg_pool_2d(ComputeContext *ctx, ggml::tensor *a, int kernel_size, int stride, float padding)
     {
-        ggml::tensor *tensor = ggml_pool_2d(ctx->get_ctx(), a, GGML_OP_POOL_AVG, kernel_size, kernel_size, stride, stride, padding, padding);
+        ggml::tensor *tensor = ggml::avg_pool_2d(ctx, a, kernel_size, kernel_size, stride, stride, padding, padding);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::avg_pool_2d(ComputeContext *ctx, ggml::tensor *a,
+            int                   k0,
+            int                   k1,
+            int                   s0,
+            int                   s1,
+            float                 p0,
+            float                 p1)
+    {
+        if (!ggml::is_contiguous(a))
+            a = ggml::cont(ctx, a);
+        ggml::tensor *tensor = ggml_pool_2d(ctx->get_ctx(), a, GGML_OP_POOL_AVG, k0, k1, s0, s1, p0, p1);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
@@ -925,6 +939,44 @@ namespace chatllm
         }
         ctx->cb_op_tensor(tensor);
         return tensor;
+    }
+
+    ggml::tensor *ggml::rope_2d_inplace(ComputeContext *ctx, ggml::tensor *hidden, ggml::tensor *pos, ggml::tensor *freq_factors,
+                                            int   n_dims, int n_ctx_orig,
+                                            float freq_base, float freq_scale, float ext_factor,
+                                            float attn_factor, float beta_fast, float beta_slow)
+    {
+        const int head_size = (int)ggml::get_dim(hidden, 0);
+        const int heads     = (int)ggml::get_dim(hidden, 1);
+        const int qlen      = (int)ggml::get_dim(hidden, 2);
+        const int b         = (int)ggml::get_dim(hidden, 3);
+
+        CHATLLM_CHECK(n_dims = head_size) << "TODO";
+
+        auto pos_w = ggml::view_1d(ctx, pos, qlen, 0);
+        auto pos_h = ggml::view_1d(ctx, pos, qlen, qlen * ggml::element_size(pos));
+
+        // for mis-aligned access
+        pos_h = ggml::dup(ctx, pos_h);
+
+        ggml::tensor *part = ggml::view_4d(ctx, hidden, head_size / 2, heads, qlen, b,
+                            ggml::row_size(hidden),
+                            ggml::row_size(hidden) * heads,
+                            ggml::row_size(hidden) * heads * qlen, 0);
+        auto r1 = ggml::rope_ext_inplace(ctx, part, pos_w, freq_factors, n_dims / 2, RoPEMode::Original, n_ctx_orig,
+                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);
+        ggml::build_forward_expand(ctx, r1);
+
+        part = ggml::view_4d(ctx, hidden, head_size / 2, heads, qlen, b,
+                            ggml::row_size(hidden),
+                            ggml::row_size(hidden) * heads,
+                            ggml::row_size(hidden) * heads * qlen,
+                            ggml::element_size(hidden) * (head_size / 2));
+        auto r2 = ggml::rope_ext_inplace(ctx, part, pos_h, freq_factors, n_dims / 2, RoPEMode::Original, n_ctx_orig,
+                        freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow);
+        ggml::build_forward_expand(ctx, r2);
+
+        return hidden;
     }
 
     ggml::tensor *ggml::soft_max(ComputeContext *ctx, ggml::tensor *a)
@@ -1920,11 +1972,19 @@ namespace chatllm
     ggml::tensor *Linear::forward(ComputeContext *ctx, ggml::tensor *input)
     {
         // input: [seqlen, in_features]
+        if (do_clip)
+        {
+            input = ggml::clamp(ctx, input, clip_input[0], clip_input[1]);
+        }
         ggml::tensor *output = ggml::mul_mat(ctx, weight, input); // [seqlen, out_features]
         ggml::mul_mat_set_prec(output, prec);
         if (bias)
         {
             output = ggml::add_inplace(ctx, output, bias);
+        }
+        if (do_clip)
+        {
+            output = ggml::clamp(ctx, output, clip_output[0], clip_output[1]);
         }
         return output;
     }
@@ -1934,6 +1994,13 @@ namespace chatllm
         loader->read_tensor(path + "weight", weight);
         if (bias)
             loader->read_tensor(path + "bias", bias);
+        if (do_clip)
+        {
+            loader->read_scaler(path + "input_min",  &clip_input[0]);
+            loader->read_scaler(path + "input_max",  &clip_input[1]);
+            loader->read_scaler(path + "output_min", &clip_output[0]);
+            loader->read_scaler(path + "output_max", &clip_output[1]);
+        }
     }
 
     ggml::tensor *MultiLinear::forward(ComputeContext *ctx, ggml::tensor *input, ggml::tensor *selected)
@@ -2014,14 +2081,14 @@ namespace chatllm
             input = ggml::cont(ctx, input);
         }
         ggml::tensor *output = inplace ? ggml::rms_norm_inplace(ctx, input, eps) : ggml::rms_norm(ctx, input, eps);
-        output = inplace ? ggml::mul_inplace(ctx, output, weight) : ggml::mul(ctx, output, weight);
+        output = weight ? (inplace ? ggml::mul_inplace(ctx, output, weight) : ggml::mul(ctx, output, weight)) : output;
         return output;
     }
 
     void RMSNorm::load(const std::string &path, TensorLoader *loader)
     {
         Block::load(path, loader);
-        loader->read_tensor(path + "weight", weight);
+        if (weight) loader->read_tensor(path + "weight", weight);
     }
 
     void RMSNormWeightPlus1::load(const std::string &path, TensorLoader *loader)
