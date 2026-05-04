@@ -266,6 +266,7 @@ namespace chatllm
     public:
         struct MediaAsEmbeddingVector
         {
+            int type   = 0;     // definition is model specific
             int width  = -1;
             int height = -1;
             int grid_width  = -1;

@@ -248,7 +248,7 @@ namespace chatllm::alphageo
             }
             else
             {
-                ggml::fill(k_cache, 0, 0, 2 * k_hidden_size * ggml::element_size(v_cache));
+                Backend::tensor_memset(k_cache, 0, 0, 2 * k_hidden_size * ggml::element_size(v_cache));
 
                 // an empty tensor (all 0)
                 key_layer = ggml::view_1d(ctx, k_cache, 1 * k_hidden_size, 1 * ggml::row_size(k_cache));
@@ -281,7 +281,7 @@ namespace chatllm::alphageo
             else
             {
                 // an empty tensor (all 0)
-                ggml::fill(v_cache, 0);
+                Backend::tensor_memset(v_cache, 0);
                 value_layer = ggml::view_3d(ctx,
                             v_cache,
                             1, head_size, num_kv_heads,

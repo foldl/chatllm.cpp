@@ -81,7 +81,7 @@ namespace audio
         return samples.size() > 0;
     }
 
-    double hz_to_mel(double freq, bool formula_htk = false)
+    double hz_to_mel(double freq, bool formula_htk)
     {
         if (formula_htk)
         {
@@ -101,7 +101,7 @@ namespace audio
         }
     }
 
-    double mel_to_hz(double mel, bool formula_htk = false)
+    double mel_to_hz(double mel, bool formula_htk)
     {
         if (formula_htk)
         {
@@ -133,16 +133,16 @@ namespace audio
 
     void frequencies_tuned_to_mel_scale(std::vector<double> &freqs,
         int n_mels, double f_min,
-        double f_max, bool formula_htk = false)
+        double f_max, bool formula_htk)
     {
-        const double min_mel = hz_to_mel(f_min);
-        const double max_mel = hz_to_mel(f_max);
+        const double min_mel = hz_to_mel(f_min, formula_htk);
+        const double max_mel = hz_to_mel(f_max, formula_htk);
         const double step = (max_mel - min_mel) / (n_mels - 1);
         freqs.resize(n_mels);
         double mel = min_mel;
         for (int i = 0; i < n_mels - 1; i++, mel += step)
-            freqs[i] = mel_to_hz(mel);
-        freqs[n_mels - 1] = mel_to_hz(max_mel);
+            freqs[i] = mel_to_hz(mel, formula_htk);
+        freqs[n_mels - 1] = mel_to_hz(max_mel, formula_htk);
     }
 
     // Note: `slaney` normalization is used
@@ -166,7 +166,7 @@ namespace audio
         {
             mel_filter f;
             f.offset = -1;
-            double enorm = 2.0 / (mel_f[2 + i] - mel_f[i]);
+            const double enorm = formula_htk ? 1.0 : 2.0 / (mel_f[2 + i] - mel_f[i]);
             for (int j = 0; j < (int)fft_freqs.size(); j++)
             {
                 if (fft_freqs[j] <= mel_f[i]) continue;
@@ -226,22 +226,32 @@ namespace audio
     {
     public:
         stft(int length)
-            : cache(length), window(length)
+            : stft(length, length)
         {
-            out_scratch.resize(length * 2 * 2);
+        }
+
+        stft(int fft_length, int frame_length)
+            : cache(fft_length), window(frame_length)
+        {
+            out_scratch.resize(fft_length * 2 * 2);
         }
 
         void transform(const float* in, float* out) const
         {
             std::vector<float> window_in;
-            const int length = (int)cache.sin_vals.size();
+            const int length = get_length();
 
-            window_in.resize(length);
-            for (int i = 0; i < length; i++)
+            window_in.resize(length, 0);
+            for (int i = 0; i < (int)window.window.size(); i++)
                 window_in[i] = in[i] * window.window[i];
 
             fft(window_in.data(), length, 1, out,
                 (float *)out_scratch.data(), cache.sin_vals.data(), cache.cos_vals.data(), length);
+        }
+
+        int get_length(void) const
+        {
+            return (int)cache.sin_vals.size();
         }
     protected:
         // naive N-point Discrete Fourier Transform
@@ -325,10 +335,9 @@ namespace audio
         std::function<void (float *fft_power_spectrum, int n_fft)> power_spectrum_pp,
         const float filling)
     {
+        const int n_fft = fft.get_length();
         std::vector<float> fft_in(frame_size, 0.0);
-        std::vector<float> fft_out(frame_size * 2);
-
-        const int n_fft = frame_size;
+        std::vector<float> fft_out(n_fft * 2);
 
         // calculate FFT only when fft_in are not all zero
         int i = ith;
@@ -392,6 +401,7 @@ namespace audio
             int64_t pad_to_samples,
             const int   sample_rate,
             const int   frame_size,
+            const int   fft_length,
             const int   frame_step,
             const mel_filter_bank & filters,
             mel & mel,
@@ -403,7 +413,7 @@ namespace audio
     {
         const int n_threads = 4;
 
-        stft fft(frame_size);
+        stft fft(fft_length, frame_size);
 
         if (pad_to_samples < 1) pad_to_samples = samples_padded.size();
 
@@ -458,6 +468,19 @@ namespace audio
         std::fill(samples_padded.begin() + n_samples + stage_2_pad, samples_padded.end(), 0.0f);
         if (stage_2_pad > 0)
             std::reverse_copy(samples + 1, samples + 1 + stage_2_pad, samples_padded.begin());
+    }
+
+    void padding_samples_left_0(
+            const float * samples,
+            int64_t     n_samples,
+            int         left_padding_length,
+            std::vector<float> &samples_padded
+        )
+    {
+        samples_padded.resize(n_samples + left_padding_length);
+        std::copy(samples, samples + n_samples, samples_padded.begin() + left_padding_length);
+
+        std::fill(samples_padded.begin(), samples_padded.begin() + left_padding_length, 0.0f);
     }
 
     void padding_samples_dual_reflect(
@@ -532,7 +555,7 @@ namespace audio
                     samples_padded,
                     pad_to_samples,
                     sample_rate,
-                    N_FFT,
+                    N_FFT, N_FFT,
                     HOP_LENGTH,
                     filters,
                     out_full,
@@ -599,11 +622,62 @@ namespace audio
                     samples_padded,
                     0,
                     sample_rate,
-                    N_FFT,
+                    N_FFT, N_FFT,
                     HOP_LENGTH,
                     filters,
                     out_full,
                     1 + (int)((samples_padded.size() - N_FFT) / HOP_LENGTH),
+                    range_compression, power_spectrum_pp, filling
+        );
+        if (!r) return false;
+
+        mel_output(out_full, output, frames_per_chunk);
+
+        return true;
+    }
+
+    bool mel_spectrogram_gemma_4(const float *samples,
+        const int64_t n_samples,
+        const int64_t pad_to_samples,
+        const int sample_rate,
+        const int mel_feature_size,
+        const int frame_length,
+        const int fft_size,
+        const int hop_length,
+        std::vector<mel> & output,
+        int64_t frames_per_chunk)
+    {
+        mel_filter_bank filters;
+
+        build_mel_filter_bank(filters, sample_rate, fft_size, mel_feature_size, 0.0, -1.0, true);
+
+        const float mel_floor = 0.001f;
+
+        auto range_compression = [mel_floor](float sum) {
+            return log(sum + mel_floor);
+        };
+        auto power_spectrum_pp = [](float *fft_power, int n_fft) {
+            for (int i = 0; i < n_fft; i++)
+                fft_power[i] = sqrt(fft_power[i]);
+        };
+        const float filling = 0.0f;
+
+        const int N_FFT = fft_size;
+        const int HOP_LENGTH = hop_length;
+        std::vector<float> samples_padded;
+
+        padding_samples_left_0(samples, n_samples, frame_length / 2, samples_padded);
+
+        mel out_full;
+        bool r = log_mel_spectrogram(
+                    samples_padded,
+                    pad_to_samples,
+                    sample_rate,
+                    frame_length, N_FFT,
+                    HOP_LENGTH,
+                    filters,
+                    out_full,
+                    (int)((pad_to_samples > 0 ? pad_to_samples : n_samples) / HOP_LENGTH),
                     range_compression, power_spectrum_pp, filling
         );
         if (!r) return false;

@@ -210,12 +210,6 @@ namespace chatllm::apertus
         float  eps;
     };
 
-    static float softplus(float input, float beta=1.0f, float threshold=20.0f)
-    {
-        if (input * beta > threshold) return input;
-        return (1/beta) * logf(1 + expf(beta * input));
-    }
-
     void XIEMLP::load(const std::string &path, TensorLoader *loader)
     {
         Block::load(path, loader);

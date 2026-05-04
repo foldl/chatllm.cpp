@@ -35,6 +35,7 @@ namespace chatllm
         RELU,
         RELU2,  // square . relu
         SWISH,
+        SIGMOID,
     };
 
     namespace ggml
@@ -54,7 +55,7 @@ namespace chatllm
         void set_input(ggml::tensor *a);
         void set_output(ggml::tensor *a);
 
-        void fill(ggml::tensor *a, uint8_t value, size_t offset = 0, size_t size = 0);
+        ggml::tensor * fill(ComputeContext *ctx, ggml::tensor *a, float value);
         float  at(ggml::tensor *a, int64_t i, int64_t j, int64_t k, int64_t l);
 
         ggml::type    type_of(const ggml::tensor *a);
@@ -185,7 +186,8 @@ namespace chatllm
 
         ggml::tensor *soft_max(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *soft_max_inplace(ComputeContext *ctx, ggml::tensor *a);
-        ggml::tensor *soft_max_ext(ComputeContext *ctx,  ggml::tensor *a,  ggml::tensor *mask, float scale, float max_bias);
+        // max_bias = 0.0f: ALiBi is disabled
+        ggml::tensor *soft_max_ext(ComputeContext *ctx,  ggml::tensor *a,  ggml::tensor *mask, float scale = 1.0f, float max_bias = 0.0f);
         void          soft_max_attach_sinks(ggml::tensor *soft_max_result, ggml::tensor *sinks);
 
         ggml::tensor *sigmoid(ComputeContext *ctx, ggml::tensor *a);
@@ -196,9 +198,9 @@ namespace chatllm
         ggml::tensor *inplace_act(ComputeContext *ctx, ActFunc act, ggml::tensor *input);
         ggml::tensor *act(ComputeContext *ctx, ActFunc act, ggml::tensor *input);
 
+        // r = s * a + b
         ggml::tensor *scale(ComputeContext *ctx, ggml::tensor *a, float  s);
         ggml::tensor *scale_inplace(ComputeContext *ctx, ggml::tensor *a, float  s);
-        // r = s * a + b
         ggml::tensor *scale(ComputeContext *ctx, ggml::tensor *a, float  s, float b);
 
         ggml::tensor *clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max);
@@ -235,6 +237,8 @@ namespace chatllm
         ggml::tensor *swiglu_oai(ComputeContext *ctx, ggml::tensor *gate, ggml::tensor *up, float alpha, float limit);
 
         ggml::tensor *xielu(ComputeContext *ctx, ggml::tensor *input, float alpha_n, float alpha_p, float beta, float eps);
+        ggml::tensor *glu(ComputeContext *ctx, ggml::tensor *input, ActFunc act,
+                bool swapped = false);
 
         ggml::tensor *logsumexp(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *softplus(ComputeContext *ctx, ggml::tensor *a);
@@ -293,6 +297,8 @@ namespace chatllm
         struct ggml_cgraph *new_graph_custom(ComputeContext *ctx, size_t size, bool grads);
         void build_forward_expand(ComputeContext *ctx, ggml::tensor * tensor);
     };
+
+    float softplus(float input, float beta=1.0f, float threshold=20.0f);
 
     // facility to pass extra params when constructing Blocks.
     // single thread assumed.
@@ -820,8 +826,8 @@ namespace chatllm
         {
         }
 
-        LayerNorm(InitContext *ctx, int normalized_shape, bool use_bias)
-            : GroupNorm(ctx, normalized_shape, normalized_shape, use_bias) {}
+        LayerNorm(InitContext *ctx, int normalized_shape, bool use_bias, float eps = 1e-5f)
+            : GroupNorm(ctx, normalized_shape, normalized_shape, use_bias, eps) {}
     };
 
     class LayerNormInplace : public LayerNorm

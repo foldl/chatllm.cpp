@@ -5724,7 +5724,7 @@ class QWen3_5Converter(BaseConverter):
         txt_config = QWen3_5Converter.txt_config
         assert not txt_config.attention_bias
         assert txt_config.rope_parameters['mrope_interleaved']
-        assert txt_config.mlp_only_layers == []
+        assert (txt_config.mlp_only_layers is None) or (txt_config.mlp_only_layers == [])
         assert not txt_config.mtp_use_dedicated_embeddings
 
         if txt_config.moe_intermediate_size is None:
@@ -6614,6 +6614,11 @@ class Gemma3Converter(BaseConverter):
 class Gemma4Converter(BaseConverter):
     MODEL_TYPE = ModelType.Gemma4
 
+    name_mapping = {
+        'model.embed_audio.embedding_projection.weight': 'audio.embedding_projection.weight',
+        'model.embed_vision.embedding_projection.weight': 'visual.embedding_projection.weight',
+    }
+
     @classmethod
     def pp(cls, config, name: str, tensor):
         if name == 'model.embed_tokens.weight':
@@ -6624,17 +6629,29 @@ class Gemma4Converter(BaseConverter):
             return tensor
 
     @classmethod
+    def gen_aud_pos_embed(cls, config):
+        hidden_size = config.hidden_size
+
+        min_timescale = 1.0
+        max_timescale = 10000.0
+        num_timescales = hidden_size // 2
+        log_timescale_increment = math.log(max_timescale / min_timescale) / max(num_timescales - 1, 1)
+        inv_timescales = min_timescale * torch.exp(torch.arange(num_timescales) * -log_timescale_increment)
+
+        position_ids = torch.arange(12, -1, -1)
+        position_ids = position_ids[..., None]
+        scaled_time = position_ids * inv_timescales
+        pos_embed = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=-1)
+        return pos_embed
+
+    @classmethod
     def state_dict_pp(cls, config, state_dict):
 
         new_dict = {}
         for k in state_dict:
             kk: str = k
             t: torch.Tensor = state_dict[kk]
-            if kk == 'model.embed_audio.embedding_projection.weight':
-                new_dict['audio.embedding_projection.weight'] = t
-            elif kk == 'model.embed_vision.embedding_projection.weight':
-                new_dict['visual.embedding_projection.weight'] = t
-            elif kk.startswith('model.language_model.'):
+            if kk.startswith('model.language_model.'):
                 kk = kk.replace('model.language_model.', 'model.')
                 t = Gemma4Converter.pp(Gemma4Converter.txt_config, kk, t)
                 new_dict[kk] = t
@@ -6645,6 +6662,19 @@ class Gemma4Converter(BaseConverter):
             elif kk.startswith('model.vision_tower.'):
                 kk = kk.replace('model.vision_tower.', 'visual.')
                 new_dict[kk] = t
+            elif kk.startswith('model.audio_tower.layers.'):
+                kk = kk.replace('model.audio_tower.layers.', 'audio.layers.')
+                kk = kk.replace('.linear.weight', '.weight')
+                new_dict[kk] = t
+            elif kk.startswith('model.audio_tower.'):
+                kk = kk.replace('model.audio_tower.', 'audio.')
+                new_dict[kk] = t
+                if kk == "audio.output_proj.bias":
+                    new_dict["audio.pos_embed.weight"] = Gemma4Converter.gen_aud_pos_embed(Gemma4Converter.aud_config)
+            elif kk in Gemma4Converter.name_mapping:
+                kk = Gemma4Converter.name_mapping[kk]
+                new_dict[kk] = t
+
         return new_dict
 
     @staticmethod
@@ -6653,6 +6683,8 @@ class Gemma4Converter(BaseConverter):
 
         txt_config = AttributeDict(config.text_config)
         Gemma4Converter.txt_config = txt_config
+        if config.audio_config is not None:
+            Gemma4Converter.aud_config = AttributeDict(config.audio_config)
 
         assert not txt_config.attention_bias, 'attention_bias must == False'
         assert txt_config.hidden_activation == 'gelu_pytorch_tanh', "hidden_activation must  == 'gelu_pytorch_tanh'"
@@ -6682,7 +6714,6 @@ class Gemma4Converter(BaseConverter):
             1 if txt_config.use_double_wide_mlp else 0,
         ] + layer_is_swa
 
-        print(config_values)
         f.write(struct.pack("i" * len(config_values), *config_values))
 
         config_values = [
@@ -6692,6 +6723,86 @@ class Gemma4Converter(BaseConverter):
             txt_config.rope_parameters['sliding_attention']['rope_theta'],
         ]
         f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_aud_weight_names(config):
+        weight_names = ["audio.output_proj.bias",
+                        "audio.output_proj.weight",
+                        "audio.pos_embed.weight",
+                        "audio.subsample_conv_projection.input_proj_linear.weight",
+                        "audio.subsample_conv_projection.layer0.conv.weight",
+                        "audio.subsample_conv_projection.layer0.norm.weight",
+                        "audio.subsample_conv_projection.layer1.conv.weight",
+                        "audio.subsample_conv_projection.layer1.norm.weight",
+                        "audio.embedding_projection.weight"
+        ]
+        for i in range(config.num_hidden_layers):
+            weight_names += [
+                f"audio.layers.{i}.lconv1d.conv_norm.weight",
+                f"audio.layers.{i}.lconv1d.depthwise_conv1d.weight",
+                f"audio.layers.{i}.lconv1d.linear_end.weight",
+                f"audio.layers.{i}.lconv1d.linear_start.weight",
+                f"audio.layers.{i}.lconv1d.pre_layer_norm.weight",
+                f"audio.layers.{i}.norm_out.weight",
+                f"audio.layers.{i}.norm_post_attn.weight",
+                f"audio.layers.{i}.norm_pre_attn.weight",
+                f"audio.layers.{i}.self_attn.k_proj.weight",
+                f"audio.layers.{i}.self_attn.per_dim_scale",
+                f"audio.layers.{i}.self_attn.post.weight",
+                f"audio.layers.{i}.self_attn.q_proj.weight",
+                f"audio.layers.{i}.self_attn.relative_k_proj.weight",
+                f"audio.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+            if config.use_clipped_linears:
+                weight_names += [
+                    f"audio.layers.{i}.lconv1d.linear_end.input_max",
+                    f"audio.layers.{i}.lconv1d.linear_end.input_min",
+                    f"audio.layers.{i}.lconv1d.linear_end.output_max",
+                    f"audio.layers.{i}.lconv1d.linear_end.output_min",
+                    f"audio.layers.{i}.lconv1d.linear_start.input_max",
+                    f"audio.layers.{i}.lconv1d.linear_start.input_min",
+                    f"audio.layers.{i}.lconv1d.linear_start.output_max",
+                    f"audio.layers.{i}.lconv1d.linear_start.output_min",
+                    f"audio.layers.{i}.self_attn.k_proj.input_max",
+                    f"audio.layers.{i}.self_attn.k_proj.input_min",
+                    f"audio.layers.{i}.self_attn.k_proj.output_max",
+                    f"audio.layers.{i}.self_attn.k_proj.output_min",
+                    f"audio.layers.{i}.self_attn.post.input_max",
+                    f"audio.layers.{i}.self_attn.post.input_min",
+                    f"audio.layers.{i}.self_attn.post.output_max",
+                    f"audio.layers.{i}.self_attn.post.output_min",
+                    f"audio.layers.{i}.self_attn.q_proj.input_max",
+                    f"audio.layers.{i}.self_attn.q_proj.input_min",
+                    f"audio.layers.{i}.self_attn.q_proj.output_max",
+                    f"audio.layers.{i}.self_attn.q_proj.output_min",
+                    f"audio.layers.{i}.self_attn.v_proj.input_max",
+                    f"audio.layers.{i}.self_attn.v_proj.input_min",
+                    f"audio.layers.{i}.self_attn.v_proj.output_max",
+                    f"audio.layers.{i}.self_attn.v_proj.output_min",
+                ]
+
+            for j in range(1, 3):
+                weight_names += [
+                    f"audio.layers.{i}.feed_forward{j}.ffw_layer_1.weight",
+                    f"audio.layers.{i}.feed_forward{j}.ffw_layer_2.weight",
+                    f"audio.layers.{i}.feed_forward{j}.post_layer_norm.weight",
+                    f"audio.layers.{i}.feed_forward{j}.pre_layer_norm.weight",
+                ]
+
+                if config.use_clipped_linears:
+                    weight_names += [
+                        f"audio.layers.{i}.feed_forward{j}.ffw_layer_1.input_max",
+                        f"audio.layers.{i}.feed_forward{j}.ffw_layer_1.input_min",
+                        f"audio.layers.{i}.feed_forward{j}.ffw_layer_1.output_max",
+                        f"audio.layers.{i}.feed_forward{j}.ffw_layer_1.output_min",
+                        f"audio.layers.{i}.feed_forward{j}.ffw_layer_2.input_max",
+                        f"audio.layers.{i}.feed_forward{j}.ffw_layer_2.input_min",
+                        f"audio.layers.{i}.feed_forward{j}.ffw_layer_2.output_max",
+                        f"audio.layers.{i}.feed_forward{j}.ffw_layer_2.output_min",
+                    ]
+
+        return weight_names
 
     @staticmethod
     def get_vis_weight_names(config):
@@ -6798,6 +6909,8 @@ class Gemma4Converter(BaseConverter):
         ]
 
         weight_names += Gemma4Converter.get_vis_weight_names(AttributeDict(config.vision_config))
+        if config.audio_config is not None:
+            weight_names += Gemma4Converter.get_aud_weight_names(AttributeDict(config.audio_config))
 
         return weight_names
 

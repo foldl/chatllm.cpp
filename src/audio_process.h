@@ -36,6 +36,17 @@ namespace audio
         std::vector<mel> & output,
         int64_t frames_per_chunk = -1);
 
+    bool mel_spectrogram_gemma_4(const float *samples,
+        const int64_t n_samples,
+        const int64_t pad_to_samples,
+        const int sample_rate,
+        const int mel_feature_size,
+        const int frame_length,
+        const int fft_size,
+        const int hop_length,
+        std::vector<mel> & output,
+        int64_t frames_per_chunk = -1);
+
     bool mel_spectrogram_dual_pad_reflect(const float *samples,
         const int64_t n_samples,
         const int sample_rate,

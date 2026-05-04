@@ -25,6 +25,12 @@
 namespace chatllm
 {
 
+    float softplus(float input, float beta, float threshold)
+    {
+        if (input * beta > threshold) return input;
+        return (1/beta) * logf(1 + expf(beta * input));
+    }
+
 #include "custom_ops.cpp"
 
     ggml::type ggml::type_of(const ggml::tensor *a)
@@ -199,12 +205,6 @@ namespace chatllm
         return ggml_get_name(tensor);
     }
 
-    void ggml::fill(ggml::tensor *a, uint8_t value, size_t offset, size_t size)
-    {
-        if (size == 0) size = ggml::nbytes(a);
-        ggml_backend_tensor_memset(a, value, offset, size);
-    }
-
     float ggml::at(ggml::tensor *a, int64_t i, int64_t j, int64_t k, int64_t l)
     {
         auto p = (char *)a->data + l*a->nb[3] + k*a->nb[2] + j*a->nb[1] + i*a->nb[0];
@@ -367,6 +367,13 @@ namespace chatllm
         });
     }
 
+    ggml::tensor * ggml::fill(ComputeContext *ctx, ggml::tensor *a, float value)
+    {
+        ggml::tensor *tensor = ggml_fill(ctx->get_ctx(), a, value);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::inplace_act(ComputeContext *ctx, ActFunc act, ggml::tensor *input)
     {
         ggml::tensor *tensor = nullptr;
@@ -396,6 +403,10 @@ namespace chatllm
             tensor = ggml_relu_inplace(ctx->get_ctx(), input);
             ctx->cb_op_tensor(tensor);
             tensor = ggml_sqr_inplace(ctx->get_ctx(), tensor);
+            ctx->cb_op_tensor(tensor);
+            break;
+        case ActFunc::SIGMOID:
+            tensor = ggml_sigmoid_inplace(ctx->get_ctx(), input);
             ctx->cb_op_tensor(tensor);
             break;
         default:
@@ -437,9 +448,13 @@ namespace chatllm
             ctx->cb_op_tensor(tensor);
             break;
         case ActFunc::SWISH:
-            tensor = ggml_sigmoid(ctx->get_ctx(), input);
+            tensor = ggml_swiglu(ctx->get_ctx(), input);
             ctx->cb_op_tensor(tensor);
             tensor = ggml_mul(ctx->get_ctx(), tensor, input);
+            ctx->cb_op_tensor(tensor);
+            break;
+        case ActFunc::SIGMOID:
+            tensor = ggml_sigmoid(ctx->get_ctx(), input);
             ctx->cb_op_tensor(tensor);
             break;
         default:
@@ -507,6 +522,10 @@ namespace chatllm
 
     ggml::tensor *ggml::clamp(ComputeContext *ctx, ggml::tensor *a, float min, float max)
     {
+        if (!ggml::is_contiguous(a))
+        {
+            a = ggml::cont(ctx, a);
+        }
         ggml::tensor *tensor = ggml_clamp(ctx->get_ctx(), a, min, max);
         ctx->cb_op_tensor(tensor);
         return tensor;
@@ -1333,6 +1352,58 @@ namespace chatllm
         return ggml::map_custom1(ctx, input, ggml_custom_xielu, GGML_N_TASKS_MAX, p);
     }
 
+    ggml::tensor *ggml::glu(ComputeContext *ctx, ggml::tensor *input, ActFunc act,
+                bool swapped)
+    {
+        ggml_glu_op op = ggml_glu_op::GGML_GLU_OP_REGLU;
+        switch (act)
+        {
+        case GELU:
+            op = ggml_glu_op::GGML_GLU_OP_GEGLU;
+            break;
+        case GELU_QUICK:
+            op = ggml_glu_op::GGML_GLU_OP_GEGLU_QUICK;
+            break;
+        case RELU:
+        case RELU2:
+            op = ggml_glu_op::GGML_GLU_OP_REGLU;
+            break;
+        case SWISH:
+            op = ggml_glu_op::GGML_GLU_OP_SWIGLU;
+            break;
+        case SIGMOID:
+            {
+                if (!ggml::is_contiguous(input))
+                    input = ggml::cont(ctx, input);
+                auto x = ggml::view_4d(ctx, input, ggml::get_dim(input, 0) / 2, ggml::get_dim(input, 1), ggml::get_dim(input, 2), ggml::get_dim(input, 3),
+                    ggml::row_size(input),
+                    ggml::row_size(input) * ggml::get_dim(input, 1),
+                    ggml::row_size(input) * ggml::get_dim(input, 1) * ggml::get_dim(input, 2),
+                    0);
+                auto g = ggml::view_4d(ctx, input, ggml::get_dim(input, 0) / 2, ggml::get_dim(input, 1), ggml::get_dim(input, 2), ggml::get_dim(input, 3),
+                    ggml::row_size(input),
+                    ggml::row_size(input) * ggml::get_dim(input, 1),
+                    ggml::row_size(input) * ggml::get_dim(input, 1) * ggml::get_dim(input, 2),
+                    ggml::row_size(input) / 2);
+                if (swapped)
+                {
+                    auto t = g;
+                    g = x;
+                    x = t;
+                }
+                g = ggml::sigmoid(ctx, g);
+                x = ggml::mul(ctx, x, g);
+                return x;
+            }
+        default:
+            CHATLLM_CHECK(false) << "unsupported op";
+            return nullptr;
+        }
+        ggml::tensor *tensor = ggml_glu(ctx->get_ctx(), input, op, swapped);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::logsumexp(ComputeContext *ctx, ggml::tensor *a)
     {
         std::vector<ggml::tensor *> inputs;
@@ -1728,6 +1799,8 @@ namespace chatllm
         }
         else if (groups == in_channels)
         {
+            if (!ggml::is_contiguous(input))
+                input = ggml::cont(ctx, input);
             CHATLLM_CHECK((out_channels % in_channels) == 0) << "not implemented groups: " << groups;
             output = ggml::conv_1d_depthwise(ctx, weight, input, stride, padding, dilation);
         }

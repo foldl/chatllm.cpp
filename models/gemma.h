@@ -102,6 +102,7 @@ namespace chatllm::gemma::v2
     {
     public:
         TanhScaling(float scale_pre, float scale_post) : scale_pre(scale_pre), scale_post(scale_post) {}
+        TanhScaling(float soft_cap) : TanhScaling(1.0f / soft_cap, soft_cap) {}
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
     public:

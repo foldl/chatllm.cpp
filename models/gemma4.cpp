@@ -1,4 +1,918 @@
 #include "gemma.h"
+#include "../src/audio_process.h"
+
+namespace chatllm::gemma
+{
+    const int media_type_image = 0;
+    const int media_type_audio = 1;
+
+    class MultimodalEmbedder : public Block
+    {
+    public:
+        MultimodalEmbedder(InitContext *ctx, int multimodal_hidden_size, int text_hidden_size);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *mm_outputs) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        const int       multimodal_hidden_size;
+        const int       text_hidden_size;
+        Linear          embedding_projection;
+        RMSNormNoScale  embedding_pre_projection_norm;
+    };
+
+    MultimodalEmbedder::MultimodalEmbedder(InitContext *ctx, int multimodal_hidden_size, int text_hidden_size):
+        multimodal_hidden_size(multimodal_hidden_size),
+        text_hidden_size(text_hidden_size),
+        embedding_projection(ctx, multimodal_hidden_size, text_hidden_size, false),
+        embedding_pre_projection_norm(ctx, multimodal_hidden_size)
+    {}
+
+    ggml::tensor *MultimodalEmbedder::forward(ComputeContext *ctx, ggml::tensor *mm_outputs)
+    {
+        auto output = embedding_pre_projection_norm.forward(ctx, mm_outputs);
+             output = embedding_projection.forward(ctx, output);
+        return output;
+    }
+
+    int64_t MultimodalEmbedder::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += embedding_projection.get_param_num(effective_only);
+        r += embedding_pre_projection_norm.get_param_num(effective_only);
+        return r;
+    }
+
+    void MultimodalEmbedder::load(const std::string &path, TensorLoader *loader)
+    {
+        embedding_pre_projection_norm.load(path + "embedding_pre_projection_norm.", loader);
+                 embedding_projection.load(path + "embedding_projection.", loader);
+    }
+}
+
+namespace chatllm::gemma::aud
+{
+    const int SUBSAMPLING_CH_NUM    = 2;
+
+    struct Config
+    {
+        ggml::type dtype;
+        int attention_chunk_size;
+        int attention_context_left;
+        int attention_context_right;
+        int chunk_size_feed_forward;
+        int conv_kernel_size;
+        int hidden_size;
+        int num_attention_heads;
+        int num_hidden_layers;
+        int output_proj_dims;
+        int subsampling_conv_channels[SUBSAMPLING_CH_NUM];
+        bool use_clipped_linears;
+
+        float attention_invalid_logits_value;
+        float attention_logit_cap;
+        float gradient_clipping;
+        float residual_weight;
+        float rms_norm_eps;
+
+        // features extractor params
+        int feature_size;
+        int fft_length;
+        int frame_length;
+        int hop_length;
+        int sampling_rate;
+        float max_frequency;
+        float mel_floor;
+        float min_frequency;
+    };
+
+    class AudioSubSampleConvProjectionLayer : public Block
+    {
+    public:
+        AudioSubSampleConvProjectionLayer(InitContext *ctx, int in_channels, int out_channels, float norm_eps = 1e-6f):
+            conv(ctx, in_channels, out_channels, 3, 2, 1, 1, 1, false),
+            norm(ctx, out_channels, false, norm_eps)
+        {
+        }
+
+        std::pair<ggml::tensor *, ggml::tensor *> forward2(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *mask);
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += conv.get_param_num(effective_only);
+            r += norm.get_param_num(effective_only);
+            return r;
+        }
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            conv.load(path + "conv.", loader);
+            norm.load(path + "norm.", loader);
+        }
+    public:
+        Conv2D      conv;
+        LayerNorm   norm;
+    };
+
+    std::pair<ggml::tensor *, ggml::tensor *> AudioSubSampleConvProjectionLayer::forward2(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *mask)
+    {
+        if (mask)
+        {
+            hidden_states = ggml::mul(ctx, hidden_states, ggml::reshape(ctx, mask, 1, ggml::get_dim(mask, 0), ggml::get_dim(mask, 1)));
+            mask          = ggml::reshape(ctx, mask, 2, ggml::get_dim(mask, 0) / 2, ggml::get_dim(mask, 1));
+            mask          = ggml::view_3d(ctx, mask, 1, ggml::get_dim(mask, 1), ggml::get_dim(mask, 2),
+                                          ggml::element_size(mask) * 2,
+                                          ggml::element_size(mask) * 2 * ggml::get_dim(mask, 1),
+                                          0);
+            mask          = ggml::cont(ctx, mask);
+            mask          = ggml::reshape(ctx, mask, ggml::get_dim(mask, 1), ggml::get_dim(mask, 2));
+        }
+        hidden_states = conv.forward (ctx, hidden_states);
+        hidden_states = ggml::permute(ctx, hidden_states, 1, 2, 0, 3);
+        hidden_states = norm.forward (ctx, hidden_states);
+        hidden_states = ggml::permute(ctx, hidden_states, 2, 0, 1, 3);
+        hidden_states = ggml::cont   (ctx, hidden_states);
+        hidden_states = ggml::act    (ctx, ActFunc::RELU, hidden_states);
+        return std::pair<ggml::tensor *, ggml::tensor *>(hidden_states, mask);
+    }
+
+    class AudioSubSampleConvProjection : public Block
+    {
+    public:
+        AudioSubSampleConvProjection(InitContext *ctx, int hidden_size, const int *subsampling_conv_channels, float rms_norm_eps);
+        std::pair<ggml::tensor *, ggml::tensor *> forward2(ComputeContext *ctx, ggml::tensor *input_features, ggml::tensor *input_features_mask);
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += input_proj_linear.get_param_num(effective_only);
+            r += layer0.get_param_num(effective_only);
+            r += layer1.get_param_num(effective_only);
+            return r;
+        }
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            input_proj_linear.load(path + "input_proj_linear.", loader);
+            layer0.load(path + "layer0.", loader);
+            layer1.load(path + "layer1.", loader);
+        }
+    public:
+        AudioSubSampleConvProjectionLayer   layer0;
+        AudioSubSampleConvProjectionLayer   layer1;
+        Linear                              input_proj_linear;
+    };
+
+    AudioSubSampleConvProjection::AudioSubSampleConvProjection(InitContext *ctx, int hidden_size, const int *subsampling_conv_channels, float rms_norm_eps):
+        layer0(ctx, 1, subsampling_conv_channels[0], rms_norm_eps),
+        layer1(ctx, subsampling_conv_channels[0], subsampling_conv_channels[1], rms_norm_eps),
+        input_proj_linear(ctx, (subsampling_conv_channels[0] / 4) * subsampling_conv_channels[1], hidden_size, false)
+    {
+    }
+
+    static int64_t calc_conv_output_size(int64_t ins, int64_t ks, int s, int p, int d) {
+        return (ins + 2 * p - d * (ks - 1) - 1) / s + 1;
+    }
+
+    static int64_t calc_projected_length(int64_t mel_n_len)
+    {
+        const int kernel_size = 3;
+        const int stride = 2;
+        const int padding = 1;
+        const int dilation = 1;
+        const int64_t len1 = calc_conv_output_size(mel_n_len, kernel_size, stride, padding, dilation);
+        const int64_t len2 = calc_conv_output_size(len1,      kernel_size, stride, padding, dilation);
+        return len2;
+    }
+
+    std::pair<ggml::tensor *, ggml::tensor *> AudioSubSampleConvProjection::forward2(ComputeContext *ctx, ggml::tensor *input_features, ggml::tensor *input_features_mask)
+    {
+        auto r = layer0.forward2(ctx, input_features, input_features_mask);
+             r = layer1.forward2(ctx, r.first,        r.second);
+        auto hidden_states = r.first;
+        const int seq_len  = ggml::get_dim(hidden_states, 1);
+        const int batch    = ggml::get_dim(hidden_states, 3);
+        hidden_states      = ggml::permute(ctx, hidden_states, 1, 2, 0, 3);
+        hidden_states      = ggml::cont   (ctx, hidden_states);
+        hidden_states      = ggml::reshape(ctx, hidden_states, ggml::nelements(hidden_states) / seq_len / batch, seq_len, batch);
+        hidden_states      = input_proj_linear.forward(ctx, hidden_states);
+        r.first = hidden_states;
+        return r;
+    }
+
+    class AudioFeedForward : public Block
+    {
+    public:
+        AudioFeedForward(InitContext *ctx, int hidden_size, float gradient_clipping, float residual_weight);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+            r += ffw_layer_1.get_param_num(effective_only);
+            r += ffw_layer_2.get_param_num(effective_only);
+            r += pre_layer_norm.get_param_num(effective_only);
+            r += post_layer_norm.get_param_num(effective_only);
+            return r;
+        }
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            ffw_layer_1.load(path + "ffw_layer_1.", loader);
+            ffw_layer_2.load(path + "ffw_layer_2.", loader);
+            pre_layer_norm.load(path + "pre_layer_norm.", loader);
+            post_layer_norm.load(path + "post_layer_norm.", loader);
+        }
+    public:
+        const float gradient_clipping;
+        const float post_layer_scale;
+        Linear   ffw_layer_1;
+        Linear   ffw_layer_2;
+        RMSNorm  pre_layer_norm;
+        RMSNorm  post_layer_norm;
+    };
+
+    AudioFeedForward::AudioFeedForward(InitContext *ctx, int hidden_size, float gradient_clipping, float residual_weight):
+        gradient_clipping(gradient_clipping), post_layer_scale(residual_weight),
+        ffw_layer_1(ctx, hidden_size, hidden_size * 4, false),
+        ffw_layer_2(ctx, hidden_size * 4, hidden_size, false),
+        pre_layer_norm(ctx, hidden_size),
+        post_layer_norm(ctx, hidden_size)
+    {
+        ffw_layer_1.enable_clipping();
+        ffw_layer_2.enable_clipping();
+    }
+
+    ggml::tensor *AudioFeedForward::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
+    {
+        auto residual = hidden_states;
+        hidden_states = ggml::clamp(ctx, hidden_states, -gradient_clipping, gradient_clipping);
+        hidden_states = pre_layer_norm.forward(ctx, hidden_states);
+
+        hidden_states = ffw_layer_1.forward(ctx, hidden_states);
+        hidden_states = ggml::act(ctx, ActFunc::SILU, hidden_states);
+        hidden_states = ffw_layer_2.forward(ctx, hidden_states);
+
+        hidden_states = ggml::clamp(ctx, hidden_states, -gradient_clipping, gradient_clipping);
+        hidden_states = post_layer_norm.forward(ctx, hidden_states);
+        hidden_states = ggml::scale(ctx, hidden_states, post_layer_scale);
+        hidden_states = ggml::add  (ctx, hidden_states, residual);
+
+        return hidden_states;
+    }
+
+    class AudioCausalConv1D : public Conv1D
+    {
+    public:
+        AudioCausalConv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride = 1, int padding = 0,
+               int dilation = 1, int groups = 1, bool bias = true);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input) override;
+    private:
+        const int left_pad;
+    };
+
+    AudioCausalConv1D::AudioCausalConv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride, int padding,
+        int dilation, int groups, bool bias) :
+        Conv1D(ctx, in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias),
+        left_pad((kernel_size - 1) * dilation + 1 - stride)
+    {}
+
+    ggml::tensor *AudioCausalConv1D::forward(ComputeContext *ctx, ggml::tensor *input)
+    {
+        input = ggml::pad(ctx, input, left_pad, 0);
+        input = Conv1D::forward(ctx, input);
+        return input;
+    }
+
+    class AudioLightConv1D : public Block
+    {
+    public:
+        AudioLightConv1D(InitContext *ctx, int hidden_size, int conv_kernel_size, ActFunc act, float rms_norm_rps, float gradient_clipping);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+
+            r += conv_norm.get_param_num(effective_only);
+            r += linear_end.get_param_num(effective_only);
+            r += linear_start.get_param_num(effective_only);
+            r += pre_layer_norm.get_param_num(effective_only);
+            r += depthwise_conv1d.get_param_num(effective_only);
+            return r;
+        }
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            depthwise_conv1d.load(path + "depthwise_conv1d.", loader);
+            pre_layer_norm.load(path + "pre_layer_norm.", loader);
+            linear_start.load(path + "linear_start.", loader);
+            linear_end.load(path + "linear_end.", loader);
+            conv_norm.load(path + "conv_norm.", loader);
+        }
+    public:
+        const ActFunc act;
+        const float gradient_clipping;
+        Linear              linear_start;
+        Linear              linear_end;
+        AudioCausalConv1D   depthwise_conv1d;
+        RMSNorm             pre_layer_norm;
+        RMSNorm             conv_norm;
+    };
+
+    AudioLightConv1D::AudioLightConv1D(InitContext *ctx, int hidden_size, int conv_kernel_size, ActFunc act, float rms_norm_rps, float gradient_clipping):
+        act(act),
+        gradient_clipping(gradient_clipping),
+        linear_start(ctx, hidden_size, hidden_size * 2, false),
+        linear_end(ctx, hidden_size, hidden_size, false),
+        depthwise_conv1d(ctx, hidden_size, hidden_size, conv_kernel_size, 1, 0, 1, hidden_size, false),
+        pre_layer_norm(ctx, hidden_size),
+        conv_norm(ctx, hidden_size)
+    {
+        pre_layer_norm.eps = rms_norm_rps;
+        conv_norm.eps = rms_norm_rps;
+        linear_start.enable_clipping();
+        linear_end.enable_clipping();
+    }
+
+    ggml::tensor *AudioLightConv1D::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
+    {
+        auto residual = hidden_states;
+
+        hidden_states = pre_layer_norm.forward(ctx, hidden_states);
+        hidden_states = linear_start.forward(ctx, hidden_states);
+        hidden_states = ggml::glu(ctx, hidden_states, ActFunc::SIGMOID);
+
+        hidden_states = ggml::transpose(ctx, hidden_states);
+        hidden_states = depthwise_conv1d.forward(ctx, hidden_states);
+        hidden_states = ggml::transpose(ctx, hidden_states);
+
+        hidden_states = ggml::clamp(ctx, hidden_states, -gradient_clipping, gradient_clipping);
+        hidden_states = conv_norm.forward(ctx, hidden_states);
+
+        hidden_states = ggml::act(ctx, act, hidden_states);
+        hidden_states = linear_end.forward(ctx, hidden_states);
+        hidden_states = ggml::add(ctx, hidden_states, residual);
+
+        return hidden_states;
+    }
+
+    class AudioAttention : public Block
+    {
+    public:
+        AudioAttention(InitContext *ctx, const Config &config);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *position_embeddings, ggml::tensor *attention_mask);
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+
+            r += q_proj.get_param_num(effective_only);
+            r += k_proj.get_param_num(effective_only);
+            r += v_proj.get_param_num(effective_only);
+            r += post.get_param_num(effective_only);
+            r += relative_k_proj.get_param_num(effective_only);
+            r += ggml::nelements(per_dim_scale);
+            return r;
+        }
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            relative_k_proj.load(path + "relative_k_proj.", loader);
+            q_proj.load(path + "q_proj.", loader);
+            k_proj.load(path + "k_proj.", loader);
+            v_proj.load(path + "v_proj.", loader);
+            post.load(path + "post.", loader);
+            loader->read_tensor(path + "per_dim_scale", per_dim_scale);
+            loader->map_tensor_element(per_dim_scale, [this](float v) -> float {
+                float t = chatllm::softplus(v);
+                return t * q_scale;
+            });
+        }
+    protected:
+        ggml::tensor *_convert_to_block(ComputeContext *ctx, ggml::tensor *hidden_states);
+        ggml::tensor *_extract_block_context(ComputeContext *ctx, ggml::tensor *hidden_states);
+        ggml::tensor *_rel_shift(ComputeContext *ctx, ggml::tensor *hidden_states);
+    public:
+        const float q_scale;
+        const float k_scale;
+        const int chunk_size;
+        const int max_past_horizon;
+        const int max_future_horizon;
+        const int num_heads;
+        const int head_dim;
+        Linear q_proj;
+        Linear k_proj;
+        Linear v_proj;
+        Linear post;
+        Linear relative_k_proj;
+        ggml::tensor *per_dim_scale;
+        v2::TanhScaling scaling;
+    };
+
+    AudioAttention::AudioAttention(InitContext *ctx, const Config &config):
+        q_scale(1.0f / sqrtf((float)config.hidden_size) / logf(2)),
+        k_scale(logf(1.0f + expf(1.0)) / logf(2)),
+        chunk_size(config.attention_chunk_size),
+        max_past_horizon(config.attention_context_left - 1),
+        max_future_horizon(config.attention_context_right),
+        num_heads(config.num_attention_heads),
+        head_dim(config.hidden_size / config.num_attention_heads),
+        q_proj(ctx, config.hidden_size, num_heads * head_dim, false),
+        k_proj(ctx, config.hidden_size, num_heads * head_dim, false),
+        v_proj(ctx, config.hidden_size, num_heads * head_dim, false),
+          post(ctx, config.hidden_size, config.hidden_size, false),
+        relative_k_proj(ctx, config.hidden_size, num_heads * head_dim, false),
+        per_dim_scale(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, head_dim)),
+        scaling(config.attention_logit_cap)
+    {
+        q_proj.enable_clipping();
+        k_proj.enable_clipping();
+        v_proj.enable_clipping();
+          post.enable_clipping();
+    }
+
+    ggml::tensor *AudioAttention::_convert_to_block(ComputeContext *ctx, ggml::tensor *hidden_states)
+    {
+        const int seq_len    = ggml::get_dim(hidden_states, 2);
+        const int num_blocks = (seq_len + chunk_size - 1) / chunk_size;
+        const int pad = num_blocks * chunk_size - seq_len;
+        if (0 == pad) return hidden_states;
+        hidden_states = ggml::pad(ctx, hidden_states, 0, 0, 0, 0, 0, pad);
+        hidden_states = ggml::reshape(ctx, hidden_states, ggml::get_dim(hidden_states, 0), ggml::get_dim(hidden_states, 1),
+            chunk_size, num_blocks);
+        return hidden_states;
+    }
+
+    ggml::tensor *AudioAttention::_extract_block_context(ComputeContext *ctx, ggml::tensor *hidden_states)
+    {
+        const int context_size = chunk_size + max_past_horizon + max_future_horizon;
+        hidden_states = ggml::pad(ctx, hidden_states, 0, 0, 0, 0, max_past_horizon, max_future_horizon + chunk_size - 1);
+        const int num_blocks = (ggml::get_dim(hidden_states, 2) - context_size) / chunk_size + 1;
+        ggml::tensor *blocks = nullptr;
+        for (int i = 0; i < num_blocks; i++)
+        {
+            const int start = i * chunk_size;
+            auto part = ggml::view_4d(ctx, hidden_states, ggml::get_dim(hidden_states, 0), ggml::get_dim(hidden_states, 1),
+                                      context_size, ggml::get_dim(hidden_states, 3),
+                                      ggml::row_size(hidden_states),
+                                      ggml::row_size(hidden_states) * ggml::get_dim(hidden_states, 1),
+                                      ggml::row_size(hidden_states) * ggml::get_dim(hidden_states, 1) * ggml::get_dim(hidden_states, 2),
+                                      ggml::row_size(hidden_states) * ggml::get_dim(hidden_states, 1) * start);
+            blocks = blocks ? ggml::concat(ctx, blocks, part, 3) : part;
+        }
+        //blocks = ggml::permute(ctx, blocks, 2, 1, 0); // torch.movedim(hidden_states, -1, 2)
+        return blocks;
+    }
+
+    ggml::tensor *AudioAttention::_rel_shift(ComputeContext *ctx, ggml::tensor *x)
+    {
+        const int context_size = chunk_size + max_past_horizon + max_future_horizon;
+
+        const int position_length   = ggml::get_dim(x, 0);
+        const int block_size        = ggml::get_dim(x, 1);
+        const int num_blocks        = ggml::get_dim(x, 2);
+        const int num_heads         = ggml::get_dim(x, 3);
+
+        x = ggml::pad(ctx, x, 0, context_size + 1 - position_length);
+        x = ggml::reshape(ctx, x, block_size * (context_size + 1), num_blocks, num_heads);
+        x = ggml::view_3d(ctx, x, block_size * context_size, num_blocks, num_heads,
+                        ggml::row_size(x),
+                        ggml::row_size(x) * num_blocks,
+                        0);
+        x = ggml::reshape(ctx, x, context_size, block_size, num_blocks, num_heads);
+        return x;
+    }
+
+    ggml::tensor *AudioAttention::forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *position_embeddings, ggml::tensor *attention_mask)
+    {
+        const int batch_size = ggml::get_dim(hidden_states, 2);
+        const int seq_len    = ggml::get_dim(hidden_states, 1);
+
+        CHATLLM_CHECK(batch_size == 1) << "we can't support 5 dims!";
+
+        auto query_states = q_proj.forward(ctx, hidden_states);
+        auto key_states   = k_proj.forward(ctx, hidden_states);
+        auto value_states = v_proj.forward(ctx, hidden_states);
+
+        query_states = ggml::reshape(ctx, query_states, head_dim, num_heads, seq_len, batch_size);
+        key_states   = ggml::reshape(ctx, key_states,   head_dim, num_heads, seq_len, batch_size);
+        value_states = ggml::reshape(ctx, value_states, head_dim, num_heads, seq_len, batch_size);
+
+        key_states   = ggml::scale(ctx, key_states,   k_scale);
+        query_states = ggml::mul  (ctx, query_states, per_dim_scale);
+
+        query_states = _convert_to_block(ctx, query_states);
+        key_states   = _extract_block_context(ctx, key_states);
+        value_states = _extract_block_context(ctx, value_states);
+
+        const int num_blocks = ggml::get_dim(query_states, 3);
+
+        auto relative_key_states = relative_k_proj.forward(ctx, position_embeddings);
+        relative_key_states = ggml::reshape(ctx, relative_key_states, head_dim, num_heads, ggml::get_dim(relative_key_states, 1));
+
+        auto queries = ggml::permute(ctx, query_states, 0, 3, 1, 2);
+        key_states   = ggml::permute(ctx, key_states,   0, 3, 1, 2);
+        auto mat_ac  = ggml::mul_mat(ctx, key_states, queries);
+
+        auto queries_flat   = ggml::reshape(ctx, queries, head_dim, -1, num_heads);
+        relative_key_states = ggml::permute(ctx, relative_key_states, 0, 2, 1);
+        auto mat_bd         = ggml::mul_mat(ctx, relative_key_states, queries_flat);
+        mat_bd              = ggml::reshape(ctx, mat_bd, -1, chunk_size, num_blocks, num_heads);
+        mat_bd              = _rel_shift(ctx, mat_bd);
+
+        auto attn_weights   = ggml::add(ctx, mat_ac, mat_bd);
+        attn_weights        = scaling.forward(ctx, attn_weights);
+        attn_weights        = ggml::soft_max_ext(ctx, attn_weights, attention_mask);
+
+        value_states        = ggml::permute (ctx, value_states, 1, 3, 0, 2);
+        value_states        = ggml::cont    (ctx, value_states);
+        auto attn_output    = ggml::mul_mat (ctx, value_states, attn_weights);
+        attn_output         = ggml::permute (ctx, attn_output, 0, 2, 3, 1);
+        attn_output         = ggml::cont    (ctx, attn_output);
+        attn_output         = ggml::reshape (ctx, attn_output, -1, num_blocks * chunk_size);
+        attn_output         = ggml::view_2d (ctx, attn_output, ggml::get_dim(attn_output, 0), seq_len,
+                                                  ggml::row_size(attn_output), 0);
+
+        attn_output         = post.forward(ctx, attn_output);
+
+        return attn_output;
+    }
+
+    class AudioLayer : public Block
+    {
+    public:
+        AudioLayer(InitContext *ctx, const Config &config);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *position_embeddings, ggml::tensor *attention_mask);
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = 0;
+
+            r += feed_forward1.get_param_num(effective_only);
+            r += feed_forward2.get_param_num(effective_only);
+            r += self_attn.get_param_num(effective_only);
+            r += lconv1d.get_param_num(effective_only);
+            r += norm_pre_attn.get_param_num(effective_only);
+            r += norm_post_attn.get_param_num(effective_only);
+            r += norm_out.get_param_num(effective_only);
+            return r;
+        }
+        void load(const std::string &path, TensorLoader *loader) override
+        {
+            norm_post_attn.load(path + "norm_post_attn.", loader);
+             feed_forward1.load(path + "feed_forward1.", loader);
+             feed_forward2.load(path + "feed_forward2.", loader);
+             norm_pre_attn.load(path + "norm_pre_attn.", loader);
+                 self_attn.load(path + "self_attn.", loader);
+                  norm_out.load(path + "norm_out.", loader);
+                   lconv1d.load(path + "lconv1d.", loader);
+        }
+    public:
+        const float             gradient_clipping;
+        AudioFeedForward        feed_forward1;
+        AudioFeedForward        feed_forward2;
+        AudioAttention          self_attn;
+        AudioLightConv1D        lconv1d;
+        RMSNorm                 norm_pre_attn;
+        RMSNorm                 norm_post_attn;
+        RMSNorm                 norm_out;
+    };
+
+    AudioLayer::AudioLayer(InitContext *ctx, const Config &config):
+        gradient_clipping(config.gradient_clipping),
+        feed_forward1(ctx, config.hidden_size, config.gradient_clipping, config.residual_weight),
+        feed_forward2(ctx, config.hidden_size, config.gradient_clipping, config.residual_weight),
+        self_attn(ctx, config),
+        lconv1d(ctx, config.hidden_size, config.conv_kernel_size, ActFunc::SILU, config.rms_norm_eps, config.gradient_clipping),
+        norm_pre_attn(ctx, config.hidden_size),
+        norm_post_attn(ctx, config.hidden_size),
+        norm_out(ctx, config.hidden_size)
+
+    {
+    }
+
+    ggml::tensor *AudioLayer::forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *position_embeddings, ggml::tensor *attention_mask)
+    {
+        hidden_states = feed_forward1.forward(ctx, hidden_states);
+        auto residual = hidden_states;
+
+        hidden_states = ggml::clamp(ctx, hidden_states, -gradient_clipping, gradient_clipping);
+        hidden_states = norm_pre_attn.forward(ctx, hidden_states);
+
+        hidden_states = self_attn.forward(ctx, hidden_states, position_embeddings, attention_mask);
+
+        hidden_states = ggml::clamp(ctx, hidden_states, -gradient_clipping, gradient_clipping);
+        hidden_states = norm_post_attn.forward(ctx, hidden_states);
+
+        hidden_states = ggml::add(ctx, hidden_states, residual);
+
+        hidden_states = lconv1d.forward(ctx, hidden_states);
+        hidden_states = feed_forward2.forward(ctx, hidden_states);
+
+        hidden_states = ggml::clamp(ctx, hidden_states, -gradient_clipping, gradient_clipping);
+        hidden_states = norm_out.forward(ctx, hidden_states);
+
+        return hidden_states;
+    }
+
+    class AudioRelPositionalEncoding : public Block
+    {
+    public:
+        AudioRelPositionalEncoding(InitContext *ctx, int hidden_size, int context_size);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
+    public:
+        ggml::tensor *pos_embed;
+    };
+
+    class AudioModel : public DynamicBlock
+    {
+    public:
+        AudioModel(InitContext *ctx, const Config &config, int llm_hidden_size);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_features);
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+        void before_eval(ComputeContext *ctx) override;
+    public:
+        const Config config;
+        AudioSubSampleConvProjection    subsample_conv_projection;
+        ggml::tensor                   *pos_emb;
+        std::vector<AudioLayer>         layers;
+        Linear                          out_proj;
+        MultimodalEmbedder              embed_audio;
+    protected:
+        ggml::tensor                   *rt_attention_mask = nullptr;
+        ggml::tensor                   *_convert_4d_mask_to_blocked_5d(ComputeContext *ctx, ggml::tensor *mask_4d);
+    };
+
+    AudioModel::AudioModel(InitContext *ctx, const Config &config, int llm_hidden_size):
+        config(config),
+        subsample_conv_projection(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), config.hidden_size, config.subsampling_conv_channels, config.rms_norm_eps),
+        pos_emb(ggml::new_tensor_2d(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), ggml::type_fallback(ctx->dtype, config.hidden_size), config.hidden_size, config.attention_context_left + config.attention_context_right)),
+        out_proj(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, config.output_proj_dims),
+        embed_audio(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.output_proj_dims, llm_hidden_size)
+    {
+        for (int i = 0; i < config.num_hidden_layers; i++)
+        {
+            ctx->move_to_layer(i);
+            layers.emplace_back(ctx, config);
+            layers[i].set_id(i);
+        }
+    }
+
+    // active value: 1.0
+    void fill_sliding_window_mask(ggml::tensor *mask, int window_left, int window_right = 0)
+    {
+        CHATLLM_CHECK(ggml::n_dims(mask) <= 2);
+        const int seq_len = (int)ggml::get_dim(mask, 0);
+        const int   q_len = (int)ggml::get_dim(mask, 1);
+        const int offset  = seq_len - q_len;
+        CHATLLM_CHECK(seq_len >= q_len);
+
+        std::vector<float> data;
+        data.resize(seq_len * q_len, 0.0f);
+
+        for (int j = 0; j < q_len; j++)
+        {
+            const int n = j + offset;
+            const int left  = n - window_left;
+            const int right = n + window_right;
+            for (int i = 0; i < seq_len; i++)
+            {
+                bool in_range = (left < i) && (i <= right);
+                if (in_range) data[j * seq_len + i] = 1.0f;
+            }
+        }
+
+        std::vector<uint8_t> buf;
+        buf.resize(ggml::nbytes(mask));
+
+        ggml::from_float(ggml::type_of(mask), data.data(), buf.data(), seq_len, ggml::nrows(mask));
+        Backend::write_tensor_data(mask, buf.data());
+    }
+
+    void AudioModel::before_eval(ComputeContext *ctx)
+    {
+        fill_sliding_window_mask(rt_attention_mask, config.attention_context_left - 1, 0);
+    }
+
+    // Convert a standard 4D attention mask `[batch_size, 1, seq_len, seq_len]` to the 5D blocked format
+    //    `[batch_size, 1, num_blocks, chunk_size, context_size]`
+    ggml::tensor *AudioModel::_convert_4d_mask_to_blocked_5d(ComputeContext *ctx, ggml::tensor *mask_4d)
+    {
+        const int batch_size = (int)ggml::get_dim(mask_4d, 3);
+        const int seq_len    = (int)ggml::get_dim(mask_4d, 1);
+
+        CHATLLM_CHECK(batch_size == 1);
+
+        const int chunk_size            = config.attention_chunk_size;
+        const int max_past_horizon      = config.attention_context_left - 1;
+        const int max_future_horizon    = config.attention_context_right;
+        const int context_size          = chunk_size + max_past_horizon + max_future_horizon;
+
+        const int num_blocks        = (seq_len + chunk_size - 1) / chunk_size;
+        const int padded_seq_len    = num_blocks * chunk_size;
+        const int pad_amount        = padded_seq_len - seq_len;
+
+        mask_4d         = ggml::pad    (ctx, mask_4d, 0, pad_amount, 0, pad_amount, 0);
+        auto mask_5d    = ggml::reshape(ctx, mask_4d, padded_seq_len, chunk_size, num_blocks);
+        mask_5d         = ggml::pad    (ctx, mask_5d, max_past_horizon, max_future_horizon);
+
+        ggml::tensor *r = nullptr;
+        for (int i = 0, block_start = 0; i < num_blocks; i++, block_start += chunk_size)
+        {
+            auto part = ggml::view_3d(ctx, mask_5d, context_size, chunk_size, 1,
+                                    ggml::row_size(mask_5d),
+                                    ggml::row_size(mask_5d) * chunk_size,
+                                    ggml::row_size(mask_5d) * chunk_size * i +
+                                    ggml::element_size(mask_5d) * block_start);
+            r = r ? ggml::concat(ctx, r, part, 2) : part;
+        }
+        return r;
+    }
+
+    ggml::tensor *AudioModel::forward(ComputeContext *ctx, ggml::tensor *input_features)
+    {
+        CHATLLM_CHECK(ggml::n_dims(input_features) <= 2);
+
+        input_features = ggml::dup(ctx, input_features);
+
+        auto r = subsample_conv_projection.forward2(ctx, input_features, nullptr);
+        auto hidden_states = r.first;
+
+        const int seq_len = ggml::get_dim(hidden_states, 1);
+        rt_attention_mask = ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F32, seq_len, seq_len);
+
+        auto attention_mask = _convert_4d_mask_to_blocked_5d(ctx, rt_attention_mask);
+
+        // mask: 0 -> -inf, 1 -> 0.0
+        attention_mask = ggml::scale(ctx, attention_mask, 1.0f, -1.0f);
+        attention_mask = ggml::scale(ctx, attention_mask, - config.attention_invalid_logits_value);
+
+        for (int i = 0; i < (int)layers.size(); i++)
+        {
+            hidden_states = layers[i].forward(ctx, hidden_states, pos_emb, attention_mask);
+        }
+
+        hidden_states = out_proj.forward(ctx, hidden_states);
+        hidden_states = embed_audio.forward(ctx, hidden_states);
+        return hidden_states;
+    }
+
+    int64_t AudioModel::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += subsample_conv_projection.get_param_num(effective_only);
+        r += embed_audio.get_param_num(effective_only);
+        r += out_proj.get_param_num(effective_only);
+        r += ggml::nelements(pos_emb);
+        r += layers[0].get_param_num(effective_only) * layers.size();
+        return r;
+    }
+
+    void AudioModel::load(const std::string &path, TensorLoader *loader)
+    {
+        subsample_conv_projection.load(path + "subsample_conv_projection.", loader);
+        embed_audio.load(path, loader);
+        out_proj.load(path + "output_proj.", loader);
+        loader->read_tensor(path + "pos_embed.weight", pos_emb);
+        for (int i = 0; i < (int)layers.size(); i++)
+        {
+            layers[i].load(path + "layers." + std::to_string(i) + ".", loader);
+        }
+        _loaded = true;
+    }
+
+    class EmbeddingGeneration
+    {
+    public:
+        EmbeddingGeneration(const RuntimeConfig &runtime_config, int max_llm_tokens, size_t GRAPH_SIZE = 4096 * 2);
+        bool load(ModelLoader &loader);
+        bool load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config, const int max_projected_tokens);
+        void generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf);
+        AudioModel *get_model(void) const { return aud_model.get(); }
+        bool is_loaded() const;
+    protected:
+        bool run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &image, std::vector<uint8_t> &buf);
+
+    protected:
+        const int max_llm_tokens;
+        std::unique_ptr<AudioModel> aud_model;
+        TensorGraphEvaluator eval;
+        InitContext _ctx; // weight context
+    public:
+        Config _config;
+    };
+
+    EmbeddingGeneration::EmbeddingGeneration(const RuntimeConfig &runtime_config, int max_llm_tokens, size_t GRAPH_SIZE):
+        max_llm_tokens(max_llm_tokens),
+        eval(runtime_config, "aud", GRAPH_SIZE),
+        _ctx(eval.get_backend_context())
+    {
+        _ctx.cache_dtype = runtime_config.cache_type;
+    }
+
+    bool EmbeddingGeneration::load(ModelLoader &loader)
+    {
+        if (aud_model.get())
+        {
+            loader.push_allocator_manager(eval.get_layer_allocators());
+            aud_model->load("audio.", &loader);
+            loader.pop_allocator_manager();
+            return aud_model->is_loaded();
+        }
+        else
+            return false;
+    }
+
+    bool EmbeddingGeneration::is_loaded() const
+    {
+        if (aud_model.get() == nullptr) return false;
+        return aud_model->is_loaded();
+    }
+
+    bool EmbeddingGeneration::load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config, const int max_projected_tokens)
+    {
+        const auto _cfg = config["config.json"]["audio_config"];
+        if (!_cfg.IsObject()) return false;
+
+        _config.dtype = dtype;
+
+        CHATLLM_CHECK(_cfg["model_type"].ToString() == "gemma4_audio");
+
+        _config.attention_chunk_size        = (int)_cfg["attention_chunk_size"].ToInt();
+        _config.attention_context_left      = (int)_cfg["attention_context_left"].ToInt();
+        _config.attention_context_right     = (int)_cfg["attention_context_right"].ToInt();
+        _config.chunk_size_feed_forward     = (int)_cfg["chunk_size_feed_forward"].ToInt();
+        _config.conv_kernel_size            = (int)_cfg["conv_kernel_size"].ToInt();
+        _config.hidden_size                 = (int)_cfg["hidden_size"].ToInt();
+        _config.num_attention_heads         = (int)_cfg["num_attention_heads"].ToInt();
+        _config.num_hidden_layers           = (int)_cfg["num_hidden_layers"].ToInt();
+        _config.output_proj_dims            = (int)_cfg["output_proj_dims"].ToInt();
+
+        for (int i = 0; i < SUBSAMPLING_CH_NUM; i++)
+            _config.subsampling_conv_channels[i] = (int)_cfg["subsampling_conv_channels"][i].ToInt();
+
+        _config.use_clipped_linears         = _cfg["use_clipped_linears"].ToBool();
+
+        _config.attention_invalid_logits_value  = (float)_cfg["attention_invalid_logits_value"].ToFloat();
+        _config.attention_logit_cap             = (float)_cfg["attention_logit_cap"].ToFloat();
+        _config.gradient_clipping               = (float)_cfg["gradient_clipping"].ToFloat();
+        _config.residual_weight                 = (float)_cfg["residual_weight"].ToFloat();
+        _config.rms_norm_eps                    = (float)_cfg["rms_norm_eps"].ToFloat();
+
+        const auto _pp_cfg = config["processor_config.json"]["feature_extractor"];
+        if (!_pp_cfg.IsObject()) return false;
+
+        _config.feature_size        = (int)_pp_cfg["feature_size"].ToFloat();
+        _config.fft_length          = (int)_pp_cfg["fft_length"].ToFloat();
+        _config.frame_length        = (int)_pp_cfg["frame_length"].ToFloat();
+        _config.hop_length          = (int)_pp_cfg["hop_length"].ToFloat();
+        _config.sampling_rate       = (int)_pp_cfg["sampling_rate"].ToFloat();
+        _config.max_frequency       = (float)_pp_cfg["max_frequency"].ToFloat();
+        _config.mel_floor           = (float)_pp_cfg["mel_floor"].ToFloat();
+        _config.min_frequency       = (float)_pp_cfg["min_frequency"].ToFloat();
+
+        const size_t tensor_ovhd = ggml_tensor_overhead();
+        const size_t num_tensors = 9 + 22 * _config.num_hidden_layers;
+        const size_t ctx_size = num_tensors * tensor_ovhd;
+        _ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+        _ctx.dtype = dtype;
+
+        aud_model.reset(new AudioModel(&_ctx, _config, lm_hidden_size));
+
+        _ctx.check_used_mem_size(true);
+
+        return true;
+    }
+
+    void EmbeddingGeneration::generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf)
+    {
+        if (!is_loaded() || (tok->media_emb.size() < 1)) return;
+
+        for (auto &media : tok->media_emb)
+        {
+            if (media.type != media_type_audio) continue;
+            run_model(gen_config, tok, dtype, media, buf);
+        }
+    }
+
+    bool EmbeddingGeneration::run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &media, std::vector<uint8_t> &buf)
+    {
+        ggml::tensor *media_emb = nullptr;
+        const auto make_graph = [this, &media_emb, &media](ComputeContext *ctx) -> ggml::tensor * {
+            media_emb = ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F32, media.width, _config.feature_size);
+            auto emb = ggml::transpose(ctx, media_emb);
+            auto r = aud_model->forward(ctx, emb);
+            return r;
+        };
+        const auto write_input_data = [this, &media_emb, &media](ComputeContext *ctx) {
+            Backend::write_tensor_data(media_emb, media.data.data(), 0, media.data.size() * sizeof(media.data[0]));
+            aud_model->before_eval(ctx);
+        };
+
+        std::vector<int64_t> shape;
+        eval.evaluate(gen_config, make_graph, write_input_data, dtype, shape, buf);
+        CHATLLM_CHECK((int)shape[1] == media.emb_vec_number);
+
+        return true;
+    }
+}
 
 namespace chatllm::gemma::vit
 {
@@ -283,48 +1197,6 @@ namespace chatllm::gemma::vit
         return r;
     }
 
-    class MultimodalEmbedder : public Block
-    {
-    public:
-        MultimodalEmbedder(InitContext *ctx, int multimodal_hidden_size, int text_hidden_size);
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *mm_outputs) override;
-        int64_t get_param_num(bool effective_only) const override;
-        void load(const std::string &path, TensorLoader *loader) override;
-    public:
-        const int       multimodal_hidden_size;
-        const int       text_hidden_size;
-        Linear          embedding_projection;
-        RMSNormNoScale  embedding_pre_projection_norm;
-    };
-
-    MultimodalEmbedder::MultimodalEmbedder(InitContext *ctx, int multimodal_hidden_size, int text_hidden_size):
-        multimodal_hidden_size(multimodal_hidden_size),
-        text_hidden_size(text_hidden_size),
-        embedding_projection(ctx, multimodal_hidden_size, text_hidden_size, false),
-        embedding_pre_projection_norm(ctx, multimodal_hidden_size)
-    {}
-
-    ggml::tensor *MultimodalEmbedder::forward(ComputeContext *ctx, ggml::tensor *mm_outputs)
-    {
-        auto output = embedding_pre_projection_norm.forward(ctx, mm_outputs);
-             output = embedding_projection.forward(ctx, output);
-        return output;
-    }
-
-    int64_t MultimodalEmbedder::get_param_num(bool effective_only) const
-    {
-        int64_t r = 0;
-        r += embedding_projection.get_param_num(effective_only);
-        r += embedding_pre_projection_norm.get_param_num(effective_only);
-        return r;
-    }
-
-    void MultimodalEmbedder::load(const std::string &path, TensorLoader *loader)
-    {
-        embedding_pre_projection_norm.load(path + "embedding_pre_projection_norm.", loader);
-                 embedding_projection.load(path + "embedding_projection.", loader);
-    }
-
     class VisionModel : public DynamicBlock
     {
     public:
@@ -509,6 +1381,7 @@ namespace chatllm::gemma::vit
 
         for (auto &image : tok->media_emb)
         {
+            if (image.type != media_type_image) continue;
             run_model(gen_config, tok, dtype, image, buf);
         }
     }
@@ -568,7 +1441,9 @@ namespace chatllm::gemma::v4
         void append_video_piece(const ContentPiece &piece, std::vector<int> &ids) const;
     public:
         const vit::Config *vis_config = nullptr;
+        const aud::Config *aud_config = nullptr;
         bool  vit_loaded = false;
+        bool  aud_loaded = false;
     };
 
     static ChatHistoryEncoder _chat_encoder;
@@ -1196,7 +2071,8 @@ namespace chatllm::gemma::v4
         const Config config;
         const int max_projected_tokens;
         v2::TanhScaling logits_pp;
-        vit::VisualEmbeddingGeneration visual;
+        vit::VisualEmbeddingGeneration  visual;
+        aud::EmbeddingGeneration        audio;
     };
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type):
@@ -1205,7 +2081,8 @@ namespace chatllm::gemma::v4
         config(config),
         max_projected_tokens(BlockParams::get_padded_embedding_num()),
         logits_pp(1.0f / config.final_logit_soft_capping / sqrtf((float)config.hidden_size), config.final_logit_soft_capping),
-        visual(runtime_config, pad_arg->get())
+        visual(runtime_config, pad_arg->get()),
+        audio(runtime_config, pad_arg->get())
     {
         const size_t tensor_ovhd = ggml_tensor_overhead();
         size_t num_tensors = 2;
@@ -1238,6 +2115,7 @@ namespace chatllm::gemma::v4
         BaseModelForConditionalGeneration::load(loader);
 
         _chat_encoder.vit_loaded  = visual.load(loader);
+        _chat_encoder.aud_loaded  = audio.load(loader);
     }
 
     void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
@@ -1247,12 +2125,18 @@ namespace chatllm::gemma::v4
         {
             _chat_encoder.vis_config = &visual.vis_config;
         }
+        if (audio.is_loaded())
+        {
+            _chat_encoder.aud_config = &audio._config;
+        }
     }
 
     bool ConditionalGeneration::load_more(const json::JSON &config)
     {
         BaseModelForConditionalGeneration::load_more(config);
         bool r = visual.load_more(this->config.dtype, this->config.hidden_size, config, max_projected_tokens);
+        if (!r) return r;
+        r = audio.load_more(this->config.dtype, this->config.hidden_size, config, max_projected_tokens);
         return r;
     }
 
@@ -1267,6 +2151,8 @@ namespace chatllm::gemma::v4
         int64_t r = BaseModelForConditionalGeneration::get_param_num(effective_only);
         if (visual.is_loaded())
             r += visual.get_model()->get_param_num(effective_only);
+        if (audio.is_loaded())
+            r += audio.get_model()->get_param_num(effective_only);
         return r;
     }
 
@@ -1278,6 +2164,8 @@ namespace chatllm::gemma::v4
 
         auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
         visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
+        audio.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
+
         if (buf.size() < 1) return;
 
         size_t offset = emb->get_base_nbytes();
@@ -1397,6 +2285,7 @@ namespace chatllm::gemma::v4
         tok->media_emb.push_back({.grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
 
         auto &image = tok->media_emb.back();
+        image.type  = media_type_image;
 
         vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::PatchesLeftRightDown_PixelsLeftRightDown_ChannelsRGB);
 
@@ -1409,7 +2298,34 @@ namespace chatllm::gemma::v4
 
     void ChatHistoryEncoder::append_audio_piece(const ContentPiece &piece, std::vector<int> &ids) const
     {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
+        CHATLLM_CHECK(aud_loaded) << "Audio model not loaded";
+
+        std::vector<float>          pcm_samples;
+        std::vector<audio::mel>     mel_chunks;
+
+        if (!audio::load(piece.content.c_str(), pcm_samples, aud_config->sampling_rate)) return;
+
+        audio::mel_spectrogram_gemma_4(pcm_samples.data(), pcm_samples.size(),
+            0,
+            aud_config->sampling_rate,
+            aud_config->feature_size,
+            aud_config->frame_length,
+            aud_config->fft_length,
+            aud_config->hop_length,
+            mel_chunks);
+
+        auto &mel = mel_chunks[0];
+
+        tok->media_emb.push_back({ .width = (int)mel.n_len, .emb_vec_number = (int)aud::calc_projected_length(mel.n_len), .data = {}});
+
+        auto &media = tok->media_emb.back();
+        media.type  = media_type_audio;
+        media.data = std::move(mel.data);
+
+        const int id_start = tok->get_image_total_emb_vectors() - media.emb_vec_number + tok->vocab_size;
+        tok->inject_media("audio", ids, id_start, media.emb_vec_number);
     }
 
     void ChatHistoryEncoder::append_video_piece(const ContentPiece &piece, std::vector<int> &ids) const
