@@ -36,7 +36,12 @@ Build:
 nim c main.nim
 ```
 
-Run it with exactly the same command line options, for example: `main -i -m path/to/model`.
+> [!WARNING]
+> Linux does not search for `.so` files in current directory by default.
+> You need to update your library path before running the nim program with:
+> `export LD_LIBRARY_PATH="$PWD:$LD_LIBRARY_PATH"`
+
+Run it with exactly the same command line options, for example: `./main -i -m path/to/model`.
 
 ![](code_highlight.png)
 
