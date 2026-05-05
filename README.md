@@ -35,6 +35,7 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
+* 2026-05-05: Gemma-4
 * 2026-03-28: InternVL3.5
 * 2026-03-27: Qianfan-OCR
 * 2026-03-22: Penguin-VL

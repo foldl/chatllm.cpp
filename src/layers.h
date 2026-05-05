@@ -1433,10 +1433,10 @@ namespace chatllm
                         Block *mlp,
                         Block *post_mlp_layernorm,
                         int id);
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past);
-        int64_t get_param_num(bool effective_only);
+        virtual ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past);
+        virtual int64_t get_param_num(bool effective_only);
         void set_id(int id);
-        void load(const std::string &path, TensorLoader *loader);
+        virtual void load(const std::string &path, TensorLoader *loader);
     protected:
         const int id;
         Block *pre_attention_layernorm;

@@ -1018,7 +1018,6 @@ namespace chatllm::gemma::vit
         VisionMLP(InitContext *ctx, int hidden_size, int intermediate_size):
             BaseMLP(ctx, hidden_size, intermediate_size, ActFunc::GELU)
         {
-            enable_clipping();
         }
     };
 
@@ -1098,11 +1097,6 @@ namespace chatllm::gemma::vit
             TensorPosHelperPrelude::done();
             causal = false;
             CHATLLM_CHECK(rope_dim % 4 == 0);
-
-            q_proj.enable_clipping();
-            k_proj.enable_clipping();
-            v_proj.enable_clipping();
-            o_proj.enable_clipping();
 
             attn_scaling_factor = 1.0f;
         }
@@ -1197,6 +1191,50 @@ namespace chatllm::gemma::vit
         return r;
     }
 
+    class Standardizer : public Block
+    {
+    public:
+        Standardizer(InitContext *ctx, int hidden_size);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        bool loaded;
+        ggml::tensor *std_bias;
+        ggml::tensor *std_scale;
+    };
+
+    Standardizer::Standardizer(InitContext *ctx, int hidden_size):
+        loaded(false),
+        std_bias(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F16, hidden_size)),
+        std_scale(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F16, hidden_size))
+    {}
+
+    ggml::tensor *Standardizer::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
+    {
+        if (!loaded) return hidden_states;
+        hidden_states = ggml::sub(ctx, hidden_states, std_bias);
+        hidden_states = ggml::mul(ctx, hidden_states, std_scale);
+        return hidden_states;
+    }
+
+    int64_t Standardizer::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        if (!loaded) return r;
+        r += ggml::nelements(std_bias);
+        r += ggml::nelements(std_scale);
+        return r;
+    }
+
+    void Standardizer::load(const std::string &path, TensorLoader *loader)
+    {
+        if (!loader->has_tensor(path + "std_bias")) return;
+        loader->read_tensor(path + "std_bias", std_bias);
+        loader->read_tensor(path + "std_scale", std_scale);
+        loaded = true;
+    }
+
     class VisionModel : public DynamicBlock
     {
     public:
@@ -1210,12 +1248,14 @@ namespace chatllm::gemma::vit
         VisionPooler                    pooler;
         MultimodalEmbedder              embed_vision;
         std::unique_ptr<TensorPosHelper> pos_helper;
+        Standardizer                    standardizer;
     };
 
     VisionModel::VisionModel(InitContext *ctx, const Config &config, const int text_hidden_size):
         patch_embedder(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), config),
         pooler(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, config.pooling_kernel_size),
-        embed_vision(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, text_hidden_size)
+        embed_vision(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, text_hidden_size),
+        standardizer(ctx, config.hidden_size)
     {
         pos_helper.reset(new TensorPosHelper(config.max_patches));
 
@@ -1225,6 +1265,15 @@ namespace chatllm::gemma::vit
             layers.emplace_back(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size, config.num_key_value_heads, config.head_dim, config.position_embedding_size);
             layers[i].attention.set_pos_helper(pos_helper.get());
             layers[i].attention.freq_base = config.rope_theta;
+
+            if (config.use_clipped_linears)
+            {
+                layers[i].attention.q_proj.enable_clipping();
+                layers[i].attention.k_proj.enable_clipping();
+                layers[i].attention.v_proj.enable_clipping();
+                layers[i].attention.o_proj.enable_clipping();
+                layers[i].mlp.enable_clipping();
+            }
         }
     }
 
@@ -1241,6 +1290,7 @@ namespace chatllm::gemma::vit
             hidden_states = layers[i].forward(ctx, hidden_states, 0);
         }
         hidden_states = pooler.forward(ctx, hidden_states, grid_w, grid_h);
+        hidden_states = standardizer.forward(ctx, hidden_states);
         hidden_states = embed_vision.forward(ctx, hidden_states);
         return hidden_states;
     }
@@ -1253,6 +1303,7 @@ namespace chatllm::gemma::vit
         r += embed_vision.get_param_num(effective_only);
         r += pooler.get_param_num(effective_only);
         r += layers[0].get_param_num(effective_only) * layers.size();
+        r += standardizer.get_param_num(effective_only);
         return r;
     }
 
@@ -1263,6 +1314,7 @@ namespace chatllm::gemma::vit
         patch_embedder.load(path + "patch_embedder.", loader);
         embed_vision.load(path, loader);
         pooler.load(path + "pooler.", loader);
+        standardizer.load(path, loader);
         for (int i = 0; i < (int)layers.size(); i++)
         {
             layers[i].load(path + "blocks." + std::to_string(i) + '.', loader);
@@ -1363,7 +1415,7 @@ namespace chatllm::gemma::vit
             return false;
 
         const size_t tensor_ovhd = ggml_tensor_overhead();
-        const size_t num_tensors = 3 + 14 * vis_config.num_hidden_layers;
+        const size_t num_tensors = 3 + 14 * vis_config.num_hidden_layers + 2;
         const size_t ctx_size = num_tensors * tensor_ovhd;
         _ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         _ctx.dtype = dtype;
@@ -1460,6 +1512,12 @@ namespace chatllm::gemma::v4
         int eoa_token_id = -1;
         int boi_token_id = -1;
         int eoi_token_id = -1;
+        int boc_token_id = -1;
+        int eoc_token_id = -1;
+        int btc_token_id = -1;
+        int etc_token_id = -1;
+        int btr_token_id = -1;
+        int etr_token_id = -1;
     };
 
     Tokenizer::Tokenizer(const BaseConfig &config)
@@ -1472,6 +1530,7 @@ namespace chatllm::gemma::v4
         tp = t;
         size_t size = tp->Load(buffer, n_vocab);
         t->SetDecoderType(tokenizer::BPEProcessor2::DecoderType::Sequence);
+        t->EnableReturnSpecialToken(true);
 
         int id = tp->PieceToId("<pad>");
         if (id >= 0) pad_token_id = id;
@@ -1483,6 +1542,12 @@ namespace chatllm::gemma::v4
         eoa_token_id            = tp->PieceToId("<audio|>");
         boi_token_id            = tp->PieceToId("<|image>");
         eoi_token_id            = tp->PieceToId("<image|>");
+        boc_token_id            = tp->PieceToId("<|channel>");
+        eoc_token_id            = tp->PieceToId("<channel|>");
+        btc_token_id            = tp->PieceToId("<|tool_call>");
+        etc_token_id            = tp->PieceToId("<tool_call|>");
+        btr_token_id            = tp->PieceToId("<|tool_response>");
+        etr_token_id            = tp->PieceToId("<tool_response|>");
 
         terminate_ids.insert(end_of_turn_token_id);
 
@@ -1738,6 +1803,206 @@ namespace chatllm::gemma::v4
         Gemma4Attention *shared_attn = nullptr;
     };
 
+    class Gemma4TextRouter : public Block
+    {
+    public:
+        Gemma4TextRouter(InitContext *ctx, int hidden_size, int num_experts, int num_expters_per_tok);
+        std::pair<ggml::tensor *, ggml::tensor *> forward2(ComputeContext *ctx, ggml::tensor *hidden_states);
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        const int num_experts;
+        const int num_expters_per_tok;
+        RMSNorm         norm;
+        Linear          proj;
+        ggml::tensor   *per_expert_scale;
+    };
+
+    class Gemma4MoE : public Block
+    {
+    public:
+        Gemma4MoE(InitContext *ctx, int hidden_size, int moe_intermediate_size, int num_experts, int num_expters_per_tok);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        const int num_experts;
+        const int num_expters_per_tok;
+        Gemma4TextRouter router;
+        MultiMLP         experts;
+        RMSNorm          post_feedforward_layernorm_1;
+        RMSNorm          post_feedforward_layernorm_2;
+        RMSNorm          pre_feedforward_layernorm_2;
+    };
+
+    class CascadedMLP : public GELUMLP
+    {
+    public:
+        using GELUMLP::GELUMLP;
+        void init_moe(InitContext *ctx, int hidden_size, int moe_intermediate_size, int num_experts, int num_expters_per_tok);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *residual) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        std::unique_ptr<Gemma4MoE> moe;
+    };
+
+    Gemma4TextRouter::Gemma4TextRouter(InitContext *ctx, int hidden_size, int num_experts, int num_expters_per_tok):
+        num_experts(num_experts), num_expters_per_tok(num_expters_per_tok),
+        norm(ctx, hidden_size),
+        proj(ctx, hidden_size, num_experts, false),
+        per_expert_scale(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, num_experts))
+    {
+    }
+
+    std::pair<ggml::tensor *, ggml::tensor *> Gemma4TextRouter::forward2(ComputeContext *ctx, ggml::tensor *hidden_states)
+    {
+        const int qlen = ggml::get_dim(hidden_states, 1);
+        hidden_states = norm.forward(ctx, hidden_states);
+        auto expert_scores = proj.forward(ctx, hidden_states);
+        auto router_probabilities = ggml::soft_max(ctx, expert_scores);
+        auto selected_experts = ggml::top_k(ctx, router_probabilities, num_expters_per_tok); // [qlen, num_experts_per_tok]
+
+        ggml::tensor * weights = ggml::get_rows(ctx,
+            ggml::reshape_3d(ctx, router_probabilities, 1, num_experts, qlen), selected_experts); // [1, num_experts_per_tok, qlen]
+
+        weights = ggml::reshape_2d(ctx, weights, num_expters_per_tok, qlen);
+
+        ggml::tensor * weights_sum = ggml::sum_rows(ctx, weights); // [1, n_tokens]
+
+        weights = ggml::div(ctx, weights, weights_sum); // [num_experts_per_tok, n_tokens]
+        weights = ggml::reshape_3d(ctx, weights, 1, num_expters_per_tok, qlen);
+
+        auto per_expert_scale = this->per_expert_scale;
+        per_expert_scale = ggml::reshape(ctx, per_expert_scale, 1, num_experts);
+        per_expert_scale = ggml::repeat(ctx, per_expert_scale, 1, num_experts, ggml::get_dim(selected_experts, 1), ggml::get_dim(selected_experts, 2));
+        auto routed_scaling_factor = ggml::get_rows(ctx, per_expert_scale, selected_experts);
+
+        weights = ggml::mul(ctx, weights, routed_scaling_factor);
+
+        auto r = std::pair<ggml::tensor *, ggml::tensor *>(weights, selected_experts);
+        return r;
+    }
+
+    int64_t Gemma4TextRouter::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += norm.get_param_num(effective_only);
+        r += proj.get_param_num(effective_only);
+        r += ggml::nelements(per_expert_scale);
+        return r;
+    }
+
+    Gemma4MoE::Gemma4MoE(InitContext *ctx, int hidden_size, int moe_intermediate_size, int num_experts, int num_expters_per_tok):
+        num_experts(num_experts), num_expters_per_tok(num_expters_per_tok),
+        router(ctx, hidden_size, num_experts, num_expters_per_tok),
+        experts(ctx, hidden_size, moe_intermediate_size, num_experts, num_expters_per_tok, ActFunc::GELU, false),
+        post_feedforward_layernorm_1(ctx, hidden_size),
+        post_feedforward_layernorm_2(ctx, hidden_size),
+        pre_feedforward_layernorm_2(ctx, hidden_size)
+    {
+    }
+
+    ggml::tensor *Gemma4MoE::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
+    {
+        const int64_t hidden_size   = ggml::get_dim(hidden_states, 0);
+        const int64_t qlen          = ggml::get_dim(hidden_states, 1);
+        const int n_expert          = num_experts;
+
+        auto router = this->router.forward2(ctx, hidden_states);
+
+        CPUMover mover(ctx, ctx->user_options.moe_on_cpu);
+
+        auto selected_experts = router.second;
+        auto weights = router.first;
+
+        auto hidden_states_2 = pre_feedforward_layernorm_2.forward(ctx, hidden_states);
+
+        hidden_states_2 = ggml::reshape_3d(ctx, hidden_states_2, hidden_size, 1, qlen);
+
+        ggml::tensor * experts = this->experts.forward(ctx, hidden_states_2, selected_experts);
+        experts                = ggml::mul(ctx, experts, weights);
+
+        ggml::tensor * moe_out = nullptr;
+        for (int i = 0; i < num_expters_per_tok; ++i)
+        {
+            ggml::tensor * cur_expert = ggml::view_2d(ctx, experts, hidden_size, qlen,
+                                                    experts->nb[2], i * experts->nb[1]);
+
+            moe_out = i == 0 ? cur_expert : ggml::add(ctx, moe_out, cur_expert);
+        }
+
+        hidden_states_2 = ggml::reshape(ctx, moe_out, hidden_size, qlen, ggml::get_dim(hidden_states, 2), ggml::get_dim(hidden_states, 3));
+        hidden_states_2 = post_feedforward_layernorm_2.forward(ctx, hidden_states_2);
+
+        return hidden_states_2;
+    }
+
+    int64_t Gemma4MoE::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += router.get_param_num(effective_only);
+        r += experts.get_param_num(effective_only);
+        r += post_feedforward_layernorm_1.get_param_num(effective_only);
+        r += post_feedforward_layernorm_2.get_param_num(effective_only);
+        r += pre_feedforward_layernorm_2.get_param_num(effective_only);
+        return r;
+    }
+
+    void Gemma4MoE::load(const std::string &path, TensorLoader *loader)
+    {
+        router.load(path + "router.", loader);
+        experts.load(path + "mlp.experts.", loader);
+        post_feedforward_layernorm_1.load(path + "post_feedforward_layernorm_1.", loader);
+        post_feedforward_layernorm_2.load(path + "post_feedforward_layernorm_2.", loader);
+        pre_feedforward_layernorm_2.load(path + "pre_feedforward_layernorm_2.", loader);
+    }
+
+    void Gemma4TextRouter::load(const std::string &path, TensorLoader *loader)
+    {
+        loader->read_tensor(path + "scale", norm.weight);
+        proj.load(path + "proj.", loader);
+        loader->read_tensor(path + "per_expert_scale", per_expert_scale);
+
+        const int hidden_size = ggml::get_dim(norm.weight, 0);
+        const float scalar_root_size = (float)(1.0 / sqrt(hidden_size));
+        loader->map_tensor_element(norm.weight, [scalar_root_size](float v) {
+            return v * scalar_root_size;
+        });
+    }
+
+    void CascadedMLP::init_moe(InitContext *ctx, int hidden_size, int moe_intermediate_size, int num_experts, int num_expters_per_tok)
+    {
+        moe.reset(new Gemma4MoE(ctx, hidden_size, moe_intermediate_size, num_experts, num_expters_per_tok));
+    }
+
+    ggml::tensor *CascadedMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *residual)
+    {
+        hidden_states = GELUMLP::forward(ctx, hidden_states);
+        if (moe.get())
+        {
+            auto hidden_states_1 = moe->post_feedforward_layernorm_1.forward(ctx, hidden_states);
+            auto hidden_states_flat = ggml::reshape(ctx, residual, ggml::get_dim(residual, 0), -1);
+            auto hidden_states_2 = moe->forward(ctx, hidden_states_flat);
+            hidden_states = ggml::add(ctx, hidden_states_1, hidden_states_2);
+        }
+        return hidden_states;
+    }
+
+    int64_t CascadedMLP::get_param_num(bool effective_only) const
+    {
+        int64_t r = GELUMLP::get_param_num(effective_only);
+        if (moe.get()) r += moe->get_param_num(effective_only);
+        return r;
+    }
+
+    void CascadedMLP::load(const std::string &path, TensorLoader *loader)
+    {
+        GELUMLP::load(path, loader);
+        if (nullptr == moe.get()) return;
+        moe->load(path, loader);
+    }
+
     template <int sliding_window_len> class Gemma4SWASelfAttention : public QKNormedRoPEAttention<RMSNormInplace, Gemma4Attention<SlidingWindowAttentionImpl<sliding_window_len>>>
     {
     public:
@@ -1766,24 +2031,87 @@ namespace chatllm::gemma::v4
         }
     };
 
-    template <int sliding_window_len> class Gemma4DenseSWABlock : public LMBlock4<RMSNorm, Gemma4SWASelfAttention<sliding_window_len>, RMSNorm, RMSNorm, GELUMLP, RMSNorm>
+    class BlockForward : public LMBlock4Forward
     {
     public:
-        typedef LMBlock4<RMSNorm, Gemma4SWASelfAttention<sliding_window_len>, RMSNorm, RMSNorm, GELUMLP, RMSNorm> Base;
+        BlockForward(Block *pre_attention_layernorm,
+                        Block *attention,
+                        Block *post_attention_layernorm,
+                        Block *pre_mlp_layernorm,
+                        Block *mlp,
+                        Block *post_mlp_layernorm,
+                        Block *per_layer_emb,
+                        float *layer_scalar,
+                        int id):
+            LMBlock4Forward(pre_attention_layernorm,
+                attention,
+                post_attention_layernorm,
+                pre_mlp_layernorm,
+                mlp,
+                post_mlp_layernorm,
+                id),
+            layer_scalar(layer_scalar),
+            per_layer_emb(per_layer_emb)
+        {}
+
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *layer_embeds, int n_past)
+        {
+            ggml::tensor *residual = hidden_states;
+
+            hidden_states = pre_attention_layernorm->forward(ctx, hidden_states);
+            hidden_states = attention->forward(ctx, hidden_states, n_past);
+            hidden_states = post_attention_layernorm->forward(ctx, hidden_states);
+
+            hidden_states = ggml::add(ctx, residual, hidden_states);
+            residual = hidden_states;
+
+            hidden_states = pre_mlp_layernorm->forward(ctx, hidden_states);
+            hidden_states = mlp->forward(ctx, hidden_states, residual);
+            hidden_states = post_mlp_layernorm->forward(ctx, hidden_states);
+
+            hidden_states = ggml::add(ctx, residual, hidden_states);
+
+            if (layer_embeds)
+            {
+                hidden_states = per_layer_emb->forward(ctx, hidden_states, layer_embeds);
+            }
+            hidden_states = ggml::scale(ctx, hidden_states, *layer_scalar);
+
+            return hidden_states;
+        }
+    protected:
+        float *layer_scalar;
+        Block *per_layer_emb;
+    };
+
+    template <int sliding_window_len> class Gemma4DenseSWABlock : public LMBlock4<RMSNorm, Gemma4SWASelfAttention<sliding_window_len>, RMSNorm, RMSNorm, CascadedMLP, RMSNorm>
+    {
+    public:
+        typedef LMBlock4<RMSNorm, Gemma4SWASelfAttention<sliding_window_len>, RMSNorm, RMSNorm, CascadedMLP, RMSNorm> Base;
         Gemma4DenseSWABlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
             : Base(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
         {}
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *layer_embeds, int n_past) override
         {
-            hidden_states = Base::forward(ctx, hidden_states, n_past);
-            if (layer_embeds)
-            {
-                hidden_states = per_layer->forward(ctx, hidden_states, layer_embeds);
-            }
-            hidden_states = ggml::scale(ctx, hidden_states, layer_scalar);
-
+            BlockForward eval(&(Base::pre_attention_layernorm),
+                &(Base::attention),
+                &(Base::post_attention_layernorm),
+                &(Base::pre_mlp_layernorm),
+                &(Base::mlp),
+                &(Base::post_mlp_layernorm),
+                per_layer, &layer_scalar,
+                Base::get_id());
+            hidden_states = eval.forward(ctx, hidden_states, layer_embeds, n_past);
             return hidden_states;
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = Base::get_param_num(effective_only);
+            r += per_layer ? per_layer->get_param_num(effective_only) : 0;
+            r += 1;
+            return r;
         }
 
         void load(const std::string &path, TensorLoader *loader) override
@@ -1827,10 +2155,10 @@ namespace chatllm::gemma::v4
         }
     };
 
-    class Gemma4DenseFullBlock : public LMBlock4<RMSNorm, Gemma4FullSelfAttention, RMSNorm, RMSNorm, GELUMLP, RMSNorm>
+    class Gemma4DenseFullBlock : public LMBlock4<RMSNorm, Gemma4FullSelfAttention, RMSNorm, RMSNorm, CascadedMLP, RMSNorm>
     {
     public:
-        typedef LMBlock4<RMSNorm, Gemma4FullSelfAttention, RMSNorm, RMSNorm, GELUMLP, RMSNorm> Base;
+        typedef LMBlock4<RMSNorm, Gemma4FullSelfAttention, RMSNorm, RMSNorm, CascadedMLP, RMSNorm> Base;
         Gemma4DenseFullBlock(InitContext *ctx, int hidden_size, int num_attention_heads, int intermediate_size, int num_kv_heads, int head_dim, int max_length)
             : Base(ctx, hidden_size, num_attention_heads, intermediate_size, num_kv_heads, head_dim, max_length)
         {
@@ -1838,14 +2166,24 @@ namespace chatllm::gemma::v4
 
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *layer_embeds, int n_past) override
         {
-            hidden_states = Base::forward(ctx, hidden_states, n_past);
-            if (layer_embeds)
-            {
-                hidden_states = per_layer->forward(ctx, hidden_states, layer_embeds);
-            }
-            hidden_states = ggml::scale(ctx, hidden_states, layer_scalar);
-
+            BlockForward eval(&(Base::pre_attention_layernorm),
+                &(Base::attention),
+                &(Base::post_attention_layernorm),
+                &(Base::pre_mlp_layernorm),
+                &(Base::mlp),
+                &(Base::post_mlp_layernorm),
+                per_layer, &layer_scalar,
+                Base::get_id());
+            hidden_states = eval.forward(ctx, hidden_states, layer_embeds, n_past);
             return hidden_states;
+        }
+
+        int64_t get_param_num(bool effective_only) const override
+        {
+            int64_t r = Base::get_param_num(effective_only);
+            r += per_layer ? per_layer->get_param_num(effective_only) : 0;
+            r += 1;
+            return r;
         }
 
         void load(const std::string &path, TensorLoader *loader) override
@@ -1897,6 +2235,25 @@ namespace chatllm::gemma::v4
         Backend::write_tensor_data(attn.freq_factors, freq_factors.data());
     }
 
+    template <int sliding_window> Gemma4DenseSWABlock<sliding_window> *create_swa_layer(InitContext *ctx, PerLayerBlocks *layer_blocks, const Config &config, int layer_index,
+        const bool is_kv_shared_layer, const int intermediate_size)
+    {
+        auto r = new Gemma4DenseSWABlock<sliding_window>(ctx, config.hidden_size, config.num_attention_heads, intermediate_size,
+                                            config.num_key_value_heads, config.head_dim, config.max_length);
+        r->attention.freq_base = config.swa_attn_rope_theta;
+
+        static decltype(r->attention) *last_non_shared = nullptr;
+        if (is_kv_shared_layer)
+            r->attention.shared_attn = last_non_shared;
+        else
+            last_non_shared = &r->attention;
+        if (config.hidden_size_per_layer_input > 0)
+            r->per_layer = &layer_blocks->per_layer_blocks[layer_index];
+        if (config.num_experts > 0)
+            r->mlp.init_moe(ctx, config.hidden_size, config.moe_intermediate_size, config.num_experts, config.top_k_experts);
+        return r;
+    }
+
     Block *ModelClass::create_layer(InitContext *ctx, PerLayerBlocks *layer_blocks, const Config &config, int layer_index)
     {
         const bool is_kv_shared_layer = layer_index >= (config.num_hidden_layers - config.num_kv_shared_layers);
@@ -1909,20 +2266,9 @@ namespace chatllm::gemma::v4
             switch (config.sliding_window)
             {
             case 512:
-                {
-                    auto r = new Gemma4DenseSWABlock<512>(ctx, config.hidden_size, config.num_attention_heads, intermediate_size,
-                                            config.num_key_value_heads, config.head_dim, config.max_length);
-                    r->attention.freq_base = config.swa_attn_rope_theta;
-
-                    static decltype(r->attention) *last_non_shared = nullptr;
-                    if (is_kv_shared_layer)
-                        r->attention.shared_attn = last_non_shared;
-                    else
-                        last_non_shared = &r->attention;
-                    if (config.hidden_size_per_layer_input > 0)
-                        r->per_layer = &layer_blocks->per_layer_blocks[layer_index];
-                    return r;
-                }
+                return create_swa_layer<512>(ctx, layer_blocks, config, layer_index, is_kv_shared_layer,intermediate_size);
+            case 1024:
+                return create_swa_layer<1024>(ctx, layer_blocks, config, layer_index, is_kv_shared_layer, intermediate_size);
             default:
                 CHATLLM_CHECK(false) << "unsupported sliding_window: " << config.sliding_window;
                 break;
@@ -1947,6 +2293,8 @@ namespace chatllm::gemma::v4
                 last_non_shared = &r->attention;
             if (config.hidden_size_per_layer_input > 0)
                 r->per_layer = &layer_blocks->per_layer_blocks[layer_index];
+            if (config.num_experts > 0)
+                r->mlp.init_moe(ctx, config.hidden_size, config.moe_intermediate_size, config.num_experts, config.top_k_experts);
             return r;
         }
         CHATLLM_CHECK(false) << "bad";
@@ -2110,6 +2458,11 @@ namespace chatllm::gemma::v4
             {".pre_attention_layernorm.",   ".input_layernorm."},
             {".pre_mlp_layernorm.",         ".pre_feedforward_layernorm."},
             {".post_mlp_layernorm.",        ".post_feedforward_layernorm."},
+            {".mlp.router.",                ".router."},
+            {".mlp.mlp.experts.",           ".mlp.experts."},
+            {".mlp.post_feedforward_layernorm_1.",                ".post_feedforward_layernorm_1."},
+            {".mlp.post_feedforward_layernorm_2.",                ".post_feedforward_layernorm_2."},
+            {".mlp.pre_feedforward_layernorm_2.",                 ".pre_feedforward_layernorm_2."},
         });
 
         BaseModelForConditionalGeneration::load(loader);
@@ -2174,14 +2527,20 @@ namespace chatllm::gemma::v4
 
     int ConditionalGeneration::tensor_num_of_layer(const Config &config, int layer_id) const
     {
+        int r = 0;
         if (config.layer_is_swa[layer_id])
         {
-            return 17;
+            r = 17;
         }
         else
         {
-            return 17;
+            r = 17;
         }
+        if (config.num_experts > 0)
+        {
+            r += 6 + 3 + 0;
+        }
+        return r;
     }
 
     bool ConditionalGeneration::run_model(const int *input_ids, const int ids_count,
@@ -2245,7 +2604,8 @@ namespace chatllm::gemma::v4
         if (!ctx.allocate()) return false;
 
         Backend::write_tensor_data(input_ids_tensor, input_ids);
-        Backend::write_tensor_data(layer_ids_tensor, ids_for_layer.data());
+        if (config.hidden_size_per_layer_input > 0)
+            Backend::write_tensor_data(layer_ids_tensor, ids_for_layer.data());
 
         if (gen_config.dump_dot.size() > 0)
         {

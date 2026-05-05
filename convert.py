@@ -6653,8 +6653,26 @@ class Gemma4Converter(BaseConverter):
             t: torch.Tensor = state_dict[kk]
             if kk.startswith('model.language_model.'):
                 kk = kk.replace('model.language_model.', 'model.')
-                t = Gemma4Converter.pp(Gemma4Converter.txt_config, kk, t)
-                new_dict[kk] = t
+                if '.experts.' not in kk:
+                    t = Gemma4Converter.pp(Gemma4Converter.txt_config, kk, t)
+                    new_dict[kk] = t
+                    continue
+
+                if kk.endswith('.experts.down_proj'):
+                    shape = t.shape
+                    for j in range(shape[0]):
+                        kkk = kk.replace('experts.down_proj', f'mlp.experts.{j}.down_proj.weight')
+                        new_dict[kkk] = t[j].contiguous()
+                elif kk.endswith('.experts.gate_up_proj'):
+                    shape = t.shape
+                    gate = t[:, : shape[1] // 2, :]
+                    up   = t[:, shape[1] // 2 :, :]
+                    for j in range(shape[0]):
+                        kkk = kk.replace('experts.gate_up_proj', f'mlp.experts.{j}.gate_proj.weight')
+                        new_dict[kkk] = gate[j].contiguous()
+                        kkk = kk.replace('experts.gate_up_proj', f'mlp.experts.{j}.up_proj.weight')
+                        new_dict[kkk] = up[j].contiguous()
+
             elif kk.startswith('model.vision_tower.encoder.layers.'):
                 kk = kk.replace('model.vision_tower.encoder.layers.', 'visual.blocks.')
                 kk = kk.replace('.linear.weight', '.weight')
@@ -6691,6 +6709,7 @@ class Gemma4Converter(BaseConverter):
         assert txt_config.num_hidden_layers <= MAX_LAYERS
         assert txt_config.tie_word_embeddings
         assert txt_config.vocab_size == txt_config.vocab_size_per_layer_input
+        assert txt_config.use_bidirectional_attention == 'vision'
 
         layer_is_swa = [0] * MAX_LAYERS
         for i in range(txt_config.num_hidden_layers):
@@ -6809,6 +6828,8 @@ class Gemma4Converter(BaseConverter):
         weight_names = ["visual.patch_embedder.input_proj.weight",
                         "visual.patch_embedder.position_embedding_table",
                         "visual.embedding_projection.weight"]
+        if config.standardize:
+            weight_names += ["visual.std_bias", "visual.std_scale"]
         for i in range(config.num_hidden_layers):
             weight_names += [
                 f"visual.blocks.{i}.input_layernorm.weight",
@@ -6887,6 +6908,21 @@ class Gemma4Converter(BaseConverter):
                 f"model.layers.{i}.self_attn.q_norm.weight",
                 f"model.layers.{i}.self_attn.q_proj.weight",
             ]
+            if Gemma4Converter.txt_config.enable_moe_block:
+                weight_names += [
+                    f"model.layers.{i}.router.per_expert_scale",
+                    f"model.layers.{i}.router.proj.weight",
+                    f"model.layers.{i}.router.scale",
+                    f"model.layers.{i}.post_feedforward_layernorm_1.weight",
+                    f"model.layers.{i}.post_feedforward_layernorm_2.weight",
+                    f"model.layers.{i}.pre_feedforward_layernorm_2.weight",
+                ]
+                for j in range(Gemma4Converter.txt_config.num_experts):
+                    weight_names += [
+                        f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                        f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                    ]
             if not is_kv_shared_layer:
                 weight_names += [
                     f"model.layers.{i}.self_attn.k_norm.weight",

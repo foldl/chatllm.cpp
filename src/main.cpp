@@ -122,6 +122,7 @@ const std::vector<std::pair<std::string, std::string>> THOUGHT_TAGS = {
     {"◁think▷",         "◁/think▷"},
     {"<thought>",       "</thought>"},
     {"<reasoning>",     "</reasoning>"},
+    {"<|channel>thought",     "<channel|>"},
 };
 
 static std::string show_default_thought_tags(void)
