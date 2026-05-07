@@ -453,6 +453,7 @@ Please use `--format completion` for these models.
     [9B](https://huggingface.co/Qwen/Qwen3.5-9B/tree/c202236235762e1c871ad0ccb60c8ee5ba337b9a),
     [27B](https://huggingface.co/Qwen/Qwen3.5-27B/tree/b7ca741b86de18df552fd2cc952861e04621a4bd),
     [35B-A3B](https://huggingface.co/Qwen/Qwen3.5-35B-A3B/tree/ec2d4ece1ffb563322cbee9a48fe0e3fcbce0307)
+    * [x] Qwen3.6: [35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B/tree/995ad96eacd98c81ed38be0c5b274b04031597b0), [27B](https://huggingface.co/Qwen/Qwen3.6-27B/tree/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9)
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
     * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)
@@ -478,11 +479,15 @@ Please use `--format completion` for these models.
     Note: Prompt for OCR: _{{image:...}}Extract the text content from this image_. [Here](https://github.com/rednote-hilab/dots.ocr/blob/master/dots_ocr/utils/prompts.py)
     are other prompts for OCR. Use `+single-turn` to discard history automatically.
 
+* GLM-OCR (`GlmOcrForConditionalGeneration`)
+    * [x] [0.9B](https://huggingface.co/zai-org/GLM-OCR/tree/677c6baa60442a451f8a8c7eabdfab32d9801a0b)
+
+* MinerU (`Qwen2VLForConditionalGeneration`)
+    * [x] 2.5: [Pro-2604-1.2B](https://huggingface.co/opendatalab/MinerU2.5-Pro-2604-1.2B/tree/d3f5e08d073c21466bbabe21c71bb1e9c2e595da)
+
 * Nanonets-OCR2 (`Qwen2VLForConditionalGeneration`, `Qwen2_5_VLForConditionalGeneration`)
     * [x] OCR2: [3B](https://huggingface.co/nanonets/Nanonets-OCR2-3B/tree/d0368059ad151ce9e38f526890cfd4f27b28be65), [1.5B](https://huggingface.co/nanonets/Nanonets-OCR2-1.5B-exp/tree/306a9b2a65672a3dbebd9bce9a9373a9a18674a2)
 
-* GLM-OCR (`GlmOcrForConditionalGeneration`)
-    * [x] [0.9B](https://huggingface.co/zai-org/GLM-OCR/tree/677c6baa60442a451f8a8c7eabdfab32d9801a0b)
 
 * Qianfan-OCR (`InternVLChatModel`)
     * [x] [4B](https://huggingface.co/baidu/Qianfan-OCR/tree/5e181e708edb4089b7b4cab94279c46c6a2604fc)

@@ -4255,6 +4255,31 @@
             }
         }
     },
+    "qwen3.6": {
+        "brief": "Built on direct feedback from the community, Qwen3.6 prioritizes stability and real-world utility, offering developers a more intuitive, responsive, and genuinely productive coding experience.",
+        "default": "a3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "27b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 17564665296,
+                        "url": "chatllm_quantized_qwen3.6/qwen3.6-27b-q4_1.bin"
+                    }
+                }
+            },
+            "a3b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 22167157984,
+                        "url": "chatllm_quantized_qwen3.6/qwen3.6-35b-a3b-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
     "penguin-vl": {
         "brief": "PenguinVL is a compact Vision-Language Model designed to explore the efficiency limits of small-scale VLMs.",
         "default": "2b",
@@ -4334,6 +4359,65 @@
                     "q8": {
                         "size": 19289054672,
                         "url": "chatllm_quantized_internvl/internvl3.5-30b-a3b-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "gemma4": {
+        "brief": "Gemma 4 models are multimodal, handling text and image input (with audio supported on small models) and generating text output.",
+        "default": "e2b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "e2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 5435427392,
+                        "url": "chatllm_quantized_gemma4/gemma-4-e2b-it.bin"
+                    }
+                }
+            },
+            "e4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8450344496,
+                        "url": "chatllm_quantized_gemma4/gemma-4-e4b-it.bin"
+                    }
+                }
+            },
+            "a4b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 16327101872,
+                        "url": "chatllm_quantized_gemma4/gemma-4-26b-a4b-it-q4_1.bin"
+                    }
+                }
+            },
+            "31b": {
+                "default": "q4_1",
+                "quantized": {
+                    "q4_1": {
+                        "size": 19745314368,
+                        "url": "chatllm_quantized_gemma4/gemma-4-31b-it-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "mineru2.5": {
+        "brief": "MinerU2.5-Pro is a document parsing model (PDF-to-Markdown) that establishes a new industry standard.",
+        "default": "1.2b",
+        "license": "Apache License Version 2.0",
+        "variants": {
+            "1.2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 123579958,
+                        "url": "chatllm_quantized_mineru/mineru2.5-pro-2604-1.2b.bin"
                     }
                 }
             }

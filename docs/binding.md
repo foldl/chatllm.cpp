@@ -24,6 +24,12 @@ Assume MSVC is used.
     cmake --build build --target libchatllm
     ```
 
+> [!WARNING]
+> Linux does not search for `.so` files in current directory by default.
+> Building script will not _install_ these files, so you need to update
+> your library path manually like this:
+> `export LD_LIBRARY_PATH="$PWD:$LD_LIBRARY_PATH"`
+
 ## Nim
 
 ### Command line
@@ -35,11 +41,6 @@ Build:
 ```
 nim c main.nim
 ```
-
-> [!WARNING]
-> Linux does not search for `.so` files in current directory by default.
-> You need to update your library path before running the nim program with:
-> `export LD_LIBRARY_PATH="$PWD:$LD_LIBRARY_PATH"`
 
 Run it with exactly the same command line options, for example: `./main -i -m path/to/model`.
 
