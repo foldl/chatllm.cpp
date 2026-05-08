@@ -107,6 +107,7 @@ type
 
 const ARG_SEP = "---"
 var port = 11434
+var host = "localhost"
 var ui: string = ""
 
 var streamer_table = initTable[StreamerType, StreamerWithHistory]()
@@ -150,7 +151,7 @@ func flatten(messages: JsonNode, sys_prompt: var string): seq[FlatMessage] =
                     result[^1].content.add (t: t, content: m["content"].getStr())
             of JObject:
                 t = m["content"]["type"].getStr()
-                if t == "input_audio":
+                if (t == "input_audio") or (t == "input_video"):
                     result[^1].content.add (t: t, content: m["content"][t]["data"].getStr())
                 elif "url" in t:
                     result[^1].content.add (t: t, content: m["content"][t]["url"].getStr())
@@ -159,7 +160,7 @@ func flatten(messages: JsonNode, sys_prompt: var string): seq[FlatMessage] =
             of JArray:
                 for o in m["content"].getElems():
                     t = o["type"].getStr()
-                    if t == "input_audio":
+                    if (t == "input_audio") or (t == "input_video"):
                         result[^1].content.add (t: t, content: o[t]["data"].getStr())
                     elif "url" in t:
                         result[^1].content.add (t: t, content: o[t]["url"].getStr())
@@ -233,6 +234,8 @@ proc start_chat(streamer: StreamerWithHistory, messages: JsonNode): bool =
                     discard streamer.llm.chatllm_multimedia_msg_append("video", extract_base64(m.content).cstring)
                 of "input_audio":
                     discard streamer.llm.chatllm_multimedia_msg_append("audio", m.content.cstring)
+                of "input_video":
+                    discard streamer.llm.chatllm_multimedia_msg_append("video", m.content.cstring)
 
     streamer.history.add (pos: -1, messages: @[])
     for i in k..<msg.len: streamer.history[^1].messages.add msg[i]
@@ -724,7 +727,7 @@ proc handle_ollama_show(req: Request) {.async gcsafe.} =
     rsp["model_info"] = info
     rsp["capabilities"] = newJArray()
 
-    const mapping = toTable({"Text Embedding": "embedding", "Ranker": "ranking", "Text": "completion", "Image Input": "vision", "Audio Input": "audio"})
+    const mapping = toTable({"Text Embedding": "embedding", "Ranker": "ranking", "Text": "completion", "Image Input": "vision", "Audio Input": "audio", "Video Input": "video"})
     for s in model["capabilities"].getElems():
         let ss = s.getStr()
         if ss in mapping:
@@ -776,6 +779,7 @@ proc handle_llama_props(req: Request) {.async gcsafe.} =
         Modalities = object
             vision: bool = false
             audio: bool = false
+            video: bool = false
         GenerationSettings = object
             id: int = 0
             id_task: int = -1
@@ -802,6 +806,8 @@ proc handle_llama_props(req: Request) {.async gcsafe.} =
         for c in capabilities.getElems():
             if c.getStr() == "Image Input":
                 props.modalities.vision = true
+            elif c.getStr() == "Video Input":
+                props.modalities.video = true
             elif (c.getStr() == "Audio Input") or (c.getStr() == "ASR"):
                 props.modalities.audio = true
 
@@ -859,9 +865,9 @@ proc run {.async.} =
     router.get  "/api/ps",                  handle_ollama_ps
     router.post "/api/chat",                handle_ollama_chat
 
-    server.listen(Port(port))
+    server.listen(Port(port), host)
     let port = server.getPort
-    echo "Serving at curl http://localhost:" & $port.uint16 & "/"
+    echo fmt"Serving at curl http://{host}:{port.uint16}/"
     while true:
         if server.shouldAcceptRequest():
             try:
@@ -894,6 +900,10 @@ proc main(): int =
         elif args[0] == "--port":
             doAssert args.len >= 2
             port = parseInt(args[1])
+            args.delete(0, 1)
+        elif args[0] == "--host":
+            doAssert args.len >= 2
+            host = args[1]
             args.delete(0, 1)
         elif args[0].startswith(ARG_SEP):
             break
