@@ -184,6 +184,18 @@ WARNING: Bun [looks buggy on Linux](https://github.com/oven-sh/bun/issues/10242)
 
     1. Test `main.exe` with exactly the same command line options.
 
+### Erlang
+
+[Port](../bindings/chatllm_port.nim) is used for communicating with Erlang. Benefits of using Ports:
+
+* Erlang VM is not hurt by crashes in this library.
+* Easy to unload a model (Note that `chatllm_destroy` is WIP).
+
+Since we love debugging by `printf`, TCP is used instead of `stdio`. Due to its simplicity,
+this Port can also be used by non-Erlang applications.
+
+`chatllm:demo().` is a quick demo.
+
 ### Pascal (Delphi/FPC)
 
 Pascal [binding](../bindings/libchatllm.pas) is also available.

@@ -40,11 +40,40 @@ else:
     const libName = "libchatllm.so"
 
 ##
+## @brief append an initialization command line option (optional)
+##
+## some command line options apply globally, such as `--rpc_endpoints ...`, `--log_level ...`.
+##
+## Treating `--rpc_endpoints ...` globally make things clearer: all backend devices are **hard**ware.
+##
+## @param[in] utf8_str          a command line option
+##
+proc chatllm_append_init_param*(utf8_str: cstring) {.stdcall, dynlib: libName, importc.}
+
+##
+## @brief init the library with parameters (optional)
+## @return                      0 if succeeded
+##
+proc chatllm_init*(): cint {.stdcall, dynlib: libName, importc.}
+
+##
 ## @brief create ChatLLM object
 ##
 ## @return                  the object
 ##
 proc chatllm_create*(): ptr chatllm_obj {.stdcall, dynlib: libName, importc.}
+
+##
+## @brief destroy a ChatLLM object
+##
+## WARNING: this is WIP!
+##
+## object can't be destroy while still working (generating tokens).
+##
+## @param[in] obj           model object
+## @return                  0 if succeeded
+##
+proc chatllm_destroy*(obj: ptr chatllm_obj): cint {.stdcall, dynlib: libName, importc.}
 
 ##
 ##  @brief append a command line option
@@ -398,7 +427,7 @@ func is_same_command_option(a, b: string): bool =
         if c1 != c2: return false
     return true
 
-func is_same_command_option(a: string, options: openArray[string]): bool =
+func is_same_command_option*(a: string, options: openArray[string]): bool =
     for s in options:
         if a.is_same_command_option(s): return true
     return false
@@ -497,6 +526,19 @@ proc get_model(model_id: string; storage_dir: string): string =
     print_progress_bar(100, 100)
 
     return fn
+
+proc get_model_storage_path(): string =
+    var storage_dir = getEnv("CHATLLM_QUANTIZED_MODEL_PATH")
+    if storage_dir == "":
+        storage_dir = joinPath([parentDir(paramStr(0)), "../quantized"])
+    return storage_dir
+
+proc normalize_model_name*(model_name: string): string =
+    let storage_dir = get_model_storage_path()
+    if model_name.startsWith(':'):
+        return get_model(model_name[1..^1], storage_dir)
+    else:
+        return model_name
 
 ## Streamer in OOP style
 type
@@ -604,13 +646,11 @@ proc streamer_on_print(user_data: pointer, print_type: cint, utf8_str: cstring) 
         of PrintType.PRINT_EVT_THOUGHT_COMPLETED:
             streamer.chan_output.send((t: StreamerMessageType.ThoughtDone, chunk: ""))
 
-proc initStreamer*(streamer: Streamer; args: openArray[string], auto_restart: bool = false): bool =
+func cmd_opt_is_model_selection*(s: string): bool =
     const candidates = ["-m", "--model", "--embedding_model", "--reranker_model"]
+    return s.is_same_command_option(candidates)
 
-    var storage_dir = getEnv("CHATLLM_QUANTIZED_MODEL_PATH")
-    if storage_dir == "":
-        storage_dir = joinPath([parentDir(paramStr(0)), "../quantized"])
-
+proc initStreamer*(streamer: Streamer; args: openArray[string], auto_restart: bool = false): bool =
     let id = streamer_dict.len + 1
     streamer_dict[id] = streamer
 
@@ -650,13 +690,10 @@ proc initStreamer*(streamer: Streamer; args: openArray[string], auto_restart: bo
             if i < len(args): streamer.fe_options.sys_prompt = args[i]
         else:
             args_pp.add s
-            if s.is_same_command_option(candidates):
+            if s.cmd_opt_is_model_selection():
                 inc i
                 if i >= len(args): break
-                if args[i][0] == ':':
-                    args_pp.add get_model(args[i][1..^1], storage_dir)
-                else:
-                    args_pp.add args[i]
+                args_pp.add normalize_model_name(args[i])
         inc i
 
     if streamer.fe_options.help: return true
