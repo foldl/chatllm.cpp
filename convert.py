@@ -6709,7 +6709,7 @@ class Gemma4Converter(BaseConverter):
         assert txt_config.num_hidden_layers <= MAX_LAYERS
         assert txt_config.tie_word_embeddings
         assert txt_config.vocab_size == txt_config.vocab_size_per_layer_input
-        assert txt_config.use_bidirectional_attention == 'vision'
+        assert (txt_config.use_bidirectional_attention is None) or (txt_config.use_bidirectional_attention == 'vision')
 
         layer_is_swa = [0] * MAX_LAYERS
         for i in range(txt_config.num_hidden_layers):

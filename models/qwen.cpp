@@ -3227,12 +3227,10 @@ namespace chatllm::qwen::v3_forcedaligner
             }
         }
 
-        int max_length = 0;
         int max_idx = -1;
         if (!dp.empty())
         {
             auto max_it = std::max_element(dp.begin(), dp.end());
-            max_length = *max_it;
             max_idx = (int)std::distance(dp.begin(), max_it);
         }
 

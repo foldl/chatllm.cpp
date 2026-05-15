@@ -1,4 +1,5 @@
 #include "gemma.h"
+#include <cstring>
 #include "../src/audio_process.h"
 
 namespace chatllm::gemma
@@ -941,7 +942,7 @@ namespace chatllm::gemma::vit
         int video_max_soft_tokens;
         int video_max_num_frames;
 
-        struct Config()
+        Config()
         {
             memset(this, 0, sizeof(*this));
         }
@@ -1919,7 +1920,6 @@ namespace chatllm::gemma::v4
     {
         const int64_t hidden_size   = ggml::get_dim(hidden_states, 0);
         const int64_t qlen          = ggml::get_dim(hidden_states, 1);
-        const int n_expert          = num_experts;
 
         auto router = this->router.forward2(ctx, hidden_states);
 
@@ -2662,8 +2662,6 @@ namespace chatllm::gemma::v4
 
     void ChatHistoryEncoder::append_image_piece(const ContentPiece &piece, std::vector<int> &ids) const
     {
-        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-
         CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
 
         int w, h;
