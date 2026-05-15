@@ -3234,7 +3234,10 @@ namespace chatllm
             if (empty < qlen)
             {
                 int remain = sliding_window_len - qlen;
-                int shift = cache_length - remain;
+                int shift = write_offset <= cache_length ? write_offset - remain : cache_length - remain;
+                CHATLLM_CHECK(shift >= 0);
+                if (cache_offset - shift + n_past < 0)
+                    shift = cache_offset + n_past;
 
                 ggml::tensor * k_cache_remain = ggml::view_1d(ctx, k_cache, remain * k_hidden_size,
                                             ggml::row_size(k_cache) * shift);

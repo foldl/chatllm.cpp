@@ -937,6 +937,14 @@ namespace chatllm::gemma::vit
 
         bool standardize;
         bool use_clipped_linears;
+
+        int video_max_soft_tokens;
+        int video_max_num_frames;
+
+        struct Config()
+        {
+            memset(this, 0, sizeof(*this));
+        }
     };
 
     class VisionPatchEmbedder : public Block
@@ -1000,7 +1008,6 @@ namespace chatllm::gemma::vit
         // Gemma4 applies no normalization and instead scales in model code
         pixel_values = ggml::scale(ctx, pixel_values, 2, -1);
         auto hidden_states = input_proj.forward(ctx, pixel_values);
-
 
         auto pos_emb_xy = ggml::get_rows(ctx, position_embedding_table, rt_pos);
         auto pos_emb_x  = ggml::view_2d(ctx, pos_emb_xy, ggml::get_dim(pos_emb_xy, 0), ggml::get_dim(pos_emb_xy, 1), ggml::row_size(pos_emb_xy), 0);
@@ -1410,6 +1417,9 @@ namespace chatllm::gemma::vit
             vis_config.image_std[0] = (float)image_std[0].ToFloat();
             vis_config.image_std[1] = (float)image_std[1].ToFloat();
             vis_config.image_std[2] = (float)image_std[2].ToFloat();
+
+            vis_config.video_max_soft_tokens = (int)pp_cfg["max_soft_tokens"].ToInt();
+            vis_config.video_max_num_frames  = (int)pp_cfg["num_frames"].ToInt();
         }
         else
             return false;
@@ -1488,6 +1498,7 @@ namespace chatllm::gemma::v4
     public:
         void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
     protected:
+        void append_image_piece(std::vector<int> &ids, const int w, const int h, const std::vector<uint8_t> &pixels) const;
         void append_image_piece(const ContentPiece &piece, std::vector<int> &ids) const;
         void append_audio_piece(const ContentPiece &piece, std::vector<int> &ids) const;
         void append_video_piece(const ContentPiece &piece, std::vector<int> &ids) const;
@@ -1518,6 +1529,7 @@ namespace chatllm::gemma::v4
         int etc_token_id = -1;
         int btr_token_id = -1;
         int etr_token_id = -1;
+        double fps = 2.0;
     };
 
     Tokenizer::Tokenizer(const BaseConfig &config)
@@ -2382,7 +2394,7 @@ namespace chatllm::gemma::v4
     class Prelude
     {
     public:
-        Prelude(int n = 2048):
+        Prelude(int n = 2048 * 10):
             pad_arg(new BlockParams::PadEmbedding(n, n))
         {
         }
@@ -2497,6 +2509,7 @@ namespace chatllm::gemma::v4
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         if (nullptr == tok) return;
+        tok->fps    = utils::get_opt(args, "fps", tok->fps);
     }
 
     int64_t ConditionalGeneration::get_param_num(bool effective_only) const
@@ -2623,20 +2636,11 @@ namespace chatllm::gemma::v4
         return true;
     }
 
-    void ChatHistoryEncoder::append_image_piece(const ContentPiece &piece, std::vector<int> &ids) const
+    void ChatHistoryEncoder::append_image_piece(std::vector<int> &ids, const int w, const int h, const std::vector<uint8_t> &pixels) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-
-        CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
-
-        int w, h;
-        std::vector<uint8_t> pixels;
         const int patch_size = vis_config->patch_size;
 
-        vision::MaxPatchNum     param1(vis_config->max_patches);
-        vision::MergeKernel     param2(vis_config->pooling_kernel_size, vis_config->pooling_kernel_size);
-
-        vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, vision::PaddingMode::Black);
         if ((w <= 0) || (h <= 0)) return;
 
         std::vector<float> scaled;
@@ -2654,6 +2658,47 @@ namespace chatllm::gemma::v4
 
         const int id_start = tok->get_image_total_emb_vectors() - image.emb_vec_number + tok->vocab_size;
         tok->inject_media("image", ids, id_start, image.emb_vec_number);
+    }
+
+    void ChatHistoryEncoder::append_image_piece(const ContentPiece &piece, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
+
+        int w, h;
+        std::vector<uint8_t> pixels;
+        const int patch_size = vis_config->patch_size;
+
+        vision::MaxPatchNum     param1(vis_config->max_patches);
+        vision::MergeKernel     param2(vis_config->pooling_kernel_size, vis_config->pooling_kernel_size);
+
+        vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, vision::PaddingMode::Black);
+        if ((w <= 0) || (h <= 0)) return;
+
+        append_image_piece(ids, w, h, pixels);
+    }
+
+    void ChatHistoryEncoder::append_video_piece(const ContentPiece &piece, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        const double fps = tok->fps;
+
+        CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
+        auto video = new vision::VideoLoader(piece.content.c_str(), (float)fps, vis_config->video_max_num_frames);
+        if (video->frames.size() < 1)
+            return;
+
+        std::ostringstream oss;
+
+        for (size_t i = 0; i < video->frames.size(); i++)
+        {
+            oss.str(i > 0 ? " " : "");
+            oss << utils::sec2ms(i / fps);
+            tok->encode(oss.str(), ids, false, false);
+
+            append_image_piece(ContentPiece(video->frames[i], ContentPiece::Image), ids);
+        }
     }
 
     void ChatHistoryEncoder::append_audio_piece(const ContentPiece &piece, std::vector<int> &ids) const
@@ -2686,11 +2731,6 @@ namespace chatllm::gemma::v4
 
         const int id_start = tok->get_image_total_emb_vectors() - media.emb_vec_number + tok->vocab_size;
         tok->inject_media("audio", ids, id_start, media.emb_vec_number);
-    }
-
-    void ChatHistoryEncoder::append_video_piece(const ContentPiece &piece, std::vector<int> &ids) const
-    {
-
     }
 
     void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
