@@ -201,7 +201,6 @@
 
         - Full cache: more RAM is needed.
         - Partial cache: less RAM is needed, and faster than ring cache (**default**).
-        - Ring cache (i.e. rolling cache): least RAM, but current implementation is *naive* (slow). 💣
 
         Note: precision of these implementations differs, which causes different results.
 
