@@ -1214,8 +1214,8 @@ namespace chatllm::gemma::vit
 
     Standardizer::Standardizer(InitContext *ctx, int hidden_size):
         loaded(false),
-        std_bias(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F16, hidden_size)),
-        std_scale(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F16, hidden_size))
+        std_bias(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, hidden_size)),
+        std_scale(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, hidden_size))
     {}
 
     ggml::tensor *Standardizer::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
