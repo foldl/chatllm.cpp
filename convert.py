@@ -354,118 +354,152 @@ def quantize_q4_1(tensor: torch.Tensor) -> torch.CharTensor:
     tensor = torch.cat((scale.half().view(torch.int8), min_values.half().view(torch.int8), tensor), dim=-1)
     return tensor
 
-@torch.jit.script
-def qkx2_quants(x: torch.Tensor, nmax, rmin, rdelta, nstep: int, use_mad: bool):
-    assert x.dim() == 1
-    N = x.shape[0]
-    av_x = torch.norm(x) / math.sqrt(N)
+@torch.compile(fullgraph=True, mode="max-autotune")
+def _quantize_q4_k_core(tensor: torch.Tensor, GGML_QK_K: int):
+    # Flatten preceding dims
+    x_raw = tensor.view(-1, GGML_QK_K)
+    num_blocks = x_raw.shape[0]
+    num_subblocks = GGML_QK_K // 32  # 8 subblocks for a block size of 256
+
+    # Shape: [Total Subblocks, 32]
+    x = x_raw.view(-1, 32)
+    N_sub = x.shape[0]
+
+    # --- Step 1: Weight and Range Calcs ---
+    av_x = torch.norm(x, dim=1, keepdim=True) / math.sqrt(32.0)
     weights = av_x + torch.abs(x)
-    min_x = torch.min(x)
-    max_x = torch.max(x)
-    sum_w = torch.sum(weights)
-    sum_x = torch.sum(weights * x)
-    if min_x > 0: min_x = torch.tensor(0)
-    if min_x == max_x:
-        L = torch.zeros(N)
-        return torch.tensor(0.0), -min_x, L
 
-    iscale = nmax / (max_x - min_x)
-    scale = 1 / iscale
-    best_mad = 0
-    L = (iscale * (x - min_x)).round().clamp(min=0, max=nmax)
-    diff = scale * L + min_x - x
-    diff = torch.abs(diff) if use_mad else torch.square(diff)
-    best_mad = torch.sum(weights * diff)
+    min_x = torch.min(x, dim=1, keepdim=True).values
+    max_x = torch.max(x, dim=1, keepdim=True).values
 
-    if nstep < 1:
-        return scale, -min_x, L
+    sum_w = torch.sum(weights, dim=1, keepdim=True)
+    sum_x = torch.sum(weights * x, dim=1, keepdim=True)
 
-    for istep in range(nstep):
-        iscale = (rmin + rdelta * istep + nmax)/(max_x - min_x)
-        l = (iscale * (x - min_x)).round().clamp(min=0, max=nmax)
-        sum_l  = torch.sum(weights * l)
-        sum_l2 = torch.sum(weights * l * l)
-        sum_xl = torch.sum(weights * l * x)
+    min_x = torch.clamp(min_x, max=0.0)
 
-        D = sum_w * sum_l2 - sum_l * sum_l
-        if D > 0:
-            this_scale = (sum_w * sum_xl - sum_x * sum_l)/D
-            this_min   = (sum_l2 * sum_x - sum_l * sum_xl)/D
-            if this_min > 0:
-                this_min = torch.tensor(0)
-                this_scale = sum_xl / sum_l2
+    range_x = max_x - min_x
+    range_x = torch.where(range_x == 0.0, torch.ones_like(range_x), range_x)
 
-            diff = this_scale * l + this_min - x
-            diff = torch.abs(diff) if use_mad else torch.square(diff)
-            mad = torch.sum(weights * diff)
-            if mad < best_mad:
-                L = l
-                scale = this_scale
-                min_x = this_min
+    # --- Step 2: Vectorized Optimization Search Grid ---
+    nmax = 15.0
+    nstep = 20
+    rmin = -1.0
+    rdelta = 0.1
 
-    return scale, -min_x, L
+    istep = torch.arange(nstep, device=tensor.device, dtype=tensor.dtype).view(-1, 1, 1)
+    iscale_grid = (rmin + rdelta * istep + nmax) / range_x.unsqueeze(0)
 
-@torch.jit.script
-def quantize_q4_k_block(tensor: torch.Tensor, GGML_QK_K: int) -> torch.CharTensor:
-    assert tensor.shape == (GGML_QK_K, )
-    tensor = tensor.view(-1, 32)
+    x_shifted = x.unsqueeze(0) - min_x.unsqueeze(0)
+    l_grid = torch.round(iscale_grid * x_shifted).clamp(0.0, nmax)
 
-    subblocks = [qkx2_quants(tensor[i], torch.tensor(15), torch.tensor(-1.0), torch.tensor(0.1), 20, False) for i in range(tensor.shape[0])]
-    scale = torch.stack([x[0] for x in subblocks])
-    min_x = torch.stack([x[1] for x in subblocks])
+    w_unsqueezed = weights.unsqueeze(0)
+    sum_l = torch.sum(w_unsqueezed * l_grid, dim=2, keepdim=True)
+    sum_l2 = torch.sum(w_unsqueezed * (l_grid ** 2), dim=2, keepdim=True)
+    sum_xl = torch.sum(w_unsqueezed * l_grid * x.unsqueeze(0), dim=2, keepdim=True)
 
-    max_scale = torch.max(scale)
-    max_min   = torch.max(min_x)
+    D = sum_w.unsqueeze(0) * sum_l2 - (sum_l ** 2)
+    D_safe = torch.where(D > 0.0, D, torch.ones_like(D))
 
-    inv_scale = torch.tensor(63.0) / max_scale if max_scale > 0 else torch.tensor(0.0)
-    inv_min   = torch.tensor(64.0) / max_min   if max_min   > 0 else torch.tensor(0.0)
+    this_scale = (sum_w.unsqueeze(0) * sum_xl - sum_x.unsqueeze(0) * sum_l) / D_safe
+    this_min = (sum_l2 * sum_x.unsqueeze(0) - sum_l * sum_xl) / D_safe
 
-    ls = (inv_scale * scale).round().clamp(max=63)
-    lm = (inv_min   * min_x).round().clamp(max=63)
+    mask_min = this_min > 0.0
+    this_min = torch.where(mask_min, torch.zeros_like(this_min), this_min)
 
-    scales = [0] * 12
-    for j in range(GGML_QK_K // 32):
-        ls_j = int(ls[j].item())
-        lm_j = int(lm[j].item())
-        if j < 4:
-            scales[j]   = ls_j
-            scales[j+4] = lm_j
-        else:
-            scales[j+4]  = (ls_j & 0xF) | ((lm_j & 0xF) << 4)
-            scales[j-4] |= ((ls_j >> 4) << 6)
-            scales[j-0] |= ((lm_j >> 4) << 6)
+    sum_l2_safe = torch.where(sum_l2 > 0.0, sum_l2, torch.ones_like(sum_l2))
+    this_scale = torch.where(mask_min, sum_xl / sum_l2_safe, this_scale)
 
-    scales = torch.tensor(scales, dtype=torch.uint8)
+    diff = this_scale * l_grid + this_min - x.unsqueeze(0)
+    mad_grid = torch.sum(w_unsqueezed * (diff ** 2), dim=2)
 
-    d    = (max_scale / 63.0).half()
-    dmin = (max_min   / 63.0).half()
+    best_step_indices = torch.argmin(mad_grid, dim=0, keepdim=True)
 
-    recovered_scale = (ls * d   ).view(-1, 1)
-    recovered_min   = (lm * dmin).view(-1, 1)
+    subblock_scale = torch.gather(this_scale.squeeze(-1).T, 1, best_step_indices.T).squeeze(-1)
+    subblock_min = torch.gather(this_min.squeeze(-1).T, 1, best_step_indices.T).squeeze(-1)
 
-    L = ((1 / recovered_scale) * (tensor + recovered_min)).round().clamp(min=0, max=15).to(torch.uint8)
-    L = L.view(-1, 2, 32)
-    L = L[:, 0, :] | (L[:, 1, :] << 4)
+    scale = subblock_scale.view(num_blocks, num_subblocks)
+    min_x = -subblock_min.view(num_blocks, num_subblocks)
 
-    r = torch.cat((d.view(1).view(torch.int8), dmin.view(1).view(torch.int8), scales, L.flatten()), dim=-1)
+    # --- Step 3: Super-quantization (Max scales calculation) ---
+    max_scale = torch.max(scale, dim=1, keepdim=True).values
+    max_min = torch.max(min_x, dim=1, keepdim=True).values
 
-    return r
+    inv_scale = torch.where(max_scale > 0.0, 63.0 / max_scale, torch.zeros_like(max_scale))
+    inv_min = torch.where(max_min > 0.0, 64.0 / max_min, torch.zeros_like(max_min))
 
-@torch.jit.script
-def quantize_q4_k(tensor: torch.Tensor, GGML_QK_K: int) -> torch.CharTensor:
-    # equivalent to dequantize_row_q4_K in ggml-quants.c
-    assert tensor.shape[tensor.ndim - 1] % GGML_QK_K == 0
-    tensor = tensor.view(-1, GGML_QK_K)
-    futures : List[torch.jit.Future[torch.Tensor]] = []
-    for i in range(tensor.shape[0]):
-        futures.append(torch.jit.fork(quantize_q4_k_block, tensor[i], GGML_QK_K))
+    ls = torch.round(inv_scale * scale).clamp(0.0, 63.0).to(torch.uint8)
+    lm = torch.round(inv_min * min_x).clamp(0.0, 63.0).to(torch.uint8)
 
-    blocks = []
-    for future in futures:
-        blocks.append(torch.jit.wait(future))
+    # --- Step 4: Bit-packing GGML Scales (EXACT implementation of original loop) ---
+    scales = torch.zeros((num_blocks, 12), dtype=torch.uint8, device=tensor.device)
 
-    tensor = torch.cat(blocks, dim=-1)
-    return tensor
+    # j < 4 logic
+    s0 = ls[:, 0]
+    s1 = ls[:, 1]
+    s2 = ls[:, 2]
+    s3 = ls[:, 3]
+
+    m0 = lm[:, 0]
+    m1 = lm[:, 1]
+    m2 = lm[:, 2]
+    m3 = lm[:, 3]
+
+    # j >= 4 logic entries
+    s4, s5, s6, s7 = ls[:, 4], ls[:, 5], ls[:, 6], ls[:, 7]
+    m4, m5, m6, m7 = lm[:, 4], lm[:, 5], lm[:, 6], lm[:, 7]
+
+    # Replicating bitwise operations on the columns perfectly
+    scales[:, 0] = s0 | ((s4 >> 4) << 6)
+    scales[:, 1] = s1 | ((s5 >> 4) << 6)
+    scales[:, 2] = s2 | ((s6 >> 4) << 6)
+    scales[:, 3] = s3 | ((s7 >> 4) << 6)
+
+    scales[:, 4] = m0 | ((m4 >> 4) << 6)
+    scales[:, 5] = m1 | ((m5 >> 4) << 6)
+    scales[:, 6] = m2 | ((m6 >> 4) << 6)
+    scales[:, 7] = m3 | ((m7 >> 4) << 6)
+
+    scales[:, 8]  = (s4 & 0xF) | ((m4 & 0xF) << 4)
+    scales[:, 9]  = (s5 & 0xF) | ((m5 & 0xF) << 4)
+    scales[:, 10] = (s6 & 0xF) | ((m6 & 0xF) << 4)
+    scales[:, 11] = (s7 & 0xF) | ((m7 & 0xF) << 4)
+
+    # --- Step 5: Final Matrix Recalculation ---
+    d_half = (max_scale / 63.0).half().view(num_blocks, 1)
+    dmin_half = (max_min / 63.0).half().view(num_blocks, 1)
+
+    # Safe int16 extraction to resolve compile stride issues
+    d_bits = d_half.view(torch.int16)
+    d_low = (d_bits & 0xFF).to(torch.uint8)
+    d_high = ((d_bits >> 8) & 0xFF).to(torch.uint8)
+
+    dmin_bits = dmin_half.view(torch.int16)
+    dmin_low = (dmin_bits & 0xFF).to(torch.uint8)
+    dmin_high = ((dmin_bits >> 8) & 0xFF).to(torch.uint8)
+
+    recovered_scale = (ls.to(torch.float32) * (max_scale / 63.0)).view(num_blocks, num_subblocks, 1)
+    recovered_min = (lm.to(torch.float32) * (max_min / 63.0)).view(num_blocks, num_subblocks, 1)
+
+    tensor_blocks = x_raw.view(num_blocks, num_subblocks, 32)
+    rec_scale_safe = torch.where(recovered_scale == 0.0, torch.ones_like(recovered_scale), recovered_scale)
+
+    L = torch.round((1.0 / rec_scale_safe) * (tensor_blocks + recovered_min)).clamp(0.0, 15.0).to(torch.uint8)
+
+    # --- Step 6: Element Nibble Interleaving matching your original layout ---
+    # Original logic grouped into sequential row pairs: L = L.view(-1, 2, 32) -> L[:, 0, :] | (L[:, 1, :] << 4)
+    L_even_blocks = L[:, 0::2, :] # Shapes: [num_blocks, num_subblocks//2, 32]
+    L_odd_blocks = L[:, 1::2, :]
+
+    L_packed = L_even_blocks | (L_odd_blocks << 4)
+    L_flat = L_packed.reshape(num_blocks, -1)
+
+    # --- Step 7: Stream Assembly ---
+    res = torch.cat((d_low, d_high, dmin_low, dmin_high, scales, L_flat), dim=1)
+    return res.view(torch.int8)
+
+def quantize_q4_k(tensor: torch.Tensor, GGML_QK_K: int = 256) -> torch.Tensor:
+    assert tensor.shape[-1] % GGML_QK_K == 0
+    return _quantize_q4_k_core(tensor, GGML_QK_K)
 
 def dump_tensor(f, name: str, tensor: torch.Tensor, ggml_type: GGMLType):
     assert tensor.dtype == torch.float32
