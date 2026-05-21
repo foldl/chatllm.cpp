@@ -80,8 +80,18 @@ namespace chatllm
 
     ggml::type ggml::type_fallback(ggml::type type, int64_t last_dim)
     {
-        auto block_size = ggml::block_size(type);
-        return (last_dim % block_size) != 0 ? ggml::type::GGML_TYPE_F16 : type;
+        const auto block_size = ggml::block_size(type);
+        if (block_size == 1)
+            return type;
+
+        if (((last_dim % block_size) == 0))
+            return type;
+
+        // try Q8_0
+        if (((last_dim % ggml::block_size(ggml::type::GGML_TYPE_Q8_0)) == 0))
+            return ggml::type::GGML_TYPE_Q8_0;
+
+        return ggml::type::GGML_TYPE_F16;
     }
 
     int64_t ggml::block_size(const ggml::tensor *tensor)

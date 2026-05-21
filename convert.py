@@ -836,6 +836,26 @@ def dequantize(state_dict: dict) -> dict:
             r[k] = t
     return r
 
+def tensor_type_fallback(shape, ndim: int, ggml_type: GGMLType):
+    match ggml_type:
+        case GGMLType.Q8_0:
+            if shape[ndim - 1] % GGML_QK8_0 == 0:
+                return ggml_type
+            else:
+                return GGMLType.F16
+        case GGMLType.Q4_0 | GGMLType.Q4_1:
+            if shape[ndim - 1] % GGML_QK4_0 == 0:
+                return ggml_type
+            else:
+                return GGMLType.F16
+        case GGMLType.Q4_K:
+            if shape[ndim - 1] % GGML_QK_K == 0:
+                return ggml_type
+            else:
+                return tensor_type_fallback(shape, ndim, GGMLType.Q8_0)
+        case _:
+            return GGMLType.F16
+
 def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_pp, loader_fun = None):
     global g_do_dequantization
 
@@ -870,10 +890,7 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
             tensor = tensor.float()
 
             if tensor.ndim in {2, 3, 4}:
-                if tensor.shape[tensor.ndim - 1] % GGML_QK8_0 == 0:
-                    tensor_ggml_type = ggml_type
-                else:
-                    tensor_ggml_type = GGMLType.F16
+                tensor_ggml_type = tensor_type_fallback(tensor.shape, tensor.ndim, ggml_type=ggml_type)
             else:
                 # 1d weight: convert it to float32
                 assert tensor.ndim <= 1, f'shape of {name} = {tensor.shape}'
