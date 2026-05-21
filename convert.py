@@ -354,6 +354,104 @@ def quantize_q4_1(tensor: torch.Tensor) -> torch.CharTensor:
     tensor = torch.cat((scale.half().view(torch.int8), min_values.half().view(torch.int8), tensor), dim=-1)
     return tensor
 
+@torch.jit.script
+def qkx2_quants_batched(x: torch.Tensor, nmax: int, rmin: float, rdelta: float, nstep: int, use_mad: bool):
+    # x shape: [N, 32]
+    N = x.shape[0]
+
+    # Vectorized constants
+    av_x = torch.norm(x, p=2, dim=1, keepdim=True) / math.sqrt(32.0)
+    weights = av_x + torch.abs(x)
+
+    min_x = torch.min(x, dim=1, keepdim=True)[0]
+    max_x = torch.max(x, dim=1, keepdim=True)[0]
+
+    # Handle min_x > 0 constraint
+    min_x = torch.where(min_x > 0, torch.zeros_like(min_x), min_x)
+
+    # Handle constant blocks (range == 0)
+    range_x = max_x - min_x
+    is_const = range_x == 0
+    # Avoid division by zero
+    safe_range = torch.where(is_const, torch.ones_like(range_x), range_x)
+
+    sum_w = torch.sum(weights, dim=1, keepdim=True)
+    sum_x = torch.sum(weights * x, dim=1, keepdim=True)
+
+    # Initial best guess (standard linear quantization)
+    iscale = nmax / safe_range
+    scale = 1.0 / iscale
+    L = (iscale * (x - min_x)).round().clamp(min=0, max=nmax)
+
+    diff = scale * L + min_x - x
+    diff = torch.abs(diff) if use_mad else torch.square(diff)
+    best_mad = torch.sum(weights * diff, dim=1, keepdim=True)
+    best_L = L
+    best_scale = scale
+    best_min = min_x
+
+    # Iterative search for optimal scale/min
+    if nstep > 0:
+        for istep in range(nstep):
+            # Current step scale factor
+            numer = rmin + rdelta * istep + nmax
+            curr_iscale = numer / safe_range
+
+            # Quantize with current scale
+            l = (curr_iscale * (x - min_x)).round().clamp(min=0, max=nmax)
+
+            # Compute stats
+            sum_l = torch.sum(weights * l, dim=1, keepdim=True)
+            sum_l2 = torch.sum(weights * l * l, dim=1, keepdim=True)
+            sum_xl = torch.sum(weights * l * x, dim=1, keepdim=True)
+
+            D = sum_w * sum_l2 - sum_l * sum_l
+
+            # Optimal scale/min calculations (vectorized)
+            cand_scale = (sum_w * sum_xl - sum_x * sum_l) / D
+            cand_min = (sum_l2 * sum_x - sum_l * sum_xl) / D
+
+            valid_D = D > 0
+
+            # Handle cases where this_min > 0
+            recalc_mask = cand_min > 0
+
+            # If min > 0, force min=0 and recalc scale
+            safe_l2 = torch.where(sum_l2 > 0, sum_l2, torch.ones_like(sum_l2))
+            new_scale = sum_xl / safe_l2
+
+            this_scale = torch.where(recalc_mask, new_scale, cand_scale)
+            this_min = torch.where(recalc_mask, torch.zeros_like(cand_min), cand_min)
+
+            # Only use these if D was valid
+            this_scale = torch.where(valid_D, this_scale, best_scale)
+            this_min = torch.where(valid_D, this_min, best_min)
+
+            # Calculate error
+            diff = this_scale * l + this_min - x
+            diff = torch.abs(diff) if use_mad else torch.square(diff)
+            mad = torch.sum(weights * diff, dim=1, keepdim=True)
+
+            # Invalidate results where D was not valid
+            mad = torch.where(valid_D, mad, torch.full_like(mad, float('inf')))
+
+            # Update best
+            is_better = mad < best_mad
+            best_mad = torch.where(is_better, mad, best_mad)
+            best_L = torch.where(is_better.unsqueeze(-1), l, best_L)
+            best_scale = torch.where(is_better, this_scale, best_scale)
+            best_min = torch.where(is_better, this_min, best_min)
+
+    # Handle constant blocks output
+    best_scale = torch.where(is_const, torch.zeros_like(best_scale), best_scale)
+    # best_min stores the offset 'min_x'. Original returns -min_x.
+    # If const, original returns -min_x.
+    best_min = torch.where(is_const, -min_x, best_min)
+    best_L = torch.where(is_const.unsqueeze(-1), torch.zeros_like(best_L), best_L)
+
+    # Output shape: scale [N, 1], min [N, 1], L [N, 32]
+    return best_scale, best_min, best_L
+
 @torch.compile(fullgraph=True, mode="max-autotune")
 def _quantize_q4_k_core(tensor: torch.Tensor, GGML_QK_K: int):
     # Flatten preceding dims
@@ -380,45 +478,54 @@ def _quantize_q4_k_core(tensor: torch.Tensor, GGML_QK_K: int):
     range_x = max_x - min_x
     range_x = torch.where(range_x == 0.0, torch.ones_like(range_x), range_x)
 
-    # --- Step 2: Vectorized Optimization Search Grid ---
+    # --- Step 2: Memory-Efficient Sequential Step Sweep ---
     nmax = 15.0
     nstep = 20
     rmin = -1.0
     rdelta = 0.1
 
-    istep = torch.arange(nstep, device=tensor.device, dtype=tensor.dtype).view(-1, 1, 1)
-    iscale_grid = (rmin + rdelta * istep + nmax) / range_x.unsqueeze(0)
+    # Initialize trackers using the 0-th step profile to save memory allocation
+    iscale_initial = (rmin + nmax) / range_x
+    l_initial = torch.round(iscale_initial * (x - min_x)).clamp(0.0, nmax)
+    diff_initial = (1.0 / torch.where(iscale_initial == 0.0, torch.ones_like(iscale_initial), iscale_initial)) * l_initial + min_x - x
 
-    x_shifted = x.unsqueeze(0) - min_x.unsqueeze(0)
-    l_grid = torch.round(iscale_grid * x_shifted).clamp(0.0, nmax)
+    best_mad = torch.sum(weights * (diff_initial ** 2), dim=1, keepdim=True)
+    best_scale = 1.0 / torch.where(iscale_initial == 0.0, torch.ones_like(iscale_initial), iscale_initial)
+    best_min = min_x
 
-    w_unsqueezed = weights.unsqueeze(0)
-    sum_l = torch.sum(w_unsqueezed * l_grid, dim=2, keepdim=True)
-    sum_l2 = torch.sum(w_unsqueezed * (l_grid ** 2), dim=2, keepdim=True)
-    sum_xl = torch.sum(w_unsqueezed * l_grid * x.unsqueeze(0), dim=2, keepdim=True)
+    # Run a sequential sweep. torch.compile fuses this completely,
+    # meaning the memory footprint stays strictly bounded at [N_sub, 32]
+    for istep in range(nstep):
+        iscale = (rmin + rdelta * istep + nmax) / range_x
+        l = torch.round(iscale * (x - min_x)).clamp(0.0, nmax)
 
-    D = sum_w.unsqueeze(0) * sum_l2 - (sum_l ** 2)
-    D_safe = torch.where(D > 0.0, D, torch.ones_like(D))
+        sum_l = torch.sum(weights * l, dim=1, keepdim=True)
+        sum_l2 = torch.sum(weights * (l ** 2), dim=1, keepdim=True)
+        sum_xl = torch.sum(weights * l * x, dim=1, keepdim=True)
 
-    this_scale = (sum_w.unsqueeze(0) * sum_xl - sum_x.unsqueeze(0) * sum_l) / D_safe
-    this_min = (sum_l2 * sum_x.unsqueeze(0) - sum_l * sum_xl) / D_safe
+        D = sum_w * sum_l2 - (sum_l ** 2)
+        D_safe = torch.where(D > 0.0, D, torch.ones_like(D))
 
-    mask_min = this_min > 0.0
-    this_min = torch.where(mask_min, torch.zeros_like(this_min), this_min)
+        this_scale = (sum_w * sum_xl - sum_x * sum_l) / D_safe
+        this_min = (sum_l2 * sum_x - sum_l * sum_xl) / D_safe
 
-    sum_l2_safe = torch.where(sum_l2 > 0.0, sum_l2, torch.ones_like(sum_l2))
-    this_scale = torch.where(mask_min, sum_xl / sum_l2_safe, this_scale)
+        mask_min = this_min > 0.0
+        this_min = torch.where(mask_min, torch.zeros_like(this_min), this_min)
 
-    diff = this_scale * l_grid + this_min - x.unsqueeze(0)
-    mad_grid = torch.sum(w_unsqueezed * (diff ** 2), dim=2)
+        sum_l2_safe = torch.where(sum_l2 > 0.0, sum_l2, torch.ones_like(sum_l2))
+        this_scale = torch.where(mask_min, sum_xl / sum_l2_safe, this_scale)
 
-    best_step_indices = torch.argmin(mad_grid, dim=0, keepdim=True)
+        diff = this_scale * l + this_min - x
+        mad = torch.sum(weights * (diff ** 2), dim=1, keepdim=True)
 
-    subblock_scale = torch.gather(this_scale.squeeze(-1).T, 1, best_step_indices.T).squeeze(-1)
-    subblock_min = torch.gather(this_min.squeeze(-1).T, 1, best_step_indices.T).squeeze(-1)
+        # Update trackers sequentially in-place
+        better_mask = mad < best_mad
+        best_mad = torch.where(better_mask, mad, best_mad)
+        best_scale = torch.where(better_mask, this_scale, best_scale)
+        best_min = torch.where(better_mask, this_min, best_min)
 
-    scale = subblock_scale.view(num_blocks, num_subblocks)
-    min_x = -subblock_min.view(num_blocks, num_subblocks)
+    scale = best_scale.view(num_blocks, num_subblocks)
+    min_x = -best_min.view(num_blocks, num_subblocks)
 
     # --- Step 3: Super-quantization (Max scales calculation) ---
     max_scale = torch.max(scale, dim=1, keepdim=True).values
@@ -430,25 +537,14 @@ def _quantize_q4_k_core(tensor: torch.Tensor, GGML_QK_K: int):
     ls = torch.round(inv_scale * scale).clamp(0.0, 63.0).to(torch.uint8)
     lm = torch.round(inv_min * min_x).clamp(0.0, 63.0).to(torch.uint8)
 
-    # --- Step 4: Bit-packing GGML Scales (EXACT implementation of original loop) ---
+    # --- Step 4: Bit-packing GGML Scales ---
     scales = torch.zeros((num_blocks, 12), dtype=torch.uint8, device=tensor.device)
 
-    # j < 4 logic
-    s0 = ls[:, 0]
-    s1 = ls[:, 1]
-    s2 = ls[:, 2]
-    s3 = ls[:, 3]
-
-    m0 = lm[:, 0]
-    m1 = lm[:, 1]
-    m2 = lm[:, 2]
-    m3 = lm[:, 3]
-
-    # j >= 4 logic entries
+    s0, s1, s2, s3 = ls[:, 0], ls[:, 1], ls[:, 2], ls[:, 3]
+    m0, m1, m2, m3 = lm[:, 0], lm[:, 1], lm[:, 2], lm[:, 3]
     s4, s5, s6, s7 = ls[:, 4], ls[:, 5], ls[:, 6], ls[:, 7]
     m4, m5, m6, m7 = lm[:, 4], lm[:, 5], lm[:, 6], lm[:, 7]
 
-    # Replicating bitwise operations on the columns perfectly
     scales[:, 0] = s0 | ((s4 >> 4) << 6)
     scales[:, 1] = s1 | ((s5 >> 4) << 6)
     scales[:, 2] = s2 | ((s6 >> 4) << 6)
@@ -468,7 +564,6 @@ def _quantize_q4_k_core(tensor: torch.Tensor, GGML_QK_K: int):
     d_half = (max_scale / 63.0).half().view(num_blocks, 1)
     dmin_half = (max_min / 63.0).half().view(num_blocks, 1)
 
-    # Safe int16 extraction to resolve compile stride issues
     d_bits = d_half.view(torch.int16)
     d_low = (d_bits & 0xFF).to(torch.uint8)
     d_high = ((d_bits >> 8) & 0xFF).to(torch.uint8)
@@ -485,9 +580,8 @@ def _quantize_q4_k_core(tensor: torch.Tensor, GGML_QK_K: int):
 
     L = torch.round((1.0 / rec_scale_safe) * (tensor_blocks + recovered_min)).clamp(0.0, 15.0).to(torch.uint8)
 
-    # --- Step 6: Element Nibble Interleaving matching your original layout ---
-    # Original logic grouped into sequential row pairs: L = L.view(-1, 2, 32) -> L[:, 0, :] | (L[:, 1, :] << 4)
-    L_even_blocks = L[:, 0::2, :] # Shapes: [num_blocks, num_subblocks//2, 32]
+    # --- Step 6: Element Nibble Interleaving ---
+    L_even_blocks = L[:, 0::2, :]
     L_odd_blocks = L[:, 1::2, :]
 
     L_packed = L_even_blocks | (L_odd_blocks << 4)
