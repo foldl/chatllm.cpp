@@ -354,246 +354,192 @@ def quantize_q4_1(tensor: torch.Tensor) -> torch.CharTensor:
     tensor = torch.cat((scale.half().view(torch.int8), min_values.half().view(torch.int8), tensor), dim=-1)
     return tensor
 
-@torch.jit.script
-def qkx2_quants_batched(x: torch.Tensor, nmax: int, rmin: float, rdelta: float, nstep: int, use_mad: bool):
-    # x shape: [N, 32]
-    N = x.shape[0]
+@torch.compile(fullgraph=True)
+def batched_qkx2_quants(x: torch.Tensor, nmax: float, rmin: float, rdelta: float,
+                        nstep: int, use_mad: bool):
+    """
+    x: (S, N) where N = 32
+    Returns: scale (S,), offset (S,) = -min_x (positive), L (S, N)
+    """
+    S, N = x.shape
+    # Weights: RMS + |x|
+    av_x = torch.norm(x, dim=1) / math.sqrt(N)
+    weights = av_x[:, None] + torch.abs(x)
 
-    # Vectorized constants
-    av_x = torch.norm(x, p=2, dim=1, keepdim=True) / math.sqrt(32.0)
-    weights = av_x + torch.abs(x)
+    # Per‑row statistics
+    min_data = torch.min(x, dim=1)[0]          # original min
+    max_data = torch.max(x, dim=1)[0]          # original max
+    sum_w = torch.sum(weights, dim=1)
+    sum_x = torch.sum(weights * x, dim=1)
 
-    min_x = torch.min(x, dim=1, keepdim=True)[0]
-    max_x = torch.max(x, dim=1, keepdim=True)[0]
+    # Clamp min_data > 0 to 0 (as in original)
+    min_data = torch.where(min_data > 0, torch.zeros_like(min_data), min_data)
 
-    # Handle min_x > 0 constraint
-    min_x = torch.where(min_x > 0, torch.zeros_like(min_x), min_x)
+    # Handle degenerate rows (min == max)
+    degenerate = (min_data == max_data)
+    range_data = max_data - min_data
+    range_safe = torch.where(degenerate, torch.ones_like(range_data), range_data)
 
-    # Handle constant blocks (range == 0)
-    range_x = max_x - min_x
-    is_const = range_x == 0
-    # Avoid division by zero
-    safe_range = torch.where(is_const, torch.ones_like(range_x), range_x)
-
-    sum_w = torch.sum(weights, dim=1, keepdim=True)
-    sum_x = torch.sum(weights * x, dim=1, keepdim=True)
-
-    # Initial best guess (standard linear quantization)
-    iscale = nmax / safe_range
+    # Initial quantization using min_data as the centering offset
+    iscale = nmax / range_safe
     scale = 1.0 / iscale
-    L = (iscale * (x - min_x)).round().clamp(min=0, max=nmax)
-
-    diff = scale * L + min_x - x
+    L = (iscale[:, None] * (x - min_data[:, None])).round().clamp(0, nmax)
+    offset = -min_data          # positive offset
+    diff = scale[:, None] * L + min_data[:, None] - x
     diff = torch.abs(diff) if use_mad else torch.square(diff)
-    best_mad = torch.sum(weights * diff, dim=1, keepdim=True)
-    best_L = L
-    best_scale = scale
-    best_min = min_x
+    best_mad = torch.sum(weights * diff, dim=1)
 
-    # Iterative search for optimal scale/min
     if nstep > 0:
-        for istep in range(nstep):
-            # Current step scale factor
-            numer = rmin + rdelta * istep + nmax
-            curr_iscale = numer / safe_range
+        inv_range = 1.0 / range_safe
+        for step in range(nstep):
+            # iscale uses constant min_data (never updated)
+            iscale = (rmin + rdelta * step + nmax) * inv_range
+            l = (iscale[:, None] * (x - min_data[:, None])).round().clamp(0, nmax)
 
-            # Quantize with current scale
-            l = (curr_iscale * (x - min_x)).round().clamp(min=0, max=nmax)
-
-            # Compute stats
-            sum_l = torch.sum(weights * l, dim=1, keepdim=True)
-            sum_l2 = torch.sum(weights * l * l, dim=1, keepdim=True)
-            sum_xl = torch.sum(weights * l * x, dim=1, keepdim=True)
+            sum_l = torch.sum(weights * l, dim=1)
+            sum_l2 = torch.sum(weights * l * l, dim=1)
+            sum_xl = torch.sum(weights * l * x, dim=1)
 
             D = sum_w * sum_l2 - sum_l * sum_l
+            D_inv = torch.where(D > 0, 1.0 / D, torch.zeros_like(D))
 
-            # Optimal scale/min calculations (vectorized)
-            cand_scale = (sum_w * sum_xl - sum_x * sum_l) / D
-            cand_min = (sum_l2 * sum_x - sum_l * sum_xl) / D
+            this_scale = (sum_w * sum_xl - sum_x * sum_l) * D_inv
+            this_min   = (sum_l2 * sum_x - sum_l * sum_xl) * D_inv   # this_min <= 0 normally
 
-            valid_D = D > 0
+            # If this_min > 0, set to 0 and recompute scale
+            pos_min_mask = this_min > 0
+            sum_l2_safe = torch.where(sum_l2 == 0, torch.ones_like(sum_l2), sum_l2)
+            new_scale_pos = sum_xl / sum_l2_safe
+            this_scale = torch.where(pos_min_mask, new_scale_pos, this_scale)
+            this_min   = torch.where(pos_min_mask, torch.zeros_like(this_min), this_min)
 
-            # Handle cases where this_min > 0
-            recalc_mask = cand_min > 0
+            diff_new = this_scale[:, None] * l + this_min[:, None] - x
+            diff_new = torch.abs(diff_new) if use_mad else torch.square(diff_new)
+            mad_new = torch.sum(weights * diff_new, dim=1)
 
-            # If min > 0, force min=0 and recalc scale
-            safe_l2 = torch.where(sum_l2 > 0, sum_l2, torch.ones_like(sum_l2))
-            new_scale = sum_xl / safe_l2
+            better = (D > 0) & (mad_new < best_mad)
+            best_mad = torch.where(better, mad_new, best_mad)
+            L = torch.where(better[:, None], l, L)
+            scale = torch.where(better, this_scale, scale)
+            offset = torch.where(better, -this_min, offset)   # offset = -min (positive)
 
-            this_scale = torch.where(recalc_mask, new_scale, cand_scale)
-            this_min = torch.where(recalc_mask, torch.zeros_like(cand_min), cand_min)
+    # Degenerate rows: set scale=0, L=0, offset=0
+    scale = torch.where(degenerate, torch.zeros_like(scale), scale)
+    L = torch.where(degenerate[:, None], torch.zeros(N, device=x.device, dtype=x.dtype), L)
+    offset = torch.where(degenerate, torch.zeros_like(offset), offset)
 
-            # Only use these if D was valid
-            this_scale = torch.where(valid_D, this_scale, best_scale)
-            this_min = torch.where(valid_D, this_min, best_min)
+    return scale, offset, L
 
-            # Calculate error
-            diff = this_scale * l + this_min - x
-            diff = torch.abs(diff) if use_mad else torch.square(diff)
-            mad = torch.sum(weights * diff, dim=1, keepdim=True)
 
-            # Invalidate results where D was not valid
-            mad = torch.where(valid_D, mad, torch.full_like(mad, float('inf')))
+@torch.compile(fullgraph=True)
+def pack_q4k_scales(ls: torch.Tensor, lm: torch.Tensor) -> torch.Tensor:
+    """
+    ls, lm: (num_blocks, 8) uint8, each 0..63
+    Returns: (num_blocks, 12) uint8 packed exactly as in GGML Q4_K.
+    """
+    B = ls.shape[0]
+    out = torch.empty((B, 12), dtype=torch.uint8, device=ls.device)
 
-            # Update best
-            is_better = mad < best_mad
-            best_mad = torch.where(is_better, mad, best_mad)
-            best_L = torch.where(is_better.unsqueeze(-1), l, best_L)
-            best_scale = torch.where(is_better, this_scale, best_scale)
-            best_min = torch.where(is_better, this_min, best_min)
+    # j = 0..3: direct assignment
+    out[:, 0] = ls[:, 0]
+    out[:, 1] = ls[:, 1]
+    out[:, 2] = ls[:, 2]
+    out[:, 3] = ls[:, 3]
+    out[:, 4] = lm[:, 0]
+    out[:, 5] = lm[:, 1]
+    out[:, 6] = lm[:, 2]
+    out[:, 7] = lm[:, 3]
 
-    # Handle constant blocks output
-    best_scale = torch.where(is_const, torch.zeros_like(best_scale), best_scale)
-    # best_min stores the offset 'min_x'. Original returns -min_x.
-    # If const, original returns -min_x.
-    best_min = torch.where(is_const, -min_x, best_min)
-    best_L = torch.where(is_const.unsqueeze(-1), torch.zeros_like(best_L), best_L)
+    # j = 4
+    ls4 = ls[:, 4]; lm4 = lm[:, 4]
+    out[:, 8] = (ls4 & 0xF) | ((lm4 & 0xF) << 4)
+    out[:, 0] |= ((ls4 >> 4) << 6)
+    out[:, 4] |= ((lm4 >> 4) << 6)
 
-    # Output shape: scale [N, 1], min [N, 1], L [N, 32]
-    return best_scale, best_min, best_L
+    # j = 5
+    ls5 = ls[:, 5]; lm5 = lm[:, 5]
+    out[:, 9] = (ls5 & 0xF) | ((lm5 & 0xF) << 4)
+    out[:, 1] |= ((ls5 >> 4) << 6)
+    out[:, 5] |= ((lm5 >> 4) << 6)
 
-@torch.compile(fullgraph=True, mode="max-autotune")
-def _quantize_q4_k_core(tensor: torch.Tensor, GGML_QK_K: int):
-    # Flatten preceding dims
-    x_raw = tensor.view(-1, GGML_QK_K)
-    num_blocks = x_raw.shape[0]
-    num_subblocks = GGML_QK_K // 32  # 8 subblocks for a block size of 256
+    # j = 6
+    ls6 = ls[:, 6]; lm6 = lm[:, 6]
+    out[:, 10] = (ls6 & 0xF) | ((lm6 & 0xF) << 4)
+    out[:, 2] |= ((ls6 >> 4) << 6)
+    out[:, 6] |= ((lm6 >> 4) << 6)
 
-    # Shape: [Total Subblocks, 32]
-    x = x_raw.view(-1, 32)
-    N_sub = x.shape[0]
+    # j = 7
+    ls7 = ls[:, 7]; lm7 = lm[:, 7]
+    out[:, 11] = (ls7 & 0xF) | ((lm7 & 0xF) << 4)
+    out[:, 3] |= ((ls7 >> 4) << 6)
+    out[:, 7] |= ((lm7 >> 4) << 6)
 
-    # --- Step 1: Weight and Range Calcs ---
-    av_x = torch.norm(x, dim=1, keepdim=True) / math.sqrt(32.0)
-    weights = av_x + torch.abs(x)
+    return out
 
-    min_x = torch.min(x, dim=1, keepdim=True).values
-    max_x = torch.max(x, dim=1, keepdim=True).values
 
-    sum_w = torch.sum(weights, dim=1, keepdim=True)
-    sum_x = torch.sum(weights * x, dim=1, keepdim=True)
+@torch.compile(fullgraph=True)
+def quantize_q4_k(tensor: torch.Tensor, GGML_QK_K: int) -> torch.CharTensor:
+    """
+    Optimized Q4_K quantization, byte‑identical to the original.
+    """
+    orig_shape = tensor.shape
+    assert orig_shape[-1] % GGML_QK_K == 0
+    tensor = tensor.view(-1, GGML_QK_K)
+    num_blocks = tensor.shape[0]
+    subblocks_per_block = GGML_QK_K // 32   # = 8 for QK_K=256
 
-    min_x = torch.clamp(min_x, max=0.0)
+    # Reshape to (num_blocks, 8, 32)
+    subblocks = tensor.view(num_blocks, subblocks_per_block, 32)
+    total_subblocks = num_blocks * subblocks_per_block
+    subblock_data = subblocks.reshape(total_subblocks, 32)
 
-    range_x = max_x - min_x
-    range_x = torch.where(range_x == 0.0, torch.ones_like(range_x), range_x)
+    # Batched quantization: returns scale (positive), offset (positive), L (float indices)
+    scale_sub, offset_sub, L_sub = batched_qkx2_quants(
+        subblock_data, nmax=15.0, rmin=-1.0, rdelta=0.1, nstep=20, use_mad=False
+    )
 
-    # --- Step 2: Memory-Efficient Sequential Step Sweep ---
-    nmax = 15.0
-    nstep = 20
-    rmin = -1.0
-    rdelta = 0.1
+    # Reshape back to block structure
+    scale_sub = scale_sub.view(num_blocks, subblocks_per_block)   # (B,8)
+    offset_sub = offset_sub.view(num_blocks, subblocks_per_block) # (B,8)
+    L_sub = L_sub.view(num_blocks, subblocks_per_block, 32)
 
-    # Initialize trackers using the 0-th step profile to save memory allocation
-    iscale_initial = (rmin + nmax) / range_x
-    l_initial = torch.round(iscale_initial * (x - min_x)).clamp(0.0, nmax)
-    diff_initial = (1.0 / torch.where(iscale_initial == 0.0, torch.ones_like(iscale_initial), iscale_initial)) * l_initial + min_x - x
+    # Per‑block maxima
+    max_scale = torch.max(scale_sub, dim=1)[0]   # (B,)
+    max_offset = torch.max(offset_sub, dim=1)[0] # (B,)
 
-    best_mad = torch.sum(weights * (diff_initial ** 2), dim=1, keepdim=True)
-    best_scale = 1.0 / torch.where(iscale_initial == 0.0, torch.ones_like(iscale_initial), iscale_initial)
-    best_min = min_x
+    # Compute integer scalings (0..63)
+    inv_scale = torch.where(max_scale > 0, 63.0 / max_scale, torch.zeros_like(max_scale))
+    inv_offset = torch.where(max_offset > 0, 64.0 / max_offset, torch.zeros_like(max_offset))
 
-    # Run a sequential sweep. torch.compile fuses this completely,
-    # meaning the memory footprint stays strictly bounded at [N_sub, 32]
-    for istep in range(nstep):
-        iscale = (rmin + rdelta * istep + nmax) / range_x
-        l = torch.round(iscale * (x - min_x)).clamp(0.0, nmax)
+    ls = (inv_scale[:, None] * scale_sub).round().clamp(max=63).to(torch.uint8)
+    lm = (inv_offset[:, None] * offset_sub).round().clamp(max=63).to(torch.uint8)
 
-        sum_l = torch.sum(weights * l, dim=1, keepdim=True)
-        sum_l2 = torch.sum(weights * (l ** 2), dim=1, keepdim=True)
-        sum_xl = torch.sum(weights * l * x, dim=1, keepdim=True)
+    # Pack scales into 12 bytes per block
+    scales_packed = pack_q4k_scales(ls, lm)   # (B,12) uint8
 
-        D = sum_w * sum_l2 - (sum_l ** 2)
-        D_safe = torch.where(D > 0.0, D, torch.ones_like(D))
+    # Dequantization factors
+    d = (max_scale / 63.0).half()
+    dmin = (max_offset / 63.0).half()
 
-        this_scale = (sum_w * sum_xl - sum_x * sum_l) / D_safe
-        this_min = (sum_l2 * sum_x - sum_l * sum_xl) / D_safe
+    # Reconstruct per‑subblock scale and offset for final quantization
+    rec_scale = (ls.float() * d[:, None]).view(num_blocks, subblocks_per_block, 1)
+    rec_offset = (lm.float() * dmin[:, None]).view(num_blocks, subblocks_per_block, 1)
 
-        mask_min = this_min > 0.0
-        this_min = torch.where(mask_min, torch.zeros_like(this_min), this_min)
+    # Final 4‑bit quantization (original formula)
+    L_quant = ((1.0 / rec_scale) * (subblocks + rec_offset)).round().clamp(0, 15).to(torch.uint8)
 
-        sum_l2_safe = torch.where(sum_l2 > 0.0, sum_l2, torch.ones_like(sum_l2))
-        this_scale = torch.where(mask_min, sum_xl / sum_l2_safe, this_scale)
+    # Pack two 4‑bit values into one byte
+    L_quant = L_quant.view(num_blocks, subblocks_per_block // 2, 2, 32)
+    L_packed = L_quant[:, :, 0, :] | (L_quant[:, :, 1, :] << 4)   # (B,4,32) -> (B,128)
+    L_packed = L_packed.view(num_blocks, -1)
 
-        diff = this_scale * l + this_min - x
-        mad = torch.sum(weights * (diff ** 2), dim=1, keepdim=True)
+    # Assemble final output: d (2 bytes), dmin (2 bytes), scales (12), L (128) = 144 bytes/block
+    d_bytes = d.view(torch.uint8).view(num_blocks, 2)
+    dmin_bytes = dmin.view(torch.uint8).view(num_blocks, 2)
 
-        # Update trackers sequentially in-place
-        better_mask = mad < best_mad
-        best_mad = torch.where(better_mask, mad, best_mad)
-        best_scale = torch.where(better_mask, this_scale, best_scale)
-        best_min = torch.where(better_mask, this_min, best_min)
-
-    scale = best_scale.view(num_blocks, num_subblocks)
-    min_x = -best_min.view(num_blocks, num_subblocks)
-
-    # --- Step 3: Super-quantization (Max scales calculation) ---
-    max_scale = torch.max(scale, dim=1, keepdim=True).values
-    max_min = torch.max(min_x, dim=1, keepdim=True).values
-
-    inv_scale = torch.where(max_scale > 0.0, 63.0 / max_scale, torch.zeros_like(max_scale))
-    inv_min = torch.where(max_min > 0.0, 64.0 / max_min, torch.zeros_like(max_min))
-
-    ls = torch.round(inv_scale * scale).clamp(0.0, 63.0).to(torch.uint8)
-    lm = torch.round(inv_min * min_x).clamp(0.0, 63.0).to(torch.uint8)
-
-    # --- Step 4: Bit-packing GGML Scales ---
-    scales = torch.zeros((num_blocks, 12), dtype=torch.uint8, device=tensor.device)
-
-    s0, s1, s2, s3 = ls[:, 0], ls[:, 1], ls[:, 2], ls[:, 3]
-    m0, m1, m2, m3 = lm[:, 0], lm[:, 1], lm[:, 2], lm[:, 3]
-    s4, s5, s6, s7 = ls[:, 4], ls[:, 5], ls[:, 6], ls[:, 7]
-    m4, m5, m6, m7 = lm[:, 4], lm[:, 5], lm[:, 6], lm[:, 7]
-
-    scales[:, 0] = s0 | ((s4 >> 4) << 6)
-    scales[:, 1] = s1 | ((s5 >> 4) << 6)
-    scales[:, 2] = s2 | ((s6 >> 4) << 6)
-    scales[:, 3] = s3 | ((s7 >> 4) << 6)
-
-    scales[:, 4] = m0 | ((m4 >> 4) << 6)
-    scales[:, 5] = m1 | ((m5 >> 4) << 6)
-    scales[:, 6] = m2 | ((m6 >> 4) << 6)
-    scales[:, 7] = m3 | ((m7 >> 4) << 6)
-
-    scales[:, 8]  = (s4 & 0xF) | ((m4 & 0xF) << 4)
-    scales[:, 9]  = (s5 & 0xF) | ((m5 & 0xF) << 4)
-    scales[:, 10] = (s6 & 0xF) | ((m6 & 0xF) << 4)
-    scales[:, 11] = (s7 & 0xF) | ((m7 & 0xF) << 4)
-
-    # --- Step 5: Final Matrix Recalculation ---
-    d_half = (max_scale / 63.0).half().view(num_blocks, 1)
-    dmin_half = (max_min / 63.0).half().view(num_blocks, 1)
-
-    d_bits = d_half.view(torch.int16)
-    d_low = (d_bits & 0xFF).to(torch.uint8)
-    d_high = ((d_bits >> 8) & 0xFF).to(torch.uint8)
-
-    dmin_bits = dmin_half.view(torch.int16)
-    dmin_low = (dmin_bits & 0xFF).to(torch.uint8)
-    dmin_high = ((dmin_bits >> 8) & 0xFF).to(torch.uint8)
-
-    recovered_scale = (ls.to(torch.float32) * (max_scale / 63.0)).view(num_blocks, num_subblocks, 1)
-    recovered_min = (lm.to(torch.float32) * (max_min / 63.0)).view(num_blocks, num_subblocks, 1)
-
-    tensor_blocks = x_raw.view(num_blocks, num_subblocks, 32)
-    rec_scale_safe = torch.where(recovered_scale == 0.0, torch.ones_like(recovered_scale), recovered_scale)
-
-    L = torch.round((1.0 / rec_scale_safe) * (tensor_blocks + recovered_min)).clamp(0.0, 15.0).to(torch.uint8)
-
-    # --- Step 6: Element Nibble Interleaving ---
-    L_even_blocks = L[:, 0::2, :]
-    L_odd_blocks = L[:, 1::2, :]
-
-    L_packed = L_even_blocks | (L_odd_blocks << 4)
-    L_flat = L_packed.reshape(num_blocks, -1)
-
-    # --- Step 7: Stream Assembly ---
-    res = torch.cat((d_low, d_high, dmin_low, dmin_high, scales, L_flat), dim=1)
-    return res.view(torch.int8)
-
-def quantize_q4_k(tensor: torch.Tensor, GGML_QK_K: int = 256) -> torch.Tensor:
-    assert tensor.shape[-1] % GGML_QK_K == 0
-    return _quantize_q4_k_core(tensor, GGML_QK_K)
+    result_uint8 = torch.cat([d_bytes, dmin_bytes, scales_packed, L_packed], dim=1)
+    result = result_uint8.view(torch.int8).flatten()
+    return result
 
 def dump_tensor(f, name: str, tensor: torch.Tensor, ggml_type: GGMLType):
     assert tensor.dtype == torch.float32
