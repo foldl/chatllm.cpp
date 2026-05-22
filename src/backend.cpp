@@ -549,6 +549,11 @@ namespace chatllm
         ggml_backend_tensor_get(tensor, data, 0, ggml::nbytes(tensor));
     }
 
+    bool Backend::support(ggml::tensor * tensor)
+    {
+        return ggml_backend_supports_op(backend, tensor);
+    }
+
     void Backend::synchronize(void)
     {
         ggml_backend_synchronize(backend);
@@ -880,7 +885,7 @@ namespace chatllm
     void ComputeContext::cb_op_tensor(ggml::tensor *tensor)
     {
         if (get_backend() == nullptr) return;
-        if (ggml_backend_supports_op(get_backend()->backend, tensor))
+        if (get_backend()->support(tensor))
         {
             //struct ggml_backend_buffer *buffer = tensor->buffer;
             //if (buffer && ggml_backend_supports_buft(get_backend()->backend, ggml_backend_buffer_get_type(buffer)))

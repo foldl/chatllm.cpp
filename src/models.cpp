@@ -1699,8 +1699,11 @@ namespace chatllm
         if (ggml::type_of(r) != expected_result_dtype)
         {
             ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
-            ggml::tensor *t = ggml::new_tensor_like(&ctx, expected_result_dtype, r);
-            r = ggml::cpy(&ctx, r, t);
+            ggml::tensor *t = ggml::cast(&ctx, r, expected_result_dtype);
+
+            // we will cast this later "manually"
+            if (ctx.get_backend()->support(t))
+                r = t;
         }
 
         ggml::get_shape(r, result_shape);
@@ -1722,9 +1725,30 @@ namespace chatllm
 
         set_dbg_ctx(nullptr);
 
-        size_t offset = result_buf.size();
-        result_buf.resize(offset + ggml::nbytes(r));
-        Backend::read_tensor_data(r, result_buf.data() + offset);
+        const size_t offset = result_buf.size();
+        if ((ggml::type_of(r) == expected_result_dtype))
+        {
+            result_buf.resize(offset + ggml::nbytes(r));
+            Backend::read_tensor_data(r, result_buf.data() + offset);
+        }
+        else
+        {
+            std::vector<float> d_f32(ggml::nelements(r));
+            if (ggml::type_of(r) != ggml::type::GGML_TYPE_F32)
+            {
+                std::vector<uint8_t> buf(ggml::nbytes(r));
+                Backend::read_tensor_data(r, buf.data());
+                ggml::to_float(ggml::type_of(r), buf.data(), d_f32.data(), ggml::get_dim(r, 0), ggml::nrows(r));
+            }
+            else
+            {
+                Backend::read_tensor_data(r, d_f32.data());
+            }
+
+            ggml::tensor *t = ggml::cast(&ctx, r, expected_result_dtype);
+            result_buf.resize(offset + ggml::nbytes(t));
+            ggml::from_float(ggml::type_of(t), d_f32.data(), result_buf.data() + offset, ggml::get_dim(r, 0), ggml::nrows(r));
+        }
         ctx.reset();
 
         return true;
