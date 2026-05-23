@@ -4379,8 +4379,16 @@
                 }
             },
             "e4b": {
-                "default": "q8",
+                "default": "q4_k",
                 "quantized": {
+                    "q4_k": {
+                        "size": 4480199728,
+                        "url": "chatllm_quantized_gemma4/gemma-4-e4b-it-q4_k.bin"
+                    },
+                    "q4_0": {
+                        "size": 4480199728,
+                        "url": "chatllm_quantized_gemma4/gemma-4-e4b-it-q4_0.bin"
+                    },
                     "q8": {
                         "size": 8450344496,
                         "url": "chatllm_quantized_gemma4/gemma-4-e4b-it.bin"
