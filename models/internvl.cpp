@@ -498,8 +498,6 @@ namespace chatllm::intern::vl
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        tok->media_emb.clear();
-
         for (auto &piece : user.pieces)
         {
             if (piece.type == ContentPiece::Type::Text)
@@ -520,8 +518,6 @@ namespace chatllm::intern::vl
     void ChatHistoryEncoder::append_content_qianfanvl(const Content &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-
-        tok->media_emb.clear();
 
         std::string question;
 

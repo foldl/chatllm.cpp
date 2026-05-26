@@ -714,8 +714,6 @@ namespace chatllm::step::vl
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        tok->media_emb.clear();
-
         std::unique_ptr<vision::Resize> resize;
 
         for (auto &piece : user.pieces)
@@ -802,6 +800,9 @@ namespace chatllm::step::vl
     void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        tok->media_emb.clear();
+
         append_user_opening(round_idx, ids);
 
         append_content(user, ids);

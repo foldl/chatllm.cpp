@@ -37,7 +37,7 @@ namespace chatllm::qwen::v3_5
     class Prelude
     {
     public:
-        Prelude(const Config &config, int n = 2048):
+        Prelude(const Config &config, int n = 2048 * 4):
             pos_helper(config.max_length, config.vocab_size),
             helper_prelude(new TensorPosHelperPrelude(&pos_helper)),
             pad_arg(new BlockParams::PadEmbedding(n, n))
@@ -83,7 +83,6 @@ namespace chatllm::qwen::v3_5
         const Config config;
         std::vector<int> v_pos;
     private:
-        std::vector<v2_5_vl::ImageGridSize> images_grid;
         int token_time = 0;
         qwen::v3_vl::vit::VisualEmbeddingGeneration visual;
         bool vit_loaded = false;
@@ -646,6 +645,7 @@ namespace chatllm::qwen::v3_5
     {
         const int image_id_start = config.vocab_size;
         const int length = (int)input_ids.size();
+        auto tok = dynamic_cast<Tokenizer *>(tokenizer);
 
         // TODO:
         int token_n_inc = 1;
@@ -654,7 +654,7 @@ namespace chatllm::qwen::v3_5
             token_time = 0;
 
         token_time = pos_helper.build_3d_pos(input_ids.data(), length,
-            images_grid, image_id_start, token_n_inc, token_time);
+            tok->images_grid, image_id_start, token_n_inc, token_time);
 
         auto r = BaseModelForConditionalGeneration::generate_next_token(input_ids, gen_config, lm_logits);
 
@@ -664,12 +664,6 @@ namespace chatllm::qwen::v3_5
     void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
     {
         std::vector<uint8_t> buf;
-        images_grid.clear();
-        for (auto &mm : tokenizer->media_emb)
-        {
-            images_grid.emplace_back(mm.grid_width / visual.vis_config.spatial_merge_size,
-                                     mm.grid_height / visual.vis_config.spatial_merge_size);
-        }
 
         auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
         visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
@@ -683,6 +677,7 @@ namespace chatllm::qwen::v3_5
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         BaseModelForConditionalGeneration::set_tokenizer(tokenizer);
+        tok->use_timestamp = true;
         if (vit_loaded)
         {
             auto encoder = dynamic_cast<v2_5_vl::ChatHistoryEncoder *>(tok->get_chat_encoder());

@@ -309,7 +309,7 @@ namespace chatllm
         {
         public:
             PadEmbedding(int n, int max);
-            ~PadEmbedding(void) { BlockParams::num_padding_embeddings = 0; }
+            ~PadEmbedding(void);
             int get(void) const { return BlockParams::num_padding_embeddings; }
         };
 

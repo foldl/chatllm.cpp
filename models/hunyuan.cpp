@@ -2052,8 +2052,6 @@ namespace chatllm::hunyuan::penguin::vl
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        tok->media_emb.clear();
-
         for (auto &piece : user.pieces)
         {
             switch (piece.type)

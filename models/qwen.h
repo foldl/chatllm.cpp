@@ -602,7 +602,7 @@ namespace chatllm::qwen
 
             int64_t get_param_num(bool effective_only) const override;
             void load(const std::string &path, TensorLoader *loader) override;
-            ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w) override;
+            ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *image0, ggml::tensor *image1,  int grid_h, int grid_w);
             bool is_loaded(void) const;
         public:
             PatchEmbedding embeddings;
@@ -662,6 +662,9 @@ namespace chatllm::qwen
         public:
             void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
             virtual void append_content(const Content &user, std::vector<int> &ids) const;
+        protected:
+            bool append_image_piece(std::vector<int> &ids, const int w, const int h, const std::vector<uint8_t> &pixels, const std::vector<uint8_t> &pixels2) const;
+            bool append_image_piece(const char *fn1, const char *fn2, std::vector<int> &ids) const;
         public:
             const vit::BaseConfig *vis_config = nullptr;
             bool vit_loaded = false;
@@ -692,6 +695,9 @@ namespace chatllm::qwen
 
             int video_max_frames = 20;
             double fps = 2.0f;
+            bool use_timestamp = false;
+
+            std::vector<ImageGridSize> images_grid;
         };
 
         class TensorPosHelper3D : public BaseTensorPosHelper
@@ -722,7 +728,7 @@ namespace chatllm::qwen
         class ExtendEmbedding
         {
         public:
-            ExtendEmbedding(int n = 2048) : pad_arg(new BlockParams::PadEmbedding(n, n)) {}
+            ExtendEmbedding(int n = 2048 * 10) : pad_arg(new BlockParams::PadEmbedding(n, n)) {}
         public:
             BlockParams::PadEmbedding *pad_arg = nullptr;
         };
@@ -901,7 +907,7 @@ namespace chatllm::qwen::v3_vl::vit
 
         int64_t get_param_num(bool effective_only) const override;
         void load(const std::string &path, TensorLoader *loader) override;
-        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *image0, ggml::tensor *image1, int grid_h, int grid_w);
         bool is_loaded(void) const;
         void reset(void);
         ggml::tensor *get_deespstack_input_for_llm_layer(ComputeContext *ctx, ggml::tensor *input_ids, const int layer_id);

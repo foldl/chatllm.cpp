@@ -1268,12 +1268,12 @@ namespace chatllm::qwen::vit
         loaded = true;
     }
 
-    ggml::tensor *VisionTransformer::forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
+    ggml::tensor *VisionTransformer::forward(ComputeContext *ctx, ggml::tensor *image0, ggml::tensor *image1,  int grid_h, int grid_w)
     {
         pos_helper->prepare(grid_h, grid_w);
         pos_helper->write_mapping_tensors(ctx, window_id, reverse_id);
 
-        auto output = embeddings.forward(ctx, input, input, grid_h, grid_w);
+        auto output = embeddings.forward(ctx, image0, image1, grid_h, grid_w);
 
         if (!is_v2)
             output = ggml::get_rows(ctx, output, window_id);
@@ -1399,6 +1399,8 @@ namespace chatllm::qwen::vit
             vis_config.max_patches      = max_patches;
             vis_config.max_pixels       = max_patches * vis_config.patch_size * vis_config.patch_size * vis_config.merge_size * vis_config.merge_size;
             vis_config.max_pixels       = std::min(vis_config.max_pixels, (int)pp_cfg["max_pixels"].ToInt());
+
+            CHATLLM_CHECK(vis_config.merge_size == vis_config.spatial_merge_size);
         }
 
         const size_t tensor_ovhd = ggml_tensor_overhead();
@@ -1433,11 +1435,12 @@ namespace chatllm::qwen::vit
         ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
 
         ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
-        ggml::tensor *media_emb = ggml::new_tensor_4d(&ctx, ggml::type::GGML_TYPE_F32, vis_config.patch_size, vis_config.patch_size, 3, image.grid_width * image.grid_height);
+        ggml::tensor *image1 = ggml::new_tensor_4d(&ctx, ggml::type::GGML_TYPE_F32, vis_config.patch_size, vis_config.patch_size, 3, image.grid_width * image.grid_height);
+        ggml::tensor *image2 = ggml::new_tensor_4d(&ctx, ggml::type::GGML_TYPE_F32, vis_config.patch_size, vis_config.patch_size, 3, image.grid_width * image.grid_height);
 
         chatllm::set_dbg_ctx(&ctx);
 
-        auto r = vis_model->forward(&ctx, media_emb, image.grid_height, image.grid_width);
+        auto r = vis_model->forward(&ctx, image1, image2, image.grid_height, image.grid_width);
 
         if (ggml::type_of(r) != dtype)
         {
@@ -1456,7 +1459,9 @@ namespace chatllm::qwen::vit
             exit(-1);
         }
 
-        Backend::write_tensor_data(media_emb, image.data.data(), 0, image.data.size() * sizeof(image.data[0]));
+        CHATLLM_CHECK(image.data.size() * sizeof(image.data[0]) == 2 * ggml::nbytes(image1));
+        Backend::write_tensor_data(image1, image.data.data());
+        Backend::write_tensor_data(image2, ((uint8_t *)image.data.data()) + ggml::nbytes(image1));
 
         ctx.compute();
 
@@ -1538,7 +1543,6 @@ namespace chatllm::qwen::v2_5_vl
         vit::VisualEmbeddingGeneration visual;
         const Config config;
     protected:
-        std::vector<ImageGridSize> images_grid;
         int token_time;
         std::unique_ptr<TensorPosHelper3D> pos_helper;
     };
@@ -1603,17 +1607,28 @@ namespace chatllm::qwen::v2_5_vl
             auto &dim = images_grid[mm_index++];
             for (int f = 0; f < dim.frame_num; f++, t += token_n_inc)
             {
+                while ((i < length) && (input_ids[i] < image_id_start))
+                {
+                    p_t[i] = t;
+                    p_h[i] = t;
+                    p_w[i] = t;
+                    i++;
+                    t++;
+                }
+
                 for (int h = 0; h < dim.h; h++)
                 {
                     for (int w = 0; w < dim.w; w++)
                     {
-                        CHATLLM_CHECK(input_ids[i] >= image_id_start);
+                        CHATLLM_CHECK(i < length);
+
                         p_t[i] = t;
                         p_h[i] = t + h;
                         p_w[i] = t + w;
                         i++;
                     }
                 }
+
             }
             t = std::max(p_h[i - 1], p_w[i - 1]) + 1;
         }
@@ -1696,12 +1711,6 @@ namespace chatllm::qwen::v2_5_vl
     void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
     {
         std::vector<uint8_t> buf;
-        images_grid.clear();
-        for (auto &mm : tokenizer->media_emb)
-        {
-            images_grid.emplace_back(mm.grid_width / visual.vis_config.merge_size,
-                                     mm.grid_height / visual.vis_config.merge_size);
-        }
 
         auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
         visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
@@ -1717,26 +1726,86 @@ namespace chatllm::qwen::v2_5_vl
         const int length = (int)input_ids.size();
 
         // TODO:
-        int token_n_inc = int(1 / ((dynamic_cast<Tokenizer *>(tokenizer))->fps / visual.vis_config.temporal_patch_size) * visual.vis_config.tokens_per_second);
+        auto tok = dynamic_cast<Tokenizer *>(tokenizer);
+        int token_n_inc = int(1 / (tok->fps / visual.vis_config.temporal_patch_size) * visual.vis_config.tokens_per_second);
         if (token_n_inc < 1) token_n_inc = 1;
 
         if ((n_past == 0) && (n_past_offset == 0))
             token_time = 0;
 
         token_time = pos_helper->build_3d_pos(input_ids.data(), length,
-            images_grid, image_id_start, token_n_inc, token_time);
+            tok->images_grid, image_id_start, token_n_inc, token_time);
         auto r = v2::ConditionalGeneration::generate_next_token(input_ids, gen_config, lm_logits);
 
         return r;
     }
 
+    bool ChatHistoryEncoder::append_image_piece(std::vector<int> &ids, const int w, const int h, const std::vector<uint8_t> &pixels, const std::vector<uint8_t> &pixels2) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        const int patch_size = vis_config->patch_size;
+        if ((w <= 0) || (h <= 0)) return false;
+
+        std::vector<float> scaled;
+        vision::image_rescale(pixels, scaled);
+
+        vision::image_normalize(scaled, vis_config->image_mean, vis_config->image_std);
+
+        tok->media_emb.push_back({.grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
+
+        auto &image = tok->media_emb.back();
+
+        // Qwen2.5 image data format:
+        // PatchesLeftRightDown_ChannelsRGB_PixelsLeftRightDown
+        // Pixels of a patch is repeated once (spatial dim)
+        // # Reorder dimensions to group grid and patch information for subsequent flattening.
+        // # (batch, grid_t, grid_h, grid_w, merge_h, merge_w, channel, temp_patch_size, patch_h, patch_w)
+
+        vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::PatchesLeftRightDown_MergeN_ChannelsRGB_PixelsLeftRightDown);
+
+        {
+            std::vector<float> scaled;
+            std::vector<float> data;
+            vision::image_rescale(pixels2, scaled);
+            vision::image_normalize(scaled, vis_config->image_mean, vis_config->image_std);
+            vision::image_arrange(scaled, w, patch_size, data, vision::PatchesFormat::PatchesLeftRightDown_MergeN_ChannelsRGB_PixelsLeftRightDown);
+
+            image.data.insert(image.data.end(), data.begin(), data.end());
+        }
+
+        const int merge_length = vis_config->spatial_merge_size * vis_config->spatial_merge_size;
+        image.emb_vec_number = image.grid_width * image.grid_height / merge_length;
+
+        const int id_start = tok->get_image_total_emb_vectors() - image.emb_vec_number + tok->vocab_size;
+        tok->inject_media("image", ids, id_start, image.emb_vec_number);
+
+        return true;
+    }
+
+    bool ChatHistoryEncoder::append_image_piece(const char *fn1, const char *fn2, std::vector<int> &ids) const
+    {
+        CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
+
+        int w, h;
+        std::vector<uint8_t> pixels;
+        std::vector<uint8_t> pixels2;
+        const int patch_size = vis_config->patch_size;
+
+        vision::MaxPatchNum     param1(vis_config->max_patches);
+        vision::MergeKernel     param2(vis_config->spatial_merge_size, vis_config->spatial_merge_size);
+
+        vision::image_load(fn1, pixels, w, h, patch_size, vision::PaddingMode::Black);
+        if (fn2 != nullptr)
+            vision::image_load(fn2, pixels2, w, h, patch_size, vision::PaddingMode::Black);
+        else
+            pixels2 = pixels;
+
+        return append_image_piece(ids, w, h, pixels, pixels2);
+    }
+
     void ChatHistoryEncoder::append_content(const Content &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-
-        tok->media_emb.clear();
-
-        std::vector<std::unique_ptr<vision::VideoLoader>> videos;
 
         std::unique_ptr<vision::Resize> resize;
 
@@ -1748,55 +1817,40 @@ namespace chatllm::qwen::v2_5_vl
             }
             else if (piece.type == ContentPiece::Type::Image)
             {
-                CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
-
-                int w, h;
-                std::vector<uint8_t> pixels;
-                const int patch_size = vis_config->patch_size;
-
-                vision::MaxPatchNum     param1(vis_config->max_patches);
-                vision::MergeKernel     param2(vis_config->spatial_merge_size, vis_config->spatial_merge_size);
-
-                vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, vision::PaddingMode::Black);
-                if ((w <= 0) || (h <= 0)) continue;
-
-                std::vector<float> scaled;
-                vision::image_rescale(pixels, scaled);
-
-                vision::image_normalize(scaled, vis_config->image_mean, vis_config->image_std);
-
-                tok->media_emb.push_back({.grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
-
-                auto &image = tok->media_emb.back();
-
-                // Qwen2.5 image data format:
-                // PatchesLeftRightDown_ChannelsRGB_PixelsLeftRightDown
-                // Pixels of a patch is repeated once (spatial dim)
-                // # Reorder dimensions to group grid and patch information for subsequent flattening.
-                // # (batch, grid_t, grid_h, grid_w, merge_h, merge_w, channel, temp_patch_size, patch_h, patch_w)
-
-                vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::PatchesLeftRightDown_MergeN_ChannelsRGB_PixelsLeftRightDown);
-
-                const int merge_length = vis_config->spatial_merge_size * vis_config->spatial_merge_size;
-                image.emb_vec_number = image.grid_width * image.grid_height / merge_length;
-
-                const int id_start = tok->get_image_total_emb_vectors() - image.emb_vec_number + tok->vocab_size;
-                tok->inject_media("image", ids, id_start, image.emb_vec_number);
+                if (!append_image_piece(piece.content.c_str(), nullptr, ids)) continue;
+                auto &mm = tok->media_emb.back();
+                tok->images_grid.emplace_back(mm.grid_width  / vis_config->spatial_merge_size,
+                                              mm.grid_height / vis_config->spatial_merge_size);
             }
             else if (piece.type == ContentPiece::Type::Video)
             {
-                // TODO: expand video into images
-                continue;
+                CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
 
                 auto video = new vision::VideoLoader(piece.content.c_str(), (float)tok->fps, tok->video_max_frames);
-                videos.emplace_back(video);
                 if (video->frames.size() < 1)
                     continue;
 
+                int frame_cnt = 0;
+
                 for (size_t i = 0; i < video->frames.size() - 1; i += 2)
                 {
-                    //pieces.emplace_back(utils::sec2hms(i / tok->fps, true));
-                    //pieces.emplace_back(video->frames[i], ContentPiece::Type::Image);
+                    if (tok->use_timestamp)
+                    {
+                        char timestamp[100];
+                        sprintf(timestamp, "<%.1f seconds>", i / tok->fps);
+                        tok->encode(timestamp, ids);
+                    }
+                    if (append_image_piece(video->frames[i].c_str(), video->frames[i + 1].c_str(), ids))
+                        frame_cnt += 1;
+                    else
+                        break;
+                }
+                if (frame_cnt > 0)
+                {
+                    auto &mm = tok->media_emb.back();
+                    tok->images_grid.emplace_back(mm.grid_width  / vis_config->spatial_merge_size,
+                                                  mm.grid_height / vis_config->spatial_merge_size,
+                                                  frame_cnt);
                 }
             }
             else
@@ -1810,6 +1864,9 @@ namespace chatllm::qwen::v2_5_vl
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         append_user_opening(round_idx, ids);
+
+        tok->media_emb.clear();
+        tok->images_grid.clear();
 
         append_content(user, ids);
 
@@ -2253,11 +2310,11 @@ namespace chatllm::qwen::v3_vl::vit
         loaded = true;
     }
 
-    ggml::tensor *VisionTransformer::forward(ComputeContext *ctx, ggml::tensor *input, int grid_h, int grid_w)
+    ggml::tensor *VisionTransformer::forward(ComputeContext *ctx, ggml::tensor *image0, ggml::tensor *image1, int grid_h, int grid_w)
     {
         pos_helper->prepare(grid_h, grid_w);
 
-        auto output = embeddings.forward(ctx, input, input, grid_h, grid_w);
+        auto output = embeddings.forward(ctx, image0, image1, grid_h, grid_w);
 
         for (size_t i = 0; i < layers.size(); i++)
         {
@@ -2403,14 +2460,19 @@ namespace chatllm::qwen::v3_vl::vit
 
     bool VisualEmbeddingGeneration::run_model(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &image, std::vector<uint8_t> &buf)
     {
-        ggml::tensor *media_emb = nullptr;
-        const auto make_graph = [this, &media_emb, &image](ComputeContext *ctx) -> ggml::tensor * {
-            media_emb = ggml::new_tensor_4d(ctx, ggml::type::GGML_TYPE_F32, vis_config.patch_size, vis_config.patch_size, 3, image.grid_width * image.grid_height);
-            auto r = vis_model->forward(ctx, media_emb, image.grid_height, image.grid_width);
+        ggml::tensor *image1 = nullptr;
+        ggml::tensor *image2 = nullptr;
+
+        const auto make_graph = [this, &image1, &image2, &image](ComputeContext *ctx) -> ggml::tensor * {
+            image1 = ggml::new_tensor_4d(ctx, ggml::type::GGML_TYPE_F32, vis_config.patch_size, vis_config.patch_size, 3, image.grid_width * image.grid_height);
+            image2 = ggml::new_tensor_4d(ctx, ggml::type::GGML_TYPE_F32, vis_config.patch_size, vis_config.patch_size, 3, image.grid_width * image.grid_height);
+            auto r = vis_model->forward(ctx, image1, image2, image.grid_height, image.grid_width);
             return r;
         };
-        const auto write_input_data = [&media_emb, &image](ComputeContext *ctx) {
-            Backend::write_tensor_data(media_emb, image.data.data(), 0, image.data.size() * sizeof(image.data[0]));
+        const auto write_input_data = [&image1, &image2, &image](ComputeContext *ctx) {
+            CHATLLM_CHECK(image.data.size() * sizeof(image.data[0]) == 2 * ggml::nbytes(image1));
+            Backend::write_tensor_data(image1, image.data.data());
+            Backend::write_tensor_data(image2, ((uint8_t *)image.data.data()) + ggml::nbytes(image1));
         };
 
         std::vector<int64_t> shape;
@@ -2460,6 +2522,7 @@ namespace chatllm::qwen::v3_vl
         void set_additional_args(const std::map<std::string, std::string> &args) override;
         int64_t get_param_num(bool effective_only) const;
         void before_generate(const GenerationConfig &gen_config) override;
+        void set_tokenizer(BaseTokenizer *tokenizer) override;
 
         ggml::tensor *lm_layer_preprocess(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *hidden_states, int layer_index);
 
@@ -2477,7 +2540,6 @@ namespace chatllm::qwen::v3_vl
         std::vector<int> v_pos;
         const Config config;
     protected:
-        std::vector<v2_5_vl::ImageGridSize> images_grid;
         int token_time;
         v3_vl::vit::VisualEmbeddingGeneration visual;
         std::unique_ptr<v2_5_vl::TensorPosHelper3D> pos_helper;
@@ -2576,16 +2638,16 @@ namespace chatllm::qwen::v3_vl
         return r;
     }
 
+    void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        v3::ConditionalGeneration::set_tokenizer(tokenizer);
+        tok->use_timestamp = true;
+    }
+
     void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
     {
         std::vector<uint8_t> buf;
-        images_grid.clear();
-        for (auto &mm : tokenizer->media_emb)
-        {
-            images_grid.emplace_back(mm.grid_width / visual.vis_config.spatial_merge_size,
-                                     mm.grid_height / visual.vis_config.spatial_merge_size);
-        }
-
         auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
         visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
         if (buf.size() < 1) return;
@@ -2598,6 +2660,7 @@ namespace chatllm::qwen::v3_vl
     {
         const int image_id_start = config.vocab_size;
         const int length = (int)input_ids.size();
+        auto tok = dynamic_cast<Tokenizer *>(tokenizer);
 
         deepstack_token_ids.resize(input_ids.size());
         for (size_t i = 0; i < input_ids.size(); i++)
@@ -2612,7 +2675,7 @@ namespace chatllm::qwen::v3_vl
             token_time = 0;
 
         token_time = pos_helper->build_3d_pos(input_ids.data(), length,
-            images_grid, image_id_start, token_n_inc, token_time);
+            tok->images_grid, image_id_start, token_n_inc, token_time);
     }
 
     bool ConditionalGeneration::generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits)
@@ -3062,7 +3125,6 @@ namespace chatllm::qwen::v3_asr
     void ChatHistoryEncoder::load_audio(const Content &user) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        tok->media_emb.clear();
 
         for (auto &piece : user.pieces)
         {
@@ -3099,6 +3161,8 @@ namespace chatllm::qwen::v3_asr
     void ChatHistoryEncoder::append_user(int round_idx, const Content &user, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        tok->media_emb.clear();
 
         load_audio(user);
         tok->encode("user", ids, true, false, true);

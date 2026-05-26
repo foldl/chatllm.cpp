@@ -1599,6 +1599,11 @@ namespace chatllm
         BlockParams::num_padding_embeddings = n;
     }
 
+    BlockParams::PadEmbedding::~PadEmbedding(void)
+    {
+        BlockParams::num_padding_embeddings = 0;
+    }
+
     int BlockParams::get_padded_embedding_num(void)
     {
         return BlockParams::max_projected_embedding > 0 ? BlockParams::max_projected_embedding : BlockParams::num_padding_embeddings;
