@@ -1918,10 +1918,10 @@ namespace chatllm
             << "pad_token_id        : " << config.pad_token_id << std::endl
             << "sep_token_id        : " << config.sep_token_id << std::endl;
 
-            if (loader.meta.size() > 0)
-            {
-                ggml::log(GGML_LOG_LEVEL_INFO, "meta: %s", loader.meta.c_str());
-            }
+        if (loader.meta.size() > 0)
+        {
+            ggml::log(GGML_LOG_LEVEL_INFO, "meta: %s", loader.meta.c_str());
+        }
 
         return oss.str();
     }
@@ -1985,12 +1985,93 @@ namespace chatllm
         return _loader->load_model(loader, args);
     }
 
-    bool ModelFactory::load(int model_type, int version, ModelLoader &loader, Result &result, const ModelObject::extra_args &args)
+    BaseImplModelLoader *get_loader(int model_type, int version)
     {
         auto _loader = ModelLoadRegistry::get_loader(model_type);
         CHATLLM_CHECK(_loader != nullptr) << "invalid model type 0x" << std::hex << model_type;
         CHATLLM_CHECK(version == _loader->version) << "only support version " << _loader->version << " for now but got " << version;
+        return _loader;
+    }
+
+    bool ModelFactory::load(int model_type, int version, ModelLoader &loader, Result &result, const ModelObject::extra_args &args)
+    {
+        auto _loader = get_loader(model_type, version);
         return _loader->load_model(loader, result, args);
+    }
+
+    static void load_tensors_only(ModelLoader &loader)
+    {
+        load_file_header(loader);
+        auto _loader = get_loader(loader.model_type, loader.version);
+        _loader->load_tensors(loader);
+    }
+
+    std::string show_tensor_basic_info(ggml::tensor *t)
+    {
+        std::ostringstream oss;
+        oss << ggml::get_name(t) << ": " << ggml::type_to_str(ggml::type_of(t));
+        if (ggml::n_dims(t) >= 1)
+        {
+            oss << "[" << ggml::get_dim(t, 0);
+            if (ggml::n_dims(t) >= 2) oss << ", " << ggml::get_dim(t, 1);
+            if (ggml::n_dims(t) >= 3) oss << ", " << ggml::get_dim(t, 2);
+            if (ggml::n_dims(t) >= 4) oss << ", " << ggml::get_dim(t, 3);
+            oss << "]";
+        }
+        return oss.str();
+    }
+
+    void ModelFactory::dump_tensors(ModelLoader &loader, const std::set<std::string> names, std::ostream &oss)
+    {
+        load_tensors_only(loader);
+
+        oss << std::fixed << std::setprecision(18);
+
+        for (auto &name : names)
+        {
+            auto &info = loader.tensor_dict.at(name);
+            auto t = &info.tensor;
+            std::vector<float> data;
+            data.resize(ggml::nelements(t));
+            if (ggml::type_of(t) != ggml::type::GGML_TYPE_F32)
+            {
+                std::vector<uint8_t> buf;
+                buf.resize(ggml::nbytes(t));
+                info.read_raw_tensor_data(loader.get_reader(), ggml::nbytes(t), buf.data());
+                ggml::to_float(ggml::type_of(t), buf.data(), data.data(), ggml::get_dim(t, 0), ggml::nrows(t));
+            }
+            else
+            {
+                info.read_raw_tensor_data(loader.get_reader(), ggml::nbytes(t), data.data());
+            }
+            oss << show_tensor_basic_info(t) << std::endl;
+
+            for (int64_t i = 0; i < ggml::nelements(t); i++)
+            {
+                oss << "[" << std::setw(3) << i << "] = " << data[i] << std::endl;
+            }
+        }
+    }
+
+    std::string ModelFactory::show_tensors(ModelLoader &loader)
+    {
+        load_tensors_only(loader);
+
+        std::ostringstream oss;
+        std::vector<std::string> sorted_names;
+        for (auto &item : loader.tensor_dict)
+        {
+            sorted_names.emplace_back(item.first);
+        }
+        std::sort(sorted_names.begin(), sorted_names.end());
+
+        for (auto &name : sorted_names)
+        {
+            auto &info = loader.tensor_dict.at(name);
+            auto t = &info.tensor;
+            oss << show_tensor_basic_info(t) << std::endl;
+        }
+        return oss.str();
     }
 
 } // namespace chatllm

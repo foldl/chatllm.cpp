@@ -11,6 +11,7 @@
 #include <random>
 #include <thread>
 #include <map>
+#include <set>
 #include <filesystem>
 
 #include "vectorstore.h"
@@ -59,6 +60,7 @@ struct Args
     std::string tts_export;
     std::string re_quantize;
     std::map<std::string, std::string> model_n_gpu_layers;
+    std::set<std::string> dump_tensors;
     int max_length = -1;
     int max_proj_length = -1;
     int max_context_length = 512;
@@ -269,6 +271,7 @@ void usage(const std::string &prog)
               << "  --show                  show model info and quit                                                                    [*]\n"
               << "  --show_devices          show info about backends and devices, then quit                                             [*]\n"
               << "  --dump_dot FILE         dump sched splits to a DOT file, and exit with -1\n"
+              << "  --dump_tensor NAME      dump data of tensor then quit. repeat this option to dump multiple tensors.                 [*]\n"
               << "  --log_level             log level. (default: 4 - ERROR)\n"
               << "  --serve_rpc [H:]P[@id]  as a RPC server on host:port (optional: host default to 127.0.0.1, id defaults to 0)        [#]\n"
               << "  --ggml_dir DIR          specify directory of GGML\n"
@@ -453,6 +456,14 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
                 if (c < argc)
                 {
                     args.model_n_gpu_layers["any"] = argv[c];
+                }
+            }
+            else if (utils::is_same_command_option(arg, "--dump_tensor"))
+            {
+                c++;
+                if (c < argc)
+                {
+                    args.dump_tensors.emplace(argv[c]);
                 }
             }
             handle_param("--model",                 "-m", model_path,           std::string)
@@ -1340,7 +1351,16 @@ int main(int argc, const char **argv)
     if (args.show)
     {
         chatllm::ModelLoader loader(args.model_path);
-        std::cout << chatllm::ModelFactory::load_info(loader) << std::endl;
+        std::cout << chatllm::ModelFactory::load_info(loader) << std::endl << std::endl;
+        std::cout << "Tensors:" << std::endl << chatllm::ModelFactory::show_tensors(loader) << std::endl;
+        return 0;
+    }
+
+    if (!args.dump_tensors.empty())
+    {
+        chatllm::ModelLoader loader(args.model_path);
+        chatllm::ModelFactory::dump_tensors(loader, args.dump_tensors, std::cout);
+        std::cout << std::endl;
         return 0;
     }
 

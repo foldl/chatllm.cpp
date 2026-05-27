@@ -1373,6 +1373,8 @@ namespace chatllm
         static AbstractModel *load_model_again(ModelLoader &loader, const ModelObject::extra_args &args);
 
         static std::string load_info(ModelLoader &loader);
+        static std::string show_tensors(ModelLoader &loader);
+        static void        dump_tensors(ModelLoader &loader, const std::set<std::string> names, std::ostream &oss);
 
     private:
         static bool load(int model_type, int version, ModelLoader &loader, Result &result, const ModelObject::extra_args &args);

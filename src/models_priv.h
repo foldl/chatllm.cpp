@@ -355,12 +355,26 @@ namespace chatllm
         return true;
     }
 
+    template <class Config, class Tokenizer, class ConditionalGeneration>
+    bool load_tensors(ModelLoader &loader)
+    {
+        Config config;
+        ModelObject::extra_args args;
+
+        load_config<Config>(loader, config, args);
+
+        delete load_tokenizer<Config, Tokenizer>(loader, config);
+
+        return true;
+    }
+
     class BaseImplModelLoader
     {
     public:
         BaseImplModelLoader(int model_type, int version);
         virtual AbstractModel *load_model(ModelLoader &loader, const ModelObject::extra_args &args) = 0;
         virtual bool load_model(ModelLoader &loader, ModelFactory::Result &result, const ModelObject::extra_args &args) = 0;
+        virtual bool load_tensors(ModelLoader &loader) = 0;
         const int version;
     };
 
@@ -376,6 +390,11 @@ namespace chatllm
         bool load_model(ModelLoader &loader, ModelFactory::Result &result, const ModelObject::extra_args &args) override
         {
             return chatllm::load_model<Config, Tokenizer, ConditionalGeneration>(loader, result, args);
+        }
+
+        bool load_tensors(ModelLoader &loader) override
+        {
+            return chatllm::load_tensors<Config, Tokenizer, ConditionalGeneration>(loader);
         }
     };
 
