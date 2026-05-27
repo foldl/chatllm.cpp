@@ -3931,6 +3931,31 @@
             }
         }
     },
+    "hy-mt2": {
+        "brief": "Hy-MT2 is a family of “fast-thinking” multilingual translation models designed for complex real-world scenarios.",
+        "default": "1.8b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "1.8b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1907333088,
+                        "url": "chatllm_quantized_hunyuan/hunyuan-mt2-1.8b.bin"
+                    }
+                }
+            },
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 7980003984,
+                        "url": "chatllm_quantized_hunyuan/hunyuan-mt2-7b.bin"
+                    }
+                }
+            }
+        }
+    },
     "mirothinker-v1.5": {
         "brief": "MiroThinker v1.5 is the world-leading search agent designed to advance tool-augmented reasoning and information-seeking capabilities.",
         "default": "30b",
