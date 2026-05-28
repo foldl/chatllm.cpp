@@ -2006,11 +2006,12 @@ namespace chatllm
         _loader->load_tensors(loader);
     }
 
-    std::string show_tensor_basic_info(ggml::tensor *t)
+    std::string show_tensor_type(ggml::tensor *t)
     {
         std::ostringstream oss;
-        oss << ggml::get_name(t) << ": " << ggml::type_to_str(ggml::type_of(t));
-        if (ggml::n_dims(t) >= 1)
+        oss << ggml::type_to_str(ggml::type_of(t));
+
+        if ((ggml::n_dims(t) >= 2) || (ggml::get_dim(t, 0) > 1))
         {
             oss << "[" << ggml::get_dim(t, 0);
             if (ggml::n_dims(t) >= 2) oss << ", " << ggml::get_dim(t, 1);
@@ -2018,6 +2019,13 @@ namespace chatllm
             if (ggml::n_dims(t) >= 4) oss << ", " << ggml::get_dim(t, 3);
             oss << "]";
         }
+        return oss.str();
+    }
+
+    std::string show_tensor_basic_info(ggml::tensor *t)
+    {
+        std::ostringstream oss;
+        oss << ggml::get_name(t) << ": " << show_tensor_type(t);
         return oss.str();
     }
 
@@ -2053,23 +2061,131 @@ namespace chatllm
         }
     }
 
+    class SmartTensorName
+    {
+    public:
+        SmartTensorName(const std::string &n)
+        {
+            std::regex expr("\\.([0-9]+)\\.");
+            std::cregex_iterator it(n.data(), n.data() + n.size(), expr);
+            std::cregex_iterator end;
+
+            if (it != end)
+            {
+                std::cmatch match = *it;
+                prefix = n.substr(0, match.position());
+                auto id = n.substr(match.position() + 1, match.length() - 2);
+                suffix = n.substr(match.position() + match.length());
+                indices.emplace(std::atoi(id.c_str()));
+            }
+            else
+                prefix = n;
+        }
+
+        void merge(const SmartTensorName &n)
+        {
+            for (int i : n.indices)
+                indices.emplace(i);
+        }
+
+        bool operator <(const SmartTensorName& b) const
+        {
+            return str_for_compare() < b.str_for_compare();
+        }
+
+        operator std::string() const
+        {
+            if (indices.empty())
+                return prefix;
+
+            std::vector<int> lst;
+            lst.insert(lst.end(), indices.begin(), indices.end());
+            std::sort(lst.begin(), lst.end());
+
+            std::ostringstream oss;
+            oss << prefix << ".";
+            if (lst.size() == 1)
+            {
+                oss << lst[0];
+            }
+            else
+            {
+                oss << "[";
+                int last_start = -10;
+                int last_end = -10;
+                for (int v : lst)
+                {
+                    if (v == last_end + 1)
+                    {
+                        last_end = v;
+                        continue;
+                    }
+                    if (last_start >= 0)
+                    {
+                        if (last_end > last_start)
+                            oss << last_start << ".." << last_end;
+                        else
+                            oss << last_start;
+                        oss << ", ";
+                    }
+                    last_start = last_end = v;
+                }
+                if (last_end > last_start)
+                    oss << last_start << ".." << last_end;
+                else
+                    oss << last_start;
+                oss << "]";
+            }
+            oss << "." << suffix;
+            return oss.str();
+        }
+
+    protected:
+        std::string str_for_compare() const
+        {
+            if (indices.empty())
+                return prefix;
+            else
+                return prefix + ".." + suffix;
+        }
+    public:
+        std::string prefix;
+        std::string suffix;
+        std::set<int> indices;
+    };
+
     std::string ModelFactory::show_tensors(ModelLoader &loader)
     {
         load_tensors_only(loader);
 
         std::ostringstream oss;
         std::vector<std::string> sorted_names;
+        std::set<SmartTensorName, std::less<>> collapsed_names;
+
         for (auto &item : loader.tensor_dict)
         {
-            sorted_names.emplace_back(item.first);
+            auto &info = item.second;
+            auto t = &info.tensor;
+            SmartTensorName st(show_tensor_basic_info(t));
+            auto it = collapsed_names.find(st);
+            if (it != collapsed_names.end())
+            {
+                st.merge(*it);
+                collapsed_names.erase(it);
+            }
+            collapsed_names.insert(st);
         }
+
+        for (auto &item : collapsed_names)
+        {
+            sorted_names.emplace_back(item);
+        }
+
         std::sort(sorted_names.begin(), sorted_names.end());
 
         for (auto &name : sorted_names)
         {
-            auto &info = loader.tensor_dict.at(name);
-            auto t = &info.tensor;
-            oss << show_tensor_basic_info(t) << std::endl;
+            oss << name << std::endl;
         }
         return oss.str();
     }
