@@ -627,6 +627,15 @@ namespace chatllm
             qa_encoder->set_tokenizer(this);
     }
 
+    BaseTokenizer::~BaseTokenizer()
+    {
+        if (tp)
+        {
+            delete tp;
+            tp = nullptr;
+        }
+    }
+
     void BaseTokenizer::set_chat_encoder(BaseHistoryEncoder *encoder)
     {
         chat_encoder = encoder;
