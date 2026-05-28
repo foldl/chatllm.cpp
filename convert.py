@@ -156,6 +156,7 @@ class ModelType(Enum):
     MiniCPM_MoE = 0x1102
     MiniCPM3    = 0x1110
     MiniCPM4    = 0x1111
+    MiniCPM5    = 0x1112
 
     Persimmon   = 0x1200
     Fuyu        = 0x1201
@@ -1692,6 +1693,35 @@ class Llama32Converter(BaseConverter):
             weight_names.remove('lm_head.weight')
         return weight_names
 
+class MiniCPM5Converter(BaseConverter):
+    MODEL_TYPE = ModelType.MiniCPM5
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return Llama3Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.rope_theta > 0, "rope_theta must be positive"
+        scaling = config.rope_scaling if config.rope_scaling is not None else 1.0
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+            1 if config.tie_word_embeddings else 0,
+        ]
+        f.write(struct.pack("i" * len(config_values), *config_values))
+        f.write(struct.pack("<f", scaling))
+        f.write(struct.pack("<f", config.rope_theta))
+
+    @staticmethod
+    def get_weight_names(config):
+        weights = Llama3Converter.get_weight_names(config)
+        if config.tie_word_embeddings:
+            weights.pop()
+        return weights
 class AprielConverter(BaseConverter):
     MODEL_TYPE = ModelType.Apriel
 
@@ -10659,6 +10689,8 @@ def main():
             OuteTTSConverter.MODEL_TYPE = ModelType.OuteTTSQwen3
             OuteTTSConverter.IsQwen3 = True
         OuteTTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'minicpm5':
+        MiniCPM5Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

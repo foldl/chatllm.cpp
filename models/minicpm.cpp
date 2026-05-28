@@ -1,6 +1,11 @@
 #include "llama.h"
 #include "deepseek.h"
 
+namespace chatllm
+{
+    const int MODEL_TYPE_MINICPM5 = MODEL_TYPE_MINICPM4 + 1;
+}
+
 namespace chatllm::minicpm::v1
 {
     struct Config : public BaseConfig
@@ -36,6 +41,8 @@ namespace chatllm::minicpm::v1
         }
 
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
+    protected:
+        virtual tokenizer::Processor *create_processor();
     };
 
     class ConditionalGeneration : public BaseModelForConditionalGeneration
@@ -108,9 +115,14 @@ namespace chatllm::minicpm::v1
         Config config;
     };
 
+    tokenizer::Processor *Tokenizer::create_processor()
+    {
+        return new tokenizer::BPEProcessor1();
+    }
+
     size_t Tokenizer::load(tokenizer::DataReader *buffer, int n_vocab)
     {
-        tp = new tokenizer::BPEProcessor1();
+        tp = create_processor();
         size_t size = tp->Load(buffer, n_vocab);
         return size;
     }
@@ -808,6 +820,94 @@ namespace chatllm::minicpm::v4
     };
 }
 
+namespace chatllm::minicpm::v5
+{
+    struct Config : public BaseConfig
+    {
+        int num_key_value_heads;
+        int head_dim;
+        int tie_word_embeddings;
+        float rope_scaling;
+        float rope_theta;
+    };
+
+    class Tokenizer : public v4::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config)
+            : v4::Tokenizer(config)
+        {
+        }
+
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            size_t size = v4::Tokenizer::load(buffer, n_vocab);
+            const static std::vector<std::string> special_toks = {
+                "<think>", "</think>",
+                "<tool_call>", "</tool_call>",
+                "<tool_response>", "</tool_response>",
+                "<tools>", "</tools>",
+                "<arguments>", "</arguments>",
+                "<parameters>", "</parameters>",
+                "<function", "</function>",
+                "<param", "</param>",
+                "<|thought_begin|>", "<|thought_end|>",
+                "<|tool_call|>", "<|execute_start|>", "<|execute_end|>",
+            };
+            for (auto &s : special_toks)
+            {
+                auto id = tp->PieceToId(s);
+                if (id >= 0)
+                    tp->OverrideTokenDecoding(id, s);
+            }
+            return size;
+        }
+
+    protected:
+        tokenizer::Processor *create_processor() override
+        {
+            return new tokenizer::BPEProcessor2();
+        }
+    };
+
+    class ConditionalGeneration : public BaseModelForConditionalGeneration
+    {
+    public:
+        typedef Model<Config, Embedding, RMSNorm, LlamaBlock, int, int, int, int, int, int> ModelClass;
+    public:
+        ConditionalGeneration() = default;
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = (ModelType)MODEL_TYPE_MINICPM5);
+    };
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type):
+        BaseModelForConditionalGeneration(type, config, runtime_config)
+    {
+        const size_t tensor_ovhd = ggml_tensor_overhead();
+        const size_t num_tensors = 3 + config.num_hidden_layers * 12 + (config.tie_word_embeddings ? -1 : 0);
+        const size_t ctx_size = num_tensors * tensor_ovhd;
+        w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+        w_ctx_.dtype = config.dtype;
+
+        transformer = config.tie_word_embeddings ?
+            new ModelClass(&w_ctx_, config, nullptr,
+                                    config.hidden_size, config.num_attention_heads,
+                                    config.intermediate_size, config.num_key_value_heads,
+                                    config.head_dim, config.max_length)
+            :
+            new ModelClass(&w_ctx_, config, false,
+                                    config.hidden_size, config.num_attention_heads,
+                                    config.intermediate_size, config.num_key_value_heads,
+                                    config.head_dim, config.max_length);
+
+        for (int i = 0; i < config.num_hidden_layers; i++)
+        {
+            auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
+            attention.freq_base = config.rope_theta;
+            attention.freq_scale = 1 / config.rope_scaling;
+        }
+    }
+}
+
 namespace chatllm
 {
     REGISTER_MODEL_LOADER(MINICPM,               minicpm::v1, 1);
@@ -815,6 +915,7 @@ namespace chatllm
     REGISTER_MODEL_LOADER(MINICPM_MoE,           minicpm::moe, 1);
     REGISTER_MODEL_LOADER(MINICPM3,              minicpm::v3, 1);
     REGISTER_MODEL_LOADER(MINICPM4,              minicpm::v4, 1);
+    REGISTER_MODEL_LOADER(MINICPM5,              minicpm::v5, 1);
     REGISTER_MODEL_LOADER(MiniCPM_Embedding_Light,   minicpm::emb_light, 1);
     REGISTER_MODEL_LOADER(MiniCPM_ReRanker_Light,    minicpm::ranker_light, 1);
 }
