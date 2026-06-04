@@ -2070,22 +2070,35 @@ namespace chatllm
             std::cregex_iterator it(n.data(), n.data() + n.size(), expr);
             std::cregex_iterator end;
 
-            if (it != end)
+            if (it == end)
             {
-                std::cmatch match = *it;
-                prefix = n.substr(0, match.position());
-                auto id = n.substr(match.position() + 1, match.length() - 2);
-                suffix = n.substr(match.position() + match.length());
-                indices.emplace(std::atoi(id.c_str()));
-            }
-            else
                 prefix = n;
+                return;
+            }
+
+            std::cmatch match = *it;
+            prefix = n.substr(0, match.position());
+            auto id = n.substr(match.position() + 1, match.length() - 2);
+            suffix = n.substr(match.position() + match.length());
+            indices.emplace(std::atoi(id.c_str()));
+            const auto n_end = match.position() + match.length();
+
+            ++it;
+            if (it == end) return;
+            match = *it;
+
+            suffix = n.substr(n_end, match.position() - n_end);
+            id = n.substr(match.position() + 1, match.length() - 2);
+            suffix2 = n.substr(match.position() + match.length());
+            indices2.emplace(std::atoi(id.c_str()));
         }
 
         void merge(const SmartTensorName &n)
         {
             for (int i : n.indices)
                 indices.emplace(i);
+            for (int i : n.indices2)
+                indices2.emplace(i);
         }
 
         bool operator <(const SmartTensorName& b) const
@@ -2098,60 +2111,81 @@ namespace chatllm
             if (indices.empty())
                 return prefix;
 
-            std::vector<int> lst;
-            lst.insert(lst.end(), indices.begin(), indices.end());
-            std::sort(lst.begin(), lst.end());
-
             std::ostringstream oss;
-            oss << prefix << ".";
-            if (lst.size() == 1)
+            oss << prefix;
+
+            oss << ".";
+            append_vector(indices, oss);
+            oss << ".";
+
+            oss << suffix;
+
+            if (!indices2.empty())
             {
-                oss << lst[0];
+                oss << ".";
+                append_vector(indices2, oss);
+                oss << ".";
+
+                oss << suffix2;
             }
-            else
-            {
-                oss << "[";
-                int last_start = -10;
-                int last_end = -10;
-                for (int v : lst)
-                {
-                    if (v == last_end + 1)
-                    {
-                        last_end = v;
-                        continue;
-                    }
-                    if (last_start >= 0)
-                    {
-                        if (last_end > last_start)
-                            oss << last_start << ".." << last_end;
-                        else
-                            oss << last_start;
-                        oss << ", ";
-                    }
-                    last_start = last_end = v;
-                }
-                if (last_end > last_start)
-                    oss << last_start << ".." << last_end;
-                else
-                    oss << last_start;
-                oss << "]";
-            }
-            oss << "." << suffix;
             return oss.str();
         }
 
     protected:
+        void append_vector(const std::set<int> &indices, std::ostringstream &oss) const
+        {
+            std::vector<int> lst;
+            lst.insert(lst.end(), indices.begin(), indices.end());
+            std::sort(lst.begin(), lst.end());
+
+            if (lst.size() == 1)
+            {
+                oss << lst[0];
+                return;
+            }
+
+            oss << "[";
+            int last_start = -10;
+            int last_end = -10;
+            for (int v : lst)
+            {
+                if (v == last_end + 1)
+                {
+                    last_end = v;
+                    continue;
+                }
+                if (last_start >= 0)
+                {
+                    if (last_end > last_start)
+                        oss << last_start << ".." << last_end;
+                    else
+                        oss << last_start;
+                    oss << ", ";
+                }
+                last_start = last_end = v;
+            }
+            if (last_end > last_start)
+                oss << last_start << ".." << last_end;
+            else
+                oss << last_start;
+            oss << "]";
+        }
+
         std::string str_for_compare() const
         {
             if (indices.empty())
                 return prefix;
-            else
+            else if (indices2.empty())
                 return prefix + ".." + suffix;
+            else
+                return prefix + ".." + suffix + ".." + suffix2;
         }
     public:
         std::string prefix;
         std::string suffix;
+        std::string suffix2;
         std::set<int> indices;
+        std::set<int> indices2;
     };
 
     std::string ModelFactory::show_tensors(ModelLoader &loader)
