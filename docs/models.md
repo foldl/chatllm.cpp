@@ -398,7 +398,8 @@ Please use `--format completion` for these models.
     * [x] v4: [Instruct-31B](https://huggingface.co/google/gemma-4-31B-it/tree/145dc2508c480a64b47242f160d286cff94a2343),
 [Instruct-26B-A4B](https://huggingface.co/google/gemma-4-26B-A4B-it/tree/4c55b528bdc40b4e79ed7fd4e2f8e46fa5aaed5a),
 [Instruct-E4B](https://huggingface.co/google/gemma-4-E4B-it/tree/c53e9d33178b12afbad4a48334d21e19b8c29761),
-[Instruct-E2B](https://huggingface.co/google/gemma-4-E2B-it/tree/6b7e72c67d3c4556f42b56d5a68b4b8e864c63b4)
+[Instruct-E2B](https://huggingface.co/google/gemma-4-E2B-it/tree/6b7e72c67d3c4556f42b56d5a68b4b8e864c63b4),
+[Instruct-12B](https://huggingface.co/google/gemma-4-12B-it/tree/5926caa4ec0cac5cbfadaf4077420520de1d5205)
 
     Note: Only download `tokenizer.model` and DO NOT download `tokenizer.json` when converting. Use `--set do-pan-and-scan 1` to enable _Pan and Scan_.
     Use `--name TranslateGemma` when converting TranslateGemma models to activate translation support: specify language codes in prompts like

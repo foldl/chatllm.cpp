@@ -2,6 +2,11 @@
 #include <cstring>
 #include "../src/audio_process.h"
 
+namespace chatllm
+{
+    const int MODEL_TYPE_GEMMA4_Unified     = MODEL_TYPE_GEMMA4 + 1;
+}
+
 namespace chatllm::gemma
 {
     const int media_type_image = 0;
@@ -26,7 +31,9 @@ namespace chatllm::gemma
         text_hidden_size(text_hidden_size),
         embedding_projection(ctx, multimodal_hidden_size, text_hidden_size, false),
         embedding_pre_projection_norm(ctx, multimodal_hidden_size)
-    {}
+    {
+        embedding_pre_projection_norm.eps = 1e-6f;
+    }
 
     ggml::tensor *MultimodalEmbedder::forward(ComputeContext *ctx, ggml::tensor *mm_outputs)
     {
@@ -644,7 +651,8 @@ namespace chatllm::gemma::aud
     AudioModel::AudioModel(InitContext *ctx, const Config &config, int llm_hidden_size):
         config(config),
         subsample_conv_projection(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), config.hidden_size, config.subsampling_conv_channels, config.rms_norm_eps),
-        pos_emb(ggml::new_tensor_2d(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), ggml::type_fallback(ctx->dtype, config.hidden_size), config.hidden_size, config.attention_context_left + config.attention_context_right)),
+        pos_emb(ggml::new_tensor_2d(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Prolog), ggml::type::GGML_TYPE_F16, // F16 to make backends happy
+            config.hidden_size, config.attention_context_left + config.attention_context_right)),
         out_proj(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.hidden_size, config.output_proj_dims),
         embed_audio(LayerMover(ctx, LayerAllocatorManager::MiscLayer::Epilog), config.output_proj_dims, llm_hidden_size)
     {
@@ -938,6 +946,7 @@ namespace chatllm::gemma::vit
 
         bool standardize;
         bool use_clipped_linears;
+        bool use_bidirectional_attention;
 
         int video_max_soft_tokens;
         int video_max_num_frames;
@@ -1381,6 +1390,12 @@ namespace chatllm::gemma::vit
 
     bool VisualEmbeddingGeneration::load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config, const int max_projected_tokens)
     {
+        {
+            const auto vis_cfg = config["config.json"]["text_config"];
+            if (!vis_cfg.IsObject()) return false;
+            vis_config.use_bidirectional_attention = vis_cfg["use_bidirectional_attention"].ToString() == "vision";
+        }
+
         const auto vis_cfg = config["config.json"]["vision_config"];
         if (!vis_cfg.IsObject()) return false;
 
@@ -1499,9 +1514,9 @@ namespace chatllm::gemma::v4
     public:
         void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
     protected:
-        void append_image_piece(std::vector<int> &ids, const int w, const int h, const std::vector<uint8_t> &pixels) const;
-        void append_image_piece(const ContentPiece &piece, std::vector<int> &ids) const;
-        void append_audio_piece(const ContentPiece &piece, std::vector<int> &ids) const;
+        virtual void append_image_piece(std::vector<int> &ids, const int w, const int h, const std::vector<uint8_t> &pixels) const;
+        virtual void append_image_piece(const ContentPiece &piece, std::vector<int> &ids) const;
+        virtual void append_audio_piece(const ContentPiece &piece, std::vector<int> &ids) const;
         void append_video_piece(const ContentPiece &piece, std::vector<int> &ids) const;
     public:
         const vit::Config *vis_config = nullptr;
@@ -2225,6 +2240,7 @@ namespace chatllm::gemma::v4
     public:
         ModelClass(InitContext *ctx, const Config &config);
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *per_layer_input_ids, int n_past) override;
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past) override;
         void load(const std::string &path, TensorLoader *loader, const std::vector<int> &layer_ids) override;
         int64_t get_param_num(bool effective_only) const override;
     protected:
@@ -2360,13 +2376,20 @@ namespace chatllm::gemma::v4
             per_layer_emb->load(path, loader);
     }
 
+    ggml::tensor *ModelClass::forward(ComputeContext *ctx, ggml::tensor *input_ids, int n_past)
+    {
+        auto r = forward(ctx, input_ids, nullptr, n_past);
+        return r;
+    }
+
     ggml::tensor *ModelClass::forward(ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *per_layer_input_ids, int n_past)
     {
         before_forward(ctx, input_ids, n_past);
+        const bool use_ple = per_layer_emb.get() && per_layer_input_ids;
 
         ctx->move_to_layer(LayerAllocatorManager::Prolog);
         ggml::tensor *hidden_states = word_embeddings->forward(ctx, input_ids);
-        if (per_layer_emb.get())
+        if (use_ple)
         {
             per_layer_emb->forward(ctx, per_layer_input_ids, hidden_states);
         }
@@ -2380,7 +2403,7 @@ namespace chatllm::gemma::v4
                 if (t) hidden_states = t;
             }
 
-            auto layer_embeds = per_layer_emb.get() ? per_layer_emb->get_input_for_layer(ctx, layer->get_id()) : nullptr;
+            auto layer_embeds = use_ple ? per_layer_emb->get_input_for_layer(ctx, layer->get_id()) : nullptr;
 
             hidden_states = layer->forward(ctx, hidden_states, layer_embeds, n_past);
         }
@@ -2407,42 +2430,28 @@ namespace chatllm::gemma::v4
         std::unique_ptr<BlockParams::PadEmbedding> pad_arg;
     };
 
-    class ConditionalGeneration : public Prelude, public BaseModelForConditionalGeneration
+    class LLMConditionalGeneration : public Prelude, public BaseModelForConditionalGeneration
     {
     public:
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA4);
+        LLMConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type);
         void load(ModelLoader &loader) override;
 
-        void set_tokenizer(BaseTokenizer *tokenizer) override;
-        bool load_more(const json::JSON &config) override;
         void set_additional_args(const std::map<std::string, std::string> &args) override;
-        void before_generate(const GenerationConfig &gen_config) override;
-
-        int64_t get_param_num(bool effective_only) const override;
 
     public:
         int tensor_num_of_layer(const Config &config, int layer_id) const;
-        bool run_model(const int *input_ids, const int ids_count,
-                            const GenerationConfig &gen_config,
-                            int past,
-                            std::vector<float> &output, const int batch_size,
-                            std::function<ggml::tensor *(ComputeContext *, ggml::tensor *)> func_epilog) override;
     public:
         const Config config;
         const int max_projected_tokens;
         v2::TanhScaling logits_pp;
-        vit::VisualEmbeddingGeneration  visual;
-        aud::EmbeddingGeneration        audio;
     };
 
-    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type):
+    LLMConditionalGeneration::LLMConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type):
         Prelude(),
         BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2),
         config(config),
         max_projected_tokens(BlockParams::get_padded_embedding_num()),
-        logits_pp(1.0f / config.final_logit_soft_capping / sqrtf((float)config.hidden_size), config.final_logit_soft_capping),
-        visual(runtime_config, pad_arg->get()),
-        audio(runtime_config, pad_arg->get())
+        logits_pp(1.0f / config.final_logit_soft_capping / sqrtf((float)config.hidden_size), config.final_logit_soft_capping)
     {
         const size_t tensor_ovhd = ggml_tensor_overhead();
         size_t num_tensors = 2;
@@ -2464,7 +2473,7 @@ namespace chatllm::gemma::v4
         Prelude::done();
     }
 
-    void ConditionalGeneration::load(ModelLoader &loader)
+    void LLMConditionalGeneration::load(ModelLoader &loader)
     {
         loader.add_tensor_name_translations({
             {".pre_attention_layernorm.",   ".input_layernorm."},
@@ -2478,6 +2487,66 @@ namespace chatllm::gemma::v4
         });
 
         BaseModelForConditionalGeneration::load(loader);
+    }
+
+    void LLMConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        if (nullptr == tok) return;
+        tok->fps    = utils::get_opt(args, "fps", tok->fps);
+    }
+
+    int LLMConditionalGeneration::tensor_num_of_layer(const Config &config, int layer_id) const
+    {
+        int r = 0;
+        if (config.layer_is_swa[layer_id])
+        {
+            r = 17;
+        }
+        else
+        {
+            r = 17;
+        }
+        if (config.num_experts > 0)
+        {
+            r += 6 + 3 + 0;
+        }
+        return r;
+    }
+
+    class ConditionalGeneration : public LLMConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_GEMMA4);
+        void load(ModelLoader &loader) override;
+
+        void set_tokenizer(BaseTokenizer *tokenizer) override;
+        bool load_more(const json::JSON &config) override;
+        void before_generate(const GenerationConfig &gen_config) override;
+
+        int64_t get_param_num(bool effective_only) const override;
+
+    public:
+        bool run_model(const int *input_ids, const int ids_count,
+                            const GenerationConfig &gen_config,
+                            int past,
+                            std::vector<float> &output, const int batch_size,
+                            std::function<ggml::tensor *(ComputeContext *, ggml::tensor *)> func_epilog) override;
+    public:
+        vit::VisualEmbeddingGeneration  visual;
+        aud::EmbeddingGeneration        audio;
+    };
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type):
+        LLMConditionalGeneration(config, runtime_config, type),
+        visual(runtime_config, pad_arg->get()),
+        audio(runtime_config, pad_arg->get())
+    {
+    }
+
+    void ConditionalGeneration::load(ModelLoader &loader)
+    {
+        LLMConditionalGeneration::load(loader);
 
         _chat_encoder.vit_loaded  = visual.load(loader);
         _chat_encoder.aud_loaded  = audio.load(loader);
@@ -2485,7 +2554,7 @@ namespace chatllm::gemma::v4
 
     void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
     {
-        BaseModelForConditionalGeneration::set_tokenizer(tokenizer);
+        LLMConditionalGeneration::set_tokenizer(tokenizer);
         if (visual.is_loaded())
         {
             _chat_encoder.vis_config = &visual.vis_config;
@@ -2498,23 +2567,16 @@ namespace chatllm::gemma::v4
 
     bool ConditionalGeneration::load_more(const json::JSON &config)
     {
-        BaseModelForConditionalGeneration::load_more(config);
+        LLMConditionalGeneration::load_more(config);
         bool r = visual.load_more(this->config.dtype, this->config.hidden_size, config, max_projected_tokens);
         if (!r) return r;
         r = audio.load_more(this->config.dtype, this->config.hidden_size, config, max_projected_tokens);
         return r;
     }
 
-    void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
-    {
-        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
-        if (nullptr == tok) return;
-        tok->fps    = utils::get_opt(args, "fps", tok->fps);
-    }
-
     int64_t ConditionalGeneration::get_param_num(bool effective_only) const
     {
-        int64_t r = BaseModelForConditionalGeneration::get_param_num(effective_only);
+        int64_t r = LLMConditionalGeneration::get_param_num(effective_only);
         if (visual.is_loaded())
             r += visual.get_model()->get_param_num(effective_only);
         if (audio.is_loaded())
@@ -2536,24 +2598,6 @@ namespace chatllm::gemma::v4
 
         size_t offset = emb->get_base_nbytes();
         Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
-    }
-
-    int ConditionalGeneration::tensor_num_of_layer(const Config &config, int layer_id) const
-    {
-        int r = 0;
-        if (config.layer_is_swa[layer_id])
-        {
-            r = 17;
-        }
-        else
-        {
-            r = 17;
-        }
-        if (config.num_experts > 0)
-        {
-            r += 6 + 3 + 0;
-        }
-        return r;
     }
 
     bool ConditionalGeneration::run_model(const int *input_ids, const int ids_count,
@@ -2641,6 +2685,8 @@ namespace chatllm::gemma::v4
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         const int patch_size = vis_config->patch_size;
 
+        CHATLLM_CHECK(!vis_config->use_bidirectional_attention) << "TODO: vis_config->use_bidirectional_attention";
+
         if ((w <= 0) || (h <= 0)) return;
 
         std::vector<float> scaled;
@@ -2662,8 +2708,6 @@ namespace chatllm::gemma::v4
 
     void ChatHistoryEncoder::append_image_piece(const ContentPiece &piece, std::vector<int> &ids) const
     {
-        CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
-
         int w, h;
         std::vector<uint8_t> pixels;
         const int patch_size = vis_config->patch_size;
@@ -2682,7 +2726,6 @@ namespace chatllm::gemma::v4
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
         const double fps = tok->fps;
 
-        CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
         auto video = new vision::VideoLoader(piece.content.c_str(), (float)fps, vis_config->video_max_num_frames);
         if (video->frames.size() < 1)
             return;
@@ -2779,7 +2822,371 @@ namespace chatllm::gemma::v4
     }
 }
 
+namespace chatllm::gemma::v4_unified
+{
+    typedef gemma::v4::Config Config;
+
+    struct MMConfig
+    {
+        // audio
+        int sampling_rate;
+        int audio_samples_per_token;
+
+        // vision
+        int mm_embed_dim;
+        int mm_posemb_size;
+        int model_patch_size;
+        int num_soft_tokens;
+        bool use_bidirectional_attention;
+
+        MMConfig()
+        {
+            memset(this, 0, sizeof(*this));
+        }
+    };
+
+    class ChatHistoryEncoder : public v4::ChatHistoryEncoder
+    {
+    protected:
+        void append_image_piece(std::vector<int> &ids, const int w, const int h, const std::vector<uint8_t> &pixels) const override;
+        void append_image_piece(const ContentPiece &piece, std::vector<int> &ids) const override;
+        void append_audio_piece(const ContentPiece &piece, std::vector<int> &ids) const override;
+    public:
+        const MMConfig *config = nullptr;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public v4::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config):
+            v4::Tokenizer(config)
+        {
+            set_chat_encoder(&_chat_encoder);
+        }
+    };
+
+    class VisionEmbedder : public Block
+    {
+    public:
+        VisionEmbedder(InitContext *ctx, int model_patch_size, int multimodal_hidden_size, int text_hidden_size, int mm_posemb_size);
+        ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *pixels, int grid_w, int grid_h);
+        int64_t get_param_num(bool effective_only) const override;
+        void load(const std::string &path, TensorLoader *loader) override;
+    public:
+        const int       patch_dim;
+        const int       multimodal_hidden_size;
+        const int       text_hidden_size;
+        LayerNorm       patch_ln1;
+        Linear          patch_dense;
+        LayerNorm       patch_ln2;
+        ggml::tensor   *pos_embedding_x;
+        ggml::tensor   *pos_embedding_y;
+        LayerNorm       pos_norm;
+        MultimodalEmbedder  multimodal_embedder;
+    };
+
+    VisionEmbedder::VisionEmbedder(InitContext *ctx, int model_patch_size, int multimodal_hidden_size, int text_hidden_size, int mm_posemb_size):
+        patch_dim(model_patch_size * model_patch_size * 3),
+        multimodal_hidden_size(multimodal_hidden_size),
+        text_hidden_size(text_hidden_size),
+        patch_ln1(ctx, patch_dim),
+        patch_dense(ctx, patch_dim, multimodal_hidden_size),
+        patch_ln2(ctx, multimodal_hidden_size),
+        pos_embedding_x(ggml::new_tensor_2d(ctx, ggml::type_fallback(ctx->dtype, multimodal_hidden_size), multimodal_hidden_size, mm_posemb_size)),
+        pos_embedding_y(ggml::new_tensor_2d(ctx, ggml::type_fallback(ctx->dtype, multimodal_hidden_size), multimodal_hidden_size, mm_posemb_size)),
+        pos_norm(ctx, multimodal_hidden_size),
+        multimodal_embedder(ctx, multimodal_hidden_size, text_hidden_size)
+    {
+    }
+
+    ggml::tensor *VisionEmbedder::forward(ComputeContext *ctx, ggml::tensor *pixels, int grid_w, int grid_h)
+    {
+        auto hidden_states = pixels;
+        hidden_states = patch_ln1  .forward(ctx, pixels);
+        hidden_states = patch_dense.forward(ctx, pixels);
+        hidden_states = patch_ln2  .forward(ctx, pixels);
+
+        auto pos_embs_x = ggml::view_2d(ctx, pos_embedding_x, ggml::get_dim(pos_embedding_x, 0), grid_w, ggml::row_size(pos_embedding_x), 0);
+        auto pos_embs_y = ggml::view_2d(ctx, pos_embedding_y, ggml::get_dim(pos_embedding_y, 0), grid_h, ggml::row_size(pos_embedding_y), 0);
+
+        pos_embs_x = ggml::repeat (ctx, pos_embs_x, ggml::get_dim(pos_embs_x, 0), ggml::get_dim(pos_embs_x, 1), grid_h);
+        pos_embs_y = ggml::reshape(ctx, pos_embs_y, ggml::get_dim(pos_embs_y, 0), 1,      ggml::get_dim(pos_embs_y, 1));
+        pos_embs_y = ggml::repeat (ctx, pos_embs_y, ggml::get_dim(pos_embs_y, 0), grid_w, ggml::get_dim(pos_embs_y, 1));
+
+        pos_embs_x = ggml::reshape(ctx, pos_embs_x, ggml::get_dim(pos_embs_x, 0), -1);
+        pos_embs_y = ggml::reshape(ctx, pos_embs_y, ggml::get_dim(pos_embs_y, 0), -1);
+
+        hidden_states = ggml::add(ctx, hidden_states, pos_embs_x);
+        hidden_states = ggml::add(ctx, hidden_states, pos_embs_y);
+
+        hidden_states = pos_norm.forward(ctx, hidden_states);
+
+        return hidden_states;
+    }
+
+    int64_t VisionEmbedder::get_param_num(bool effective_only) const
+    {
+        int64_t r = 0;
+        r += ggml::nelements(pos_embedding_x);
+        r += ggml::nelements(pos_embedding_y);
+        r += pos_norm.get_param_num(effective_only);
+        r += patch_ln1.get_param_num(effective_only);
+        r += patch_ln2.get_param_num(effective_only);
+        r += patch_dense.get_param_num(effective_only);
+        r += multimodal_embedder.get_param_num(effective_only);
+        return r;
+    }
+
+    void VisionEmbedder::load(const std::string &path, TensorLoader *loader)
+    {
+        loader->read_tensor(path + "pos_embedding_x", pos_embedding_x);
+        loader->read_tensor(path + "pos_embedding_y", pos_embedding_y);
+        pos_norm.load(path + "pos_norm.", loader);
+        patch_ln1.load(path + "patch_ln1.", loader);
+        patch_ln2.load(path + "patch_ln2.", loader);
+        patch_dense.load(path + "patch_dense.", loader);
+        multimodal_embedder.load(path, loader);
+    }
+
+    class ConditionalGeneration : public v4::LLMConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = (ModelType)MODEL_TYPE_GEMMA4_Unified);
+        void load(ModelLoader &loader) override;
+
+        bool load_more(const json::JSON &config) override;
+        void before_generate(const GenerationConfig &gen_config) override;
+
+        int64_t get_param_num(bool effective_only) const override;
+    protected:
+        bool project_audio(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &media, std::vector<uint8_t> &buf);
+        bool project_image(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &image, std::vector<uint8_t> &buf);
+
+    public:
+        MMConfig             mm_config;
+        TensorGraphEvaluator eval;
+        InitContext mm_ctx;   // for mm
+        std::unique_ptr<VisionEmbedder>             visual;
+        std::unique_ptr<MultimodalEmbedder>         audio;
+    };
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type):
+        LLMConditionalGeneration(config, runtime_config, type),
+        eval(runtime_config),
+        mm_ctx(eval.get_backend_context())
+    {
+        CHATLLM_CHECK(config.hidden_size_per_layer_input <= 0);
+    }
+
+    void ConditionalGeneration::load(ModelLoader &loader)
+    {
+        LLMConditionalGeneration::load(loader);
+
+        _chat_encoder.config = &mm_config;
+
+        if (visual.get())
+        {
+            loader.clear_tensor_name_translations();
+            loader.add_tensor_name_translations({
+                {"visual.p",   "model.vision_embedder.p"},
+            });
+
+            loader.push_allocator_manager(eval.get_layer_allocators());
+            visual->load("visual.", &loader);
+            loader.pop_allocator_manager();
+
+            _chat_encoder.vit_loaded = true;
+        }
+
+        if (audio.get())
+        {
+            loader.push_allocator_manager(eval.get_layer_allocators());
+            audio->load("audio.", &loader);
+            loader.pop_allocator_manager();
+            _chat_encoder.aud_loaded = true;
+        }
+    }
+
+    bool ConditionalGeneration::load_more(const json::JSON &config)
+    {
+        LLMConditionalGeneration::load_more(config);
+
+        {
+            const auto vis_cfg = config["config.json"]["text_config"];
+            if (!vis_cfg.IsObject()) return false;
+            mm_config.use_bidirectional_attention = vis_cfg["use_bidirectional_attention"].ToString() == "vision";
+        }
+
+        {
+            const auto _cfg = config["config.json"]["audio_config"];
+            if (!_cfg.IsObject()) return false;
+
+            CHATLLM_CHECK(_cfg["model_type"].ToString() == "gemma4_unified_audio");
+
+            const auto _aud_cfg = config["processor_config.json"]["feature_extractor"];
+            if (!_aud_cfg.IsObject()) return false;
+
+            mm_config.audio_samples_per_token   = (int)_aud_cfg["audio_samples_per_token"].ToInt();
+            mm_config.sampling_rate             = (int)_aud_cfg["sampling_rate"].ToInt();
+        }
+
+        {
+            const auto _cfg = config["config.json"]["vision_config"];
+            if (!_cfg.IsObject()) return false;
+
+            CHATLLM_CHECK(_cfg["model_type"].ToString() == "gemma4_unified_vision");
+
+            mm_config.mm_embed_dim              = (int)_cfg["mm_embed_dim"].ToInt();
+            mm_config.mm_posemb_size            = (int)_cfg["mm_posemb_size"].ToInt();
+            mm_config.model_patch_size          = (int)_cfg["model_patch_size"].ToInt();
+            mm_config.num_soft_tokens           = (int)_cfg["num_soft_tokens"].ToInt();
+        }
+
+        if ((mm_config.sampling_rate > 0) && (mm_config.mm_embed_dim > 0))
+        {
+            const size_t tensor_ovhd = ggml_tensor_overhead();
+            const size_t num_tensors = 12;
+            const size_t ctx_size = num_tensors * tensor_ovhd;
+            mm_ctx.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+            mm_ctx.dtype = w_ctx_.dtype;
+
+            audio.reset(new MultimodalEmbedder(&mm_ctx, mm_config.audio_samples_per_token, this->config.hidden_size));
+            visual.reset(new VisionEmbedder(&mm_ctx, mm_config.model_patch_size, mm_config.mm_embed_dim, this->config.hidden_size, mm_config.mm_posemb_size));
+
+            mm_ctx.check_used_mem_size(true);
+        }
+
+        return true;
+    }
+
+    int64_t ConditionalGeneration::get_param_num(bool effective_only) const
+    {
+        int64_t r = LLMConditionalGeneration::get_param_num(effective_only);
+        if (visual.get())
+            r += visual->get_param_num(effective_only);
+        if (audio.get())
+            r += audio->get_param_num(effective_only);
+        return r;
+    }
+
+    bool ConditionalGeneration::project_audio(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &media, std::vector<uint8_t> &buf)
+    {
+        CHATLLM_CHECK(audio.get());
+
+        ggml::tensor *media_emb = nullptr;
+        const auto make_graph = [this, &media_emb, &media](ComputeContext *ctx) -> ggml::tensor * {
+            media_emb = ggml::new_tensor_2d(ctx, ggml::type::GGML_TYPE_F32, media.width, media.emb_vec_number);
+            auto r = audio->forward(ctx, media_emb);
+            return r;
+        };
+        const auto write_input_data = [this, &media_emb, &media](ComputeContext *ctx) {
+            Backend::write_tensor_data(media_emb, media.data.data(), 0, media.data.size() * sizeof(media.data[0]));
+        };
+
+        std::vector<int64_t> shape;
+        eval.evaluate(gen_config, make_graph, write_input_data, dtype, shape, buf);
+        CHATLLM_CHECK((int)shape[1] == media.emb_vec_number);
+
+        return true;
+    }
+
+    bool ConditionalGeneration::project_image(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, const BaseTokenizer::MediaAsEmbeddingVector &image, std::vector<uint8_t> &buf)
+    {
+        return false;
+    }
+
+    void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
+    {
+        std::vector<uint8_t> buf;
+
+        CHATLLM_CHECK(tokenizer->get_image_total_emb_vectors() < max_projected_tokens) << "too many projected tokens.";
+
+        auto emb = dynamic_cast<Embedding *>(dynamic_cast<v4::ModelClass *>(transformer)->word_embeddings);
+        auto dtype = ggml::type_of(emb->weight);
+
+        for (auto &media : tokenizer->media_emb)
+        {
+            if (media_type_image == media.type)
+                project_image(gen_config, tokenizer, dtype, media, buf);
+            else if (media_type_audio == media.type)
+                project_audio(gen_config, tokenizer, dtype, media, buf);
+        }
+
+        if (buf.size() < 1) return;
+
+        size_t offset = emb->get_base_nbytes();
+        Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
+    }
+
+    void ChatHistoryEncoder::append_image_piece(std::vector<int> &ids, const int w, const int h, const std::vector<uint8_t> &pixels) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        const int patch_size = config->model_patch_size;
+
+        CHATLLM_CHECK(!config->use_bidirectional_attention) << "TODO: vis_config->use_bidirectional_attention";
+
+        if ((w <= 0) || (h <= 0)) return;
+
+        std::vector<float> scaled;
+        vision::image_rescale(pixels, scaled);
+
+        tok->media_emb.push_back({.grid_width = w / patch_size, .grid_height = h / patch_size, .patch_size = patch_size, .data = {}});
+
+        auto &image = tok->media_emb.back();
+        image.type  = media_type_image;
+
+        vision::image_arrange(scaled, w, patch_size, image.data, vision::PatchesFormat::PatchesLeftRightDown_PixelsLeftRightDown_ChannelsRGB);
+
+        image.emb_vec_number = image.grid_width * image.grid_height;
+
+        const int id_start = tok->get_image_total_emb_vectors() - image.emb_vec_number + tok->vocab_size;
+        tok->inject_media("image", ids, id_start, image.emb_vec_number);
+    }
+
+    void ChatHistoryEncoder::append_image_piece(const ContentPiece &piece, std::vector<int> &ids) const
+    {
+        CHATLLM_CHECK(vit_loaded) << "Vision model not loaded";
+
+        int w, h;
+        std::vector<uint8_t> pixels;
+        const int patch_size = config->model_patch_size;
+
+        vision::MaxPatchNum     param1(config->mm_posemb_size);
+
+        vision::image_load(piece.content.c_str(), pixels, w, h, patch_size, vision::PaddingMode::Black);
+        if ((w <= 0) || (h <= 0)) return;
+
+        append_image_piece(ids, w, h, pixels);
+    }
+
+    void ChatHistoryEncoder::append_audio_piece(const ContentPiece &piece, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        CHATLLM_CHECK(aud_loaded) << "Audio model not loaded";
+
+        std::vector<float>          pcm_samples;
+
+        if (!audio::load(piece.content.c_str(), pcm_samples, config->sampling_rate)) return;
+
+        const int n = (int)((pcm_samples.size() + config->audio_samples_per_token - 1) / config->audio_samples_per_token);
+        pcm_samples.resize((size_t)n * config->audio_samples_per_token);
+
+        tok->media_emb.push_back({ .width = config->audio_samples_per_token, .emb_vec_number = n, .data = {}});
+
+        auto &media = tok->media_emb.back();
+        media.type  = media_type_audio;
+        media.data = std::move(pcm_samples);
+
+        const int id_start = tok->get_image_total_emb_vectors() - media.emb_vec_number + tok->vocab_size;
+        tok->inject_media("audio", ids, id_start, media.emb_vec_number);
+    }
+}
+
 namespace chatllm
 {
-    REGISTER_MODEL_LOADER(GEMMA4,                gemma::v4, 1);
+    REGISTER_MODEL_LOADER(GEMMA4,                gemma::v4,         1);
+    REGISTER_MODEL_LOADER(GEMMA4_Unified,        gemma::v4_unified, 1);
 }

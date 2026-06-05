@@ -282,6 +282,7 @@ class ModelType(Enum):
     PenguinVL               = ModelTypeTagChatImageVideoIn + 0x0000221
 
     Gemma4                  = ModelTypeTagChatImageVideoAudioIn + 0x0000001
+    Gemma4Unified           = ModelTypeTagChatImageVideoAudioIn + 0x0000002
 
     MiniCPM_O               = ModelTypeTagChatImageVideoAudioInAudioOut + 0x0000001
 
@@ -6813,6 +6814,8 @@ class Gemma4Converter(BaseConverter):
             elif kk in Gemma4Converter.name_mapping:
                 kk = Gemma4Converter.name_mapping[kk]
                 new_dict[kk] = t
+            else:
+                new_dict[kk] = t
 
         return new_dict
 
@@ -7001,7 +7004,7 @@ class Gemma4Converter(BaseConverter):
         return weight_names
 
     @staticmethod
-    def get_weight_names(config):
+    def get_llm_weight_names():
         weight_names = ["model.embed_tokens.weight"]
         if Gemma4Converter.txt_config.hidden_size_per_layer_input > 0:
             weight_names += [
@@ -7065,9 +7068,65 @@ class Gemma4Converter(BaseConverter):
             "model.norm.weight",
         ]
 
+        return weight_names
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = Gemma4Converter.get_llm_weight_names()
+
         weight_names += Gemma4Converter.get_vis_weight_names(AttributeDict(config.vision_config))
         if config.audio_config is not None:
             weight_names += Gemma4Converter.get_aud_weight_names(AttributeDict(config.audio_config))
+
+        return weight_names
+
+class Gemma4UnifiedConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Gemma4Unified
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+
+        new_dict = {}
+        for k in state_dict:
+            kk: str = k
+            t: torch.Tensor = state_dict[kk]
+            if kk.startswith('model.language_model.'):
+                kk = kk.replace('model.language_model.', 'model.')
+                t = Gemma4Converter.pp(Gemma4Converter.txt_config, kk, t)
+                new_dict[kk] = t
+            elif kk == 'model.vision_embedder.pos_embedding':
+                new_dict[kk + '_x'] = t[:, 0, :]
+                new_dict[kk + '_y'] = t[:, 1, :]
+            elif kk in Gemma4Converter.name_mapping:
+                kk = Gemma4Converter.name_mapping[kk]
+                new_dict[kk] = t
+            else:
+                new_dict[kk] = t
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        Gemma4Converter.dump_config(f, config, ggml_type)
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = Gemma4Converter.get_llm_weight_names()
+
+        weight_names += [
+            "audio.embedding_projection.weight",
+            "visual.embedding_projection.weight",
+            "model.vision_embedder.pos_embedding_x",
+            "model.vision_embedder.pos_embedding_y",
+            "model.vision_embedder.patch_dense.bias",
+            "model.vision_embedder.patch_dense.weight",
+            "model.vision_embedder.patch_ln1.bias",
+            "model.vision_embedder.patch_ln1.weight",
+            "model.vision_embedder.patch_ln2.bias",
+            "model.vision_embedder.patch_ln2.weight",
+            "model.vision_embedder.pos_norm.bias",
+            "model.vision_embedder.pos_norm.weight",
+        ]
 
         return weight_names
 
@@ -10531,6 +10590,8 @@ def main():
         Gemma3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Gemma4ForConditionalGeneration':
         Gemma4Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Gemma4UnifiedForConditionalGeneration':
+        Gemma4UnifiedConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'CohereForCausalLM':
         CohereCommandConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'Cohere2ForCausalLM':
