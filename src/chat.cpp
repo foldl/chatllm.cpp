@@ -88,6 +88,12 @@ namespace chatllm
 
         push_back("", ContentPiece::Type::Text);
 
+        #define handle_tag(TAG, tag)        \
+            if (inner.starts_with(TAG))     \
+            {                               \
+                push_back(inner.substr(std::string(TAG).size()), tag); \
+            }
+
         size_t start = 0;
         while (start < content.size())
         {
@@ -113,38 +119,35 @@ namespace chatllm
             std::string inner = content.substr(pos + owner->get_opening().size(), end - (pos + owner->get_opening().size()));
             start = end + owner->get_closing().size();
 
-            pos = inner.find(':');
-            if (pos != std::string::npos)
+            handle_tag("image:", ContentPiece::Type::Image)
+            else handle_tag("video:", ContentPiece::Type::Video)
+            else handle_tag("audio:", ContentPiece::Type::Audio)
+            else
             {
-                auto tag  = inner.substr(0, pos);
-                auto path = inner.substr(pos + 1);
-                // remove quotes
-                if (path.size() >= 2)
+                // auto detect some file types
+                static const std::map<std::string, ContentPiece::Type> mapping({
+                    {".bmp",    ContentPiece::Type::Image},
+                    {".jpeg",   ContentPiece::Type::Image},
+                    {".jpg",    ContentPiece::Type::Image},
+                    {".png",    ContentPiece::Type::Image},
+                    {".mp3",    ContentPiece::Type::Audio},
+                    {".wav",    ContentPiece::Type::Audio},
+                    {".mp4",    ContentPiece::Type::Video},
+                });
+                auto ss = inner;
+                bool found = false;
+                std::transform(ss.begin(), ss.end(), ss.begin(), [](unsigned char c) { return std::tolower(c); });
+                for (auto k : mapping)
                 {
-                    if ((path[0] == '"') && (path.back() == '"'))
+                    if (ss.ends_with(k.first))
                     {
-                        path = path.substr(1, path.size() - 2);
+                        found = true;
+                        push_back(inner, k.second);
+                        break;
                     }
                 }
 
-                if (path.size() == 0) continue;
-
-                if (tag == "image")
-                {
-                    push_back(path, ContentPiece::Type::Image);
-                }
-                else if (tag == "video")
-                {
-                    push_back(path, ContentPiece::Type::Video);
-                }
-                else if (tag == "audio")
-                {
-                    push_back(path, ContentPiece::Type::Audio);
-                }
-                else
-                {
-                    CHATLLM_CHECK(false) << "Unknown multi-media tag: " << tag;
-                }
+                CHATLLM_CHECK(found) << "can't detect multi-media tag: " << inner;
             }
         }
     }

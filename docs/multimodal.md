@@ -27,7 +27,7 @@ Then an `image`, `audio`, or `video` can be embedded in prompt like this:
 {{tag:/path/to/an/image/file}}
 ```
 
-where `tag` is `image`, `audio`, or `video` respectively.
+where `tag` is `image`, `audio`, or `video` respectively. For some well known file types (`jpg`, `mp3`, etc), `tag:` can be omitted.
 
 Take Fuyu model as an example:
 
