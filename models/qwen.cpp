@@ -1638,9 +1638,9 @@ namespace chatllm::qwen::v2_5_vl
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
         : TensorPosHelperPrelude(new TensorPosHelper3D(config.max_length, config.vocab_size)),
-          ExtendEmbedding(),
+          ExtendEmbedding(2048, 10),
           v2::ConditionalGeneration(config, runtime_config, ModelType::MODEL_TYPE_QWEN2_5_VL, config.tie_word_embeddings != 0),
-          visual(runtime_config, pad_arg->get()),
+          visual(runtime_config, pad_arg->get() / image_num),
           config(config),
           token_time(0),
           pos_helper((TensorPosHelper3D *)TensorPosHelperParam::get(0))
@@ -2560,11 +2560,11 @@ namespace chatllm::qwen::v3_vl
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, const bool skip_lm_head, int extra_tensors):
         TensorPosHelperPrelude(new v2_5_vl::TensorPosHelper3D(config.max_length, config.vocab_size)),
-        ExtendEmbedding(),
+        ExtendEmbedding(2048, 10),
         v3::ConditionalGeneration(config, runtime_config, type, skip_lm_head, extra_tensors),
         config(config),
         token_time(0),
-        visual(runtime_config, pad_arg->get()),
+        visual(runtime_config, pad_arg->get() / image_num),
         pos_helper((v2_5_vl::TensorPosHelper3D *)TensorPosHelperParam::get(0)),
         deepstack_ids_tensor(nullptr)
     {

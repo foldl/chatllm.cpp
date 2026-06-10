@@ -1672,7 +1672,7 @@ namespace chatllm::qwen::v3_tts
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
             ModelType type):
-        v2_5_vl::ExtendEmbedding(10000),
+        v2_5_vl::ExtendEmbedding(10000, 1),
         v3::ConditionalGeneration(config, runtime_config, type, true, 1, config.talker_vocab_size, config.hidden_size),
         talker_vocab_size(config.talker_vocab_size),
         talker(runtime_config)

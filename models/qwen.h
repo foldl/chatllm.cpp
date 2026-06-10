@@ -728,8 +728,13 @@ namespace chatllm::qwen
         class ExtendEmbedding
         {
         public:
-            ExtendEmbedding(int n = 2048 * 10) : pad_arg(new BlockParams::PadEmbedding(n, n)) {}
+            ExtendEmbedding(int per_image, int image_num) :
+                per_image(per_image), image_num(image_num),
+                pad_arg(new BlockParams::PadEmbedding(per_image * image_num, per_image * image_num))
+            {}
         public:
+            const int per_image;
+            const int image_num;
             BlockParams::PadEmbedding *pad_arg = nullptr;
         };
     }
