@@ -227,6 +227,7 @@ namespace chatllm
         MODEL_TYPE_KIMI_VL          = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x00100,
         MODEL_TYPE_SMOL_VLM         = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x00200,
         MODEL_TYPE_YOUTU_VL         = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x00220,
+        MODEL_TYPE_LocateAnything   = MODEL_TYPE_TAG_ChatImageInVideoIn + 0x00230,
 
         MODEL_TYPE_GEMMA4           = MODEL_TYPE_TAG_ChatImageInVideoInAudioIn + 0x00001,
 

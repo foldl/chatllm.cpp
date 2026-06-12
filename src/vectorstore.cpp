@@ -538,6 +538,13 @@ namespace utils
         return true;
     }
 
+    std::string index2words(int value)
+    {
+        const static std::vector<std::string> names = {"first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"};
+        CHATLLM_CHECK((0 <= value) && (value < names.size()));
+        return names[value];
+    }
+
     std::string num2words(int value)
     {
         if (value < 0)

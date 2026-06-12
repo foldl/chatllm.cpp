@@ -280,6 +280,7 @@ class ModelType(Enum):
     SmolVLM                 = ModelTypeTagChatImageVideoIn + 0x0000200
     YoutuVL                 = ModelTypeTagChatImageVideoIn + 0x0000220
     PenguinVL               = ModelTypeTagChatImageVideoIn + 0x0000221
+    LocateAnything          = ModelTypeTagChatImageVideoIn + 0x0000230
 
     Gemma4                  = ModelTypeTagChatImageVideoAudioIn + 0x0000001
     Gemma4Unified           = ModelTypeTagChatImageVideoAudioIn + 0x0000002
@@ -1088,7 +1089,7 @@ class FastTokenizerVocab:
         return f"<FastTokenizerVocab with {self.vocab_size} tokens>"
 
 class GenericBPETokenizerVocab:
-    def __init__(self, vocab_fn: Path, merges_fn: Path) -> None:
+    def __init__(self, vocab_fn: Path, merges_fn: Path, added_tokens_fn: Path) -> None:
 
         all_tokens: Dict[str, int] = {}
 
@@ -1097,6 +1098,12 @@ class GenericBPETokenizerVocab:
         for tok in vocab_dict.keys():
             tokidx = vocab_dict[tok]
             all_tokens[tok] = tokidx
+
+        if added_tokens_fn.exists():
+            added = json.load(open(added_tokens_fn, encoding='utf-8'))
+            for tok in added.keys():
+                tokidx = added[tok]
+                all_tokens[tok] = tokidx
 
         all_ids = sorted(list(all_tokens.values()))
 
@@ -8275,10 +8282,9 @@ class KimiVLConverter(BaseConverter):
         DeepSeekV3Converter.dump_config(f, KimiVLConverter.txt_config, ggml_type)
 
     @staticmethod
-    def get_weight_names(config):
-        weight_names = DeepSeekV3Converter.get_weight_names(KimiVLConverter.txt_config)
-
-        for i in range(config.vision_config['num_hidden_layers']):
+    def get_vit_weight_names(num_hidden_layers):
+        weight_names = []
+        for i in range(num_hidden_layers):
             weight_names += [
                 f"vision_model.encoder.blocks.{i}.attn.q_proj.bias",
                 f"vision_model.encoder.blocks.{i}.attn.q_proj.weight",
@@ -8297,6 +8303,13 @@ class KimiVLConverter(BaseConverter):
                 f"vision_model.encoder.blocks.{i}.norm1.bias",
                 f"vision_model.encoder.blocks.{i}.norm1.weight",
             ]
+        return weight_names
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = DeepSeekV3Converter.get_weight_names(KimiVLConverter.txt_config)
+
+        weight_names += KimiVLConverter.get_vit_weight_names(config.vision_config['num_hidden_layers'])
 
         weight_names += [
             "multi_modal_projector.linear_1.bias",
@@ -8305,6 +8318,66 @@ class KimiVLConverter(BaseConverter):
             "multi_modal_projector.linear_2.weight",
             "multi_modal_projector.pre_norm.bias",
             "multi_modal_projector.pre_norm.weight",
+            "vision_model.final_layernorm.bias",
+            "vision_model.final_layernorm.weight",
+            "vision_model.patch_embed.pos_emb.weight",
+            "vision_model.patch_embed.proj.bias",
+            "vision_model.patch_embed.proj.weight",
+        ]
+
+        return weight_names
+
+class LocateAnythingConverter(BaseConverter):
+    MODEL_TYPE = ModelType.LocateAnything
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+
+            if name.startswith('language_model.'):
+                r[name.replace('language_model.', '')] = tensor
+            elif name.startswith('vision_model.encoder.'):
+                if '.wo.' in name:
+                    r[name.replace('.wo.', '.attn.o_proj.')] = tensor
+                elif name.endswith('.wqkv.bias') or name.endswith('.wqkv.weight'):
+                    #print(f'shape: {name} = {tensor.shape}')
+                    num_heads = config.vision_config['hidden_size']
+                    q, k, v = tensor.split([num_heads, num_heads, num_heads], dim=0)
+                    r[name.replace('.wqkv.', '.attn.q_proj.')] = q
+                    r[name.replace('.wqkv.', '.attn.k_proj.')] = k
+                    r[name.replace('.wqkv.', '.attn.v_proj.')] = v
+                elif '.final_layernorm.' in name:
+                    r[name.replace('encoder.', '')] = tensor
+                else:
+                    r[name] = tensor
+            elif name.startswith('vision_tower.'):
+                r[name.replace('vision_tower.', 'vision_model.')] = tensor
+            else:
+                r[name] = tensor
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        LocateAnythingConverter.txt_config = AttributeDict(config.text_config)
+        QWen2Converter.dump_config(f, LocateAnythingConverter.txt_config, ggml_type)
+        f.write(struct.pack("<I", 1 if LocateAnythingConverter.txt_config.tie_word_embeddings else 0))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = QWen2Converter.get_weight_names(LocateAnythingConverter.txt_config)
+
+        weight_names += KimiVLConverter.get_vit_weight_names(config.vision_config['num_hidden_layers'])
+
+        weight_names += [
+            "mlp1.0.bias",
+            "mlp1.0.weight",
+            "mlp1.1.bias",
+            "mlp1.1.weight",
+            "mlp1.3.bias",
+            "mlp1.3.weight",
             "vision_model.final_layernorm.bias",
             "vision_model.final_layernorm.weight",
             "vision_model.patch_embed.pos_emb.weight",
@@ -10155,7 +10228,7 @@ def load_vocab(path: Path, skip_def_model_file: bool = False) -> Any:
         path8 = path / 'merges.txt'
         if path6.exists():
              if path7.exists() and path8.exists():
-                 return GenericBPETokenizerVocab(path7, path8)
+                 return GenericBPETokenizerVocab(path7, path8, path / 'added_tokens.json')
 
         path9 = path / 'vocab' / "360.tiktoken"
         if path9.exists():
@@ -10525,6 +10598,8 @@ def main():
         QWen3_5Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'KimiVLForConditionalGeneration':
         KimiVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'LocateAnythingForConditionalGeneration':
+        LocateAnythingConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen':
         QWen2TieConverter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen
         QWen2TieConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

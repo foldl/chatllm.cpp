@@ -81,6 +81,7 @@ namespace utils
     bool save_as_bin_file(const void *data, size_t size, const char *filename);
     bool save_array(const float *data, size_t size, const char *filename);
 
+    std::string index2words(int value);
     std::string num2words(int value);
 
     std::string sec2hms(double seconds, bool hour_2digits = false, bool show_us = false, bool show_ms = false, char ms_delimiter = '.');
