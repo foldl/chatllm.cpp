@@ -9,6 +9,7 @@ namespace chatllm
 {
     const int MODEL_TYPE_WEDLM            = 0x1f03;
     const int MODEL_TYPE_YOUTU            = 0x1f04;
+    const int MODEL_TYPE_HUNYUAN_V3       = 0x1f05;
     const int MODEL_TYPE_PENGUIN_VL       = MODEL_TYPE_YOUTU_VL + 1;
 }
 
@@ -2101,6 +2102,145 @@ namespace chatllm::hunyuan::penguin::vl
     }
 }
 
+namespace chatllm::hunyuan::v3
+{
+    struct Config : public BaseConfig
+    {
+        int num_key_value_heads;
+        int head_dim;
+
+        int first_k_dense_replace;
+        int num_experts;
+        int num_shared_experts;
+        int expert_hidden_dim;
+        int moe_intermediate_size;
+        int num_experts_per_tok;
+
+        int tie_word_embeddings;
+
+        float rope_theta;
+        float router_scaling_factor;
+    };
+
+    class Tokenizer : public dense_v1::Tokenizer
+    {
+    public:
+        using dense_v1::Tokenizer::Tokenizer;
+        size_t load(tokenizer::DataReader *buffer, int n_vocab) override
+        {
+            auto r = dense_v1::Tokenizer::load(buffer, n_vocab);
+            eos_token_id            = tp->PieceToId("<eos:6124c78e>");
+            return r;
+        }
+    };
+
+    class ConditionalGeneration : public BaseModelForConditionalGeneration
+    {
+    public:
+        typedef HeterogeneousModel ModelClass;
+    public:
+        ConditionalGeneration() = default;
+
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = (ModelType)MODEL_TYPE_HUNYUAN_V3);
+
+        void load(ModelLoader &loader) override;
+
+    private:
+        Block *create_layer(InitContext *ctx, int layer_index);
+    public:
+        const Config config;
+    };
+
+    template <int NUM_EXPERTS, int EXPERTS_PER_TOK> class HunyuanSparseMoE : public BaseSparseMLP
+    {
+    public:
+        HunyuanSparseMoE(InitContext *ctx, int hidden_size, int intermediate_size)
+            : BaseSparseMLP(ctx, hidden_size, intermediate_size, NUM_EXPERTS, EXPERTS_PER_TOK, ActFunc::SILU, true)
+        {
+            score_func = ScoreFunc::Sigmoid;
+            norm_topk_prob = true;
+            always_scaling = true;
+        }
+    };
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
+        : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 4),
+        config(config)
+    {
+        const size_t tensor_ovhd = ggml_tensor_overhead();
+        const size_t num_tensors = (config.tie_word_embeddings ? 2 : 3)
+                                + config.first_k_dense_replace * 14
+                                + (config.num_hidden_layers - config.first_k_dense_replace) * (15 + 4);
+        const size_t ctx_size = num_tensors * tensor_ovhd;
+        w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+        w_ctx_.dtype = config.dtype;
+
+        transformer = new ModelClass(&w_ctx_, config.num_hidden_layers, config.hidden_size,
+            create_embedding<Embedding>(&w_ctx_, config.vocab_size, config.hidden_size),
+            create_final_norm<RMSNorm>(&w_ctx_, config),
+            config.tie_word_embeddings ? (Block *)nullptr : create_lm_head(&w_ctx_, config, false),
+            [&](InitContext *ctx, int layer_index) {
+                return create_layer(ctx, layer_index);
+            });
+
+        w_ctx_.check_used_mem_size(true);
+    }
+
+    Block *ConditionalGeneration::create_layer(InitContext *ctx, int layer_index)
+    {
+        if (layer_index < config.first_k_dense_replace)
+        {
+            auto layer = new dense::HunyuanBlock(ctx, config.hidden_size, config.num_attention_heads,
+                config.intermediate_size, config.num_key_value_heads, config.head_dim, config.max_length);
+            layer->attention.freq_base = config.rope_theta;
+            return layer;
+        }
+
+        switch (config.num_experts)
+        {
+        case 128:
+            switch (config.num_experts_per_tok)
+            {
+            case 8:
+                {
+                    typedef CombinedMLP<HunyuanSparseMoE<128, 8>, SiLUMLP> HunyuanMoEMLP;
+                    typedef moe_v1::HunyuanMoEBlock<HunyuanMoEMLP> MoEBlock;
+
+                    auto layer = new MoEBlock(ctx, config.hidden_size, config.num_attention_heads, config.intermediate_size,
+                        config.moe_intermediate_size, config.moe_intermediate_size * config.num_shared_experts,
+                        config.num_key_value_heads, config.head_dim,
+                        config.max_length);
+                    layer->attention.freq_base = config.rope_theta;
+                    layer->mlp.mlp1.routed_scaling_factor = config.router_scaling_factor;
+                    return layer;
+                }
+                break;
+
+            default:
+                break;
+            }
+            break;
+
+        default:
+            break;
+        }
+
+        CHATLLM_CHECK(false) << "unsupport MoE param";
+    }
+
+    void ConditionalGeneration::load(ModelLoader &loader)
+    {
+        loader.add_tensor_name_translations({
+            {".mlp.mlp1.gate_score_correction_bias",            ".mlp.expert_bias"},
+            {".mlp.mlp1.gate.",            ".mlp.gate."},
+            {".mlp.mlp1.experts.",         ".mlp.experts."},
+            {".mlp2.",                     ".shared_expert."},
+        });
+
+        BaseModelForConditionalGeneration::load(loader);
+    }
+}
+
 namespace chatllm
 {
     REGISTER_MODEL_LOADER(HUNYUAN_DENSE,         hunyuan::dense, 1);
@@ -2110,4 +2250,5 @@ namespace chatllm
     REGISTER_MODEL_LOADER(YOUTU,                 hunyuan::youtu::llm, 1);
     REGISTER_MODEL_LOADER(YOUTU_VL,              hunyuan::youtu::vl, 1);
     REGISTER_MODEL_LOADER(PENGUIN_VL,            hunyuan::penguin::vl, 1);
+    REGISTER_MODEL_LOADER(HUNYUAN_V3,            hunyuan::v3, 1);
 }

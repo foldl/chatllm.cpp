@@ -205,6 +205,7 @@ class ModelType(Enum):
     HunYuanDenseV1  = 0x1f02
     WeDLM           = 0x1f03
     Youtu           = 0x1f04
+    HunYuanV3       = 0x1f05
 
     MoonLight       = 0x2000
 
@@ -479,8 +480,6 @@ def pack_q4k_scales(ls: torch.Tensor, lm: torch.Tensor) -> torch.Tensor:
 
     return out
 
-
-@torch.compile(fullgraph=True)
 def quantize_q4_k(tensor: torch.Tensor, GGML_QK_K: int) -> torch.CharTensor:
     """
     Optimized Q4_K quantization, byte‑identical to the original.
@@ -491,58 +490,74 @@ def quantize_q4_k(tensor: torch.Tensor, GGML_QK_K: int) -> torch.CharTensor:
     num_blocks = tensor.shape[0]
     subblocks_per_block = GGML_QK_K // 32   # = 8 for QK_K=256
 
-    # Reshape to (num_blocks, 8, 32)
-    subblocks = tensor.view(num_blocks, subblocks_per_block, 32)
-    total_subblocks = num_blocks * subblocks_per_block
-    subblock_data = subblocks.reshape(total_subblocks, 32)
+    block_chunk_size: int = 8192 * 32
 
-    # Batched quantization: returns scale (positive), offset (positive), L (float indices)
-    scale_sub, offset_sub, L_sub = batched_qkx2_quants(
-        subblock_data, nmax=15.0, rmin=-1.0, rdelta=0.1, nstep=20, use_mad=False
-    )
+    # Pre‑allocate list to hold per‑block results (as uint8 tensors)
+    block_results = []
 
-    # Reshape back to block structure
-    scale_sub = scale_sub.view(num_blocks, subblocks_per_block)   # (B,8)
-    offset_sub = offset_sub.view(num_blocks, subblocks_per_block) # (B,8)
-    L_sub = L_sub.view(num_blocks, subblocks_per_block, 32)
+    for start_block in range(0, num_blocks, block_chunk_size):
+        end_block = min(start_block + block_chunk_size, num_blocks)
+        chunk_blocks = end_block - start_block
 
-    # Per‑block maxima
-    max_scale = torch.max(scale_sub, dim=1)[0]   # (B,)
-    max_offset = torch.max(offset_sub, dim=1)[0] # (B,)
+        # Extract subblocks for this chunk: shape (chunk_blocks, 8, 32)
+        chunk_subblocks = tensor[start_block:end_block].view(chunk_blocks, subblocks_per_block, 32)
+        total_subblocks = chunk_blocks * subblocks_per_block
+        subblock_data = chunk_subblocks.reshape(total_subblocks, 32)
 
-    # Compute integer scalings (0..63)
-    inv_scale = torch.where(max_scale > 0, 63.0 / max_scale, torch.zeros_like(max_scale))
-    inv_offset = torch.where(max_offset > 0, 64.0 / max_offset, torch.zeros_like(max_offset))
+        # Quantize all subblocks in this chunk
+        scale_sub, offset_sub, L_sub = batched_qkx2_quants(
+            subblock_data, nmax=15.0, rmin=-1.0, rdelta=0.1, nstep=20, use_mad=False
+        )
 
-    ls = (inv_scale[:, None] * scale_sub).round().clamp(max=63).to(torch.uint8)
-    lm = (inv_offset[:, None] * offset_sub).round().clamp(max=63).to(torch.uint8)
+        # Reshape back to block structure
+        scale_sub = scale_sub.view(chunk_blocks, subblocks_per_block)
+        offset_sub = offset_sub.view(chunk_blocks, subblocks_per_block)
+        L_sub = L_sub.view(chunk_blocks, subblocks_per_block, 32)
 
-    # Pack scales into 12 bytes per block
-    scales_packed = pack_q4k_scales(ls, lm)   # (B,12) uint8
+        # Per‑block maxima
+        max_scale = torch.max(scale_sub, dim=1)[0]
+        max_offset = torch.max(offset_sub, dim=1)[0]
 
-    # Dequantization factors
-    d = (max_scale / 63.0).half()
-    dmin = (max_offset / 63.0).half()
+        # Integer scaling factors (0..63)
+        inv_scale = torch.where(max_scale > 0, 63.0 / max_scale, torch.zeros_like(max_scale))
+        inv_offset = torch.where(max_offset > 0, 64.0 / max_offset, torch.zeros_like(max_offset))
 
-    # Reconstruct per‑subblock scale and offset for final quantization
-    rec_scale = (ls.float() * d[:, None]).view(num_blocks, subblocks_per_block, 1)
-    rec_offset = (lm.float() * dmin[:, None]).view(num_blocks, subblocks_per_block, 1)
+        ls = (inv_scale[:, None] * scale_sub).round().clamp(max=63).to(torch.uint8)
+        lm = (inv_offset[:, None] * offset_sub).round().clamp(max=63).to(torch.uint8)
 
-    # Final 4‑bit quantization (original formula)
-    L_quant = ((1.0 / rec_scale) * (subblocks + rec_offset)).round().clamp(0, 15).to(torch.uint8)
+        # Pack scales
+        scales_packed = pack_q4k_scales(ls, lm)   # (chunk_blocks, 12) uint8
 
-    # Pack two 4‑bit values into one byte
-    L_quant = L_quant.view(num_blocks, subblocks_per_block // 2, 2, 32)
-    L_packed = L_quant[:, :, 0, :] | (L_quant[:, :, 1, :] << 4)   # (B,4,32) -> (B,128)
-    L_packed = L_packed.view(num_blocks, -1)
+        # d and dmin as half
+        d = (max_scale / 63.0).half()
+        dmin = (max_offset / 63.0).half()
 
-    # Assemble final output: d (2 bytes), dmin (2 bytes), scales (12), L (128) = 144 bytes/block
-    d_bytes = d.view(torch.uint8).view(num_blocks, 2)
-    dmin_bytes = dmin.view(torch.uint8).view(num_blocks, 2)
+        # Reconstruct per‑subblock scale and offset for final quantization
+        rec_scale = (ls.float() * d[:, None]).view(chunk_blocks, subblocks_per_block, 1)
+        rec_offset = (lm.float() * dmin[:, None]).view(chunk_blocks, subblocks_per_block, 1)
 
-    result_uint8 = torch.cat([d_bytes, dmin_bytes, scales_packed, L_packed], dim=1)
-    result = result_uint8.view(torch.int8).flatten()
-    return result
+        # Final 4‑bit quantization
+        L_quant = ((1.0 / rec_scale) * (chunk_subblocks + rec_offset)).round().clamp(0, 15).to(torch.uint8)
+
+        # Pack nibbles
+        L_quant = L_quant.view(chunk_blocks, subblocks_per_block // 2, 2, 32)
+        L_packed = L_quant[:, :, 0, :] | (L_quant[:, :, 1, :] << 4)   # (chunk_blocks, 4, 32)
+        L_packed = L_packed.view(chunk_blocks, -1)                     # (chunk_blocks, 128)
+
+        # Convert d and dmin to bytes
+        d_bytes = d.view(torch.uint8).view(chunk_blocks, 2)
+        dmin_bytes = dmin.view(torch.uint8).view(chunk_blocks, 2)
+
+        # Concatenate all parts for this chunk: 2+2+12+128 = 144 bytes per block
+        chunk_result = torch.cat([d_bytes, dmin_bytes, scales_packed, L_packed], dim=1)
+        block_results.append(chunk_result)
+
+    # Combine all chunks and flatten to 1D int8
+    if not block_results:
+        return torch.empty(0, dtype=torch.int8, device=tensor.device)
+    final = torch.cat(block_results, dim=0).view(torch.int8).flatten()
+
+    return final
 
 def dump_tensor(f, name: str, tensor: torch.Tensor, ggml_type: GGMLType):
     assert tensor.dtype == torch.float32
@@ -853,7 +868,8 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
     print(tabulate(tensor_info, headers=["name", "shape", "dtype"]))
 
     if len(tensor_info) != len(weight_names):
-        raise Exception(f'not all tensors are converted: {remaining}')
+        print("WARNING or ERROR: below tensors are missing:")
+        print('* ' + '\n- '.join(remaining))
 
 class SentencePieceVocab:
     def __init__(self, fname_tokenizer: Path, fname_added_tokens: Optional[Path]) -> None:
@@ -8602,6 +8618,100 @@ class HunYuanMoEV1Converter(BaseConverter):
 
         return weight_names
 
+class HunYuanV3Converter(BaseConverter):
+    MODEL_TYPE = ModelType.HunYuanV3
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        new_dict = {}
+
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            new_name = name
+            new_name = new_name.replace('.mlp.router.gate.', '.mlp.gate.')
+            new_name = new_name.replace('.shared_mlp.', '.shared_expert.')
+
+            new_dict[new_name] = tensor
+
+        return new_dict
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert not config.use_grouped_mm, "use_grouped_mm must be False"
+        assert config.qk_norm, "qk_norm must be True"
+        assert config.moe_router_enable_expert_bias
+        assert config.moe_router_use_sigmoid
+        assert config.route_norm
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+
+            config.first_k_dense_replace,
+            config.num_experts,
+            config.num_shared_experts,
+            config.expert_hidden_dim,
+            config.moe_intermediate_size,
+            config.num_experts_per_tok,
+
+            1 if config.tie_word_embeddings else 0,
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_theta,
+            config.router_scaling_factor,
+        ]
+        f.write(struct.pack("<" + "f" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = ["model.embed_tokens.weight"]
+        for i in range(config.num_hidden_layers):
+            if i >= config.first_k_dense_replace:
+                for j in range(config.num_experts):
+                        weight_names += [
+                            f"model.layers.{i}.mlp.experts.{j}.down_proj.weight",
+                            f"model.layers.{i}.mlp.experts.{j}.gate_proj.weight",
+                            f"model.layers.{i}.mlp.experts.{j}.up_proj.weight",
+                        ]
+                weight_names += [
+                    f"model.layers.{i}.mlp.expert_bias",
+                    f"model.layers.{i}.mlp.gate.weight",
+                    f"model.layers.{i}.mlp.shared_expert.down_proj.weight",
+                    f"model.layers.{i}.mlp.shared_expert.gate_proj.weight",
+                    f"model.layers.{i}.mlp.shared_expert.up_proj.weight",
+                ]
+            else:
+                weight_names += [
+                    f"model.layers.{i}.mlp.down_proj.weight",
+                    f"model.layers.{i}.mlp.gate_proj.weight",
+                    f"model.layers.{i}.mlp.up_proj.weight",
+                ]
+
+            weight_names += [
+                f"model.layers.{i}.input_layernorm.weight",
+                f"model.layers.{i}.post_attention_layernorm.weight",
+                f"model.layers.{i}.self_attn.k_proj.weight",
+                f"model.layers.{i}.self_attn.o_proj.weight",
+                f"model.layers.{i}.self_attn.q_proj.weight",
+                f"model.layers.{i}.self_attn.v_proj.weight",
+                f"model.layers.{i}.self_attn.k_norm.weight",
+                f"model.layers.{i}.self_attn.q_norm.weight",
+            ]
+
+        weight_names += [
+            "model.norm.weight",
+            "lm_head.weight"
+        ]
+
+        if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
+            weight_names.remove("lm_head.weight")
+
+        return weight_names
+
 class SolarConverter(BaseConverter):
     MODEL_TYPE = ModelType.SolarPro
 
@@ -10717,6 +10827,8 @@ def main():
         HunYuanDenseV1Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'HunYuanMoEV1ForCausalLM':
         HunYuanMoEV1Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'HYV3ForCausalLM':
+        HunYuanV3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InstellaForCausalLM':
         InstellaConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'DeciLMForCausalLM':
