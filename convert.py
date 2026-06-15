@@ -311,6 +311,7 @@ g_tokenizer_type = TokenizerType.BPE1
 
 g_special_tokens: Dict = {}
 g_do_dequantization: bool = False
+g_tensor_types: list = []
 
 def pad_to_len(l: list, to_len: int, v = 0) -> list:
     assert len(l) <= to_len
@@ -490,7 +491,7 @@ def quantize_q4_k(tensor: torch.Tensor, GGML_QK_K: int) -> torch.CharTensor:
     num_blocks = tensor.shape[0]
     subblocks_per_block = GGML_QK_K // 32   # = 8 for QK_K=256
 
-    block_chunk_size: int = 8192 * 32
+    block_chunk_size: int = 8192 * 64
 
     # Pre‑allocate list to hold per‑block results (as uint8 tensors)
     block_results = []
@@ -820,6 +821,24 @@ def tensor_type_fallback(shape, ndim: int, ggml_type: GGMLType):
         case _:
             return GGMLType.F16
 
+def tensor_quantization_type(name: str, tensor: torch.Tensor, def_type: GGMLType) -> GGMLType:
+    global g_tensor_types
+
+    # 1d weight: convert it to float32
+    if tensor.ndim <= 1:
+        return GGMLType.F32
+
+    assert tensor.ndim in {2, 3, 4}, f'unsupported: {name}.ndim = {tensor.ndim}'
+
+    t = def_type
+    for (pat, _t) in g_tensor_types:
+        if re.match(pat, name):
+            t = _t
+            break
+
+    t = tensor_type_fallback(tensor.shape, tensor.ndim, ggml_type=t)
+    return t
+
 def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_pp, loader_fun = None):
     global g_do_dequantization
 
@@ -853,12 +872,7 @@ def dump_state_dict(f, weight_names, model_files, ggml_type, config, state_dict_
 
             tensor = tensor.float()
 
-            if tensor.ndim in {2, 3, 4}:
-                tensor_ggml_type = tensor_type_fallback(tensor.shape, tensor.ndim, ggml_type=ggml_type)
-            else:
-                # 1d weight: convert it to float32
-                assert tensor.ndim <= 1, f'shape of {name} = {tensor.shape}'
-                tensor_ggml_type = GGMLType.F32
+            tensor_ggml_type = tensor_quantization_type(name, tensor, def_type=ggml_type)
 
             dump_tensor(f, name, tensor, tensor_ggml_type)
             tensor_info.append((name, tensor.shape, tensor_ggml_type.name))
@@ -10387,7 +10401,7 @@ def load_some_model(path: Path, fallback_files: list[Path] = []) -> List[Path]:
         return [path]
 
 def main():
-    global g_lora, g_do_dequantization
+    global g_lora, g_do_dequantization, g_tensor_types
 
     parser = argparse.ArgumentParser("chatllm-convert")
     parser.add_argument("-i", "--model_name_or_path", type=str)
@@ -10395,6 +10409,7 @@ def main():
     parser.add_argument("-l", "--lora_model_name_or_path", type=str, default=None)
     parser.add_argument("-o", "--save_path", type=Path)
     parser.add_argument("-t", "--type", type=str, default="q8_0", choices=["f32", "f16", "q8_0", "q4_0", "q4_1", "q4_k"])
+    parser.add_argument("-tt", "--tensor-type", nargs=2, action='append', default=[], help='custom quantization for specific tensors. -tt pattern1 type1 -tt pattern2 type2')
     parser.add_argument("-n", "--name", type=str, required=True, help='model name in English')
     parser.add_argument("--vocab_dir", type=str, default='')
     parser.add_argument("--experts", type=str, default='')
@@ -10402,6 +10417,9 @@ def main():
     parser.add_argument("--snac_model", type=str, default='', help='snac model path (required by Orpheus-TTS, etc)')
     parser.add_argument("--dac_model", type=str, default='', help='dac model path (required by Oute-TTS, etc)')
     args = parser.parse_args()
+
+    for l in reversed(args.tensor_type):
+        g_tensor_types.append((l[0], GGMLType[l[1].upper()]))
 
     arch = args.arch.lower()
 

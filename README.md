@@ -56,12 +56,6 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 * 2026-01-09: QWen3-VL-Embedding/Reranker
 * 2026-01-05: HY-MT
 * 2026-01-04: GLM-ASR-Nano
-* 2025-12-31: Qwen3-VL
-* 2025-12-24: GLM-4.6V-Flash
-* 2025-12-15: Rnj-1
-* 2025-12-08: Ministral-3
-* 2025-11-06: Maya1
-* 2025-11-03: Ouro
 * 2025-10-10: [I can draw](./docs/multimodal.md): Janus-Pro
 * 2025-06-21: [I can hear](./docs/multimodal.md): Qwen2-Audio
 * 2025-05-23: [I can see](./docs/multimodal.md): Fuyu
@@ -141,6 +135,26 @@ python convert.py -i path/to/model -l path/to/lora/model -o quantized.bin --name
 ```
 
 Note: Appropriately, only HF format is supported (with a few exceptions); Format of the generated `.bin` files is different from the one (GGUF) used by `llama.cpp`.
+
+#### Customized Quantization
+
+It's possible to specify quantization for each tensor using `-tt pattern type`, where `pattern` is a regex pattern to match against tensor names. Multiple `-tt ... ...`
+can be used. In this example, all tensors are using `q4_k` quantization except embeddings are using `q8_0`.
+
+```sh
+... -t q4_k -tt lm_head q8_0 -tt model.embed_tokens.weight q8_0
+```
+
+#### Supported Types
+
+|Type  |`GGML_TYPE`                 |
+|:----:|:---------------------------|
+|f32   |`GGML_TYPE_F32`             |
+|f16   |`GGML_TYPE_F16`             |
+|q8_0  |`GGML_TYPE_Q8_0`            |
+|q4_0  |`GGML_TYPE_Q4_0`            |
+|q4_1  |`GGML_TYPE_Q4_1`            |
+|q4_k  |`GGML_TYPE_Q4_K`            |
 
 ### Build
 
