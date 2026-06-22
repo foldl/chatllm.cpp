@@ -1851,10 +1851,10 @@ namespace chatllm
             uint32_t ver = loader.read_basic<uint32_t>();
             CHATLLM_CHECK(GGMM_VER == ver) << "GGMM file version error: " << ver;
 
-            loader.ggml_header = loader.read_basic<ModelLoader::GGMMHeader>();
-            if ((int64_t)loader.ggml_header.offset_config > loader.tell())
+            loader.ggmm_header = loader.read_basic<ModelLoader::GGMMHeader>();
+            if ((int64_t)loader.ggmm_header.offset_config > loader.tell())
             {
-                loader.meta = loader.read_string(loader.ggml_header.offset_config - loader.tell());
+                loader.meta = loader.read_string(loader.ggmm_header.offset_config - loader.tell());
                 size_t last_non_null = loader.meta.find_last_not_of('\0');
                 if (last_non_null != std::string::npos)
                     loader.meta.erase(last_non_null + 1);
@@ -1868,7 +1868,7 @@ namespace chatllm
                 if (native.IsString())
                     loader.model_native_name = native.ToString();
             }
-            loader.seek(loader.ggml_header.offset_config, 0);
+            loader.seek(loader.ggmm_header.offset_config, 0);
         }
         else
         {
@@ -2002,8 +2002,16 @@ namespace chatllm
     static void load_tensors_only(ModelLoader &loader)
     {
         load_file_header(loader);
-        auto _loader = get_loader(loader.model_type, loader.version);
-        _loader->load_tensors(loader);
+        if (ModelLoader::FileFormat::GGMM == loader.ff)
+        {
+            loader.seek(loader.ggmm_header.offset_tensors, SEEK_SET);
+            loader.load_all_tensors();
+        }
+        else
+        {
+            auto _loader = get_loader(loader.model_type, loader.version);
+            _loader->load_tensors(loader);
+        }
     }
 
     std::string show_tensor_type(ggml::tensor *t)
