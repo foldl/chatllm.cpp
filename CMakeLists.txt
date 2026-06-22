@@ -103,6 +103,7 @@ set(core_files src/backend.cpp
     models/maya.cpp
     models/m_a_p.cpp
     models/megrez.cpp
+    models/mellum.cpp
     models/minicpm.cpp
     models/mistral.cpp
     models/moonshot.cpp

@@ -35,6 +35,7 @@ LittleAcademia[<a href="https://github.com/foldl/little-academia"   style="text-
 
 **What's New:**
 
+* 2026-06-22: Mellum-2
 * 2026-06-14: HY-MT2
 * 2026-05-28: MiniCPM5
 * 2026-05-05: Gemma-4

@@ -175,6 +175,10 @@
 * Megrez (`MegrezMoeForCausalLM`)
     * [x] (3x7B-A3B)[https://huggingface.co/Infinigence/Megrez2-3x7B-A3B/tree/3ffc3b7c0ffc0f0b27d71fba2a97dcc14c797bb4]
 
+* Mellum (`MellumForCausalLM`)
+    * [x] [12B-A2.5B-Instruct](https://huggingface.co/JetBrains/Mellum2-12B-A2.5B-Instruct/tree/717997f0f5913a53cdb45931a358fab62da3c937),
+    [12B-A2.5B-Thinking](https://huggingface.co/JetBrains/Mellum2-12B-A2.5B-Thinking/tree/ba4838faad89e968c36f39e76e95319d756714fe)
+
 * MiniCPM (`MiniCPMForCausalLM`, `MiniCPM3ForCausalLM`)
     * [x] [DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16), [SFT-2B](https://huggingface.co/openbmb/MiniCPM-2B-sft-bf16),
           [SFT-1B](https://huggingface.co/openbmb/MiniCPM-1B-sft-bf16)🔥

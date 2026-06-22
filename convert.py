@@ -243,6 +243,8 @@ class ModelType(Enum):
 
     OURO            = 0x3000
 
+    Mellum          = 0x3010
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -10237,6 +10239,67 @@ class InternVLConverter(BaseConverter):
         ]
 
         return weight_names
+class MellumConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Mellum
+
+    layer_is_sparse = []
+    has_lm_head = True
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        MAX_LAYERS = 128
+        rope_scaling = config.rope_parameters
+        assert not config.attention_bias
+        assert rope_scaling['full_attention']['rope_type'] == 'yarn'
+        assert rope_scaling['sliding_attention']['rope_type'] == 'default'
+
+        if config.moe_intermediate_size is None:
+            config.moe_intermediate_size = -1
+        if config.num_experts is None:
+            config.num_experts = -1
+        if config.num_experts_per_tok is None:
+            config.num_experts_per_tok = -1
+        if config.norm_topk_prob is None:
+            config.norm_topk_prob = False
+
+        def is_sparse(layer_idx, config):
+            if layer_idx >= config.num_hidden_layers: return 0
+
+            return 1 if config.mlp_layer_types[layer_idx] == 'sparse' else 0
+
+        QWen3Converter.layer_is_sparse = [is_sparse(i, config) for i in range(MAX_LAYERS)]
+        layer_is_swa = [0] * MAX_LAYERS
+        for i in range(config.num_hidden_layers):
+            layer_is_swa[i] = 1 if config.layer_types[i] == 'sliding_attention' else 0
+
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+            config.sliding_window if config.use_sliding_window else -1,
+            config.moe_intermediate_size,
+            config.num_experts_per_tok,
+            config.num_experts,
+            1 if config.norm_topk_prob else 0,
+            1 if config.tie_word_embeddings else 0,
+            rope_scaling['full_attention']['rope_theta'],
+            rope_scaling['full_attention']['factor'],
+            rope_scaling['full_attention']['original_max_position_embeddings'],
+            rope_scaling['full_attention']['beta_fast'],
+            rope_scaling['full_attention']['beta_slow'],
+            rope_scaling['full_attention']['attention_factor'],
+            rope_scaling['sliding_attention']['rope_theta'],
+        ]
+        f.write(struct.pack("<iiiiiiiifffffff", *config_values))
+        f.write(struct.pack("<" + "i" * MAX_LAYERS,   *layer_is_swa))
+        f.write(struct.pack("<" + "i" * MAX_LAYERS,   *QWen3Converter.layer_is_sparse))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = QWen3Converter.get_weight_names(config)
+
+        return weight_names
 
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
@@ -10922,6 +10985,8 @@ def main():
         PenguinVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InternVLChatModel':
         InternVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'MellumForCausalLM':
+        MellumConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
