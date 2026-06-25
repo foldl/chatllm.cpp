@@ -518,6 +518,7 @@ namespace chatllm::bailing::llada
             exit(-1);
         }
 
+        transformer->before_eval(&ctx);
         ctx.compute();
 
         if (logits_output)

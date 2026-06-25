@@ -1987,6 +1987,7 @@ namespace chatllm::qwen::v3_tts
 
         Backend::write_tensor_data(input_id_new,    &added_id);
 
+        transformer->before_eval(&ctx);
         ctx.compute();
 
         Backend::read_tensor_data(r, logits.data());
@@ -2068,6 +2069,7 @@ namespace chatllm::qwen::v3_tts
             exit(-1);
         }
 
+        transformer->before_eval(&ctx);
         ctx.compute();
 
         Backend::read_tensor_data(r, output.data());

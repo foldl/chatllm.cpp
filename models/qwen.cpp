@@ -2737,7 +2737,8 @@ namespace chatllm::qwen::v3_vl
         if (!ctx.allocate()) return false;
 
         Backend::write_tensor_data(input_ids_tensor, input_ids);
-        Backend::write_tensor_data(deepstack_ids_tensor, deepstack_token_ids.data());
+        if (Backend::is_tensor_allocated(deepstack_ids_tensor))
+            Backend::write_tensor_data(deepstack_ids_tensor, deepstack_token_ids.data());
 
         if (gen_config.dump_dot.size() > 0)
         {
@@ -2745,6 +2746,7 @@ namespace chatllm::qwen::v3_vl
             exit(-1);
         }
 
+        transformer->before_eval(&ctx);
         ctx.compute();
 
         Backend::read_tensor_data(r, output.data());

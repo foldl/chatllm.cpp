@@ -621,6 +621,7 @@ namespace chatllm::hunyuan::wedlm
             exit(-1);
         }
 
+        transformer->before_eval(&ctx);
         ctx.compute();
 
         if (logits_output)

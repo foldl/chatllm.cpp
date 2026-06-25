@@ -559,6 +559,12 @@ namespace chatllm
         ggml_backend_synchronize(backend);
     }
 
+    bool Backend::is_tensor_allocated(ggml::tensor * tensor)
+    {
+        // TODO: use API instead of internal members
+        return (tensor->data != nullptr) || (tensor->view_src != nullptr);
+    }
+
     BackendContext::BackendContext()
     {
         ComputeManager::init();

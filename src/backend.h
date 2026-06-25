@@ -300,6 +300,8 @@ namespace chatllm
 
         static void read_tensor_data(ggml::tensor * tensor, void * data);
 
+        static bool is_tensor_allocated(ggml::tensor * tensor);
+
         bool support(ggml::tensor * tensor);
 
         void synchronize(void);
