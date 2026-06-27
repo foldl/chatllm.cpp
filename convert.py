@@ -270,6 +270,7 @@ class ModelType(Enum):
     StepVL                  = ModelTypeTagChatImageIn + 0x0000040
     GLM_OCR                 = ModelTypeTagChatImageIn + 0x0000050
     InternVL                = ModelTypeTagChatImageIn + 0x0000060
+    PaddleOCRVL             = ModelTypeTagChatImageIn + 0x0000070
 
     Qwen2Audio              = ModelTypeTagChatAudioIn + 0x0000001
     Qwen3ForcedAligner      = ModelTypeTagChatAudioIn + 0x0000002
@@ -10239,6 +10240,7 @@ class InternVLConverter(BaseConverter):
         ]
 
         return weight_names
+
 class MellumConverter(BaseConverter):
     MODEL_TYPE = ModelType.Mellum
 
@@ -10298,6 +10300,98 @@ class MellumConverter(BaseConverter):
     @staticmethod
     def get_weight_names(config):
         weight_names = QWen3Converter.get_weight_names(config)
+
+        return weight_names
+
+class PaddleOCRVLConverter(BaseConverter):
+    MODEL_TYPE = ModelType.PaddleOCRVL
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            new_name: str = name
+            if new_name.startswith('visual.vision_model.encoder.'):
+                new_name = new_name.replace('visual.vision_model.encoder.', 'visual.')
+                r[new_name] = tensor
+            elif new_name.startswith('visual.vision_model.'):
+                new_name = new_name.replace('visual.vision_model.', 'visual.')
+                r[new_name] = tensor
+            else:
+                r[new_name] = tensor
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert not config.use_bias
+
+        # emulate params for llama
+        dump_llama_like_config(f, config, ggml_type)
+
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+            config.rope_theta,
+            config.rope_scaling['mrope_section'][0],
+            config.rope_scaling['mrope_section'][1],
+            config.rope_scaling['mrope_section'][2],
+            1 if config.tie_word_embeddings else 0,
+        ]
+        f.write(struct.pack("<iifiiii", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = LlamaConverter.get_weight_names(config)
+        if (config.tie_word_embeddings is None) or config.tie_word_embeddings:
+            weight_names.remove('lm_head.weight')
+
+        for i in range(config.vision_config['num_hidden_layers']):
+            weight_names += [
+                f"visual.layers.{i}.layer_norm1.bias",
+                f"visual.layers.{i}.layer_norm1.weight",
+                f"visual.layers.{i}.layer_norm2.bias",
+                f"visual.layers.{i}.layer_norm2.weight",
+                f"visual.layers.{i}.mlp.fc1.bias",
+                f"visual.layers.{i}.mlp.fc1.weight",
+                f"visual.layers.{i}.mlp.fc2.bias",
+                f"visual.layers.{i}.mlp.fc2.weight",
+                f"visual.layers.{i}.self_attn.k_proj.bias",
+                f"visual.layers.{i}.self_attn.k_proj.weight",
+                f"visual.layers.{i}.self_attn.out_proj.bias",
+                f"visual.layers.{i}.self_attn.out_proj.weight",
+                f"visual.layers.{i}.self_attn.q_proj.bias",
+                f"visual.layers.{i}.self_attn.q_proj.weight",
+                f"visual.layers.{i}.self_attn.v_proj.bias",
+                f"visual.layers.{i}.self_attn.v_proj.weight",
+            ]
+
+        weight_names += [
+                f"mlp_AR.linear_1.bias",
+                f"mlp_AR.linear_1.weight",
+                f"mlp_AR.linear_2.bias",
+                f"mlp_AR.linear_2.weight",
+                f"mlp_AR.pre_norm.bias",
+                f"mlp_AR.pre_norm.weight",
+                f"visual.head.attention.in_proj_bias",
+                f"visual.head.attention.in_proj_weight",
+                f"visual.head.attention.out_proj.bias",
+                f"visual.head.attention.out_proj.weight",
+                f"visual.head.layernorm.bias",
+                f"visual.head.layernorm.weight",
+                f"visual.head.mlp.fc1.bias",
+                f"visual.head.mlp.fc1.weight",
+                f"visual.head.mlp.fc2.bias",
+                f"visual.head.mlp.fc2.weight",
+                f"visual.head.probe",
+                f"visual.post_layernorm.bias",
+                f"visual.post_layernorm.weight",
+                f"visual.embeddings.packing_position_embedding.weight",
+                f"visual.embeddings.patch_embedding.bias",
+                f"visual.embeddings.patch_embedding.weight",
+                f"visual.embeddings.position_embedding.weight",
+        ]
 
         return weight_names
 
@@ -10985,6 +11079,8 @@ def main():
         PenguinVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InternVLChatModel':
         InternVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'PaddleOCRVLForConditionalGeneration':
+        PaddleOCRVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'MellumForCausalLM':
         MellumConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':

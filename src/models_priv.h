@@ -221,6 +221,7 @@ namespace chatllm
         MODEL_TYPE_STEP_VL          = MODEL_TYPE_TAG_ChatImageIn + 0x00040,
         MODEL_TYPE_GLM_OCR          = MODEL_TYPE_TAG_ChatImageIn + 0x00050,
         MODEL_TYPE_INTERN_VL        = MODEL_TYPE_TAG_ChatImageIn + 0x00060,
+        MODEL_TYPE_PADDLE_OCR_VL    = MODEL_TYPE_TAG_ChatImageIn + 0x00070,
 
         MODEL_TYPE_QWEN2_AUDIO      = MODEL_TYPE_TAG_ChatAudioIn + 0x00001,
 

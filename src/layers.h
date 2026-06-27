@@ -669,18 +669,21 @@ namespace chatllm
     class Embedding : public Block
     {
     public:
-        Embedding(InitContext *ctx, int num_embeddings, int embedding_dim)
-            : Embedding(ctx, ctx->dtype, num_embeddings, embedding_dim)
+        Embedding(InitContext *ctx, int num_embeddings, int embedding_dim, bool auto_padding = true)
+            : Embedding(ctx, ctx->dtype, num_embeddings, embedding_dim, auto_padding)
         {
         }
 
-        Embedding(InitContext *ctx, ggml::type dtype, int num_embeddings, int embedding_dim)
-            : num_embeddings(num_embeddings), num_padded_embeddings(BlockParams::get_padded_embedding_num()),
+        Embedding(InitContext *ctx, ggml::type dtype, int num_embeddings, int embedding_dim, bool auto_padding)
+            : num_embeddings(num_embeddings), num_padded_embeddings(auto_padding ? BlockParams::get_padded_embedding_num() : 0),
               weight(ggml::new_tensor_2d(ctx, ggml::type_fallback(dtype, embedding_dim), embedding_dim,
-                     num_embeddings + BlockParams::get_padded_embedding_num()))
+                     num_embeddings + num_padded_embeddings))
         {
             ggml::set_input(weight);
         }
+
+        Embedding(InitContext *ctx, ggml::type dtype, int num_embeddings, int embedding_dim)
+            : Embedding(ctx, ctx->dtype, num_embeddings, embedding_dim, false) {}
 
         Embedding(InitContext *ctx, int num_embeddings, int embedding_dim, int pos_max)
             : Embedding(ctx, num_embeddings, embedding_dim) {}

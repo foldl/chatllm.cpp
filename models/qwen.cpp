@@ -996,7 +996,6 @@ namespace chatllm::qwen::vit
                         index++;
                     }
                 }
-
             }
         }
     }
@@ -1006,7 +1005,7 @@ namespace chatllm::qwen::vit
         CHATLLM_CHECK(grid_h % spatial_merge_size == 0);
         CHATLLM_CHECK(grid_w % spatial_merge_size == 0);
 
-        if (window_size == 0)
+        if (window_size <= 0)
         {
             prepare_v2(grid_h, grid_w);
             return;
