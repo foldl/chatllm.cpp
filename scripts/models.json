@@ -1229,6 +1229,22 @@
             }
         }
     },
+    "minicpm5": {
+        "brief": "MiniCPM5-1B, the first model in the MiniCPM5 series. It is a dense 1B Transformer built for on-device, local deployment, and resource-constrained scenarios, reaching 1B-class open-source SOTA.",
+        "default": "1b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "1b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1152158736,
+                        "url": "chatllm_quantized_minicpm5/minicpm5-1b.bin"
+                    }
+                }
+            }
+        }
+    },
     "minicpm-embedding": {
         "brief": "MiniCPM-Embedding-Light is a bilingual & cross-lingual text embedding model developed by ModelBest Inc., THUNLP and NEUIR.",
         "default": "light",
@@ -3055,6 +3071,10 @@
                     "q8": {
                         "size": 637779424,
                         "url": "chatllm_quantized_qwen3/qwen3-0.6b.bin"
+                    },
+                    "q4_k": {
+                        "size": 339787248,
+                        "url": "chatllm_quantized_qwen3/qwen3-0.6b-q4_k.bin"
                     }
                 }
             },
@@ -3775,6 +3795,15 @@
                         "url": "chatllm_quantized_vibethinker/vibethinker-1.5b.bin"
                     }
                 }
+            },
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3283809456,
+                        "url": "chatllm_quantized_weibo/vibethinker-3b.bin"
+                    }
+                }
             }
         }
     },
@@ -3951,6 +3980,15 @@
                     "q8": {
                         "size": 7980003984,
                         "url": "chatllm_quantized_hunyuan/hunyuan-mt2-7b.bin"
+                    }
+                }
+            },
+            "a3b": {
+                "default": "q4_k",
+                "quantized": {
+                    "q4_k": {
+                        "size": 17164954656,
+                        "url": "chatllm_quantized_hunyuan/hunyuan-mt2-20b-a3b-q4_k.bin"
                     }
                 }
             }
@@ -4429,6 +4467,15 @@
                     }
                 }
             },
+            "12b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 12720163776,
+                        "url": "chatllm_quantized_gemma4/gemma-4-12b-it.bin"
+                    }
+                }
+            },
             "31b": {
                 "default": "q4_1",
                 "quantized": {
@@ -4451,6 +4498,107 @@
                     "q8": {
                         "size": 123579958,
                         "url": "chatllm_quantized_mineru/mineru2.5-pro-2604-1.2b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "fara": {
+        "brief": "Fara-7B is Microsoft's first agentic small language model (SLM) designed specifically for computer use.",
+        "default": "7b",
+        "license": "MIT",
+        "variants": {
+            "7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 8949973664,
+                        "url": "chatllm_quantized_fara/fara-8b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "nex-n2": {
+        "brief": "Nex-N2 — an agent model built for real-world productivity scenarios.",
+        "default": "mini",
+        "license": "Apache License 2.0",
+        "variants": {
+            "mini": {
+                "default": "q4_k",
+                "quantized": {
+                    "mixed-q4_k": {
+                        "size": 20605387872,
+                        "url": "chatllm_quantized_nex/nex-n2-mini-mixed-q4_k.bin"
+                    },
+                    "q4_k": {
+                        "size": 20096828512,
+                        "url": "chatllm_quantized_nex/nex-n2-mini-q4_k.bin"
+                    },
+                    "q4_1": {
+                        "size": 22142525408,
+                        "url": "chatllm_quantized_nex/nex-n2-mini-q4_1.bin"
+                    }
+                }
+            }
+        }
+    },
+    "mellum2": {
+        "brief": "Mellum2 is a family of models from JetBrain.",
+        "default": "a2.5b-it",
+        "license": "Apache License 2.0",
+        "variants": {
+            "a2.5b-it": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 12912623728,
+                        "url": "chatllm_quantized_mellum/mellum2-12b-a2.5b-it.bin"
+                    }
+                }
+            },
+            "a2.5b-think": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 12912623728,
+                        "url": "chatllm_quantized_mellum/mellum2-12b-a2.5b-think.bin"
+                    }
+                }
+            }
+        }
+    },
+    "ornith-1.0": {
+        "brief": "Ornith-1.0, a self-improving family of open-source models for agentic coding.",
+        "default": "9b",
+        "license": "MIT",
+        "variants": {
+            "9b": {
+                "default": "q4_k",
+                "quantized": {
+                    "q4_k": {
+                        "size": 6656787792,
+                        "url": "chatllm_quantized_ornith/ornith-1.0-9b-q4_k.bin"
+                    },
+                    "q8": {
+                        "size": 10136094032,
+                        "url": "chatllm_quantized_ornith/ornith-1.0-9b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "paddleocr-vl-1.6": {
+        "brief": "PaddleOCR-VL-1.6, an upgraded compact document parsing model built upon PaddleOCR-VL-1.5.",
+        "default": "0.9b",
+        "license": "MIT",
+        "variants": {
+            "0.9b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1152244240,
+                        "url": "chatllm_quantized_ernie/paddleorc-vl-1.6.bin"
                     }
                 }
             }
