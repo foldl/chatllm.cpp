@@ -53,6 +53,7 @@ namespace chatllm
             im_start_token_id = ids[0];
             im_end_token_id   = ids[1];
             nl_token_id       = ids[2];
+            tokenizer->terminate_ids.emplace(im_end_token_id);
         }
     }
 
@@ -98,12 +99,6 @@ namespace chatllm
                 oss << "\n";
             tokenizer->encode(oss.str(), ids);
         }
-    }
-
-    HistoryEncoderImStartImEnd *HistoryEncoderImStartImEnd::get()
-    {
-        static HistoryEncoderImStartImEnd encoder;
-        return &encoder;
     }
 
     void HistoryEncoderBracketRole::append_sys_ending(std::vector<int> &ids) const

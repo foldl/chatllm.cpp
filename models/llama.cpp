@@ -223,6 +223,24 @@ namespace chatllm::llama::v3
             attention.freq_base = config.rope_theta;
         }
     }
+
+    void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
+    {
+        v2::GenericConditionalGeneration<LlamaBlock>::set_tokenizer(tokenizer);
+        if (utils::to_lower(type_name()) == "g9v3")
+        {
+            static HistoryEncoderImStartImEnd encoder;
+            tokenizer->set_chat_encoder(&encoder);
+
+            std::vector<int> ids;
+            tokenizer->tp->Encode("<think></think>", &ids);
+            if (ids.size() == 2)
+            {
+                tokenizer->tp->EnableReturnSpecialToken(true);
+                //tokenizer->tp->OverrideTokenDecoding(ids[0], "<think>");
+            }
+        }
+    }
 }
 
 namespace chatllm::llama::v3_1
@@ -405,7 +423,8 @@ namespace chatllm::llama::v2_plus
         v3::ConditionalGeneration::set_tokenizer(tokenizer);
         if (is_using_im_start)
         {
-            tokenizer->set_chat_encoder(HistoryEncoderImStartImEnd::get());
+            static HistoryEncoderImStartImEnd encoder;
+            tokenizer->set_chat_encoder(&encoder);
             if (is_nanbeige)
                 tokenizer->set_system_prompt("你是南北阁，一款由BOSS直聘自主研发并训练的专业大语言模型。");
         }

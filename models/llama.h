@@ -145,6 +145,7 @@ namespace chatllm::llama::v3
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_LLAMA3);
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type,
                             int num_key_value_heads, int max_length);
+        void set_tokenizer(BaseTokenizer *tokenizer) override;
     };
 }
 

@@ -7,7 +7,7 @@ namespace chatllm
     class HistoryEncoderImStartImEnd: public BaseHistoryEncoder
     {
     public:
-        static HistoryEncoderImStartImEnd *get();
+        HistoryEncoderImStartImEnd();
 
         void append_sys_prompt(std::vector<int> &ids) const override;
         void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
@@ -19,7 +19,7 @@ namespace chatllm
 
         void set_tokenizer(BaseTokenizer *tokenizer) override;
     protected:
-        HistoryEncoderImStartImEnd();
+
         void encode(const std::string &role, const std::string &text, std::vector<int> &ids) const;
         void encode(const std::string &role, std::vector<int> &ids) const;
     public:

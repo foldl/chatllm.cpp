@@ -366,11 +366,11 @@ namespace chatllm
         BaseHistoryEncoder *completion_encoder;
         BaseHistoryEncoder *qa_encoder;
         bool auto_add_bos;
-        std::set<int> terminate_ids;
         std::vector<char> vocab_for_c;
         int vocab_width = -1;
     public:
         const int vocab_size;
+        std::set<int> terminate_ids;
     };
 
     class BaseHistoryEncoder

@@ -167,6 +167,7 @@
     [Reasoning-8B](https://huggingface.co/ByteDance-Seed/Seed-Coder-8B-Reasoning/tree/47f18f877ea7d6aa5c0d87a474f30d420b22bd98) (`--name Seed-Coder`)
     * [x] Nanbeige4: [3B-Thinking](https://huggingface.co/Nanbeige/Nanbeige4-3B-Thinking-2511/tree/396a1fb7a5e1a87941b321b4da85bc510b424d00)
     * [x] MiniCPM5: [1B](https://huggingface.co/openbmb/MiniCPM5-1B/tree/4e9de7a0778dc1c362e983e6858f0e77542cbdca) (`-a MiniCPM5`)
+    * [x] G9v3: [3B](https://huggingface.co/ai9stars/G9v3-3B/tree/d9553445ff92dbce667381954c9699fbcbc924f9) (`--name G9v3`)
 
     For other models that using `LlamaForCausalLM` architecture, for example, [aiXcoder-7B](https://huggingface.co/aiXcoder/aixcoder-7b-base), try `-a Yi`.
 
