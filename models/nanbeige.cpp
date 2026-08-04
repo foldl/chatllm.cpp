@@ -338,19 +338,20 @@ namespace chatllm::nanbeige
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type)
         : BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 2), config(config)
     {
+        const int    num_loops   = std::atoi(utils::get_opt(runtime_config.additional, "num_loops", utils::sprintf("%d", config.num_loops)).c_str());
         const bool   tie_lm_head = config.tie_word_embeddings > 0;
         const size_t tensor_ovhd = ggml_tensor_overhead();
-        const size_t num_tensors = (tie_lm_head ? 2 : 3) + config.num_hidden_layers * 12 + (2 * (config.num_loops - 1) * config.num_hidden_layers);
+        const size_t num_tensors = (tie_lm_head ? 2 : 3) + config.num_hidden_layers * 12 + (2 * (num_loops - 1) * config.num_hidden_layers);
         const size_t ctx_size = num_tensors * tensor_ovhd;
         w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
         w_ctx_.dtype = config.dtype;
 
         if (tie_lm_head)
-            transformer = new ModelClass(&w_ctx_, config, config.num_loops, nullptr,
+            transformer = new ModelClass(&w_ctx_, config, num_loops, nullptr,
                                                 config.hidden_size, config.num_attention_heads,
                                                 config.intermediate_size, config.num_key_value_heads, config.head_dim, config.max_length);
         else
-            transformer = new ModelClass(&w_ctx_, config, config.num_loops, false,
+            transformer = new ModelClass(&w_ctx_, config, num_loops, false,
                                                 config.hidden_size, config.num_attention_heads,
                                                 config.intermediate_size, config.num_key_value_heads, config.head_dim, config.max_length);
 
