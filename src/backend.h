@@ -175,7 +175,7 @@ namespace chatllm
 
         void show_info(void) override;
 
-        bool operator ==(const LayerBufAllocator &b);
+        bool operator ==(const LayerBufAllocator &b) const;
 
     protected:
         Usage detect_usage(ggml::tensor *tensor);

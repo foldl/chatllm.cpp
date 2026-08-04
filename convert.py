@@ -245,6 +245,8 @@ class ModelType(Enum):
 
     Mellum          = 0x3010
 
+    Nanbeige        = 0x3020
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -10474,6 +10476,39 @@ class NEOChatConverter(BaseConverter):
 
         return weight_names
 
+class NanbeigeConverter(BaseConverter):
+    MODEL_TYPE = ModelType.Nanbeige
+
+    @classmethod
+    def pp(cls, config, name: str, tensor):
+        return Llama3Converter.pp(config, name, tensor)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert len(config.loop_loss_weights) == 0
+        assert config.rope_scaling is None
+
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+            config.num_loops,
+            1 if config.skip_loop_final_norm else 0,
+            1 if config.tie_word_embeddings else 0,
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+        config_values = [
+            config.rope_theta,
+        ]
+        f.write(struct.pack("<f", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = Llama31Converter.get_weight_names(config)
+        if (config.tie_word_embeddings is not None) and config.tie_word_embeddings:
+            weight_names.remove('lm_head.weight')
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -11164,6 +11199,8 @@ def main():
         MellumConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'NEOChatModel':
         NEOChatConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'NanbeigeForCausalLM':
+        NanbeigeConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

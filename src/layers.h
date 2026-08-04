@@ -48,6 +48,7 @@ namespace chatllm
         ggml::tensor *new_tensor_2d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1);
         ggml::tensor *new_tensor_3d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2);
         ggml::tensor *new_tensor_4d(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
+        ggml::tensor *new_tensor_like(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *new_tensor_like(ComputeContext *ctx, ggml::type type, ggml::tensor *a);
 
         ggml::tensor *new_zeros(ComputeContext *ctx, ggml::type type, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);

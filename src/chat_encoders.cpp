@@ -43,7 +43,7 @@ namespace chatllm
         im_end_token_id     = -1;
         nl_token_id         = -1;
         BaseHistoryEncoder::set_tokenizer(tokenizer);
-        if (nullptr == tokenizer) return;
+        if ((nullptr == tokenizer) || (nullptr == tokenizer->tp)) return;
 
         std::vector<int> ids;
         tokenizer->tp->Encode("<|im_start|><|im_end|>\n", &ids);

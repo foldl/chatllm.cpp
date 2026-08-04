@@ -228,6 +228,11 @@
 
         Note: Please download `tokenizer.json` from [here](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/tree/73ce7c62b904fa83d7cb018e44c3bc06feed4d81).
 
+* Nanbeige (`NanbeigeForCausalLM`)
+    * [x] 4.2: [3B](https://huggingface.co/Nanbeige/Nanbeige4.2-3B/tree/5d54321e9e01e0d026f8e371046678fc384dca39)
+
+        Note: Do NOT download `tokenizer.json`.
+
 * Olm (`OlmoeForCausalLM`, `Olmo2ForCausalLM`)
     * [x] OLMoE: [Instruct-7B](https://huggingface.co/allenai/OLMoE-1B-7B-0924-Instruct)
     * [x] OLM-2: [Instruct-7B](https://huggingface.co/allenai/OLMo-2-1124-7B-Instruct), [Instruct-13B](https://huggingface.co/allenai/OLMo-2-1124-13B-Instruct), [Instruct-32B](https://huggingface.co/allenai/OLMo-2-0325-32B-Instruct/tree/5942a2f5e0bc38c2a5f5200cec2ea236d5984547)

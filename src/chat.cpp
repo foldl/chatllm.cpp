@@ -1202,7 +1202,7 @@ namespace chatllm
         if (data)
         {
             CHATLLM_CHECK(ggml::type_of(tensor) == target_type) << "type mismatch: " << ggml::type_of(tensor) << ", " << target_type;
-            CHATLLM_CHECK(this->alloc == alloc) << "TODO: tensor (" << tensor.name << ") loaded, but using different allocators";
+            CHATLLM_CHECK(*this->alloc == *alloc) << "TODO: tensor (" << tensor.name << ") loaded, but using different allocators";
             return true;
         }
 

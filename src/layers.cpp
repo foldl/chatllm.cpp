@@ -174,8 +174,15 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::new_tensor_like(ComputeContext *ctx, ggml::tensor *a)
+    {
+        if (nullptr == a) return nullptr;
+        return new_tensor_like(ctx, ggml::type_of(a), a);
+    }
+
     ggml::tensor *ggml::new_tensor_like(ComputeContext *ctx, ggml::type type, ggml::tensor *a)
     {
+        if (nullptr == a) return nullptr;
         return ggml::new_tensor_4d(ctx, type, ggml::get_dim(a, 0), ggml::get_dim(a, 1), ggml::get_dim(a, 2), ggml::get_dim(a, 3));
     }
 

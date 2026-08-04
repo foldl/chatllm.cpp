@@ -107,6 +107,7 @@ set(core_files src/backend.cpp
     models/minicpm.cpp
     models/mistral.cpp
     models/moonshot.cpp
+    models/nanbeige.cpp
     models/neochat.cpp
     models/neuralbeagle.cpp
     models/numinamath.cpp

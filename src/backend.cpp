@@ -200,7 +200,7 @@ namespace chatllm
         buffers.clear();
     }
 
-    bool LayerBufAllocator::operator ==(const LayerBufAllocator &b)
+    bool LayerBufAllocator::operator ==(const LayerBufAllocator &b) const
     {
         return (alloc_matrix == b.alloc_matrix)
             && (alloc_others == b.alloc_others)

@@ -24,7 +24,6 @@ namespace chatllm
         void encode(const std::string &role, std::vector<int> &ids) const;
     public:
         bool append_nl_after_end_tok = true;
-    protected:
         int im_start_token_id   = -1;
         int im_end_token_id     = -1;
         int nl_token_id         = -1;
