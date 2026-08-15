@@ -3871,6 +3871,22 @@
             }
         }
     },
+    "nanbeige4.2": {
+        "brief": "Nanbeige4.1-3B is built upon Nanbeige4-3B-Base and represents an enhanced iteration of our previous reasoning model, Nanbeige4-3B-Thinking-2511.",
+        "default": "3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4433339408,
+                        "url": "chatllm_quantized_nanbeige/nanbeige4.2-3b.bin"
+                    }
+                }
+            }
+        }
+    },
     "glm-4.6v": {
         "brief": "GLM-4.6V series model includes two versions: GLM-4.6V (106B), a foundation model designed for cloud and high-performance cluster scenarios, and GLM-4.6V-Flash (9B), a lightweight model optimized for local deployment and low-latency applications.",
         "default": "flash",
@@ -4343,6 +4359,22 @@
             }
         }
     },
+    "qwen3.8": {
+        "brief": "Qwen3.8, the most capable generation in the Qwen open-model family to date.",
+        "default": "27b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "27b": {
+                "default": "q4_k",
+                "quantized": {
+                    "q4_k": {
+                        "size": 15976924016,
+                        "url": "chatllm_quantized_qwen3.8/qwen3.8-27b-q4_k.bin"
+                    }
+                }
+            }
+        }
+    },
     "penguin-vl": {
         "brief": "PenguinVL is a compact Vision-Language Model designed to explore the efficiency limits of small-scale VLMs.",
         "default": "2b",
@@ -4599,6 +4631,54 @@
                     "q8": {
                         "size": 1152244240,
                         "url": "chatllm_quantized_ernie/paddleorc-vl-1.6.bin"
+                    }
+                }
+            }
+        }
+    },
+    "jacobian-lens": {
+        "brief": "Pre-fitted Jacobian Lenses for specific models.",
+        "default": "qwen3-4b",
+        "license": "MIT",
+        "variants": {
+            "qwen3-4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 243714000,
+                        "url": "chatllm_quantized_j_lens/qwen3-4b-jacobian-lens-q8.bin"
+                    }
+                }
+            }
+        }
+    },
+    "g9v3": {
+        "brief": "G9v3-3B is a dense 3B causal language model from the AI9Stars team.",
+        "default": "3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 3179860784,
+                        "url": "chatllm_quantized_g9v3/g9v3-3b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "qwythos": {
+        "brief": "Qwythos-9B is a full-parameter reasoning model built on top of a deeply uncensored Qwen3.5-9B base.",
+        "default": "9B-claude-mythos-5-1m",
+        "license": "Apache License 2.0",
+        "variants": {
+            "9B-claude-mythos-5-1m": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 10136093136,
+                        "url": "chatllm_quantized_qwythos/qwythos-9B-claude-mythos-5-1m.bin"
                     }
                 }
             }

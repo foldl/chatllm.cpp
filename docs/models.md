@@ -466,6 +466,7 @@ Please use `--format completion` for these models.
     [27B](https://huggingface.co/Qwen/Qwen3.5-27B/tree/b7ca741b86de18df552fd2cc952861e04621a4bd),
     [35B-A3B](https://huggingface.co/Qwen/Qwen3.5-35B-A3B/tree/ec2d4ece1ffb563322cbee9a48fe0e3fcbce0307)
     * [x] Qwen3.6: [35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B/tree/995ad96eacd98c81ed38be0c5b274b04031597b0), [27B](https://huggingface.co/Qwen/Qwen3.6-27B/tree/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9)
+    * [x] Ornith-1.0: [9B](https://huggingface.co/ornith-ai/Ornith-1.0-9B/tree/83dc1f5e24ef8527af019a6b3bf66ac0f1c2c999)
     * [x] Qwen3.8: [27B](https://huggingface.co/Qwen/Qwen3.8-27B/tree/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0)
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
@@ -625,3 +626,7 @@ Tips for diffusion LLMs, they are very sensitive to sampling parameters. The res
     This is a base model, and remember to use `--format completion`.
 
     Tip: Use `--kv n_future_tokens N` to change number of future tokens, N = [1, 4].
+
+* [Jacobian Lens models](https://huggingface.co/neuronpedia/jacobian-lens/tree/a4114d7752d11eb546e6cf372213d7e75526d3a1)
+
+    See ["Introspection" with lens](lens.md).
