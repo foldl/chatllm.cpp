@@ -62,6 +62,7 @@ struct Args
     std::string lens_type;
     std::string lens_layers;
     std::string lens_fn;
+    std::string reasoning_effort;
     std::map<std::string, std::string> model_n_gpu_layers;
     std::set<std::string> dump_tensors;
     int max_length = -1;
@@ -103,6 +104,7 @@ struct Args
     int max_new_tokens = -1;
     bool single_turn = false;
     bool opt_speed   = true;
+    chatllm::trilean enable_thinking = chatllm::trilean::Default;
     std::string flash_attention = "";
 };
 
@@ -256,6 +258,11 @@ void usage(const std::string &prog)
               << "  --thought_tags O C      customize thought tags (Opening & Closing) to override built-in tags\n"
               << "                          built-in tags: " << show_default_thought_tags() << "\n"
               << "                          this options enables detection of thoughts implicitly.\n"
+              << "   +thinking              enable thinking (default: model specific) (WIP: Qwen3 only)\n"
+              << "   -no-thinking           disable thinking (default: model specific) (WIP: Qwen3 only)\n"
+              << "                          these two options conflict with `--ai-prefix` for some models.\n"
+              << "  --reasoning_effort O    set reasoning effort to O (default: model specific)\n"
+              << "                          O ::= low | medium | high | xhigh | ... (model specific)\n"
               << "Multi-model options:\n"
               << "  --multimedia_file_tags OPENING CLOSING\n"
               << "                          multimedia file tags. Default: Not set. Example {{ }}: {{TAG:/path/to/image.png}}\n"
@@ -379,6 +386,14 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_flag(moe_on_cpu)
             handle_flag(detect_thoughts)
             handle_flag(single_turn)
+            else if (utils::is_same_command_option(arg, "+thinking") || utils::is_same_command_option(arg, "-thinking"))
+            {
+                args.enable_thinking = chatllm::trilean::True;
+            }
+            else if (utils::is_same_command_option(arg, "-no-thinking"))
+            {
+                args.enable_thinking = chatllm::trilean::False;
+            }
             else if (utils::is_same_command_option(arg, "--format"))
             {
                 c++;
@@ -538,7 +553,8 @@ static size_t parse_args(Args &args, const std::vector<std::string> &argv)
             handle_para0("--tts_export",                  tts_export,           std::string)
             handle_para0("--re_quantize",                 re_quantize,          std::string)
             handle_para0("--max_new_tokens",              max_new_tokens,       std::stoi)
-            handle_param("--flash_attn",      "-fa",      flash_attention,           std::string)
+            handle_param("--flash_attn",      "-fa",      flash_attention,      std::string)
+            handle_para0("--reasoning_effort",            reasoning_effort,     std::string)
             else
                 break;
 
@@ -949,7 +965,9 @@ static void run_qa_ranker(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
                                          gen_config.frequency_penalty = args.frequency_penalty; \
                                          gen_config.penalty_window = args.penalty_window; \
                                          gen_config.max_new_tokens = args.max_new_tokens; \
-                                         gen_config._seed = args.seed;
+                                         gen_config._seed = args.seed; \
+                                         gen_config.enable_thinking = args.enable_thinking; \
+                                         gen_config.reasoning_effort = args.reasoning_effort;
 
 
 #define DEF_ExtraArgs(pipe_args, args)  \

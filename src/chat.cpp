@@ -1821,6 +1821,8 @@ namespace chatllm
         else;
 
         input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous, true, gen_config.reversed_role);
+
+        model->prepare(input_ids, gen_config, continuous);
         add_ai_prefix(input_ids, gen_config, streamer);
 
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, streamer);
@@ -1830,6 +1832,7 @@ namespace chatllm
             {
                 streamer->putln("\nRUN OUT OF CONTEXT. Let me forget something and try again ...\n");
                 input_ids = tokenizer->encode_history(history, gen_config.max_context_length, false, true, gen_config.reversed_role);
+                model->prepare(input_ids, gen_config, continuous);
                 add_ai_prefix(input_ids, gen_config, streamer);
                 output_ids = model->generate(input_ids, gen_config, false, completed, &performance, streamer);
             }
@@ -1855,6 +1858,8 @@ namespace chatllm
         else;
 
         input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous, true, gen_config.reversed_role);
+
+        model->prepare(input_ids, gen_config, continuous);
         add_ai_prefix(input_ids, gen_config, streamer);
 
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, streamer);
@@ -1880,6 +1885,7 @@ namespace chatllm
         else;
 
         std::vector<int> input_ids = tokenizer->encode_history(history, gen_config.max_context_length, continuous, true, gen_config.reversed_role);
+        model->prepare(input_ids, gen_config, continuous);
         add_ai_prefix(input_ids, gen_config, streamer);
 
         std::vector<int> output_ids = model->generate(input_ids, gen_config, continuous, completed, &performance, streamer);
@@ -1963,11 +1969,13 @@ namespace chatllm
 
     void Pipeline::add_ai_prefix(std::vector<int> &input_ids, const GenerationConfig &gen_config, BaseStreamer *streamer)
     {
-        if (gen_config.ai_prefix.size() > 0)
+        std::string prefix = gen_config.ai_prefix.size() > 0 ? gen_config.ai_prefix : tokenizer->ai_prefix;
+
+        if (prefix.size() > 0)
         {
-            tokenizer->encode(gen_config.ai_prefix, input_ids);
+            tokenizer->encode(prefix, input_ids);
             if (streamer)
-                streamer->call_put_chunk(true, gen_config.ai_prefix);
+                streamer->call_put_chunk(true, prefix);
         }
     }
 
@@ -2197,6 +2205,7 @@ namespace chatllm
 
     void Pipeline::before_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
     {
+        tokenizer->prepare(history, gen_config);
     }
 
     void Pipeline::post_chat(Messages &history, const GenerationConfig &gen_config, BaseStreamer *streamer)
@@ -2431,6 +2440,7 @@ namespace chatllm
 
     void unescape_c_sequences(std::string &s)
     {
+        replace_all(s, "\\r", "\r");
         replace_all(s, "\\n", "\n");
         replace_all(s, "\\t", "\t");
     }

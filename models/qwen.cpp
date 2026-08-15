@@ -97,8 +97,11 @@ namespace chatllm::qwen::v1
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
 
-        tok->encode("system", ids, true, false, true);
-        tok->encode(tok->get_system_prompt(), ids, false, true, true);
+        if (tok->get_system_prompt().size() > 0)
+        {
+            tok->encode("system", ids, true, false, true);
+            tok->encode(tok->get_system_prompt(), ids, false, true, true);
+        }
     }
 
     void ChatHistoryEncoder::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
@@ -1998,6 +2001,22 @@ namespace chatllm::qwen::v3
                 num++;
         }
         return num;
+    }
+
+    void ConditionalGeneration::prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous)
+    {
+        switch (gen_config.enable_thinking)
+        {
+        case trilean::Default:
+            tokenizer->ai_prefix = "";
+            break;
+        case trilean::True:
+            tokenizer->ai_prefix = "<think>\n";
+            break;
+        default:
+            tokenizer->ai_prefix = "<think>\n\n</think>\n\n";
+            break;
+        }
     }
 }
 

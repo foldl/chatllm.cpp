@@ -65,7 +65,36 @@ namespace chatllm::qwen::v3_5
         }
     };
 
-    typedef v3_vl::Tokenizer Tokenizer;
+    class Tokenizer : public v3_vl::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config) :
+            v3_vl::Tokenizer(config)
+        {
+            sys_prompt = "";
+        }
+
+        void prepare(Messages &history, const GenerationConfig &config) override
+        {
+            std::ostringstream oss;
+            if (config.reasoning_effort == "low")
+            {
+                oss << "Reasoning effort is set to low. Keep your thinking brief and focused, moving directly to the conclusion without unnecessary elaboration.";
+            }
+            else if (config.reasoning_effort.ends_with("high"))
+            {
+                oss << "Reasoning effort is set to xhigh. Please think carefully through the task, validate key assumptions, consider plausible alternatives, and prioritize correctness, consistency, and clarity in the final answer.";
+            }
+
+            if (sys_prompt.size() > 0)
+            {
+                if (oss.tellp() > std::streampos(0))
+                    oss << "\n\n";
+                oss << sys_prompt;
+            }
+            rt_sys_prompt = oss.str();
+        }
+    };
 
     class Prelude
     {
@@ -108,6 +137,7 @@ namespace chatllm::qwen::v3_5
         void set_additional_args(const std::map<std::string, std::string> &args) override;
         int64_t get_param_num(bool effective_only) const override;
         void before_generate(const GenerationConfig &gen_config) override;
+        void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous) override;
         void set_tokenizer(BaseTokenizer *tokenizer) override;
     protected:
         bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override;
@@ -699,6 +729,22 @@ namespace chatllm::qwen::v3_5
         auto r = BaseModelForConditionalGeneration::generate_next_token(input_ids, gen_config, lm_logits);
 
         return r;
+    }
+
+    void ConditionalGeneration::prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous)
+    {
+        switch (gen_config.enable_thinking)
+        {
+        case trilean::Default:
+            tokenizer->ai_prefix = "";
+            break;
+        case trilean::True:
+            tokenizer->ai_prefix = "<think>\n";
+            break;
+        default:
+            tokenizer->ai_prefix = "<think>\n\n</think>\n\n";
+            break;
+        }
     }
 
     void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)

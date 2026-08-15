@@ -785,7 +785,7 @@ namespace chatllm::qwen
         public:
             ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, const bool skip_lm_head, int extra_tensors,
                 const int vocab_size, const int hidden_size, std::function<Block *(InitContext *, int)> create_layer, int added_tensors);
-
+            void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous) override;
         protected:
             int get_sparse_layer_num();
 

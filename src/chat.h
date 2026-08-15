@@ -265,6 +265,65 @@ namespace chatllm
 
     std::string trim(std::string str, const char *spaces = " \t");
 
+    enum trilean
+    {
+        Default,
+        False,
+        True,
+    };
+
+    // ===== generation =====
+
+    struct GenerationConfig
+    {
+        int max_length;
+        int max_context_length;
+        int max_new_tokens;
+        bool do_sample;
+        bool reversed_role;
+        int top_k;
+        int penalty_window;
+        float top_p;
+        float temperature;
+        float presence_penalty;
+        float repeat_penalty;
+        float frequency_penalty;
+        float tfs_z;
+        int _seed = -1;
+        trilean enable_thinking = trilean::Default;
+        std::string sampling;
+        std::string ai_prefix;
+        std::string dump_dot;
+        std::string emb_rank_query_sep;
+        std::string reasoning_effort;
+
+        GenerationConfig()
+        {
+        }
+
+        GenerationConfig(int max_length, int max_context_length, bool do_sample, bool reversed_role,
+                         int top_k,
+                         float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty, float tfs_z)
+            : max_length(max_length), max_context_length(max_context_length),
+              do_sample(do_sample), reversed_role(reversed_role), top_k(top_k),
+              top_p(top_p), temperature(temperature), presence_penalty(presence_penalty), tfs_z(tfs_z),
+              sampling(sampling), ai_prefix("") {}
+
+        void set_ai_prefix(const std::string &prefix);
+
+        int get_seed(void) const
+        {
+            if (_seed > 0) return _seed;
+
+            std::random_device rd;
+            return rd();
+        }
+        void seed(int x)
+        {
+            _seed = x;
+        }
+    };
+
     class BaseHistoryEncoder;
 
     class BaseTokenizer
@@ -300,6 +359,8 @@ namespace chatllm
 
         virtual bool load_config(const json::JSON &config) { return true; }
 
+        virtual void prepare(Messages &history, const GenerationConfig &config) {}
+
         virtual void encode(const std::string &text, std::vector<int> &ids) const;
         std::vector<int> encode(const std::string &text) const;
 
@@ -322,7 +383,7 @@ namespace chatllm
         virtual std::vector<int> encode_sys_prompt(void);
 
         void set_system_prompt(const std::string &prompt) { sys_prompt = prompt; }
-        const std::string &get_system_prompt(void) { return sys_prompt; }
+        const std::string &get_system_prompt(void) { return rt_sys_prompt.size() > 0 ? rt_sys_prompt : sys_prompt; }
         virtual void set_additional_args(const std::map<std::string, std::string> &args) {}
 
         virtual bool is_terminate_token_id(int id) const;
@@ -360,6 +421,7 @@ namespace chatllm
         std::vector<MediaAsEmbeddingVector> media_emb;
     protected:
         std::string sys_prompt;
+        std::string rt_sys_prompt;
         const int max_length;
         ChatFormat format;
         BaseHistoryEncoder *chat_encoder;
@@ -371,6 +433,7 @@ namespace chatllm
     public:
         const int vocab_size;
         std::set<int> terminate_ids;
+        std::string ai_prefix;
     };
 
     class BaseHistoryEncoder
@@ -868,56 +931,6 @@ namespace chatllm
         std::string model_native_name;
     };
 
-    // ===== generation =====
-
-    struct GenerationConfig
-    {
-        int max_length;
-        int max_context_length;
-        int max_new_tokens;
-        bool do_sample;
-        bool reversed_role;
-        int top_k;
-        int penalty_window;
-        float top_p;
-        float temperature;
-        float presence_penalty;
-        float repeat_penalty;
-        float frequency_penalty;
-        float tfs_z;
-        int _seed = -1;
-        std::string sampling;
-        std::string ai_prefix;
-        std::string dump_dot;
-        std::string emb_rank_query_sep;
-
-        GenerationConfig()
-        {
-        }
-
-        GenerationConfig(int max_length, int max_context_length, bool do_sample, bool reversed_role,
-                         int top_k,
-                         float top_p, float temperature, int num_threads, const std::string sampling, float presence_penalty, float tfs_z)
-            : max_length(max_length), max_context_length(max_context_length),
-              do_sample(do_sample), reversed_role(reversed_role), top_k(top_k),
-              top_p(top_p), temperature(temperature), presence_penalty(presence_penalty), tfs_z(tfs_z),
-              sampling(sampling), ai_prefix("") {}
-
-        void set_ai_prefix(const std::string &prefix);
-
-        int get_seed(void) const
-        {
-            if (_seed > 0) return _seed;
-
-            std::random_device rd;
-            return rd();
-        }
-        void seed(int x)
-        {
-            _seed = x;
-        }
-    };
-
     class ModelPerfInfo
     {
     public:
@@ -986,6 +999,9 @@ namespace chatllm
         virtual bool load_more(const json::JSON &config) = 0;
 
         virtual void set_layer_ids(const std::vector<int> &ids) = 0;
+
+        virtual void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous)
+        {}
 
         virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,
@@ -1073,6 +1089,11 @@ namespace chatllm
         bool load_more(const json::JSON &config) override { return model->load_more(config); }
 
         void set_layer_ids(const std::vector<int> &ids) override { return model->set_layer_ids(ids); }
+
+        void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous) override
+        {
+            model->prepare(input_ids, gen_config, continuous);
+        }
 
         std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                             const bool continuous,
