@@ -314,6 +314,24 @@ namespace chatllm
             model->set_layer_ids(layers);
 
         loader.push_allocator_manager(model->get_alloc_manager());
+
+        if (args.max_proj_length <= 0)
+        {
+            // try to disable other modalities
+            auto cfg = loader.meta_json["config.json"];
+            if (cfg.IsObject())
+            {
+                if (cfg["vision_config"].IsObject())
+                {
+                    loader.meta_json["config.json"]["vision_config"] = json::JSON::_null;
+                }
+                if (cfg["audio_config"].IsObject())
+                {
+                    loader.meta_json["config.json"]["audio_config"] = json::JSON::_null;
+                }
+            }
+        }
+
         model->load_more(loader.meta_json);
         model->load(loader);
 

@@ -167,7 +167,7 @@ void usage(const std::string &prog)
               << "                          use this to enlarge it (use with caution!).\n"
               << "  --max_proj_length N     max number of projected embeddings. (default: model specific)\n"
               << "                          for vision, larger value means lossless, but intermediate tensors might to too large\n"
-              << "                          to be handled by GPU.\n"
+              << "                          to be handled by GPU. Set to 0 will disable other modalities.\n"
               << "  --layer_spec LAYERS     select/redesign layers.\n"
               << "                          LAYERS=S0,S1,.... where S0/S1/... are like slices of Python, `start:stop[:step]`,\n"
               << "                          negative values in `start` and `stop` can be used referencing layers in reversed order,\n"

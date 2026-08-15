@@ -1645,7 +1645,7 @@ namespace chatllm
     BlockParams::PadEmbedding::PadEmbedding(int n, int max)
     {
         n = std::min(n, max);
-        if (BlockParams::max_projected_embedding > 0)
+        if (BlockParams::max_projected_embedding >= 0)
             n = std::min(n, BlockParams::max_projected_embedding);
         BlockParams::num_padding_embeddings = n;
     }

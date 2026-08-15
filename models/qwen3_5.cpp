@@ -310,7 +310,7 @@ namespace chatllm::qwen::v3_5
         key_dim(key_head_dim * num_key_heads),
         value_dim(value_head_dim * num_value_heads),
         num_v_heads(num_value_heads), num_k_heads(num_key_heads),
-        state(ggml::new_tensor_3d(ctx, ggml::type::GGML_TYPE_F16, head_v_dim, head_k_dim, num_v_heads)),
+        state(ggml::new_tensor_3d(ctx, ggml::type::GGML_TYPE_F16, head_v_dim, head_k_dim, num_v_heads)), // OPT: `state` is relatively small. ggml::type_fallback(ctx->cache_dtype, head_v_dim)
         conv1d(ctx, key_dim * 2 + value_dim, key_dim * 2 + value_dim, conv_kernel_dim, 1, 1, key_dim * 2 + value_dim, false),
         dt_bias(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, num_value_heads)),
         A_log(ggml::new_tensor_1d(ctx, ggml::type::GGML_TYPE_F32, num_value_heads)),
@@ -406,6 +406,10 @@ namespace chatllm::qwen::v3_5
         query = ggml::scale(ctx, query, scale);
 
         auto last_state = state;
+        // OPT: [GGML] this is a favor for `ggml::mul` & `ggml::cast`.
+        if (ggml::is_quantized(last_state))
+            last_state = ggml::cast(ctx, last_state, ggml::type::GGML_TYPE_F32);
+
         std::vector<ggml::tensor *> attn_outs;
 
         for (int i = 0; i < sequence_length; i++)
