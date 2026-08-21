@@ -315,7 +315,7 @@ namespace chatllm
 
         loader.push_allocator_manager(model->get_alloc_manager());
 
-        if (args.max_proj_length <= 0)
+        if (args.max_proj_length == 0)
         {
             // try to disable other modalities
             auto cfg = loader.meta_json["config.json"];
