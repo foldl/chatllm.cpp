@@ -467,7 +467,9 @@ Please use `--format completion` for these models.
     [35B-A3B](https://huggingface.co/Qwen/Qwen3.5-35B-A3B/tree/ec2d4ece1ffb563322cbee9a48fe0e3fcbce0307)
     * [x] Qwen3.6: [35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B/tree/995ad96eacd98c81ed38be0c5b274b04031597b0), [27B](https://huggingface.co/Qwen/Qwen3.6-27B/tree/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9)
     * [x] Ornith-1.0: [9B](https://huggingface.co/ornith-ai/Ornith-1.0-9B/tree/83dc1f5e24ef8527af019a6b3bf66ac0f1c2c999)
+    * [x] Ornith-1.5: [9B](https://huggingface.co/ornith-ai/Ornith-1.5-9B/tree/c927ad73b7eb20f00aafcaa0a11a9d58ed5487bc), [35B-A3B](https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B/tree/e4dfb35a93d4b6822a811a7676f3488514abe7e2)
     * [x] Qwen3.8: [27B](https://huggingface.co/Qwen/Qwen3.8-27B/tree/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0)
+    * [x] KAT-Coder-V2.5: [Dev](https://huggingface.co/Kwaipilot/KAT-Coder-V2.5-Dev/tree/7be56fe773e72b6f5ca93c1ae45d828ddb893922) (LLM Only)
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
     * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)

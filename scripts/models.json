@@ -4620,6 +4620,22 @@
             }
         }
     },
+    "ornith-1.5": {
+        "brief": "Ornith-1.5, a major step toward building foundation models through end-to-end self-improvement.",
+        "default": "a3b",
+        "license": "MIT",
+        "variants": {
+            "a3b": {
+                "default": "q4_k",
+                "quantized": {
+                    "q4_k": {
+                        "size": 20572043424,
+                        "url": "chatllm_quantized_ornith/ornith-1.5-35b-a3b-q4_k.bin"
+                    }
+                }
+            }
+        }
+    },
     "paddleocr-vl-1.6": {
         "brief": "PaddleOCR-VL-1.6, an upgraded compact document parsing model built upon PaddleOCR-VL-1.5.",
         "default": "0.9b",
@@ -4679,6 +4695,22 @@
                     "q8": {
                         "size": 10136093136,
                         "url": "chatllm_quantized_qwythos/qwythos-9B-claude-mythos-5-1m.bin"
+                    }
+                }
+            }
+        }
+    },
+    "kat-coder-v2.5-Dev": {
+        "brief": "KAT-Coder-V2.5-Dev, an MOE model with a total parameter count of 35B and 3B activated parameters, to strengthen communication with the community and showcase our research achievements.",
+        "default": "a3b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "a3b": {
+                "default": "q4_k",
+                "quantized": {
+                    "q4_k": {
+                        "size": 19509311632,
+                        "url": "chatllm_quantized_kat/kat-coder-v2.5-dev-q4_k.bin"
                     }
                 }
             }
