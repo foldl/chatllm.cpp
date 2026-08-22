@@ -2731,6 +2731,15 @@
                         "url": "chatllm_quantized_instella/instella-3b.bin"
                     }
                 }
+            },
+            "a3b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 16858818944,
+                        "url": "chatllm_quantized_instella/instella-moe-16b-a3b-think.bin"
+                    }
+                }
             }
         }
     },

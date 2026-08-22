@@ -210,6 +210,7 @@ class ModelType(Enum):
     MoonLight       = 0x2000
 
     Instella        = 0x2100
+    InstellaMoE     = 0x2101
 
     DeciLM          = 0x2200
 
@@ -3400,6 +3401,40 @@ class InstellaConverter(BaseConverter):
             "model.norm.weight",
             "lm_head.weight"
         ]
+
+        return weight_names
+
+class InstellaMoEConverter(BaseConverter):
+    MODEL_TYPE = ModelType.InstellaMoE
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        return DeepSeekV3Converter.state_dict_pp(config, state_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert not config.tie_word_embeddings, "tie_word_embeddings must be False"
+        assert not config.attention_bias, "attention_bias must be False"
+        assert config.gated_attention
+
+        DeepSeekV3Converter.dump_config(f, config, ggml_type)
+
+        config_values = [
+            1 if config.farskip else 0,
+            config.first_k_dense_replace,
+            config.farskip_start_idx if config.farskip_start_idx is not None else 0,
+            config.farskip_end_idx if config.farskip_end_idx is not None else config.num_hidden_layers - 1
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = DeepSeekV3Converter.get_weight_names(config)
+        if config.gated_attention:
+            for i in range(config.num_hidden_layers):
+                weight_names += [
+                    f"model.layers.{i}.self_attn.gate_proj.weight",
+                ]
 
         return weight_names
 
@@ -11201,6 +11236,8 @@ def main():
         NEOChatConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'NanbeigeForCausalLM':
         NanbeigeConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'InstellaMoEForCausalLM':
+        InstellaMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

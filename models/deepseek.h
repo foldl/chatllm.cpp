@@ -267,6 +267,7 @@ namespace chatllm::deepseek::v2_light
 
         void load(const std::string &path, TensorLoader *loader) override;
     protected:
+        virtual ggml::tensor *output_project(ComputeContext *ctx, ggml::tensor *scores);
         ggml::tensor *forward_speed(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past);
         ggml::tensor *cross_attention_speed(ComputeContext *ctx, const int hidden_size, const int n_past, const int qlen,
                                              ggml::tensor *q, ggml::tensor *k_nope, ggml::tensor *k_pe, ggml::tensor *v);

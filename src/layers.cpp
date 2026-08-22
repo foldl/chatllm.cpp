@@ -3625,17 +3625,17 @@ namespace chatllm
 
     ggml::tensor *BaseCombinedMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states)
     {
-        ggml::tensor *r1 = mlp1->forward(ctx, hidden_states);
-        ggml::tensor *r2 = mlp2->forward(ctx, hidden_states);
-        ggml::tensor *r = ggml::add(ctx, r1, r2);
+        rt_mlp1_output = mlp1->forward(ctx, hidden_states);
+        rt_mlp2_output = mlp2->forward(ctx, hidden_states);
+        ggml::tensor *r = ggml::add(ctx, rt_mlp1_output, rt_mlp2_output);
         return r;
     }
 
     ggml::tensor *BaseCombinedMLP::forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *hidden_states2)
     {
-        ggml::tensor *r1 = mlp1->forward(ctx, hidden_states, hidden_states2);
-        ggml::tensor *r2 = mlp2->forward(ctx, hidden_states);
-        ggml::tensor *r = ggml::add(ctx, r1, r2);
+        rt_mlp1_output = mlp1->forward(ctx, hidden_states, hidden_states2);
+        rt_mlp2_output = mlp2->forward(ctx, hidden_states);
+        ggml::tensor *r = ggml::add(ctx, rt_mlp1_output, rt_mlp2_output);
         return r;
     }
 

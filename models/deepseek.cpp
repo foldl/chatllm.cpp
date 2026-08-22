@@ -360,7 +360,7 @@ namespace chatllm::deepseek::v2_light
 
         ggml::tensor *scores = cross_attention_speed(ctx, hidden_size, n_past, qlen, tmpq, k_nope, k_pe, tmpv);
 
-        ggml::tensor *attn_output = o_proj.forward(ctx, scores);
+        ggml::tensor *attn_output = output_project(ctx, scores);
 
         return attn_output;
     }
@@ -403,6 +403,13 @@ namespace chatllm::deepseek::v2_light
         return attn_scores;
     }
 
+    ggml::tensor *BaseMLAttention::output_project(ComputeContext *ctx, ggml::tensor *scores)
+    {
+        ggml::tensor *attn_output = o_proj.forward(ctx, scores);
+
+        return attn_output;
+    }
+
     ggml::tensor *BaseMLAttention::forward_memory(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past)
     {
         const int hidden_size = o_proj.in_features();
@@ -419,7 +426,7 @@ namespace chatllm::deepseek::v2_light
 
         ggml::tensor *scores = cross_attention_memory(ctx, hidden_size, n_past, qlen, tmpq, k_pe, kv_lora);
 
-        ggml::tensor *attn_output = o_proj.forward(ctx, scores);
+        ggml::tensor *attn_output = output_project(ctx, scores);
 
         return attn_output;
     }

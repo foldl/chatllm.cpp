@@ -38,6 +38,7 @@ LLMirror[<a href="https://github.com/foldl/llmirror"   style="text-decoration:no
 
 **What's New:**
 
+* 2026-08-22: Instella-MoE
 * 2026-08-04: Nanbeige4.2
 * 2026-07-24: G9v3
 * 2026-07-16: [Introspection with lens](./docs/lens.md)

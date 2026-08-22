@@ -2325,6 +2325,9 @@ namespace chatllm
     protected:
         std::unique_ptr<Block> mlp1;
         std::unique_ptr<Block> mlp2;
+    public:
+        ggml::tensor *rt_mlp1_output = nullptr;
+        ggml::tensor *rt_mlp2_output = nullptr;
     };
 
     template<class MLP1, class MLP2> class CombinedMLP : public BaseCombinedMLP

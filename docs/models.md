@@ -106,8 +106,9 @@
     * [x] MT1.5: [1.8B](https://huggingface.co/tencent/HY-MT1.5-1.8B/tree/dbad03788f49709801014c95d481a514c272ca52), [7B](https://huggingface.co/tencent/HY-MT1.5-7B/tree/f1aa7278ccb1825edaf806c7e40d1febcbf2cbbd)
     * [x] MT2: [1.8B](https://huggingface.co/tencent/Hy-MT2-1.8B/tree/9a341cd1b679d3efd23b46e847b01745a71ed792), [7B](https://huggingface.co/tencent/Hy-MT2-7B/tree/9b0eb4e8f001def3e5ff6469a0ac96fdb39ec223), [30B-A3B](https://huggingface.co/tencent/Hy-MT2-30B-A3B/tree/6091895bbfa37c7846ff265a0829d409f771402a)
 
-* Instella (`InstellaForCausalLM`)
+* Instella (`InstellaForCausalLM`, `InstellaMoEForCausalLM`)
     * [x] [Instruct-3B](https://huggingface.co/amd/Instella-3B-Instruct)
+    * [x] [16B-A3B-DPO](https://huggingface.co/amd/Instella-MoE-16B-A3B-DPO/commit/f9886e6990b0c6e10ee290395736f5cb386c0dd1), [16B-A3B-Think](https://huggingface.co/amd/Instella-MoE-16B-A3B-Think/tree/fe339bc1a9464a486754c695666f13c036b4f809)
 
 * InternLM (`InternLMForCausalLM`, `InternLM2ForCausalLM`)
     * [x] v1: [Chat-7B](https://huggingface.co/internlm/internlm-chat-7b), [Chat-7B v1.1](https://huggingface.co/internlm/internlm-chat-7b-v1_1), [Chat-20B](https://huggingface.co/internlm/internlm-chat-20b)
