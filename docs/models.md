@@ -92,6 +92,9 @@
     * [x] v3.0: [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.0-1b-a400m-instruct), [Instruct-3B-A800M](https://huggingface.co/ibm-granite/granite-3.0-3b-a800m-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.0-2b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.0-8b-instruct)
     * [x] v3.1: [Instruct-1B-A400M](https://huggingface.co/ibm-granite/granite-3.1-1b-a400m-instruct), [Instruct-3B-A800M](https://huggingface.co/ibm-granite/granite-3.1-3b-a800m-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.1-2b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.1-8b-instruct)
     * [x] v3.2: [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.2-2b-instruct), [Instruct-2B](https://huggingface.co/ibm-granite/granite-3.2-8b-instruct), [Instruct-8B](https://huggingface.co/ibm-granite/granite-3.2-8b-instruct/tree/0276d996f60d5eb0b376b6d06622042d4ef3eb4b)
+    * [x] v4.2: [3B](https://huggingface.co/ibm-granite/granite-4.2-3b/tree/b7e947307dd2efb3ad3b853b0e8a7e75f8ad4ac2),
+    [8B](https://huggingface.co/ibm-granite/granite-4.2-8b/tree/41a8a2d41c54ef4a71741b3e62604f4caaec9295),
+    [30B](https://huggingface.co/ibm-granite/granite-4.2-30b/tree/70fc514076785017d93087f3d8b0676426b6b355)
 
 * GroveMoE (`GroveMoeForCausalLM`)
     * [x] [Inst](https://huggingface.co/inclusionAI/GroveMoE-Inst/tree/b3441abf1f3ed166e58c005ef2c528c584b55764)

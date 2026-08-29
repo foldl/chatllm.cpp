@@ -77,13 +77,16 @@ namespace chatllm::qwen::v3_5
         void prepare(Messages &history, const GenerationConfig &config) override
         {
             std::ostringstream oss;
-            if (config.reasoning_effort == "low")
+            if (config.enable_thinking != trilean::False)
             {
-                oss << "Reasoning effort is set to low. Keep your thinking brief and focused, moving directly to the conclusion without unnecessary elaboration.";
-            }
-            else if (config.reasoning_effort.ends_with("high"))
-            {
-                oss << "Reasoning effort is set to xhigh. Please think carefully through the task, validate key assumptions, consider plausible alternatives, and prioritize correctness, consistency, and clarity in the final answer.";
+                if (config.reasoning_effort == "low")
+                {
+                    oss << "Reasoning effort is set to low. Keep your thinking brief and focused, moving directly to the conclusion without unnecessary elaboration.";
+                }
+                else if (config.reasoning_effort.ends_with("high"))
+                {
+                    oss << "Reasoning effort is set to xhigh. Please think carefully through the task, validate key assumptions, consider plausible alternatives, and prioritize correctness, consistency, and clarity in the final answer.";
+                }
             }
 
             if (sys_prompt.size() > 0)

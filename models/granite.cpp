@@ -1,4 +1,5 @@
 #include "llama.h"
+#include "../src/chat_encoders.h"
 
 namespace chatllm::granite::moe
 {
@@ -26,7 +27,14 @@ namespace chatllm::granite::moe
         void append_user_opening(int round_idx, std::vector<int> &ids) const override;
     };
 
-    static ChatHistoryEncoder _chat_encoder;
+    class ChatHistoryEncoder2 : public HistoryEncoderImStartImEnd
+    {
+    public:
+        void append_user(int round_idx, const std::string &user, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder   _chat_encoder;
+    static ChatHistoryEncoder2  _chat_encoder_im;
 
     class Tokenizer : public BaseTokenizer
     {
@@ -50,9 +58,16 @@ namespace chatllm::granite::moe
             end_of_role_id   = tp->PieceToId("<|end_of_role|>");
             tool_call_id     = tp->PieceToId("<|tool_call|>");
 
+            if (start_of_role_id < 0)
+            {
+                set_chat_encoder(&_chat_encoder_im);
+            }
+
             std::vector<int> ids;
             tp->Encode("\n", &ids);
             nl_token_id = ids[0];
+
+            tp->EnableReturnSpecialToken(true);
 
             return size;
         }
@@ -76,12 +91,31 @@ namespace chatllm::granite::moe
             ids.push_back(nl_token_id);
         }
 
+        void prepare(Messages &history, const GenerationConfig &config) override
+        {
+            user_suffix = "";
+            if (config.enable_thinking != trilean::False)
+            {
+                if (config.reasoning_effort == "low")
+                {
+                    user_suffix = "{reasoning effort: low}";
+                }
+            }
+        }
+
     public:
         int start_of_role_id;
         int end_of_role_id;
         int tool_call_id;
         int nl_token_id;
+        std::string user_suffix;
     };
+
+    void ChatHistoryEncoder2::append_user(int round_idx, const std::string &user, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+        HistoryEncoderImStartImEnd::append_user(round_idx, user + tok->user_suffix, ids);
+    }
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
@@ -308,6 +342,22 @@ namespace chatllm::granite::dense
             }
 
             logit_scale = config.logits_scaling;
+        }
+
+        void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous)
+        {
+            switch (gen_config.enable_thinking)
+            {
+            case trilean::Default:
+                tokenizer->ai_prefix = "";
+                break;
+            case trilean::True:
+                tokenizer->ai_prefix = "<think>\n";
+                break;
+            default:
+                tokenizer->ai_prefix = "<think></think>";
+                break;
+            }
         }
     };
 }
