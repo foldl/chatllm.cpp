@@ -877,6 +877,7 @@ namespace chatllm::minicpm::v5
     public:
         ConditionalGeneration() = default;
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = (ModelType)MODEL_TYPE_MINICPM5);
+        void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous) override;
     };
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type):
@@ -904,6 +905,22 @@ namespace chatllm::minicpm::v5
             auto &attention = get_typed_transformer<ModelClass>()->layers[i].attention;
             attention.freq_base = config.rope_theta;
             attention.freq_scale = 1 / config.rope_scaling;
+        }
+    }
+
+    void ConditionalGeneration::prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous)
+    {
+        switch (gen_config.enable_thinking)
+        {
+        case trilean::Default:
+            tokenizer->ai_prefix = "";
+            break;
+        case trilean::True:
+            tokenizer->ai_prefix = "<think>\n";
+            break;
+        default:
+            tokenizer->ai_prefix = "<think>\n\n</think>\n\n";
+            break;
         }
     }
 }

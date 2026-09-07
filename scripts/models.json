@@ -1242,6 +1242,15 @@
                         "url": "chatllm_quantized_minicpm5/minicpm5-1b.bin"
                     }
                 }
+            },
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2678340736,
+                        "url": "chatllm_quantized_minicpm5/minicpm5-2b.bin"
+                    }
+                }
             }
         }
     },
