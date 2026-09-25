@@ -518,6 +518,11 @@ Please use `--format completion` for these models.
 * Qianfan-OCR (`InternVLChatModel`)
     * [x] [4B](https://huggingface.co/baidu/Qianfan-OCR/tree/5e181e708edb4089b7b4cab94279c46c6a2604fc)
 
+* TeleOCR (`Qwen2_5_VLForConditionalGeneration`)
+    * [x] [0.8B](https://huggingface.co/StarDoc-AI/TeleOCR/tree/a61433186527cb53958bf354e34ae673c19cec4b) (`-a TeleOCR`)
+
+    Note: This is not a model of `Qwen2_5_VLForConditionalGeneration`, `-a TeleOCR` is a must when converting.
+
 ## ASR Models
 
 * GLM-ASR (`GlmAsrForConditionalGeneration`)

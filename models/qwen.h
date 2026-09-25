@@ -93,7 +93,7 @@ namespace chatllm::qwen
             typedef Model<Config, Embedding, RMSNorm, QWen2Block, int, int, int, int, int> ModelClass;
         public:
             ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = ModelType::MODEL_TYPE_QWEN2, bool tie_embeddings = false);
-
+            static HeterogeneousModel *create_model(InitContext &w_ctx_, const Config &config, bool tie_embeddings);
         public:
             Config config;
 
@@ -621,6 +621,7 @@ namespace chatllm::qwen
         public:
             VisualEmbeddingGeneration(const RuntimeConfig &runtime_config, int max_patches, size_t GRAPH_SIZE = 4096);
             bool load(ModelLoader &loader);
+            bool is_loaded() const;
             bool load_more(ggml::type dtype, int lm_hidden_size, const json::JSON &config);
             void generate(const GenerationConfig &gen_config, BaseTokenizer *tok, ggml::type dtype, std::vector<uint8_t> &buf);
 
@@ -736,6 +737,33 @@ namespace chatllm::qwen
             const int per_image;
             const int image_num;
             BlockParams::PadEmbedding *pad_arg = nullptr;
+        };
+
+        class BaseConditionalGeneration : public TensorPosHelperPrelude, public ExtendEmbedding, public BaseModelForConditionalGeneration
+        {
+        protected:
+            BaseConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, std::function<HeterogeneousModel * ()> create_model);
+        public:
+            bool load_more(const json::JSON &config) override;
+            void load(ModelLoader &loader) override;
+            void set_additional_args(const std::map<std::string, std::string> &args) override;
+            int64_t get_param_num(bool effective_only) const;
+            void set_tokenizer(BaseTokenizer *tokenizer) override;
+        protected:
+            bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override;
+        public:
+            vit::VisualEmbeddingGeneration visual;
+            const Config config;
+        protected:
+            int token_time;
+            std::unique_ptr<TensorPosHelper3D> pos_helper;
+        };
+
+        class ConditionalGeneration : public BaseConditionalGeneration
+        {
+        public:
+            ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
+            void before_generate(const GenerationConfig &gen_config) override;
         };
     }
 

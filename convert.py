@@ -274,6 +274,7 @@ class ModelType(Enum):
     GLM_OCR                 = ModelTypeTagChatImageIn + 0x0000050
     InternVL                = ModelTypeTagChatImageIn + 0x0000060
     PaddleOCRVL             = ModelTypeTagChatImageIn + 0x0000070
+    TeleOCR                 = ModelTypeTagChatImageIn + 0x0000080
 
     Qwen2Audio              = ModelTypeTagChatAudioIn + 0x0000001
     Qwen3ForcedAligner      = ModelTypeTagChatAudioIn + 0x0000002
@@ -5163,6 +5164,36 @@ class QWen2_5VLConverter(BaseConverter):
             "visual.patch_embed.proj.1.weight",
         ]
 
+        return weight_names
+
+class TeleOCRConverter(BaseConverter):
+    MODEL_TYPE = ModelType.TeleOCR
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        return QWen2_5VLConverter.state_dict_pp(config, state_dict)
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        config.text_config['tie_word_embeddings'] = False
+        QWen2_5VLConverter.dump_config(f, config, ggml_type)
+        config_values = [
+            config.text_config['head_dim'],
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = QWen2_5VLConverter.get_weight_names(config)
+        for i in range(AttributeDict(config.text_config).num_hidden_layers):
+            weight_names += [
+                f"model.layers.{i}.self_attn.k_norm.weight",
+                f"model.layers.{i}.self_attn.q_norm.weight",
+            ]
+
+            weight_names.remove(f"model.layers.{i}.self_attn.k_proj.bias")
+            weight_names.remove(f"model.layers.{i}.self_attn.q_proj.bias")
+            weight_names.remove(f"model.layers.{i}.self_attn.v_proj.bias")
         return weight_names
 
 class MiniCPMOConverter(BaseConverter):
@@ -11273,6 +11304,8 @@ def main():
         OuteTTSConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'minicpm5':
         MiniCPM5Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'teleocr':
+        TeleOCRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     else:
         raise Exception(f'unknown model_type: {arch}')
 

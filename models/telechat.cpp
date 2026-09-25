@@ -1,5 +1,6 @@
 #include "../src/models.h"
 #include "../src/models_priv.h"
+#include "qwen.h"
 
 namespace chatllm::telechat::v2
 {
@@ -208,6 +209,165 @@ namespace chatllm::telechat::v2
 
         ids.push_back(tok->_bot_token_id);
     }
+}
 
-    REGISTER_MODEL_LOADER(TELECHAT2,             telechat::v2, 1);
+namespace chatllm::telechat::ocr
+{
+    struct Config : qwen::v2_5_vl::Config
+    {
+        int head_dim;
+    };
+
+    class ChatHistoryEncoder : public qwen::v2_5_vl::ChatHistoryEncoder
+    {
+    public:
+        void append_content(const std::vector<ContentPiece> &pieces, std::vector<int> &ids) const override;
+    };
+
+    static ChatHistoryEncoder _chat_encoder;
+
+    class Tokenizer : public qwen::v2_5_vl::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config):
+            qwen::v2_5_vl::Tokenizer(config, &_chat_encoder)
+        {
+            sys_prompt = "You are a helpful assistant.";
+        }
+    public:
+        int image_cnt = 0;
+        int video_cnt = 0;
+    };
+
+    class ConditionalGeneration : public qwen::v2_5_vl::BaseConditionalGeneration
+    {
+    public:
+        typedef Model<Config, Embedding, RMSNorm, qwen::v3::QWen3Block, int, int, int, int, int, int> ModelClass;
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config);
+        void before_generate(const GenerationConfig &gen_config) override;
+
+        static ModelClass *create_model(InitContext &w_ctx_, const Config &config);
+    };
+
+    ConditionalGeneration::ModelClass *ConditionalGeneration::create_model(InitContext &w_ctx_, const Config &config)
+    {
+        const bool tie_embeddings = config.tie_word_embeddings != 0;
+        const size_t tensor_ovhd = ggml_tensor_overhead();
+        const size_t num_tensors = 3 + config.num_hidden_layers * 15 + (tie_embeddings ? -1 : 0);
+        const size_t ctx_size = num_tensors * tensor_ovhd;
+
+        w_ctx_.gctx = GGMLContext({.mem_size = ctx_size, .mem_buffer = nullptr, .no_alloc = true});
+        w_ctx_.dtype = config.dtype;
+
+        ModelClass *transformer = nullptr;
+
+        if (tie_embeddings)
+        {
+            transformer = new ModelClass(&w_ctx_, config, nullptr,
+                                        config.hidden_size, config.num_attention_heads,
+                                        config.intermediate_size, config.num_key_value_heads,
+                                        config.head_dim,
+                                        config.max_length);
+        }
+        else
+        {
+            transformer = new ModelClass(&w_ctx_, config, false,
+                                        config.hidden_size, config.num_attention_heads,
+                                        config.intermediate_size, config.num_key_value_heads,
+                                        config.head_dim,
+                                        config.max_length);
+        }
+
+
+        for (int i = 0; i < config.num_hidden_layers; i++)
+        {
+            auto &layer = transformer->layers[i];
+            layer.attention.freq_base = config.rope_theta;
+            layer.attention.mrope_sections = config.mrope_section;
+            layer.attention.rope_mode = RoPEMode::MROPE;
+        }
+
+        return transformer;
+    }
+
+    ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
+        : BaseConditionalGeneration(config, runtime_config, MODEL_TYPE_TELE_OCR,
+            [&]() {
+                auto r = create_model(w_ctx_, config);
+                for (int i = 0; i < config.num_hidden_layers; i++)
+                {
+                    auto &layer = r->layers[i];
+                    layer.attention.mrope_sections = this->config.mrope_section;
+                    layer.attention.rope_mode = RoPEMode::MROPE;
+                }
+                return r;
+            }
+        )
+    {
+    }
+
+    void ConditionalGeneration::before_generate(const GenerationConfig &gen_config)
+    {
+        std::vector<uint8_t> buf;
+
+        if (n_past + n_past_offset == 0)
+        {
+            Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+            tok->image_cnt = 0;
+            tok->video_cnt = 0;
+        }
+
+        auto emb = dynamic_cast<Embedding *>(dynamic_cast<ModelClass *>(transformer)->word_embeddings);
+        visual.generate(gen_config, dynamic_cast<Tokenizer *>(tokenizer), ggml::type_of(emb->weight), buf);
+        if (buf.size() < 1) return;
+
+        size_t offset = emb->get_base_nbytes();
+        Backend::write_tensor_data(emb->weight, buf.data(), offset, buf.size());
+    }
+
+    void ChatHistoryEncoder::append_content(const std::vector<ContentPiece> &pieces, std::vector<int> &ids) const
+    {
+        Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+        std::vector<ContentPiece> updated;
+
+        auto try_added_msg = [&updated](std::string msg) {
+            if (updated.size() > 0)
+            {
+                auto &last = updated.back();
+                if (last.type == ContentPiece::Type::Text)
+                {
+                    if (last.content.ends_with(msg)) return;
+                }
+            }
+            updated.push_back(msg);
+        };
+
+        for (auto &piece : pieces)
+        {
+            if (piece.type == ContentPiece::Type::Image)
+            {
+                tok->image_cnt += 1;
+                try_added_msg(utils::sprintf("Image %d:", tok->image_cnt));
+            }
+            else if (piece.type == ContentPiece::Type::Video)
+            {
+                tok->video_cnt += 1;
+                try_added_msg(utils::sprintf("Video %d:", tok->image_cnt));
+            }
+            else if (piece.type != ContentPiece::Type::Text)
+            {
+                CHATLLM_THROW << "Unsupported content type: " << (int)piece.type;
+            }
+            updated.push_back(piece);
+        }
+
+        qwen::v2_5_vl::ChatHistoryEncoder::append_content(updated, ids);
+    }
+}
+
+namespace chatllm::telechat
+{
+    REGISTER_MODEL_LOADER(TELECHAT2,            telechat::v2, 1);
+    REGISTER_MODEL_LOADER(TELE_OCR,             telechat::ocr, 1);
 }
