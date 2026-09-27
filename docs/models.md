@@ -315,9 +315,12 @@
 * Solor (`SolarForCausalLM`)
     * [x] [Pro](https://huggingface.co/upstage/solar-pro-preview-instruct/tree/dd4bcf7006df9b1ce3f87711e702e4063832aae3)
 
+* Spark (`Spark2_5ForCausalLM`)
+    * [x] v2.5: [1.7B](https://huggingface.co/XHToken/Spark-X2.5-1.7B/tree/14d6e83c13c7add2b62a7c39b2131f4ed1cddcf8), [4B](https://huggingface.co/XHToken/Spark-X2.5-4B/tree/0bcb35678590218655dff3765b9e61c83b35e9c4)
+
 * TeleChat (`TeleChat2ForCausalLM`)
     * [x] v2: [3B](https://huggingface.co/Tele-AI/TeleChat2-3B), [7B](https://huggingface.co/Tele-AI/TeleChat2-7B), [115B](https://huggingface.co/Tele-AI/TeleChat2-115B)
-    * [x] v2.5 [35B](https://huggingface.co/Tele-AI/TeleChat2.5-35B/commit/e53676611f3c5072f7696a359132eaf456272151), [115B](https://huggingface.co/Tele-AI/TeleChat2-115B/tree/8be654fe28bfe60fca4cd483297167a6e570f93b)
+    * [x] v2.5: [35B](https://huggingface.co/Tele-AI/TeleChat2.5-35B/commit/e53676611f3c5072f7696a359132eaf456272151), [115B](https://huggingface.co/Tele-AI/TeleChat2-115B/tree/8be654fe28bfe60fca4cd483297167a6e570f93b)
 
 * XVERSE (`XverseForCausalLM`)
     * [x] [Chat-7B](https://huggingface.co/xverse/XVERSE-7B-Chat), [Chat-13B](https://huggingface.co/xverse/XVERSE-13B-Chat), [Chat-65B](https://huggingface.co/xverse/XVERSE-65B-Chat)

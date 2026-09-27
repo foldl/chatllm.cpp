@@ -198,6 +198,8 @@ namespace chatllm
 
         MODEL_TYPE_NANBEIGE         = 0x3020,
 
+        MODEL_TYPE_SPARK_2_5        = 0x3030,
+
         MODEL_TYPE_BCE_Embedding = 0x10000100,
         MODEL_TYPE_BCE_ReRanker  = 0x10000101,
         MODEL_TYPE_BGE_M3        = 0x10000102,

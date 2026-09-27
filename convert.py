@@ -248,6 +248,8 @@ class ModelType(Enum):
 
     Nanbeige        = 0x3020
 
+    Spark2_5        = 0x3030
+
     BCE_Embedding           = 0x10000100
     BCE_ReRanker            = 0x10000101
     BGE_M3                  = 0x10000102
@@ -10575,6 +10577,75 @@ class NanbeigeConverter(BaseConverter):
             weight_names.remove('lm_head.weight')
         return weight_names
 
+class Spark2_5Converter(BaseConverter):
+    MODEL_TYPE = ModelType.Spark2_5
+
+    @classmethod
+    def state_dict_pp(cls, config, state_dict):
+        r = {}
+        for name in state_dict:
+            tensor: torch.Tensor = state_dict[name]
+            new_name: str = name
+            new_name = new_name.replace('model.embedding.weight', 'model.embed_tokens.weight')
+            new_name = new_name.replace('.out_proj.', '.o_proj.')
+            if new_name.endswith('q_k_v_proj.weight'):
+                q_dim = config.num_attention_heads * config.head_dim
+                kv_dim = config.num_key_value_heads * config.head_dim
+                q = tensor[0:q_dim, :]
+                k = tensor[q_dim:q_dim + kv_dim, :]
+                v = tensor[q_dim + kv_dim:, :]
+                r[new_name.replace('q_k_v_proj.weight', 'q_proj.weight')] = permute(q.contiguous(), config.num_attention_heads)
+                r[new_name.replace('q_k_v_proj.weight', 'k_proj.weight')] = permute(k.contiguous(), config.num_key_value_heads)
+                r[new_name.replace('q_k_v_proj.weight', 'v_proj.weight')] = v
+            else:
+                r[new_name] = tensor
+
+        return r
+
+    @staticmethod
+    def dump_config(f, config, ggml_type):
+        assert config.hidden_act == 'gelu'
+        assert config.gate_attn_act_mode == 'sigmoid'
+        assert config.headwise_attn_output_gate
+
+        MAX_LAYERS = 128
+
+        config.hidden_act = 'silu'
+        dump_llama_like_config(f, config, ggml_type)
+        config_values = [
+            config.num_key_value_heads,
+            config.head_dim,
+            config.sliding_window,
+            1 if config.tie_word_embeddings else 0,
+        ]
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [0] * MAX_LAYERS
+        for i in range(config.num_hidden_layers):
+            if config.layer_types[i] == 'sliding_attention':
+                config_values[i] = 1
+        f.write(struct.pack("<" + "i" * len(config_values), *config_values))
+
+        config_values = [
+            config.rope_parameters['full_attention']['partial_rotary_factor'],
+            config.rope_parameters['full_attention']['rope_theta'],
+            config.rope_parameters['sliding_attention']['partial_rotary_factor'],
+            config.rope_parameters['sliding_attention']['rope_theta'],
+        ]
+        f.write(struct.pack("<ffff", *config_values))
+
+    @staticmethod
+    def get_weight_names(config):
+        weight_names = LlamaConverter.get_weight_names(config)
+        if config.headwise_attn_output_gate:
+            for i in range(config.num_hidden_layers):
+                weight_names += [
+                    f"model.layers.{i}.self_attn.g_proj.weight",
+                ]
+        if config.tie_word_embeddings:
+            weight_names.remove('lm_head.weight')
+        return weight_names
+
 def convert_grok_1_base(args, vocab, ggml_type):
     def ffn_size(emb_size, widening_factor):
         _ffn_size = int(widening_factor * emb_size) * 2 // 3
@@ -11269,6 +11340,8 @@ def main():
         NanbeigeConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'InstellaMoEForCausalLM':
         InstellaMoEConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
+    elif arch == 'Spark2_5ForCausalLM':
+        Spark2_5Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'deepseek-r1-distill-qwen3':
         QWen3Converter.MODEL_TYPE = ModelType.DeepSeek_R1_Distill_QWen3
         QWen3Converter.convert(config, model_files, vocab, ggml_type, args.save_path)

@@ -128,6 +128,7 @@ set(core_files src/backend.cpp
     models/siglip.cpp
     models/smol.cpp
     models/solar.cpp
+    models/spark.cpp
     models/stablelm.cpp
     models/starcoder.cpp
     models/starling.cpp
