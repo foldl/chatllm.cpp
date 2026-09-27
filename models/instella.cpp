@@ -157,7 +157,6 @@ namespace chatllm::instella::moe
     {
         if (rt_gate != nullptr)
         {
-            auto gate = gate_proj->forward(ctx, scores);
             scores = ggml::mul(ctx, scores, rt_gate);
         }
         ggml::tensor * r = deepseek::v2_light::MLAttention::output_project(ctx, scores);
