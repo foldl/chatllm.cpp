@@ -1718,7 +1718,7 @@ namespace chatllm::qwen::v2_5_vl
     int64_t BaseConditionalGeneration::get_param_num(bool effective_only) const
     {
         int64_t r = BaseModelForConditionalGeneration::get_param_num(effective_only);
-        if (_chat_encoder.vit_loaded)
+        if (visual.vis_model.get())
             r += visual.vis_model->get_param_num(effective_only);
         return r;
     }

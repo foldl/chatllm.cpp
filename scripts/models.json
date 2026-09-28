@@ -3316,6 +3316,22 @@
             }
         }
     },
+    "mimo-v2.6-distill-qwen": {
+        "brief": "Mo-V2.6-Distill-Qwen-9B is a 9B agentic model developed by Xiaomi MiMo through supervised fine-tuning of Qwen3.5-9B on MiMo-generated data.",
+        "default": "9b",
+        "license": "MIT",
+        "variants": {
+            "9b": {
+                "default": "q4_k",
+                "quantized": {
+                    "q4_k": {
+                        "size": 5639669040,
+                        "url": "chatllm_quantized_mimo/mimo-v2.6-distill-qwen-9b-q4_k.bin"
+                    }
+                }
+            }
+        }
+    },
     "seed-coder": {
         "brief": "Seed-Coder, a powerful, transparent, and parameter-efficient family of open-source code models at the 8B scale, featuring base, instruct, and reasoning variants.",
         "default": "8b-it",
@@ -4745,6 +4761,47 @@
                     "q4_k": {
                         "size": 19509311632,
                         "url": "chatllm_quantized_kat/kat-coder-v2.5-dev-q4_k.bin"
+                    }
+                }
+            }
+        }
+    },
+    "spark-x2.5": {
+        "brief": "Spark-X2.5-4B and Spark-X2.5-1.7B, two compact, general-purpose language models designed to make capable AI more practical, efficient, and accessible.",
+        "default": "1.7b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "1.7b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1818677648,
+                        "url": "chatllm_quantized_spark/spark-x2.5-1.7b.bin"
+                    }
+                }
+            },
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4373587520,
+                        "url": "chatllm_quantized_spark/spark-x2.5-4b.bin"
+                    }
+                }
+            }
+        }
+    },
+    "teleocr": {
+        "brief": "TeleOCR is a lightweight, open-source Vision-Language Model designed specifically for document parsing.",
+        "default": "1.4b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "1.4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 1642266080,
+                        "url": "chatllm_quantized_telechat/teleocr.bin"
                     }
                 }
             }

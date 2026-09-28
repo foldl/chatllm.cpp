@@ -478,6 +478,7 @@ Please use `--format completion` for these models.
     * [x] Ornith-1.5: [9B](https://huggingface.co/ornith-ai/Ornith-1.5-9B/tree/c927ad73b7eb20f00aafcaa0a11a9d58ed5487bc), [35B-A3B](https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B/tree/e4dfb35a93d4b6822a811a7676f3488514abe7e2)
     * [x] Qwen3.8: [27B](https://huggingface.co/Qwen/Qwen3.8-27B/tree/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0)
     * [x] KAT-Coder-V2.5: [Dev](https://huggingface.co/Kwaipilot/KAT-Coder-V2.5-Dev/tree/7be56fe773e72b6f5ca93c1ae45d828ddb893922) (LLM Only)
+    * [x] MiMo-V2.6-Distill-Qwen: [9B](https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Distill-Qwen-9B/tree/2367e865d009c13ac81713a2878291d33ab28177)
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
     * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)
@@ -522,7 +523,7 @@ Please use `--format completion` for these models.
     * [x] [4B](https://huggingface.co/baidu/Qianfan-OCR/tree/5e181e708edb4089b7b4cab94279c46c6a2604fc)
 
 * TeleOCR (`Qwen2_5_VLForConditionalGeneration`)
-    * [x] [0.8B](https://huggingface.co/StarDoc-AI/TeleOCR/tree/a61433186527cb53958bf354e34ae673c19cec4b) (`-a TeleOCR`)
+    * [x] [1.4B](https://huggingface.co/StarDoc-AI/TeleOCR/tree/a61433186527cb53958bf354e34ae673c19cec4b) (`-a TeleOCR`)
 
     Note: This is not a model of `Qwen2_5_VLForConditionalGeneration`, `-a TeleOCR` is a must when converting.
 
