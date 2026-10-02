@@ -509,6 +509,15 @@ DLL_DECL void chatllm_set_lens_callback(struct chatllm_obj *obj, f_chatllm_lens_
  */
 DLL_DECL const char *chatllm_inspect_model(const char *model_path);
 
+/**
+ * @brief make decisions based current message history
+ *
+ * @param[in]  obj              model object
+ * @param[out] input_length     input length (in tokens)
+ * @return                      pointing to logits of each decision
+ */
+DLL_DECL const float *chatllm_make_decisions(struct chatllm_obj *obj, int *input_length);
+
 #ifdef __cplusplus
 }
 #endif

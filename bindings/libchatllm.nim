@@ -417,6 +417,27 @@ proc chatllm_async_embedding*(obj: ptr chatllm_obj; utf8_str: cstring; purpose: 
 proc chatllm_async_qa_rank*(obj: ptr chatllm_obj; utf8_str_q: cstring;
                             utf8_str_a: cstring): cint {.stdcall, dynlib: libName, importc.}
 
+##
+## @brief get basic info about a model
+##
+## Equiv. to `--show`.
+##
+## The returned data is available until a new call of this function.
+##
+## @param[in]  model_path       a model file
+## @return                      pointing to a string
+##
+proc chatllm_inspect_model*(model_path: cstring): cstring {.stdcall, dynlib: libName, importc.}
+
+##
+## @brief make decisions based current message history
+##
+## @param[in]  obj              model object
+## @param[out] input_length     input length (in tokens)
+## @return                      pointing to logits of each decision
+##
+proc chatllm_make_decisions*(obj: ptr chatllm_obj, input_length: ptr cint): ptr float32 {.stdcall, dynlib: libName, importc.}
+
 func is_same_command_option(a, b: string): bool =
     if len(a) != len(b): return false
     for i in 0 ..< len(a):

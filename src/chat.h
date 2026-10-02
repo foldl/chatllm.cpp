@@ -32,6 +32,7 @@ namespace chatllm
         Ranker      = 0x2,
         TTS         = 0x3,
         ASR         = 0x4,
+        Decision    = 0x5,
     };
 
     enum ChatModelAccessPoint
@@ -1036,6 +1037,10 @@ namespace chatllm
         virtual void speech_synthesis(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                       std::vector<int16_t> &audio, int &sample_rate, int &channels) = 0;
 
+        virtual bool make_decisions(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                std::vector<std::string> &options,
+                std::vector<float> &logits, ModelPerfInfo *performance) = 0;
+
         virtual std::string  type_name()    const = 0;
         virtual std::string  native_name()  const = 0;
         virtual ModelPurpose get_purpose()  const = 0;
@@ -1125,6 +1130,13 @@ namespace chatllm
                                 std::vector<int16_t> &audio, int &sample_rate, int &channels) override
         {
             model->speech_synthesis(gen_config, input_ids, audio, sample_rate, channels);
+        }
+
+        bool make_decisions(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                std::vector<std::string> &options,
+                std::vector<float> &logits, ModelPerfInfo *performance) override
+        {
+            return model->make_decisions(input_ids, gen_config, options, logits, performance);
         }
 
         int get_embedding_dim(void) const override { return model->get_embedding_dim(); }
@@ -1301,6 +1313,13 @@ namespace chatllm
             CHATLLM_CHECK(false) << "TTS not supported!";
         }
 
+        bool make_decisions(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                std::vector<std::string> &options,
+                std::vector<float> &logits, ModelPerfInfo *performance) override
+        {
+            return false;
+        }
+
         std::string  type_name()    const override { return name_; }
         std::string  native_name()  const override { return native_name_; }
         ModelPurpose get_purpose()  const override { return purpose; }
@@ -1463,6 +1482,8 @@ namespace chatllm
         void text_tokenize(const std::string &input, const GenerationConfig &gen_config, std::vector<int> &result);
         void embedding(const Content &input, const GenerationConfig &gen_config, std::vector<float> &result, BaseTokenizer::EmbeddingPurpose purpose = BaseTokenizer::EmbeddingPurpose::Document);
         float qa_rank(const Content &q, const Content &a, const GenerationConfig &gen_config);
+        void make_decisions(Messages &history, const GenerationConfig &gen_config,
+            std::vector<std::string> &options, std::vector<float> &result, int *input_length = nullptr);
 
         bool speech_synthesis(const std::string &input, const GenerationConfig &gen_config, std::vector<int16_t> &audio, int &sample_rate, int &channels);
 

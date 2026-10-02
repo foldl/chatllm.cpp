@@ -1,5 +1,6 @@
 #include "../src/models.h"
 #include "../src/models_priv.h"
+#include "qwen.h"
 
 namespace chatllm::internlm
 {
@@ -448,9 +449,128 @@ namespace chatllm::internlm
             }
         };
     }
+}
 
+namespace chatllm::internlm::decision
+{
+    using qwen::v3_5::Config;
+    using qwen::v3_5::Tokenizer;
+
+#if (0)
+    bool Pipeline::evaluate(const std::string &input,
+                const std::vector<int> &selected_positions, const std::vector<int> &selected_tokens,
+                std::vector<float> &logits)
+    {
+        if (!modelobj.loaded) return false;
+        std::vector<int> input_ids;
+        tokenizer->encode(input, input_ids);
+        logits.resize(selected_tokens.size() * selected_positions.size());
+        return model->evaluate(input_ids, selected_positions, selected_tokens, logits.data(), &performance);
+    }
+
+    bool Pipeline::evaluate(const std::string &input,
+                const std::string &marker, const std::vector<std::string> &selected_tokens,
+                std::vector<float> &logits)
+    {
+        std::vector<int> selected_positions;
+        std::vector<int> selected_token_ids;
+        return evaluate(input, selected_positions, selected_token_ids, logits);
+    }
+#endif
+
+    class ConditionalGeneration : public qwen::v3_5::ConditionalGeneration
+    {
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
+            ModelType type = (ModelType)MODEL_TYPE_INTERN_DECISION):
+            qwen::v3_5::ConditionalGeneration(config, runtime_config, type)
+        {}
+        void set_tokenizer(BaseTokenizer *tokenizer) override;
+        bool make_decisions(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                std::vector<std::string> &options,
+                std::vector<float> &logits, ModelPerfInfo *performance) override;
+
+    protected:
+        int marker_token_id;
+        std::vector<int> option_token_ids;
+    };
+
+    void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
+    {
+        qwen::v3_5::ConditionalGeneration::set_tokenizer(tokenizer);
+        tokenizer->set_system_prompt("You are a careful decision assistant. Use the state and decision schema in the user message to make the requested decisions. For every field, choose exactly one answer symbol (e.g. A, B, C, ...) from its listed options and return one valid JSON object mapping each field name to its chosen symbol. Use the field names and symbols exactly as given. Do not include explanations, Markdown, or extra text.");
+
+        auto tp = tokenizer->tp;
+        marker_token_id = tp->PieceToId("<decision>");
+        std::string s = "A";
+        for (int i = 'A'; i <= 'Z'; i++)
+        {
+            s[0] = (char)i;
+            option_token_ids.push_back(tp->PieceToId(s));
+        }
+        for (int i = 'a'; i <= 'z'; i++)
+        {
+            s[0] = (char)i;
+            option_token_ids.push_back(tp->PieceToId(s));
+        }
+        for (int i = '0'; i <= '9'; i++)
+        {
+            s[0] = (char)i;
+            option_token_ids.push_back(tp->PieceToId(s));
+        }
+    }
+
+    bool ConditionalGeneration::make_decisions(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                std::vector<std::string> &options,
+                std::vector<float> &logits, ModelPerfInfo *performance)
+    {
+        if (input_ids.size() > config.max_length) return false;
+
+        options.resize(option_token_ids.size());
+        for (size_t i = 0; i < option_token_ids.size(); i++)
+        {
+            options[i] = tokenizer->tp->IdToPiece(option_token_ids[i]);
+        }
+
+        std::vector<int> selected_positions;
+        for (size_t i = 1; i < input_ids.size(); i++)
+        {
+            if (input_ids[i] == marker_token_id)
+                selected_positions.push_back((int)i - 1);
+        }
+        if (selected_positions.size() < 1) return false;
+
+        logits.resize(selected_positions.size() * option_token_ids.size());
+
+        const int image_id_start = config.vocab_size;
+        const int length = (int)input_ids.size();
+
+        {
+            const int image_id_start = config.vocab_size;
+            const int length = (int)input_ids.size();
+            auto tok = dynamic_cast<Tokenizer *>(tokenizer);
+
+            // TODO:
+            int token_n_inc = 1;
+
+            if ((n_past == 0) && (n_past_offset == 0))
+                token_time = 0;
+
+            token_time = pos_helper.build_3d_pos(input_ids.data(), length,
+                tok->images_grid, image_id_start, token_n_inc, token_time);
+        }
+
+        bool r = evaluate(input_ids, selected_positions, option_token_ids, logits.data(), performance);
+
+        return r;
+    }
+}
+
+namespace chatllm
+{
     REGISTER_MODEL_LOADER(INTERNLM,              internlm::v1, 1);
     REGISTER_MODEL_LOADER(INTERNLM2,             internlm::v2, 1);
     REGISTER_MODEL_LOADER(INTERNLM2_1,           internlm::v2_1, 1);
     REGISTER_MODEL_LOADER(INTERNLM3,             internlm::v3, 1);
+    REGISTER_MODEL_LOADER(INTERN_DECISION,       internlm::decision, 1);
 }

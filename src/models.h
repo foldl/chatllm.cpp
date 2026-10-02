@@ -72,7 +72,8 @@ namespace chatllm
         Block *get_layer(int index);
         int    get_layer_num(void) const;
 
-        void set_final_steps(std::unique_ptr<ModelFinalSteps> final_steps);
+        // we does not own it
+        void set_final_steps(ModelFinalSteps *final_steps);
         ModelFinalSteps *get_final_steps();
 
         void set_layer_preprocess(std::unique_ptr<ModelLayerInputPreprocess> layer_preprocess);
@@ -101,7 +102,8 @@ namespace chatllm
         virtual void prepare_for_lens(ComputeContext *ctx);
         virtual void attach_lens(ComputeContext *ctx, ggml::tensor *hidden_states, int layer_id);
         void inspect_tensor(ComputeContext *ctx, ggml::tensor *tensor, ggml::type dtype, const char *format, ...);
-
+    private:
+        std::unique_ptr<ModelFinalSteps> _def_lm_final_steps;
     public:
         const int num_hidden_layers;
         const int hidden_size;
@@ -116,7 +118,7 @@ namespace chatllm
         // std::vector<std::unique_ptr<Block>> layers;
         std::vector<Block *> layers;
         size_t cache_size;
-        std::unique_ptr<ModelFinalSteps> final_steps;
+        ModelFinalSteps *final_steps;
         std::unique_ptr<ModelLayerInputPreprocess> layer_preprocess;
 
         int n_vocab = -1;
@@ -174,6 +176,15 @@ namespace chatllm
     {
     public:
         ggml::tensor *forward(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states) override;
+    };
+
+    class IdentityFinalSteps : public ModelFinalSteps
+    {
+    public:
+        ggml::tensor *forward(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states) override
+        {
+            return hidden_states;
+        }
     };
 
 } // namespace chatllm

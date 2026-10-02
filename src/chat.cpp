@@ -2053,6 +2053,19 @@ namespace chatllm
         tokenizer->encode(input, result);
     }
 
+    void Pipeline::make_decisions(Messages &history, const GenerationConfig &gen_config,
+            std::vector<std::string> &options, std::vector<float> &result, int *input_length)
+    {
+        if (input_length) *input_length = 0;
+        if (!modelobj.loaded) return;
+
+        std::vector<int> input_ids = tokenizer->encode_history(history, gen_config.max_context_length,
+            false, false);
+        if (input_length) *input_length = (int)input_ids.size();
+
+        model->make_decisions(input_ids, gen_config, options, result, &performance);
+    }
+
     void Pipeline::embedding(const Content &input, const GenerationConfig &gen_config, std::vector<float> &result, BaseTokenizer::EmbeddingPurpose purpose)
     {
         if (!modelobj.loaded) return;

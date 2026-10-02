@@ -2071,7 +2071,7 @@ namespace chatllm::qwen::v3_emb
         : PreludeCacheDisable(), v3::ConditionalGeneration(config, runtime_config, type, skip_lm_head, extra_tensors)
     {
         delete disabler;
-        dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(std::make_unique<EmbeddingLastTokenFinalSteps>());
+        dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(&_final_steps);
     }
 
     void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
@@ -2113,14 +2113,6 @@ namespace chatllm::qwen::v3_ranker
         BaseTokenizer::encode(oss.str(), ids);
     }
 
-    class FinalSteps : public LMFinalSteps
-    {
-    public:
-        ggml::tensor *forward(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states) override;
-    public:
-        ggml::tensor *yes_no_ids;
-    };
-
     ggml::tensor *FinalSteps::forward(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states)
     {
         ggml::tensor *logits = LMFinalSteps::forward(model, ctx, input_ids, hidden_states);
@@ -2135,7 +2127,7 @@ namespace chatllm::qwen::v3_ranker
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config)
         : v3_emb::ConditionalGeneration(config, runtime_config, MODEL_TYPE_QWEN3_ReRanker, false, 1)
     {
-        dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(std::make_unique<FinalSteps>());
+        dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(&_final_steps);
 
         FinalSteps *steps = dynamic_cast<FinalSteps *>(dynamic_cast<HeterogeneousModel *>(transformer)->get_final_steps());
         steps->yes_no_ids = ggml::new_tensor_1d(&w_ctx_, ggml::type::GGML_TYPE_I32, 2);
@@ -2852,6 +2844,8 @@ namespace chatllm::qwen::v3_vl_emb
 
         void embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                 std::vector<float> &embedding) override;
+    private:
+        EmbeddingLastTokenFinalSteps _final_steps;
     };
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type) :
@@ -2859,7 +2853,7 @@ namespace chatllm::qwen::v3_vl_emb
         v3_vl::ConditionalGeneration(config, runtime_config, type)
     {
         delete disabler;
-        dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(std::make_unique<EmbeddingLastTokenFinalSteps>());
+        dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(&_final_steps);
     }
 
     void ConditionalGeneration::set_additional_args(const std::map<std::string, std::string> &args)
@@ -2943,7 +2937,9 @@ namespace chatllm::qwen::v3_vl_ranker
 
         float qa_rank(const GenerationConfig &gen_config, const std::vector<int> &input_ids) override;
     protected:
-            ggml::tensor *yes_no_ids = nullptr;
+        ggml::tensor *yes_no_ids = nullptr;
+    private:
+        v3_ranker::FinalSteps _final_steps;
     };
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type) :
@@ -2952,7 +2948,7 @@ namespace chatllm::qwen::v3_vl_ranker
     {
         delete disabler;
 
-        dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(std::make_unique<v3_ranker::FinalSteps>());
+        dynamic_cast<HeterogeneousModel *>(transformer)->set_final_steps(&_final_steps);
 
         v3_ranker::FinalSteps *steps = dynamic_cast<v3_ranker::FinalSteps *>(dynamic_cast<HeterogeneousModel *>(transformer)->get_final_steps());
         steps->yes_no_ids = ggml::new_tensor_1d(&w_ctx_, ggml::type::GGML_TYPE_I32, 2);

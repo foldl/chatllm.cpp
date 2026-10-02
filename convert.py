@@ -265,6 +265,7 @@ class ModelType(Enum):
     GLM_ASR                 = 0x1000010D
     Qwen3_TTS               = 0x1000010E
     Qwen3_ASR               = 0x1000010F
+    Intern_Decision         = 0x10000110
 
     LlaMAMulti    = 0x20000001
 
@@ -11131,6 +11132,8 @@ def main():
             Qwen3ASRConverter.MODEL_TYPE = ModelType.Qwen3ForcedAligner
         Qwen3ASRConverter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch in ['Qwen3_5ForConditionalGeneration', 'Qwen3_5MoeForConditionalGeneration']:
+        if args.name.lower() == 'intern-decision':
+            QWen3_5Converter.MODEL_TYPE = ModelType.Intern_Decision
         QWen3_5Converter.convert(config, model_files, vocab, ggml_type, args.save_path)
     elif arch == 'KimiVLForConditionalGeneration':
         KimiVLConverter.convert(config, model_files, vocab, ggml_type, args.save_path)

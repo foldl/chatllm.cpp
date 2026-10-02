@@ -2,36 +2,8 @@
 #include <string.h>
 #include "../src/vision_process.h"
 
-namespace chatllm
-{
-    const int MODEL_TYPE_QWEN3_5 = MODEL_TYPE_QWEN2_5_VL + 3;
-}
-
 namespace chatllm::qwen::v3_5
 {
-    struct Config : public BaseConfig
-    {
-        int num_key_value_heads;
-        int attn_output_gate;
-        int linear_conv_kernel_dim;
-        int linear_key_head_dim;
-        int linear_num_key_heads;
-        int linear_num_value_heads;
-        int linear_value_head_dim;
-        int head_dim;
-        float rope_theta;
-        int rope_dim;
-        int mrope_sections[v2_5_vl::MROPE_SECTION_MAX];
-        int moe_intermediate_size;
-        int shared_expert_intermediate_size;
-        int num_experts_per_tok;
-        int num_experts;
-        int tie_word_embeddings;
-        int mtp_num_hidden_layers;
-        float router_aux_loss_coef;
-        int layer_is_la[v3::MAX_LAYERS];
-    };
-
     class ChatHistoryEncoderOvisOCR : public v2_5_vl::ChatHistoryEncoder
     {
     public:
@@ -65,97 +37,35 @@ namespace chatllm::qwen::v3_5
         }
     };
 
-    class Tokenizer : public v3_vl::Tokenizer
+    Tokenizer::Tokenizer(const BaseConfig &config) :
+        v3_vl::Tokenizer(config)
     {
-    public:
-        Tokenizer(const BaseConfig &config) :
-            v3_vl::Tokenizer(config)
-        {
-            sys_prompt = "";
-        }
+        sys_prompt = "";
+    }
 
-        void prepare(Messages &history, const GenerationConfig &config) override
+    void Tokenizer::prepare(Messages &history, const GenerationConfig &config)
+    {
+        std::ostringstream oss;
+        if (config.enable_thinking != trilean::False)
         {
-            std::ostringstream oss;
-            if (config.enable_thinking != trilean::False)
+            if (config.reasoning_effort == "low")
             {
-                if (config.reasoning_effort == "low")
-                {
-                    oss << "Reasoning effort is set to low. Keep your thinking brief and focused, moving directly to the conclusion without unnecessary elaboration.";
-                }
-                else if (config.reasoning_effort.ends_with("high"))
-                {
-                    oss << "Reasoning effort is set to xhigh. Please think carefully through the task, validate key assumptions, consider plausible alternatives, and prioritize correctness, consistency, and clarity in the final answer.";
-                }
+                oss << "Reasoning effort is set to low. Keep your thinking brief and focused, moving directly to the conclusion without unnecessary elaboration.";
             }
-
-            if (sys_prompt.size() > 0)
+            else if (config.reasoning_effort.ends_with("high"))
             {
-                if (oss.tellp() > std::streampos(0))
-                    oss << "\n\n";
-                oss << sys_prompt;
+                oss << "Reasoning effort is set to xhigh. Please think carefully through the task, validate key assumptions, consider plausible alternatives, and prioritize correctness, consistency, and clarity in the final answer.";
             }
-            rt_sys_prompt = oss.str();
         }
-    };
 
-    class Prelude
-    {
-    public:
-        Prelude(const Config &config, int n_image_emb, int n_image):
-            n_image_emb(n_image_emb), n_image(n_image),
-            pos_helper(config.max_length, config.vocab_size),
-            helper_prelude(new TensorPosHelperPrelude(&pos_helper)),
-            pad_arg(new BlockParams::PadEmbedding(n_image_emb * n_image, n_image_emb * n_image))
+        if (sys_prompt.size() > 0)
         {
-            old_rms_eps = BlockParams::Epsilon::rms_norm;
-            BlockParams::Epsilon::rms_norm = 1e-6f;
+            if (oss.tellp() > std::streampos(0))
+                oss << "\n\n";
+            oss << sys_prompt;
         }
-
-        void done(void)
-        {
-            BlockParams::Epsilon::rms_norm = old_rms_eps;
-            helper_prelude.reset(nullptr);
-            pad_arg.reset(nullptr);
-        }
-    protected:
-        float old_rms_eps = 0.0f;
-        const int n_image_emb;
-        const int n_image;
-        qwen::v2_5_vl::TensorPosHelper3D pos_helper;
-        std::unique_ptr<TensorPosHelperPrelude> helper_prelude;
-        std::unique_ptr<BlockParams::PadEmbedding> pad_arg;
-    };
-
-    class ConditionalGeneration : public Prelude, public BaseModelForConditionalGeneration
-    {
-    public:
-        typedef HeterogeneousModel ModelClass;
-    public:
-        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
-            ModelType type = (ModelType)MODEL_TYPE_QWEN3_5, int vocab_size = -1);
-        void load(ModelLoader &loader) override;
-        void before_run_model(const int *input_ids, const int ids_count, const GenerationConfig &gen_config, int past) override;
-        bool load_more(const json::JSON &config) override;
-        void set_additional_args(const std::map<std::string, std::string> &args) override;
-        int64_t get_param_num(bool effective_only) const override;
-        void before_generate(const GenerationConfig &gen_config) override;
-        void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous) override;
-        void set_tokenizer(BaseTokenizer *tokenizer) override;
-    protected:
-        bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override;
-    private:
-        int get_sparse_layer_num();
-        int get_la_layer_num();
-        Block *create_layer(InitContext *ctx, int layer_index);
-    public:
-        const Config config;
-        std::vector<int> v_pos;
-    private:
-        int token_time = 0;
-        qwen::v3_vl::vit::VisualEmbeddingGeneration visual;
-        bool vit_loaded = false;
-    };
+        rt_sys_prompt = oss.str();
+    }
 
     class QwenGatedAttention : public QKNormedRoPEAttention<RMSNormInplaceWeightPlus1, BaseAttention>
     {
@@ -532,7 +442,7 @@ namespace chatllm::qwen::v3_5
 
     ConditionalGeneration::ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, int vocab_size):
         Prelude(config, 2048, 10),
-        BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 10),
+        BaseModelForConditionalGeneration(type, config, runtime_config, 4096 * 100),
         config(config),
         token_time(0),
         visual(runtime_config, pad_arg->get() / n_image)
@@ -780,7 +690,7 @@ namespace chatllm::qwen::v3_5
     }
 }
 
-namespace chatllm
+namespace chatllm::qwen
 {
     REGISTER_MODEL_LOADER(QWEN3_5,                          qwen::v3_5, 1);
 }

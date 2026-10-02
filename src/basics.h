@@ -41,6 +41,16 @@ namespace base64
 
 namespace utils
 {
+    template <class T> void ordering(const T *data, const size_t size, std::vector<size_t> &order, bool descending = false)
+    {
+        order.resize(size);
+        for (size_t i = 0; i < size; i++) order[i] = i;
+        std::sort(order.begin(), order.end(), [data, descending](auto a, auto b)
+        {
+            return descending ? data[a] > data[b] : data[a] < data[b];
+        });
+    }
+
     template <class T> void ordering(const std::vector<T> &lst, std::vector<size_t> &order, bool descending = false)
     {
         order.resize(lst.size());

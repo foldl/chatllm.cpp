@@ -38,6 +38,7 @@ LLMirror[<a href="https://github.com/foldl/llmirror"   style="text-decoration:no
 
 **What's New:**
 
+* 2026-10-02: Intern-Decision
 * 2026-09-27: Spark-2.5
 * 2026-09-25: TeleOCR
 * 2026-09-08: MiniCPM5-2B

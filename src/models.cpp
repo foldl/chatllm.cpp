@@ -250,6 +250,8 @@ namespace chatllm
         case MODEL_TYPE_GLM_ASR:
         case MODEL_TYPE_QWEN3_ASR:
             return ModelPurpose::ASR;
+        case MODEL_TYPE_INTERN_DECISION:
+            return ModelPurpose::Decision;
         default:
             return (ModelPurpose)(GET_PURPOSE_TAG(model_type));
         }
@@ -278,6 +280,7 @@ namespace chatllm
         case MODEL_TYPE_QWEN3_ASR:
             return ChatModelAccessPoint::Text | ChatModelAccessPoint::AudioInput;
         case MODEL_TYPE_LLAMA_MULTI:
+        case MODEL_TYPE_INTERN_DECISION:
             return ChatModelAccessPoint::Text;
         default:
             break;
@@ -315,6 +318,8 @@ namespace chatllm
             return "TTS";
         case ModelPurpose::ASR:
             return "ASR";
+        case ModelPurpose::Decision:
+            return "Decision";
         default:
             CHATLLM_THROW << "unknown model purpose: " << purpose;
             return "???";
@@ -1085,6 +1090,31 @@ namespace chatllm
         return output_ids;
     }
 
+    bool BaseModelForConditionalGeneration::evaluate(const std::vector<int> &input_ids,
+                const std::vector<int> &selected_positions, const std::vector<int> &selected_tokens,
+                float *logits, ModelPerfInfo *performance)
+    {
+        if ((int)input_ids.size() > config_.max_length)
+            return false;
+
+        n_past = 0;
+        n_past_offset = 0;
+
+        transformer->set_ctx((int)input_ids.size());
+
+        if (performance)
+            performance->Reset();
+
+        bool r = simple_eval(input_ids.data(), (int)input_ids.size(),
+            selected_positions.data(), (int)selected_positions.size(),
+            selected_tokens.data(), (int)selected_tokens.size(), logits);
+
+        if (performance)
+            performance->Accumulate(ModelPerfInfo::Type::Prompt, input_ids.size());
+
+        return r;
+    }
+
     void BaseModelForConditionalGeneration::embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                 std::vector<float> &embedding)
     {
@@ -1241,6 +1271,86 @@ namespace chatllm
         transformer->before_eval(ctx);
     }
 
+    class FinalStepChanger
+    {
+    public:
+        FinalStepChanger(HeterogeneousModel *model, ModelFinalSteps *steps):
+            model(model),
+            old(model->get_final_steps())
+        {
+            model->set_final_steps(steps);
+        }
+        ~FinalStepChanger()
+        {
+            model->set_final_steps(old);
+        }
+    private:
+        HeterogeneousModel *model;
+        ModelFinalSteps *old;
+    };
+
+    bool BaseModelForConditionalGeneration::simple_eval(const int *input_ids, const int ids_count,
+                            const int *selected_positions, const int pos_count,
+                            const int *selected_tokens, const int token_count,
+                            float *logits)
+    {
+        IdentityFinalSteps _steps;
+        FinalStepChanger change(transformer, &_steps);
+        std::vector<float> output;
+        ForwardContext ctx(&backend_context);
+        ctx.user_options = w_ctx_.user_options;
+
+        ctx.gctx = GGMLContext({.mem_size = backend_context.buf_compute_meta.size(), .mem_buffer = backend_context.buf_compute_meta.data(), .no_alloc = true});
+        ctx.gf = ggml::new_graph_custom(&ctx, GRAPH_SIZE, false);
+
+        dbg_ctx = &ctx;
+
+        ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Prolog);
+        ggml::tensor *input_ids_tensor  = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, ids_count);
+        ggml::tensor *select_pos_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, pos_count);
+        ggml::tensor *select_tok_tensor = ggml::new_tensor_1d(&ctx, GGML_TYPE_I32, token_count);
+
+        ggml::tensor *r = transformer->forward(&ctx, input_ids_tensor, 0);
+
+        ctx.move_to_layer(LayerAllocatorManager::MiscLayer::Epilog);
+        r = ggml::get_rows(&ctx, r, select_pos_tensor);
+        r = transformer->final_layernorm->forward(&ctx, r);
+
+        if (transformer->lm_head)
+        {
+            CHATLLM_CHECK(dynamic_cast<Linear *>(transformer->lm_head) != nullptr);
+            CHATLLM_CHECK(dynamic_cast<Linear *>(transformer->lm_head)->bias == nullptr);
+        }
+        auto head = transformer->lm_head ? dynamic_cast<Linear *>(transformer->lm_head)->weight
+                                         : dynamic_cast<Embedding *>(transformer->word_embeddings)->weight;
+        head = ggml::get_rows(&ctx, head, select_tok_tensor);
+        r    = ggml::mul_mat (&ctx, head, r);
+
+        ggml::set_output(r);
+        ggml::build_forward_expand(&ctx, r);
+
+        CHATLLM_CHECK(r->type == GGML_TYPE_F32) << "output type must be float: " << r->type;
+
+        output.resize(ggml::nbytes(r) / sizeof(output[0]));
+
+        if (!ctx.allocate()) return false;
+
+        Backend::write_tensor_data(input_ids_tensor,  input_ids);
+        Backend::write_tensor_data(select_pos_tensor, selected_positions);
+        Backend::write_tensor_data(select_tok_tensor, selected_tokens);
+
+        before_eval_model(&ctx);
+        ctx.compute();
+
+        Backend::read_tensor_data(r, output.data());
+
+        memcpy(logits, output.data(), output.size() * sizeof(float));
+
+        ctx.reset();
+
+        return true;
+    }
+
     bool BaseModelForConditionalGeneration::run_model(const int *input_ids, const int ids_count,
                             const GenerationConfig &gen_config,
                             int past,
@@ -1363,13 +1473,14 @@ namespace chatllm
     HeterogeneousModel::HeterogeneousModel(InitContext *ctx, int num_hidden_layers, int hidden_size,
         Block *word_embeddings, Block *final_layernorm,
         Block *lm_head, std::function<Block *(InitContext *, int)> create_layer)
-    : num_hidden_layers(num_hidden_layers), hidden_size(hidden_size),
+    :   _def_lm_final_steps(new LMFinalSteps()),
+        num_hidden_layers(num_hidden_layers), hidden_size(hidden_size),
         word_embeddings(word_embeddings),
         final_layernorm(final_layernorm),
         lm_head(lm_head),
         logits_pp(nullptr),
         cache_size(0),
-        final_steps(std::make_unique<LMFinalSteps>())
+        final_steps(_def_lm_final_steps.get())
     {
         init_ctx = ctx;
         layers.reserve(num_hidden_layers);
@@ -1466,14 +1577,14 @@ namespace chatllm
         return (int)layers.size();
     }
 
-    void HeterogeneousModel::set_final_steps(std::unique_ptr<ModelFinalSteps> final_steps)
+    void HeterogeneousModel::set_final_steps(ModelFinalSteps *final_steps)
     {
-        this->final_steps = std::move(final_steps);
+        this->final_steps = final_steps;
     }
 
     ModelFinalSteps *HeterogeneousModel::get_final_steps()
     {
-        return final_steps.get();
+        return final_steps;
     }
 
     void HeterogeneousModel::set_layer_preprocess(std::unique_ptr<ModelLayerInputPreprocess> layer_preprocess)

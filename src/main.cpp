@@ -805,6 +805,36 @@ static void print_embedding(const std::vector<float> &data, std::ostream &cout)
     cout << std::endl;
 }
 
+static void print_decisions(const std::vector<std::string> &options, const std::vector<float> &data, std::ostream &cout, int top_n = 3)
+{
+    const int num = (int)(data.size() / options.size());
+    cout << "[" << std::endl;
+
+    for (int i = 0; i < num; i++)
+    {
+        const float *d = data.data() + (options.size() * i);
+        std::vector<size_t> order;
+        utils::ordering(d, options.size(), order, true);
+
+        if (i > 0)
+        {
+            cout << "," << std::endl;
+        }
+        cout << "    {" << std::endl;
+        for (int t = 0; t < top_n; t++)
+        {
+            const size_t id = order[t];
+            if (t > 0)
+            {
+                cout << "," << std::endl;
+            }
+            cout << "        \"" << options[id] << "\": " << std::setw(14) << std::fixed << std::setprecision(8) << d[id];
+        }
+        cout << std::endl << "    }";
+    }
+    cout << std::endl << "]" << std::endl;
+}
+
 static void play_audio(const std::vector<int16_t> &data, const int sample_rate, const int channels, TextStreamer &streamer, std::string export_fn)
 {
     auto fn = export_fn.size() > 0 ? export_fn : utils::tmpname();
@@ -930,6 +960,50 @@ static void run_embedding(Args &args, chatllm::Pipeline &pipeline, TextStreamer 
 
         purpose = purpose == chatllm::BaseTokenizer::EmbeddingPurpose::Document ?
                     chatllm::BaseTokenizer::EmbeddingPurpose::Query : chatllm::BaseTokenizer::EmbeddingPurpose::Document;
+    }
+    streamer.cout << "Bye\n";
+}
+
+static void run_decision(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer, const chatllm::GenerationConfig &gen_config)
+{
+    if (!args.interactive)
+    {
+        streamer.cout << "-i required" << std::endl;
+        return;
+    }
+
+    while (1)
+    {
+        DEF_MESSAGES_FROM_ARG(messages, args);
+        std::string input;
+        std::string assistant;
+        std::vector<float> result;
+        std::vector<std::string> options;
+
+        streamer.cout << "User > " << std::flush;
+
+        if (!get_utf8_line(input, args.multi_line))
+        {
+            streamer.cout << "FAILED to read line." << std::endl;
+            break;
+        }
+        if (input.empty()) continue;
+
+        streamer.cout << "Assistant > " << std::flush;
+        if (!get_utf8_line(assistant, args.multi_line))
+        {
+            streamer.cout << "FAILED to read line." << std::endl;
+            break;
+        }
+        if (assistant.empty()) continue;
+
+        messages.push_back(input, chatllm::MsgRole::User);
+        messages.push_back(assistant, chatllm::MsgRole::Assistant);
+
+        pipeline.make_decisions(messages, gen_config, options, result);
+
+        streamer.cout << "      > ";
+        print_decisions(options, result, streamer.cout);//, (int)options.size());
     }
     streamer.cout << "Bye\n";
 }
@@ -1084,6 +1158,9 @@ void chat(Args &args, chatllm::Pipeline &pipeline, TextStreamer &streamer)
             return;
         case chatllm::ModelPurpose::ASR:
             run_asr_ocr(args, pipeline, streamer, gen_config, "audio");
+            return;
+        case chatllm::ModelPurpose::Decision:
+            run_decision(args, pipeline, streamer, gen_config);
             return;
         default:
             break;
@@ -1582,6 +1659,7 @@ public:
     chatllm::GenerationConfig gen_config;
     chatllm::Content content_scratch;
     std::vector<std::string> tmp_files;
+    std::vector<float> decision_logits;
     int sess_n_past;
     int sess_hist_len;
     Args args;
@@ -2320,6 +2398,18 @@ const char *chatllm_inspect_model(const char *model_path)
     oss << "Tensors:" << std::endl << chatllm::ModelFactory::show_tensors(loader) << std::endl;
     info = oss.str();
     return info.data();
+}
+
+const float *chatllm_make_decisions(struct chatllm_obj *obj, int *input_length)
+{
+    DEF_CHAT_STREAMER();
+
+    if (!streamer->is_prompt || chat->is_async_busy) return NULL;
+
+    std::vector<std::string> options;
+
+    chat->pipeline->make_decisions(chat->history, chat->gen_config, options, chat->decision_logits, input_length);
+    return chat->decision_logits.data();
 }
 
 #endif

@@ -628,6 +628,13 @@ Tips for diffusion LLMs, they are very sensitive to sampling parameters. The res
             For algo 0, tokens are accepted if entropy is less than threshold; for others, tokens are accepted when probability (or condidence level) is larger than this.
         - `pos_penalty_factor`: default 0.02 (used by entropy algo)
 
+* Intern-Decision (`Qwen3_5ForConditionalGeneration`)
+    * [x] [0.8B](https://huggingface.co/internlm/Intern-Decision-0.8B/tree/85a0cc5a99d67ea8d56dfe98115689212867171d),
+    [2B](https://huggingface.co/internlm/Intern-Decision-2B/tree/8797836c65fc91a2435b1fb6850b5f0aabd75cc3),
+    [4B](https://huggingface.co/internlm/Intern-Decision-4B/tree/0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd)
+
+    Note: `--name Intern-Decision` is required to enable the decision feature.
+
 * [Meta-AI multi-token prediction models](https://huggingface.co/facebook/multi-token-prediction) checkpoints
 
     Download at least one multi-token prediction checkpoint (such as 7B_1T_4).

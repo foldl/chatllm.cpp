@@ -215,6 +215,7 @@ namespace chatllm
         MODEL_TYPE_GLM_ASR                  = 0x1000010D,
         MODEL_TYPE_QWEN3_TTS                = 0x1000010E,
         MODEL_TYPE_QWEN3_ASR                = 0x1000010F,
+        MODEL_TYPE_INTERN_DECISION          = 0x10000110,
 
         MODEL_TYPE_LLAMA_MULTI      = 0x20000001,
 
@@ -478,11 +479,11 @@ namespace chatllm
         int get_max_length(void) override;
         void shift_memory(int keep) override;
         int64_t get_param_num(bool effective_only) const override;
-        virtual std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+        std::vector<int> generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                   const bool continuous,
                                   bool &completed,
                                   ModelPerfInfo *performance,
-                                  BaseStreamer *streamer = nullptr);
+                                  BaseStreamer *streamer = nullptr) override;
 
         void embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                     std::vector<float> &embedding) override;
@@ -509,6 +510,15 @@ namespace chatllm
         virtual bool before_initial_run(const int ids_count,
                                        const GenerationConfig &gen_config,
                                        int past);
+
+        virtual bool evaluate(const std::vector<int> &input_ids,
+                const std::vector<int> &selected_positions, const std::vector<int> &selected_tokens,
+                float *logits,
+                ModelPerfInfo *performance);
+        virtual bool simple_eval(const int *input_ids, const int ids_count,
+                const int *selected_positions, const int pos_count,
+                const int *selected_tokens, const int token_count,
+                float *logits);
 
         bool run_model(const std::vector<int> &input_ids,
             const GenerationConfig &gen_config,
@@ -615,8 +625,10 @@ namespace chatllm
         EmbeddingModel(InitContext *ctx, const Config &config, _Types... layer_args)
         : Base(ctx, config, nullptr, std::forward<_Types>(layer_args)...)
         {
-            Base::set_final_steps(std::make_unique<EmbeddingPoolingFinalSteps>());
+            Base::set_final_steps(&_final_steps);
         }
+    private:
+        EmbeddingPoolingFinalSteps _final_steps;
     };
 
     template <class Embedding> Block *create_embedding(InitContext *ctx, const BaseConfig &config)

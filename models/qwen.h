@@ -5,6 +5,8 @@
 
 namespace chatllm::qwen
 {
+    const int MODEL_TYPE_QWEN3_5 = MODEL_TYPE_QWEN2_5_VL + 3;
+
     namespace v1
     {
         struct Config : public BaseConfig
@@ -859,6 +861,8 @@ namespace chatllm::qwen
 
             void set_additional_args(const std::map<std::string, std::string> &args) override;
             int get_embedding_dim(void) const override;
+        private:
+            EmbeddingLastTokenFinalSteps _final_steps;
         };
     }
 
@@ -878,6 +882,14 @@ namespace chatllm::qwen
             int no_token_id;
         };
 
+        class FinalSteps : public LMFinalSteps
+        {
+        public:
+            ggml::tensor *forward(HeterogeneousModel *model, ComputeContext *ctx, ggml::tensor *input_ids, ggml::tensor *hidden_states) override;
+        public:
+            ggml::tensor *yes_no_ids;
+        };
+
         class ConditionalGeneration : public v3_emb::ConditionalGeneration
         {
         public:
@@ -886,6 +898,8 @@ namespace chatllm::qwen
             void set_tokenizer(BaseTokenizer *tokenizer) override;
         protected:
             ggml::tensor *yes_no_ids = nullptr;
+        private:
+            FinalSteps _final_steps;
         };
     }
 }
@@ -988,5 +1002,97 @@ namespace chatllm::qwen::v3_vl
     public:
         Tokenizer(const BaseConfig &config);
         Tokenizer(const BaseConfig &config, BaseHistoryEncoder *encoder);
+    };
+}
+
+namespace chatllm::qwen::v3_5
+{
+    struct Config : public BaseConfig
+    {
+        int num_key_value_heads;
+        int attn_output_gate;
+        int linear_conv_kernel_dim;
+        int linear_key_head_dim;
+        int linear_num_key_heads;
+        int linear_num_value_heads;
+        int linear_value_head_dim;
+        int head_dim;
+        float rope_theta;
+        int rope_dim;
+        int mrope_sections[v2_5_vl::MROPE_SECTION_MAX];
+        int moe_intermediate_size;
+        int shared_expert_intermediate_size;
+        int num_experts_per_tok;
+        int num_experts;
+        int tie_word_embeddings;
+        int mtp_num_hidden_layers;
+        float router_aux_loss_coef;
+        int layer_is_la[v3::MAX_LAYERS];
+    };
+
+    class Tokenizer : public v3_vl::Tokenizer
+    {
+    public:
+        Tokenizer(const BaseConfig &config);
+
+        void prepare(Messages &history, const GenerationConfig &config);
+    };
+
+    class Prelude
+    {
+    public:
+        Prelude(const Config &config, int n_image_emb, int n_image):
+            n_image_emb(n_image_emb), n_image(n_image),
+            pos_helper(config.max_length, config.vocab_size),
+            helper_prelude(new TensorPosHelperPrelude(&pos_helper)),
+            pad_arg(new BlockParams::PadEmbedding(n_image_emb * n_image, n_image_emb * n_image))
+        {
+            old_rms_eps = BlockParams::Epsilon::rms_norm;
+            BlockParams::Epsilon::rms_norm = 1e-6f;
+        }
+
+        void done(void)
+        {
+            BlockParams::Epsilon::rms_norm = old_rms_eps;
+            helper_prelude.reset(nullptr);
+            pad_arg.reset(nullptr);
+        }
+    protected:
+        float old_rms_eps = 0.0f;
+        const int n_image_emb;
+        const int n_image;
+        qwen::v2_5_vl::TensorPosHelper3D pos_helper;
+        std::unique_ptr<TensorPosHelperPrelude> helper_prelude;
+        std::unique_ptr<BlockParams::PadEmbedding> pad_arg;
+    };
+
+    class ConditionalGeneration : public Prelude, public BaseModelForConditionalGeneration
+    {
+    public:
+        typedef HeterogeneousModel ModelClass;
+    public:
+        ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config,
+            ModelType type = (ModelType)MODEL_TYPE_QWEN3_5, int vocab_size = -1);
+        void load(ModelLoader &loader) override;
+        void before_run_model(const int *input_ids, const int ids_count, const GenerationConfig &gen_config, int past) override;
+        bool load_more(const json::JSON &config) override;
+        void set_additional_args(const std::map<std::string, std::string> &args) override;
+        int64_t get_param_num(bool effective_only) const override;
+        void before_generate(const GenerationConfig &gen_config) override;
+        void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous) override;
+        void set_tokenizer(BaseTokenizer *tokenizer) override;
+    protected:
+        bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override;
+    private:
+        int get_sparse_layer_num();
+        int get_la_layer_num();
+        Block *create_layer(InitContext *ctx, int layer_index);
+    public:
+        const Config config;
+        std::vector<int> v_pos;
+    protected:
+        int token_time = 0;
+        qwen::v3_vl::vit::VisualEmbeddingGeneration visual;
+        bool vit_loaded = false;
     };
 }

@@ -1,6 +1,6 @@
 import std/[asynchttpserver, asyncdispatch, asyncnet]
-import std/[os, cmdline, strutils, strformat, json, tables, options, times, sequtils, parseutils]
-import libchatllm
+import std/[os, cmdline, strutils, strformat, json, tables, options, times, sequtils, parseutils, enumerate]
+import libchatllm, system_one
 
 type
     RequestHandler* = proc(request: Request) {.async gcsafe.}
@@ -98,6 +98,7 @@ type
         Chat = "chat"
         FIM = "fim"
         Emb = "emb"
+        Decision = "decision"
 
     FlatMessage = tuple[role: string; content: seq[tuple[t: string, content: string]]]
 
@@ -619,6 +620,55 @@ proc handle_embeddings(req: Request) {.async gcsafe.} =
     await req.send_headers(headers)
     await req.end_headers_send($(%* r))
 
+proc handle_system_one(req: Request) {.async gcsafe.} =
+    let streamer = get_streamer(StreamerType.Decision)
+    if streamer == nil:
+        await req.respond(Http404, "model not available")
+        return
+
+    let info = parseJson(streamer.model_info)
+    if info["name"].getStr() != "Intern-Decision":
+        debugEcho fmt"""unexpected model name: {info["name"].getStr()}"""
+
+    let body = parseJson(req.body)
+    var compiled = new(InternDecisionCompiled)
+
+    try:
+        let validated_req = system_one.validate_request(body)
+        system_one.compile(compiled, validated_req)
+    except:
+        await req.respond(Http404, "bad request")
+        return
+
+    for i, msg in enumerate(compiled.messages.getElems()):
+        case msg["role"].getStr()
+        of "system":
+            assert i == 0
+            streamer.set_system_prompt(msg["content"].getStr())
+            streamer.restart()
+        of "user":
+            streamer.llm.chatllm_history_append(cast[cint](RoleType.ROLE_USER), msg["content"].getStr().cstring)
+        of "assistant":
+            streamer.llm.chatllm_history_append(cast[cint](RoleType.ROLE_ASSISTANT), msg["content"].getStr().cstring)
+        else:
+            discard
+
+    var input_length: cint = 0
+    let t0 = cpuTime()
+    let logits = streamer.llm.chatllm_make_decisions(addr input_length)
+    let answers = system_one.decode(compiled, logits, input_length, (cpuTime() - t0) * 1000, info["name"].getStr())
+
+    let headers = @[("Cache-Control", "no-cache"),
+                ("vary", "origin, access-control-request-method, access-control-request-headers"),
+                ("access-control-allow-credentials", "true"),
+                ("x-content-type-options", "nosniff"),
+                ("Content-type", "application/json")]
+
+    await req.sendCode(Http200)
+
+    await req.send_headers(headers)
+    await req.end_headers_send($(%* answers))
+
 proc handle_index(req: Request) {.async gcsafe.} =
     const defaultUI {.strdefine: "defaultUI".}: string = currentSourcePath.parentDir() & "/../scripts/chat_ui.html"
     const compiled_file = readFile(defaultUI)
@@ -851,6 +901,7 @@ proc run {.async.} =
     # OAI-compatible
     router.post "/v1/chat/completions",     handle_completions
     router.post "/v1/embeddings",           handle_embeddings
+    router.post "v1/systemone",             handle_system_one
     router.get  "/v1/models",               handle_oai_models
 
     # llama-compatible
@@ -881,7 +932,7 @@ proc main(): int =
     if paramCount() < 1:
         echo fmt"usage: {paramStr(0)} [app_args] [{ARG_SEP}TYPE path/to/model [additional args]]"
         echo fmt"where app_args :: --ui /path/to/ui --port PORT"
-        echo fmt"where TYPE ::= chat | fim | emb"
+        echo fmt"where TYPE ::= chat | fim | emb | decision"
         return -1
 
     var args: seq[string] = @[]
