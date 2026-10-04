@@ -1,5 +1,18 @@
 cmake_minimum_required(VERSION 3.18)  # for CMAKE_CUDA_ARCHITECTURES
 
+# ARM64EC uses the x64 ABI, so it needs the x64 import libraries. The arm64 ones
+# hold native ARM64 symbols and cannot satisfy EC references at link time.
+# FindCUDAToolkit picks the library dir from the host arch, not the target, so
+# anchor its search at lib/x64 here. It derives everything else from CUDA_CUDART.
+string(TOLOWER "${CMAKE_GENERATOR_PLATFORM}" GGML_CUDA_PLATFORM_LWR)
+if (MSVC AND GGML_CUDA_PLATFORM_LWR STREQUAL "arm64ec")
+    find_library(CUDA_CUDART
+        NAMES cudart
+        HINTS ${CUDAToolkit_ROOT} ENV CUDA_PATH
+        PATH_SUFFIXES lib/x64
+    )
+endif()
+
 find_package(CUDAToolkit)
 
 if (CUDAToolkit_FOUND)
@@ -15,6 +28,7 @@ if (CUDAToolkit_FOUND)
         # 80     == Ampere, asynchronous data loading, faster tensor core instructions
         # 86     == RTX 3000, needs CUDA v11.1
         # 89     == RTX 4000, needs CUDA v11.8
+        # 90     == Hopper H100/200, needs CUDA v11.8
         # 120    == Blackwell, needs CUDA v12.8, FP4 tensor cores
         #
         # XX-virtual == compile CUDA code as PTX, do JIT compilation to binary code on first run
@@ -33,7 +47,7 @@ if (CUDAToolkit_FOUND)
             list(APPEND CMAKE_CUDA_ARCHITECTURES 75-virtual 80-virtual 86-real)
 
             if (CUDAToolkit_VERSION VERSION_GREATER_EQUAL "11.8")
-                list(APPEND CMAKE_CUDA_ARCHITECTURES 89-real)
+                list(APPEND CMAKE_CUDA_ARCHITECTURES 89-real 90-virtual)
             endif()
 
             if (CUDAToolkit_VERSION VERSION_GREATER_EQUAL "12.8")
@@ -57,14 +71,13 @@ if (CUDAToolkit_FOUND)
 
     enable_language(CUDA)
 
-    # TODO: Remove once CCCL 3.2 has been released and bundled with CUDA Toolkit
-    if (GGML_CUDA_CUB_3DOT2)
+    if (GGML_CUDA_CCCL_VERSION)
         include(FetchContent)
 
         FetchContent_Declare(
             CCCL
             GIT_REPOSITORY https://github.com/nvidia/cccl.git
-            GIT_TAG        v3.2.0
+            GIT_TAG        "${GGML_CUDA_CCCL_VERSION}"
             GIT_SHALLOW    TRUE
         )
 
@@ -111,25 +124,13 @@ if (CUDAToolkit_FOUND)
     file(GLOB   SRCS "template-instances/mmf*.cu")
     list(APPEND GGML_SOURCES_CUDA ${SRCS})
 
-    if (GGML_CUDA_FA_ALL_QUANTS)
-        file(GLOB   SRCS "template-instances/fattn-vec*.cu")
-        list(APPEND GGML_SOURCES_CUDA ${SRCS})
-        add_compile_definitions(GGML_CUDA_FA_ALL_QUANTS)
-    else()
-        file(GLOB   SRCS "template-instances/fattn-vec*q4_0-q4_0.cu")
-        list(APPEND GGML_SOURCES_CUDA ${SRCS})
-        file(GLOB   SRCS "template-instances/fattn-vec*q8_0-q8_0.cu")
-        list(APPEND GGML_SOURCES_CUDA ${SRCS})
-        file(GLOB   SRCS "template-instances/fattn-vec*f16-f16.cu")
-        list(APPEND GGML_SOURCES_CUDA ${SRCS})
-    endif()
+    ggml_cuda_fattn_vec_instances(${CMAKE_CURRENT_SOURCE_DIR} SRCS)
+    list(APPEND GGML_SOURCES_CUDA ${SRCS})
 
     ggml_add_backend_library(ggml-cuda
                              ${GGML_HEADERS_CUDA}
                              ${GGML_SOURCES_CUDA}
                             )
-
-    add_compile_definitions(GGML_CUDA_PEER_MAX_BATCH_SIZE=${GGML_CUDA_PEER_MAX_BATCH_SIZE})
 
     if (GGML_CUDA_GRAPHS)
         add_compile_definitions(GGML_CUDA_USE_GRAPHS)
@@ -155,14 +156,15 @@ if (CUDAToolkit_FOUND)
         add_compile_definitions(GGML_CUDA_NO_PEER_COPY)
     endif()
 
+    if (GGML_CUDA_CCCL_VERSION)
+        target_link_libraries(ggml-cuda PRIVATE CCCL::CCCL)
+    endif()
+
     if (GGML_STATIC)
         if (WIN32)
             # As of 12.3.1 CUDA Toolkit for Windows does not offer a static cublas library
             target_link_libraries(ggml-cuda PRIVATE CUDA::cudart_static CUDA::cublas)
         else ()
-            if (GGML_CUDA_CUB_3DOT2)
-                target_link_libraries(ggml-cuda PRIVATE  CCCL::CCCL)
-            endif()
             if (CUDAToolkit_VERSION VERSION_GREATER_EQUAL "10.1")
                 target_link_libraries(ggml-cuda PRIVATE  CUDA::cudart_static CUDA::cublas_static CUDA::cublasLt_static)
             else()
@@ -170,9 +172,6 @@ if (CUDAToolkit_FOUND)
             endif()
         endif()
     else()
-        if (GGML_CUDA_CUB_3DOT2)
-            target_link_libraries(ggml-cuda PRIVATE  CCCL::CCCL)
-        endif()
         target_link_libraries(ggml-cuda PRIVATE CUDA::cudart CUDA::cublas)
     endif()
 
@@ -180,6 +179,16 @@ if (CUDAToolkit_FOUND)
         # No VMM requested, no need to link directly with the cuda driver lib (libcuda.so)
     else()
         target_link_libraries(ggml-cuda PRIVATE CUDA::cuda_driver)
+    endif()
+
+    if (GGML_CUDA_NCCL)
+        find_package(NCCL)
+        if (NCCL_FOUND)
+            add_compile_definitions(GGML_USE_NCCL)
+            target_link_libraries(ggml-cuda PRIVATE NCCL::NCCL)
+        else()
+            message(STATUS "Warning: NCCL not found, performance for multiple CUDA GPUs will be suboptimal")
+        endif()
     endif()
 
     set(CUDA_CXX_FLAGS "")

@@ -8,24 +8,28 @@
 extern "C" {
 #endif
 
-    #define GGML_BACKEND_API_VERSION 2
+    #define GGML_BACKEND_API_VERSION 3
 
     //
     // Backend buffer type
     //
 
     struct ggml_backend_buffer_type_i {
-        const char *          (*get_name)      (ggml_backend_buffer_type_t buft);
+        const char *          (*get_name)        (ggml_backend_buffer_type_t buft);
         // allocate a buffer of this type
-        ggml_backend_buffer_t (*alloc_buffer)  (ggml_backend_buffer_type_t buft, size_t size);
+        ggml_backend_buffer_t (*alloc_buffer)    (ggml_backend_buffer_type_t buft, size_t size);
+        // (optional) allocate tensors from a list into a buffer of this type (defaults to alloc_buffer + linear allocator)
+        ggml_backend_buffer_t (*alloc_buffer_n)  (ggml_backend_buffer_type_t buft, struct ggml_tensor ** tensors, int n_tensors);
         // tensor alignment
-        size_t                (*get_alignment) (ggml_backend_buffer_type_t buft);
+        size_t                (*get_alignment)   (ggml_backend_buffer_type_t buft);
         // (optional) max buffer size that can be allocated (defaults to SIZE_MAX)
-        size_t                (*get_max_size)  (ggml_backend_buffer_type_t buft);
+        size_t                (*get_max_size)    (ggml_backend_buffer_type_t buft);
         // (optional) data size needed to allocate the tensor, including padding (defaults to ggml_nbytes)
-        size_t                (*get_alloc_size)(ggml_backend_buffer_type_t buft, const struct ggml_tensor * tensor);
+        size_t                (*get_alloc_size)  (ggml_backend_buffer_type_t buft, const struct ggml_tensor * tensor);
+        // (optional) total data size needed to allocate the given tensors, including padding and splitting (defaults to per-tensor get_alloc_size)
+        size_t                (*get_alloc_size_n)(ggml_backend_buffer_type_t buft, struct ggml_tensor ** tensors, int n_tensors);
         // (optional) check if tensor data is in host memory and uses standard ggml tensor layout (defaults to false)
-        bool                  (*is_host)       (ggml_backend_buffer_type_t buft);
+        bool                  (*is_host)         (ggml_backend_buffer_type_t buft);
     };
 
     struct ggml_backend_buffer_type {
@@ -33,6 +37,11 @@ extern "C" {
         ggml_backend_dev_t device;
         void * context;
     };
+
+    // [TAG_ALLOC_SIZE_EXPAND]
+    // returns true for ops that may require additional memory for fleeting data on some backends,
+    // i.e. the backend buffer type's get_alloc_size may return more than ggml_nbytes for the output tensor
+    GGML_API bool ggml_op_alloc_size_may_expand(enum ggml_op op);
 
     //
     // Backend buffer
@@ -49,6 +58,10 @@ extern "C" {
         void         (*memset_tensor)(ggml_backend_buffer_t buffer,       struct ggml_tensor * tensor,     uint8_t value, size_t offset, size_t size);
         void         (*set_tensor)   (ggml_backend_buffer_t buffer,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size);
         void         (*get_tensor)   (ggml_backend_buffer_t buffer, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size);
+        // (optional) 2d data copies
+        void         (*set_tensor_2d)(ggml_backend_buffer_t buffer,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
+        void         (*get_tensor_2d)(ggml_backend_buffer_t buffer, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
+
         // (optional) tensor copy: dst is in the buffer, src may be in any buffer, including buffers from a different backend (return false if not supported)
         bool         (*cpy_tensor)   (ggml_backend_buffer_t buffer, const struct ggml_tensor * src, struct ggml_tensor * dst);
         // clear the entire buffer
@@ -79,10 +92,32 @@ extern "C" {
     GGML_API ggml_backend_buffer_t ggml_backend_multi_buffer_alloc_buffer(ggml_backend_buffer_t * buffers, size_t n_buffers);
     GGML_API bool                  ggml_backend_buffer_is_multi_buffer(ggml_backend_buffer_t buffer);
     GGML_API void                  ggml_backend_multi_buffer_set_usage(ggml_backend_buffer_t buffer, enum ggml_backend_buffer_usage usage);
+    GGML_API void                  ggml_backend_meta_buffer_set_usage (ggml_backend_buffer_t buffer, enum ggml_backend_buffer_usage usage);
+
+    //
+    // Backend (meta)
+    //
+
+    GGML_API bool ggml_backend_is_meta       (ggml_backend_t backend);
+    GGML_API bool ggml_backend_buffer_is_meta(ggml_backend_buffer_t buf);
+    GGML_API bool ggml_backend_buft_is_meta  (ggml_backend_buffer_type_t buft);
+
+    GGML_API size_t         ggml_backend_meta_n_backends    (ggml_backend_t meta_backend);
+    GGML_API ggml_backend_t ggml_backend_meta_simple_backend(ggml_backend_t meta_backend, size_t index);
 
     //
     // Backend (stream)
     //
+
+    // passed to graph_optimize so the backend can add allocation dependencies:
+    // if the backend executes parts of the graph out of order (e.g. on concurrent streams),
+    // it must keep the affected tensors allocated until a node where execution is known to have joined
+    struct ggml_backend_graph_optimize_params {
+        // keep `tensor` allocated at least until `until` (a node of the same graph) has been computed
+        // can be called multiple times for the same tensor: the longest lifetime applies
+        void (*add_alloc_dep)(void * user_data, struct ggml_tensor * tensor, struct ggml_tensor * until);
+        void * user_data;
+    };
 
     struct ggml_backend_i {
         const char * (*get_name)(ggml_backend_t backend);
@@ -90,8 +125,10 @@ extern "C" {
         void (*free)(ggml_backend_t backend);
 
         // (optional) asynchronous tensor data access
-        void (*set_tensor_async)(ggml_backend_t backend,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size);
-        void (*get_tensor_async)(ggml_backend_t backend, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size);
+        void (*set_tensor_async)   (ggml_backend_t backend,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size);
+        void (*get_tensor_async)   (ggml_backend_t backend, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size);
+        void (*set_tensor_2d_async)(ggml_backend_t backend,       struct ggml_tensor * tensor, const void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
+        void (*get_tensor_2d_async)(ggml_backend_t backend, const struct ggml_tensor * tensor,       void * data, size_t offset, size_t size, size_t n_copies, size_t stride_tensor, size_t stride_data);
         bool (*cpy_tensor_async)(ggml_backend_t backend_src, ggml_backend_t backend_dst, const struct ggml_tensor * src, struct ggml_tensor * dst);
 
         // (optional) complete all pending operations (required if the backend supports async operations)
@@ -116,7 +153,7 @@ extern "C" {
         void (*event_wait)  (ggml_backend_t backend, ggml_backend_event_t event);
 
         // (optional) sort/optimize the nodes in the graph
-        void                      (*graph_optimize)    (ggml_backend_t backend, struct ggml_cgraph * cgraph);
+        void                      (*graph_optimize)    (ggml_backend_t backend, struct ggml_cgraph * cgraph, struct ggml_backend_graph_optimize_params * params);
     };
 
     struct ggml_backend {

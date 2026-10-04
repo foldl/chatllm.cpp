@@ -28,7 +28,7 @@ if (NOT ZENDNN_ROOT OR ZENDNN_ROOT STREQUAL "" OR ZENDNN_ROOT STREQUAL "OFF")
     ExternalProject_Add(
         zendnn
         GIT_REPOSITORY https://github.com/amd/ZenDNN.git
-        GIT_TAG a18adf8c605fb5f5e52cefd7eda08a7b18febbaf    # ZenDNN-2026-WW08
+        GIT_TAG 1f399a75cc0993778374a51bea49b64a57879595    # ZenDNN-2026-WW28
         PREFIX      ${ZENDNN_PREFIX}
         SOURCE_DIR  ${ZENDNN_SOURCE_DIR}
         BINARY_DIR  ${ZENDNN_BUILD_DIR}
@@ -86,6 +86,6 @@ endif()
 
 target_link_libraries(ggml-zendnn PRIVATE m pthread)
 
-if (GGML_OPENMP)
-    target_link_libraries(ggml-zendnn PRIVATE OpenMP::OpenMP_CXX)
+if (GGML_OPENMP_ENABLED)
+    target_link_libraries(ggml-zendnn PRIVATE ${GGML_OPENMP_TARGET_CXX})
 endif()
