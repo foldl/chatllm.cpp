@@ -42,6 +42,14 @@ namespace chatllm
     {
         typedef ggml_prec prec;
 
+        enum tri_type
+        {
+            UPPER_DIAG = 0,
+            UPPER      = 1,
+            LOWER_DIAG = 2,
+            LOWER      = 3
+        };
+
         ggml::type type_fallback(ggml::type type, int64_t last_dim);
 
         ggml::tensor *new_tensor_1d(ComputeContext *ctx, ggml::type type, int64_t ne0);
@@ -58,6 +66,7 @@ namespace chatllm
 
         ggml::tensor * fill(ComputeContext *ctx, ggml::tensor *a, float value);
         float  at(ggml::tensor *a, int64_t i, int64_t j, int64_t k, int64_t l);
+        ggml::tensor * eye(ComputeContext *ctx, int64_t ne0, ggml::type type = ggml::type::GGML_TYPE_F32);
 
         ggml::type    type_of(const ggml::tensor *a);
 
@@ -136,6 +145,9 @@ namespace chatllm
         ggml::tensor *reshape_4d(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
         ggml::tensor *reshape(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1 = 1, int64_t ne2 = 1, int64_t ne3 = 1);
         ggml::tensor *flatten(ComputeContext *ctx, ggml::tensor *a);
+
+        ggml::tensor *unsqueeze(ComputeContext *ctx, ggml::tensor *a, int dim);
+        ggml::tensor *trig(ComputeContext *ctx, ggml::tensor *a, tri_type type);
 
         ggml::tensor *repeat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b);
         ggml::tensor *repeat(ComputeContext *ctx, ggml::tensor *a, int64_t ne0, int64_t ne1 = 0, int64_t ne2 = 0, int64_t ne3 = 0);
@@ -247,6 +259,7 @@ namespace chatllm
 
         ggml::tensor *logsumexp(ComputeContext *ctx, ggml::tensor *a);
         ggml::tensor *softplus(ComputeContext *ctx, ggml::tensor *a);
+        ggml::tensor *cumsum(ComputeContext *ctx, ggml::tensor *a);
 
         // accept either probs or logits, but not both
         ggml::tensor *categorical_entropy(ComputeContext *ctx, ggml::tensor *probs, ggml::tensor *logits);
@@ -270,6 +283,14 @@ namespace chatllm
             float           scale,
             float           max_bias        = 0.0f,
             float           logit_softcap   = 0.0f);
+
+        ggml::tensor *gated_linear_attn(ComputeContext *ctx,
+            struct ggml_tensor  * k,
+            struct ggml_tensor  * v,
+            struct ggml_tensor  * q,
+            struct ggml_tensor  * g,
+            struct ggml_tensor  * state,
+            float scale);
 
         ggml::tensor *map_custom1(ComputeContext *ctx, ggml::tensor *a, const ggml_custom1_op_t fun, int n_tasks, void *userdata);
         ggml::tensor *map_custom2(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b, const ggml_custom2_op_t fun, int n_tasks, void *userdata);

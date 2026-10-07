@@ -147,6 +147,8 @@ namespace chatllm::qwen::v3_5
     protected:
         ggml::tensor *causal_conv1d_update(ComputeContext *ctx, ggml::tensor *input, int n_past);
         ggml::tensor *recurrent_gated_delta_rule(ComputeContext *ctx, ggml::tensor *query, ggml::tensor *key, ggml::tensor *value,
+            ggml::tensor *g, ggml::tensor *beta, bool use_qk_l2norm_in_kernel);
+        ggml::tensor *chunk_gated_delta_rule(ComputeContext *ctx, ggml::tensor *query, ggml::tensor *key, ggml::tensor *value,
             ggml::tensor *g, ggml::tensor *beta, bool use_qk_l2norm_in_kernel, const int chunk_size = 64);
         ggml::tensor *calc_beta(ComputeContext *ctx, ggml::tensor *input);
         ggml::tensor *calc_g(ComputeContext *ctx, ggml::tensor *input);
@@ -283,8 +285,190 @@ namespace chatllm::qwen::v3_5
         return mixed_qkv;
     }
 
-    ggml::tensor *QwenGatedDeltaNet::recurrent_gated_delta_rule(ComputeContext *ctx, ggml::tensor *query, ggml::tensor *key, ggml::tensor *value,
+    ggml::tensor *QwenGatedDeltaNet::chunk_gated_delta_rule(ComputeContext *ctx, ggml::tensor *query, ggml::tensor *key, ggml::tensor *value,
             ggml::tensor *g, ggml::tensor *beta, bool use_qk_l2norm_in_kernel, const int chunk_size)
+    {
+        CHATLLM_CHECK(ggml::n_dims(key) <= 3);
+
+        if (use_qk_l2norm_in_kernel)
+        {
+            query = ggml::norm_p2(ctx, query, 1e-6f);
+            key   = ggml::norm_p2(ctx, key,   1e-6f);
+        }
+
+        auto reshape = [](ComputeContext *ctx, ggml::tensor *x) {
+            auto t = ggml::permute(ctx, x, 0, 2, 1);
+            t = ggml::cont(ctx, t);
+            return t;
+        };
+
+        auto mm = [](ComputeContext* ctx, ggml::tensor* m1, ggml::tensor* m2) {
+            auto m_tr = ggml::cont(ctx, ggml::transpose(ctx, m2));
+            return ggml::mul_mat(ctx, m_tr, ggml::cont(ctx, m1));
+        };
+
+        query = reshape(ctx, query);
+        key   = reshape(ctx, key);
+        value = reshape(ctx, value);
+        const int k_head_dim        = (int)ggml::get_dim(key, 0);
+        const int sequence_length   = (int)ggml::get_dim(key, 1);
+        const int num_heads         = (int)ggml::get_dim(key, 2);
+        const int v_head_im         = (int)ggml::get_dim(value, 0);
+        const int total_sequence_length = (sequence_length + chunk_size - 1) / chunk_size * chunk_size;
+        const int pad_size              = total_sequence_length - sequence_length;
+        const int n_chunks              = total_sequence_length / chunk_size;
+
+        beta = ggml::transpose(ctx, beta);
+        g    = ggml::transpose(ctx, g);
+
+        query = ggml::pad(ctx, query, 0, 0, 0, pad_size);
+        key   = ggml::pad(ctx,   key, 0, 0, 0, pad_size);
+        value = ggml::pad(ctx, value, 0, 0, 0, pad_size);
+        beta  = ggml::pad(ctx,  beta, 0, pad_size);
+        g     = ggml::pad(ctx,     g, 0, pad_size);
+
+        const float scale = 1.0f / sqrtf((float)ggml::get_dim(query, 0));
+        query = ggml::scale(ctx, query, scale);
+
+        auto beta_un = ggml::unsqueeze(ctx, beta, 0);
+        auto v_beta = ggml::mul(ctx, value, beta_un);
+        auto k_beta = ggml::mul(ctx,   key, beta_un);
+
+        query = ggml::reshape(ctx,  query, ggml::get_dim( query, 0), chunk_size, -1, ggml::get_dim(query, 2));
+          key = ggml::reshape(ctx,    key, ggml::get_dim(   key, 0), chunk_size, -1, ggml::get_dim(  key, 2));
+        value = ggml::reshape(ctx,  value, ggml::get_dim( value, 0), chunk_size, -1, ggml::get_dim(value, 2));
+        k_beta= ggml::reshape(ctx, k_beta, ggml::get_dim(k_beta, 0), chunk_size, -1, ggml::get_dim(k_beta, 2));
+        v_beta= ggml::reshape(ctx, v_beta, ggml::get_dim(v_beta, 0), chunk_size, -1, ggml::get_dim(v_beta, 2));
+            g = ggml::reshape(ctx,      g,                           chunk_size, -1, ggml::get_dim(g, 1));
+
+        auto get_chunk = [](ComputeContext *ctx, ggml::tensor *x, int ith) {
+            auto r = ggml::view_3d(ctx, x, ggml::get_dim(x, 0), ggml::get_dim(x, 1), ggml::get_dim(x, 3),
+                ggml::row_size(x),
+                ggml::row_size(x) * ggml::get_dim(x, 1) * ggml::get_dim(x, 2),
+                ggml::row_size(x) * ggml::get_dim(x, 1) * ith);
+            return r;
+        };
+
+        auto get_chunk2 = [](ComputeContext* ctx, ggml::tensor* x, int ith) {
+            auto r = ggml::view_2d(ctx, x, ggml::get_dim(x, 0), ggml::get_dim(x, 2),
+                ggml::row_size(x) * ggml::get_dim(x, 1),
+                ggml::row_size(x) * ith);
+            return r;
+          };
+
+        g = ggml::cumsum(ctx, g);
+
+        auto g_0 = ggml::unsqueeze(ctx, g, 0);
+        auto g_1 = ggml::unsqueeze(ctx, g, 1);
+             g_0 = ggml::repeat(ctx, g_0, ggml::get_dim(g_1, 0));
+        auto decay_mask = ggml::sub(ctx, g_0, g_1);
+
+        decay_mask = ggml::exp(ctx, decay_mask);
+        decay_mask = ggml::trig(ctx, decay_mask, ggml::tri_type::LOWER_DIAG);
+
+        auto attn = mm(ctx, k_beta, ggml::transpose(ctx, key));
+
+        attn = ggml::mul(ctx, attn, decay_mask);
+        attn = ggml::trig(ctx, attn, ggml::tri_type::LOWER);
+        attn = ggml::neg(ctx, attn);
+
+        for (int i = 1; i < chunk_size; i++)
+        {
+            auto row = ggml::view_4d(ctx, attn, i, 1, ggml::get_dim(attn, 2), ggml::get_dim(attn, 3),
+                                  ggml::row_size(attn),
+                                  ggml::row_size(attn) * ggml::get_dim(attn, 1),
+                                  ggml::row_size(attn) * ggml::get_dim(attn, 1) * ggml::get_dim(attn, 2),
+                                  ggml::row_size(attn) * i);
+            auto sub = ggml::view_4d(ctx, attn, i, i, ggml::get_dim(attn, 2), ggml::get_dim(attn, 3),
+                                  ggml::row_size(attn),
+                                  ggml::row_size(attn) * ggml::get_dim(attn, 1),
+                                  ggml::row_size(attn) * ggml::get_dim(attn, 1) * ggml::get_dim(attn, 2), 0);
+            auto row_2 = ggml::cont(ctx, row);
+            row_2 = ggml::reshape(ctx, row_2, 1, ggml::get_dim(row_2, 0), ggml::get_dim(row_2, 2), ggml::get_dim(row_2, 3));
+            row_2 = ggml::mul(ctx, sub, row_2);
+            row_2 = ggml::sum(ctx, row_2, 1);
+            row_2 = ggml::reshape(ctx, row_2, ggml::get_dim(row_2, 0), 1, ggml::get_dim(row_2, 1), ggml::get_dim(row_2, 2));
+            row = ggml::add_inplace(ctx, row, row_2);
+            ggml::build_forward_expand(ctx, row);
+        }
+        {
+            auto eye = ggml::eye(ctx, chunk_size);
+            attn = ggml::add(ctx, attn, eye);
+        }
+
+        value = mm(ctx, attn, v_beta);
+        ggml::tensor *k_cum_decay = nullptr;
+        {
+            auto g2 = ggml::exp(ctx, g);
+            g2 = ggml::unsqueeze(ctx, g2, 0);
+            g2 = ggml::mul(ctx, k_beta, g2);
+            k_cum_decay = mm(ctx, attn, g2);
+        }
+
+        auto last_state = state;
+        std::vector<ggml::tensor *> attn_outs;
+
+        for (int i = 0; i < n_chunks; i++)
+        {
+            auto q_i = get_chunk(ctx, query, i);
+            auto k_i = get_chunk(ctx,   key, i);
+            auto v_i = get_chunk(ctx, value, i);
+            auto decay_i = get_chunk(ctx, decay_mask, i);
+
+            auto k_cum_decay_i = get_chunk(ctx, k_cum_decay, i);
+
+            auto v_prime = mm(ctx, k_cum_decay_i, last_state);
+            auto v_new   = ggml::sub(ctx, v_i, v_prime);
+
+            auto attn = mm(ctx, q_i, ggml::transpose(ctx, k_i));
+                 attn = ggml::mul(ctx, attn, decay_i);
+                 attn = mm(ctx, attn, v_new);
+
+            auto g_i     = get_chunk2(ctx, g, i);
+            auto g_i_exp = ggml::exp(ctx, g_i);
+            g_i_exp = ggml::unsqueeze(ctx, g_i_exp, 0);
+            auto attn_inner = ggml::mul(ctx, q_i, g_i_exp);
+                 attn_inner = mm(ctx, attn_inner, last_state);
+
+            attn = ggml::add(ctx, attn_inner, attn);
+            if ((n_chunks - 1 == i) && (pad_size > 0))
+            {
+                attn = ggml::view_4d(ctx, attn, ggml::get_dim(attn, 0), chunk_size - pad_size, ggml::get_dim(attn, 2), ggml::get_dim(attn, 3),
+                                    ggml::row_size(attn),
+                                    ggml::row_size(attn) * ggml::get_dim(attn, 1),
+                                    ggml::row_size(attn) * ggml::get_dim(attn, 1) * ggml::get_dim(attn, 2), 0);
+            }
+            attn_outs.push_back(attn);
+
+            g_i   = ggml::cont(ctx, g_i);
+            auto g_i_last_unsqueezed = ggml::view_3d(ctx, g_i, 1, ggml::get_dim(g_i, 1), ggml::get_dim(g_i, 2),
+                                        ggml::row_size(g_i),
+                                        ggml::row_size(g_i) * ggml::get_dim(g_i, 1),
+                                        (ggml::get_dim(g_i, 0) - 1) * ggml::element_size(g_i));
+            auto delta = ggml::sub(ctx, g_i, g_i_last_unsqueezed);
+            delta = ggml::neg(ctx, delta);
+            delta = ggml::exp(ctx, delta);
+            delta = ggml::unsqueeze(ctx, delta, 0);
+            delta = ggml::mul(ctx, k_i, delta);
+            delta = ggml::transpose(ctx, delta);
+            delta = mm(ctx, delta, v_new);
+
+            g_i_last_unsqueezed = ggml::exp(ctx, g_i_last_unsqueezed);
+            auto state_g = ggml::mul(ctx, last_state, g_i_last_unsqueezed);
+            last_state = ggml::add(ctx, state_g, delta);
+        }
+
+        ggml::build_forward_expand(ctx, ggml::cpy(ctx, last_state, state));
+
+        ggml::tensor *core_attn_out = ggml::concat(ctx, attn_outs, 1);
+        core_attn_out = ggml::permute(ctx, core_attn_out, 0, 2, 1, 3);
+        core_attn_out = ggml::cont(ctx, core_attn_out);
+
+        return core_attn_out;
+    }
+
+    ggml::tensor *QwenGatedDeltaNet::recurrent_gated_delta_rule(ComputeContext *ctx, ggml::tensor *query, ggml::tensor *key, ggml::tensor *value,
+            ggml::tensor *g, ggml::tensor *beta, bool use_qk_l2norm_in_kernel)
     {
         CHATLLM_CHECK(ggml::n_dims(key) <= 3);
 
@@ -410,8 +594,10 @@ namespace chatllm::qwen::v3_5
         auto beta = calc_beta(ctx, input);
         auto g    = calc_g   (ctx, input);
 
-        auto core_attn_out = recurrent_gated_delta_rule(ctx, query, key, value,
-            g, beta, true);
+        auto core_attn_out = qlen > 1 ?
+            chunk_gated_delta_rule(ctx, query, key, value, g, beta, true)
+            :
+            recurrent_gated_delta_rule(ctx, query, key, value, g, beta, true);
 
         // reshape input data into 2D tensor
         core_attn_out = ggml::reshape_2d(ctx, core_attn_out, head_v_dim, ggml::nelements(core_attn_out) / head_v_dim);

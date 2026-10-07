@@ -396,6 +396,15 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor * ggml::eye(ComputeContext *ctx, int64_t ne0, ggml::type type)
+    {
+        ggml::tensor *tensor = ggml::new_tensor_1d(ctx, type, ne0);
+        ggml::set_input(tensor);
+        tensor = ggml_fill_inplace(ctx->get_ctx(), tensor, 1.0f);
+        tensor = ggml_diag(ctx->get_ctx(), tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::inplace_act(ComputeContext *ctx, ActFunc act, ggml::tensor *input)
     {
         ggml::tensor *tensor = nullptr;
@@ -728,6 +737,25 @@ namespace chatllm
         CHATLLM_CHECK(ggml::is_contiguous(a));
         ggml::tensor *r = ggml::reshape(ctx, a, ggml::nelements(a));
         return r;
+    }
+
+    ggml::tensor *ggml::unsqueeze(ComputeContext *ctx, ggml::tensor *a, int dim)
+    {
+        CHATLLM_CHECK((0 <= dim) & (dim < GGML_MAX_DIMS - 1));
+        CHATLLM_CHECK(ggml::n_dims(a) < GGML_MAX_DIMS);
+        int64_t dims[GGML_MAX_DIMS];
+        for (int i = 0; i < GGML_MAX_DIMS; i++) dims[i] = ggml::get_dim(a, i);
+        for (int i = GGML_MAX_DIMS - 1; i > dim; i--) dims[i] = dims[i - 1];
+        dims[dim] = 1;
+        auto r = ggml::reshape(ctx, a, dims[0], dims[1], dims[2], dims[3]);
+        return r;
+    }
+
+    ggml::tensor *ggml::trig(ComputeContext *ctx, ggml::tensor *a, tri_type type)
+    {
+        ggml::tensor *tensor = ggml_tri(ctx->get_ctx(), a, (ggml_tri_type)type);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
     }
 
     ggml::tensor *ggml::repeat(ComputeContext *ctx, ggml::tensor *a, ggml::tensor *b)
@@ -1481,6 +1509,13 @@ namespace chatllm
         return tensor;
     }
 
+    ggml::tensor *ggml::cumsum(ComputeContext *ctx, ggml::tensor *a)
+    {
+        ggml::tensor *tensor = ggml_cumsum(ctx->get_ctx(), a);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
     ggml::tensor *ggml::categorical_entropy(ComputeContext *ctx, ggml::tensor *probs, ggml::tensor *logits)
     {
         CHATLLM_CHECK((probs != nullptr) ^ (logits != nullptr));
@@ -1513,6 +1548,19 @@ namespace chatllm
             float           logit_softcap)
     {
         ggml::tensor *tensor = ggml_flash_attn_ext(ctx->get_ctx(), q, k, v, mask, scale, max_bias, logit_softcap);
+        ctx->cb_op_tensor(tensor);
+        return tensor;
+    }
+
+    ggml::tensor *ggml::gated_linear_attn(ComputeContext *ctx,
+            struct ggml_tensor  * k,
+            struct ggml_tensor  * v,
+            struct ggml_tensor  * q,
+            struct ggml_tensor  * g,
+            struct ggml_tensor  * state,
+            float scale)
+    {
+        ggml::tensor *tensor = ggml_gated_linear_attn(ctx->get_ctx(), q, k, v, g, state, scale);
         ctx->cb_op_tensor(tensor);
         return tensor;
     }
