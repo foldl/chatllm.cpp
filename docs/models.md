@@ -479,6 +479,7 @@ Please use `--format completion` for these models.
     * [x] Qwen3.8: [27B](https://huggingface.co/Qwen/Qwen3.8-27B/tree/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0)
     * [x] KAT-Coder-V2.5: [Dev](https://huggingface.co/Kwaipilot/KAT-Coder-V2.5-Dev/tree/7be56fe773e72b6f5ca93c1ae45d828ddb893922) (LLM Only)
     * [x] MiMo-V2.6-Distill-Qwen: [9B](https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Distill-Qwen-9B/tree/2367e865d009c13ac81713a2878291d33ab28177)
+    * [x] Swift: [27B](https://huggingface.co/ukisai/Swift-Qwen3.8-27b/commit/6bc57e4eca31ee61d4e92a631978655a78bfa465), [1.5-27B](https://huggingface.co/ukisai/Swift-1.5-Qwen3.8-27b/tree/bc7a1e10b689648585a3ef41494c8d84cf77271a)
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
     * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)
