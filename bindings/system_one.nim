@@ -217,4 +217,4 @@ proc main(): int =
     let answers = decode(compiled, logits, input_length, (cpuTime() - t0) * 1000)
     echo answers.pretty(4)
 
-quit(main())
+#quit(main())

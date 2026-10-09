@@ -1036,6 +1036,7 @@ namespace chatllm::qwen::v3_5
         Tokenizer(const BaseConfig &config);
 
         void prepare(Messages &history, const GenerationConfig &config);
+        bool load_config(const json::JSON &config) override;
     };
 
     class Prelude

@@ -184,6 +184,7 @@
 * Mellum (`MellumForCausalLM`)
     * [x] [12B-A2.5B-Instruct](https://huggingface.co/JetBrains/Mellum2-12B-A2.5B-Instruct/tree/717997f0f5913a53cdb45931a358fab62da3c937),
     [12B-A2.5B-Thinking](https://huggingface.co/JetBrains/Mellum2-12B-A2.5B-Thinking/tree/ba4838faad89e968c36f39e76e95319d756714fe)
+    * [x]v2.1: [12B-A2.5B-Thinking](https://huggingface.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking/tree/92ddae9fc7665e9f801d141d2e5a6b2caf2460c4)
 
 * MiniCPM (`MiniCPMForCausalLM`, `MiniCPM3ForCausalLM`)
     * [x] [DPO-2B](https://huggingface.co/openbmb/MiniCPM-2B-dpo-fp16), [SFT-2B](https://huggingface.co/openbmb/MiniCPM-2B-sft-bf16),
@@ -480,6 +481,7 @@ Please use `--format completion` for these models.
     * [x] KAT-Coder-V2.5: [Dev](https://huggingface.co/Kwaipilot/KAT-Coder-V2.5-Dev/tree/7be56fe773e72b6f5ca93c1ae45d828ddb893922) (LLM Only)
     * [x] MiMo-V2.6-Distill-Qwen: [9B](https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Distill-Qwen-9B/tree/2367e865d009c13ac81713a2878291d33ab28177)
     * [x] Swift: [27B](https://huggingface.co/ukisai/Swift-Qwen3.8-27b/commit/6bc57e4eca31ee61d4e92a631978655a78bfa465), [1.5-27B](https://huggingface.co/ukisai/Swift-1.5-Qwen3.8-27b/tree/bc7a1e10b689648585a3ef41494c8d84cf77271a)
+    * [x] LightOnOCR-3: [4B](https://huggingface.co/lightonai/LightOnOCR-3-4B/tree/b71010f095dc3735de7ee6b9969bff8f8f50b39a), [0.8B](https://huggingface.co/lightonai/LightOnOCR-3-0.8B/tree/36d8636925327c671bd8e479c517a004f7566bd9) (`--name LightOnOCR`)
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
     * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)

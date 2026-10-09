@@ -78,6 +78,7 @@ namespace chatllm::mellum
             ModelType type = ModelType::MODEL_TYPE_MELLUM);
 
         void set_tokenizer(BaseTokenizer *tokenizer) override;
+        void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous) override;
     private:
         int get_sparse_full_layer_num() const;
         int get_sparse_swa_layer_num() const;
@@ -208,6 +209,16 @@ namespace chatllm::mellum
     {
         BaseModelForConditionalGeneration::set_tokenizer(tokenizer);
         tokenizer->set_system_prompt("");
+    }
+
+    void ConditionalGeneration::prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous)
+    {
+        switch (gen_config.enable_thinking)
+        {
+        case trilean::False:
+            tokenizer->ai_prefix = "<think>\n\n</think>\n\n";
+            break;
+        }
     }
 }
 

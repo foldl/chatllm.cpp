@@ -37,10 +37,27 @@ namespace chatllm::qwen::v3_5
         }
     };
 
+    static ChatHistoryEncoderOvisOCR _ovis_encoder;
+
     Tokenizer::Tokenizer(const BaseConfig &config) :
         v3_vl::Tokenizer(config)
     {
         sys_prompt = "";
+    }
+
+    bool Tokenizer::load_config(const json::JSON &config)
+    {
+        auto name = config["model_name"];
+        if (name.IsString())
+        {
+            auto n = name.ToString();
+            if (n == "OvisOCR2")
+            {
+                sys_prompt = "";
+                set_chat_encoder(&_ovis_encoder);
+            }
+        }
+        return BaseTokenizer::load_config(config);
     }
 
     void Tokenizer::prepare(Messages &history, const GenerationConfig &config)
@@ -793,6 +810,10 @@ namespace chatllm::qwen::v3_5
         bool r = BaseModelForConditionalGeneration::load_more(config);
         vit_loaded = visual.load_more(this->config.dtype, this->config.hidden_size, config);
         if (config["model_name"].ToString() == "OvisOCR2")
+        {
+            multi_turn = false;
+        }
+        else if (config["model_name"].ToString().ends_with("OCR"))
         {
             multi_turn = false;
         }
