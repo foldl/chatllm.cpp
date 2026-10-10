@@ -285,6 +285,7 @@ namespace chatllm::internlm
                 return (id == bos_token_id) || (id == eos_token_id) || (im_end_token_id == id) || (id == im_start_token_id);
             }
 
+            using BaseTokenizer::encode;
             void encode(const std::string &text, std::vector<int> &ids, bool add_im_start, bool add_im_end)
             {
                 if (add_im_start)
@@ -524,7 +525,7 @@ namespace chatllm::internlm::decision
                 std::vector<std::string> &options,
                 std::vector<float> &logits, ModelPerfInfo *performance)
     {
-        if (input_ids.size() > config.max_length) return false;
+        if ((int)input_ids.size() > config.max_length) return false;
 
         options.resize(option_token_ids.size());
         for (size_t i = 0; i < option_token_ids.size(); i++)
@@ -541,9 +542,6 @@ namespace chatllm::internlm::decision
         if (selected_positions.size() < 1) return false;
 
         logits.resize(selected_positions.size() * option_token_ids.size());
-
-        const int image_id_start = config.vocab_size;
-        const int length = (int)input_ids.size();
 
         {
             const int image_id_start = config.vocab_size;

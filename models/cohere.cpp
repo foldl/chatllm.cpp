@@ -55,6 +55,7 @@ public:
     }
 
 public:
+    using BaseTokenizer::encode;
     void encode(const std::string &text, std::vector<int> &ids, bool add_start, int start_token, bool add_end)
     {
         if (add_start)

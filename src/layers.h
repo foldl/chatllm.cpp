@@ -1343,7 +1343,7 @@ namespace chatllm
               post_attention_layernorm(ctx, hidden_size),
               mlp(ctx, hidden_size, mlp_intermediate_size1, mlp_intermediate_size2) {}
 
-        using Block::forward;
+        using Base::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past) override
         {
             LMBlock1Forward eval(&input_layernorm, &(Base::attention), &post_attention_layernorm, &mlp, Base::get_id(), scale_depth);

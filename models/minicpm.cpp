@@ -211,6 +211,7 @@ namespace chatllm::minicpm::v2
         }
 
     public:
+        using v1::Tokenizer::encode;
         void encode(const std::string &text, std::vector<int> &ids, bool add_start, bool add_end) const
         {
             if (add_start)

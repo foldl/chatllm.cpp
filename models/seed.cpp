@@ -45,6 +45,8 @@ namespace chatllm::seed::oss
 
     public:
         void encode_role(std::vector<int> &ids, const std::string &role) const;
+
+        using BaseTokenizer::encode;
         void encode(std::vector<int> &ids, const std::string &role, const std::string &content) const;
 
     public:

@@ -79,6 +79,7 @@ namespace chatllm::locate_anything
     class ChatHistoryEncoder : public qwen::v1::ChatHistoryEncoder
     {
     public:
+        using qwen::v1::ChatHistoryEncoder::append_user;
         void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
     public:
         const vit::Config *vis_config = nullptr;

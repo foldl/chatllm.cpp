@@ -741,6 +741,7 @@ namespace chatllm::mistral::mistral3
     class ChatHistoryEncoder : public mistral::ChatHistoryEncoder
     {
     public:
+        using mistral::ChatHistoryEncoder::append_user;
         void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
 
     public:

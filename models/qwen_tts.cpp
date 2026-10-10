@@ -1378,6 +1378,7 @@ namespace chatllm::qwen::v3_tts
             _ctx.cache_dtype = runtime_config.cache_type;
         }
 
+        using Block::load;
         bool load_more(ggml::type dtype, const json::JSON &config);
         bool load(ModelLoader &loader);
 

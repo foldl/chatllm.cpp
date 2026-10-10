@@ -32,6 +32,7 @@ namespace chatllm::gemma::v1
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
     public:
+        using BaseTokenizer::encode;
         void encode(const std::string &text, std::vector<int> &ids, bool add_start, bool add_end);
     public:
         int start_of_turn_token_id;
@@ -268,6 +269,7 @@ namespace chatllm::gemma::v3
     class ChatHistoryEncoder : public v1::ChatHistoryEncoder
     {
     public:
+        using v1::ChatHistoryEncoder::append_user;
         void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
     protected:
         bool append_image(const vision::image_pixels_t pixels, const int w, const int h, std::vector<int> &ids) const;

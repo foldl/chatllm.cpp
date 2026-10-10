@@ -1650,7 +1650,7 @@ namespace chatllm
 
     void ggml::mul_mat_set_prec(ggml::tensor *a, ggml::prec prec)
     {
-        ggml_mul_mat_set_prec(a, prec);
+        ggml_prec_set_acc(a, prec);
     }
 
     bool ggml::is_contiguous(const ggml::tensor *tensor)

@@ -218,6 +218,8 @@ namespace chatllm::mellum
         case trilean::False:
             tokenizer->ai_prefix = "<think>\n\n</think>\n\n";
             break;
+        default:
+            break;
         }
     }
 }

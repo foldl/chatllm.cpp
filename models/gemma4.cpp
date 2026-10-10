@@ -1512,6 +1512,7 @@ namespace chatllm::gemma::v4
     class ChatHistoryEncoder : public v1::ChatHistoryEncoder
     {
     public:
+        using v1::ChatHistoryEncoder::append_user;
         void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
     protected:
         virtual void append_image_piece(std::vector<int> &ids, const int w, const int h, const std::vector<uint8_t> &pixels) const;
@@ -2081,6 +2082,7 @@ namespace chatllm::gemma::v4
             per_layer_emb(per_layer_emb)
         {}
 
+        using LMBlock4Forward::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *layer_embeds, int n_past)
         {
             ggml::tensor *residual = hidden_states;

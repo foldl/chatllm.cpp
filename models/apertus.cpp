@@ -46,6 +46,7 @@ namespace chatllm::apertus
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
     public:
+        using BaseTokenizer::encode;
         void encode(std::vector<int> &ids, const std::string &content, int leading_tok, int trailing_token) const;
 
     public:

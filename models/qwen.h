@@ -246,6 +246,7 @@ namespace chatllm::qwen
         class ChatHistoryEncoder : public v1::ChatHistoryEncoder
         {
         public:
+            using v1::ChatHistoryEncoder::append_user;
             void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
 
         public:
@@ -663,6 +664,7 @@ namespace chatllm::qwen
         class ChatHistoryEncoder : public v1::ChatHistoryEncoder
         {
         public:
+            using v1::ChatHistoryEncoder::append_user;
             void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
             virtual void append_content(const std::vector<ContentPiece> &pieces, std::vector<int> &ids) const;
         protected:

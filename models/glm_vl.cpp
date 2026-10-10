@@ -451,6 +451,7 @@ namespace chatllm::glm::v4v
     class ChatHistoryEncoder : public v4::ChatHistoryEncoder
     {
     public:
+        using v4::ChatHistoryEncoder::append_user;
         void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
     protected:
         void append_image_piece(int round_idx, const ContentPiece &piece, std::vector<int> &ids) const;

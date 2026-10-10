@@ -2828,7 +2828,7 @@ namespace chatllm::qwen::v3_vl_emb
             Messages messages;
             messages.push_back(input, MsgRole::User);
 
-            auto x = std::move(const_cast<Tokenizer *>(this)->encode_history(chat_encoder, messages, max_length, false, true, false));
+            auto x = const_cast<Tokenizer *>(this)->encode_history(chat_encoder, messages, max_length, false, true, false);
             ids.insert(ids.end(), x.begin(), x.end());
         }
     };
@@ -2922,7 +2922,7 @@ namespace chatllm::qwen::v3_vl_ranker
 
         messages.push_back(input, MsgRole::User);
 
-        auto x = std::move(const_cast<Tokenizer *>(this)->encode_history(chat_encoder, messages, max_length, false, true, false));
+        auto x = const_cast<Tokenizer *>(this)->encode_history(chat_encoder, messages, max_length, false, true, false);
         ids.insert(ids.end(), x.begin(), x.end());
     }
 

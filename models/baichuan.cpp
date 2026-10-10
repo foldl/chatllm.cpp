@@ -165,6 +165,7 @@ namespace chatllm::baichuan::m1
             return r;
         }
 
+        using llama::v2::Tokenizer::encode;
         void encode(const std::string &text, std::vector<int> &ids, int prefix_token_id = -1)
         {
             if (prefix_token_id >= 0)

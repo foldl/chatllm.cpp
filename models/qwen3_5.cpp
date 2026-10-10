@@ -113,6 +113,7 @@ namespace chatllm::qwen::v3_5
     public:
         CausalConv1D(InitContext *ctx, int in_channels, int out_channels, int kernel_size, int stride = 1,
                int dilation = 1, int groups = 1, bool bias = true);
+        using Conv1D::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *input, int n_past) override;
     protected:
         ggml::tensor *state;
@@ -327,10 +328,7 @@ namespace chatllm::qwen::v3_5
         query = reshape(ctx, query);
         key   = reshape(ctx, key);
         value = reshape(ctx, value);
-        const int k_head_dim        = (int)ggml::get_dim(key, 0);
         const int sequence_length   = (int)ggml::get_dim(key, 1);
-        const int num_heads         = (int)ggml::get_dim(key, 2);
-        const int v_head_im         = (int)ggml::get_dim(value, 0);
         const int total_sequence_length = (sequence_length + chunk_size - 1) / chunk_size * chunk_size;
         const int pad_size              = total_sequence_length - sequence_length;
         const int n_chunks              = total_sequence_length / chunk_size;

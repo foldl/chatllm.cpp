@@ -134,6 +134,7 @@ namespace chatllm::phi::v3
 
         size_t load(tokenizer::DataReader *buffer, int n_vocab) override;
 
+        using BaseTokenizer::encode;
         void encode(const std::string &msg, std::vector<int> &ids, int type_token_id, int end_token_id = -1);
     public:
         int system_token_id;
@@ -417,6 +418,7 @@ namespace chatllm::phi::v4
 
         void encode_role(const std::string &msg, std::vector<int> &ids);
 
+        using BaseTokenizer::encode;
         void encode(const std::string &msg, std::vector<int> &ids, bool add_end_tok = true);
 
     public:

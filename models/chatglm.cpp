@@ -1036,6 +1036,7 @@ namespace chatllm::glm::asr
     class ChatHistoryEncoder : public HistoryEncoderBracketRole
     {
     public:
+        using HistoryEncoderBracketRole::append_user;
         void append_user(int round_idx, const Content &user, std::vector<int> &ids) const override;
 
     protected:

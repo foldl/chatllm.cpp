@@ -626,7 +626,7 @@ namespace utils
         int hh  = min / 60;
         sec %= 60;
         min %= 60;
-        char s[100];
+        char s[100] = {0};
         if (hour_2digits)
         {
             if (show_us)
@@ -654,7 +654,7 @@ namespace utils
         int ms  = (int)((seconds - sec) * 1000000);
         int min = sec / 60;
         sec %= 60;
-        char s[100];
+        char s[100] = {0};
         if (show_us)
             sprintf(s, "%02d:%02d.%06d", min, sec, ms);
         else
@@ -733,7 +733,7 @@ namespace utils
         std::tm* timeinfo = std::localtime(&tt);
         char buffer[200];
         std::strftime(buffer, sizeof(buffer), fmt, timeinfo);
-        return std::move(std::string(buffer));
+        return buffer;
     }
 
     std::string now(const char *fmt)

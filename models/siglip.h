@@ -106,6 +106,7 @@ namespace chatllm::siglip
     public:
         VisualEmbeddingGeneration(const RuntimeConfig &runtime_config);
         bool load_model(Config vis_config);
+        using BaseMediaProjectedEmbeddingGeneration::load;
         bool load(const std::string &path, ModelLoader &loader);
     protected:
         ggml::tensor *make_media_tensor(ComputeContext *ctx, const BaseTokenizer::MediaAsEmbeddingVector &media) override;

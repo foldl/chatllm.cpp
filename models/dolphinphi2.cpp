@@ -29,6 +29,7 @@ namespace chatllm::dolphinphi2
         }
 
     public:
+        using BaseTokenizer::encode;
         void encode(const std::string &text, std::vector<int> &ids, bool add_start, bool add_end) const
         {
             if (add_start)

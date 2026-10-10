@@ -680,9 +680,6 @@ namespace chatllm::neochat
     ggml::tensor * BaseNeoAttention::proj_split_norm_rope(ComputeContext *ctx, ggml::tensor *hidden_states, Block *proj,
         Block *norm_t, Block *norm_hw, ggml::tensor *indexes_t, ggml::tensor *indexes_h, ggml::tensor *indexes_w)
     {
-        const int batch = (int)ggml::get_dim(hidden_states, 2);
-        const int qlen  = (int)ggml::get_dim(hidden_states, 1);
-
         auto states = proj->forward(ctx, hidden_states);
         const int heads = (int)ggml::get_dim(states, 0) / head_dim;
 
@@ -692,9 +689,7 @@ namespace chatllm::neochat
 
     ggml::tensor *BaseNeoAttention::forward_und(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past)
     {
-        const int batch = (int)ggml::get_dim(hidden_states, 2);
         const int qlen  = (int)ggml::get_dim(hidden_states, 1);
-        const int heads = (int)ggml::get_dim(hidden_states, 0) / head_dim;
 
         CHATLLM_CHECK(ggml::get_dim(rt_indexes_t, 0) == qlen);
         auto indexes_t = rt_indexes_t;
@@ -713,9 +708,7 @@ namespace chatllm::neochat
 
     ggml::tensor *BaseNeoAttention::forward_gen(ComputeContext *ctx, ggml::tensor *hidden_states, int n_past)
     {
-        const int batch = (int)ggml::get_dim(hidden_states, 2);
         const int qlen  = (int)ggml::get_dim(hidden_states, 1);
-        const int heads = (int)ggml::get_dim(hidden_states, 0) / head_dim;
 
         CHATLLM_CHECK(ggml::get_dim(rt_indexes_t, 0) == qlen);
         auto indexes_t = rt_indexes_t;
@@ -760,9 +753,7 @@ namespace chatllm::neochat
     ggml::tensor *BaseNeoAttention::forward_mix(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *image_gen_id_pos, ggml::tensor *non_image_id_pos,
         int n_past)
     {
-        const int batch = (int)ggml::get_dim(hidden_states, 2);
         const int qlen  = (int)ggml::get_dim(hidden_states, 1);
-        const int heads = (int)ggml::get_dim(hidden_states, 0) / head_dim;
 
         CHATLLM_CHECK(ggml::get_dim(rt_indexes_h, 0) == qlen);
         auto indexes_t = rt_indexes_t;
@@ -785,7 +776,6 @@ namespace chatllm::neochat
     {
         const int batch = (int)ggml::get_dim(hidden_states, 2);
         const int qlen  = (int)ggml::get_dim(hidden_states, 1);
-        const int heads = (int)ggml::get_dim(hidden_states, 0) / head_dim;
 
         const bool has_image_gen = ggml::nelements(image_gen_id_pos) > 0;
         const bool has_non_image = ggml::nelements(non_image_id_pos) > 0;
@@ -910,6 +900,7 @@ namespace chatllm::neochat
             Base::attention.before_eval(ctx);
         }
 
+        using Base::forward;
         ggml::tensor *forward(ComputeContext *ctx, ggml::tensor *hidden_states, ggml::tensor *image_gen_id_pos, ggml::tensor *non_image_id_pos,
             int n_past)
         {
