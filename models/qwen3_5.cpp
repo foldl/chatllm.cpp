@@ -321,8 +321,9 @@ namespace chatllm::qwen::v3_5
         };
 
         auto mm = [](ComputeContext* ctx, ggml::tensor* m1, ggml::tensor* m2) {
-            auto m_tr = ggml::cont(ctx, ggml::transpose(ctx, m2));
-            return ggml::mul_mat(ctx, m_tr, ggml::cont(ctx, m1));
+            auto m_tr = ggml::transpose(ctx, m2);
+            m_tr = ggml::is_contiguous(m_tr) ? m_tr : ggml::cont(ctx, m_tr);
+            return ggml::mul_mat(ctx, m_tr, ggml::is_contiguous(m1) ? m1 : ggml::cont(ctx, m1));
         };
 
         query = reshape(ctx, query);
@@ -381,7 +382,7 @@ namespace chatllm::qwen::v3_5
         decay_mask = ggml::exp(ctx, decay_mask);
         decay_mask = ggml::trig(ctx, decay_mask, ggml::tri_type::LOWER_DIAG);
 
-        auto attn = mm(ctx, k_beta, ggml::transpose(ctx, key));
+        auto attn = ggml::mul_mat(ctx, key, k_beta);
 
         attn = ggml::mul(ctx, attn, decay_mask);
         attn = ggml::trig(ctx, attn, ggml::tri_type::LOWER);
@@ -432,20 +433,23 @@ namespace chatllm::qwen::v3_5
 
             auto k_cum_decay_i = get_chunk(ctx, k_cum_decay, i);
 
-            auto v_prime = mm(ctx, k_cum_decay_i, last_state);
-            auto v_new   = ggml::sub(ctx, v_i, v_prime);
+            auto last_state_tr = ggml::cont(ctx, ggml::transpose(ctx, last_state));
 
-            auto attn = mm(ctx, q_i, ggml::transpose(ctx, k_i));
+            auto v_prime = ggml::mul_mat(ctx, last_state_tr, k_cum_decay_i);
+            auto v_new   = ggml::sub(ctx, v_i, v_prime);
+            auto v_new_tr= ggml::cont(ctx, ggml::transpose(ctx, v_new));
+
+            auto attn = ggml::mul_mat(ctx, k_i, q_i);
                  attn = ggml::mul(ctx, attn, decay_i);
-                 attn = mm(ctx, attn, v_new);
+                 attn = ggml::mul_mat(ctx, v_new_tr, attn);
 
             auto g_i     = get_chunk2(ctx, g, i);
             auto g_i_exp = ggml::exp(ctx, g_i);
             g_i_exp = ggml::unsqueeze(ctx, g_i_exp, 0);
-            auto attn_inner = ggml::mul(ctx, q_i, g_i_exp);
-                 attn_inner = mm(ctx, attn_inner, last_state);
+            auto attn_inter = ggml::mul(ctx, q_i, g_i_exp);
+                 attn_inter = ggml::mul_mat(ctx, last_state_tr, attn_inter);
 
-            attn = ggml::add(ctx, attn_inner, attn);
+            attn = ggml::add(ctx, attn_inter, attn);
             if ((n_chunks - 1 == i) && (pad_size > 0))
             {
                 attn = ggml::view_4d(ctx, attn, ggml::get_dim(attn, 0), chunk_size - pad_size, ggml::get_dim(attn, 2), ggml::get_dim(attn, 3),
@@ -465,8 +469,8 @@ namespace chatllm::qwen::v3_5
             delta = ggml::exp(ctx, delta);
             delta = ggml::unsqueeze(ctx, delta, 0);
             delta = ggml::mul(ctx, k_i, delta);
-            delta = ggml::transpose(ctx, delta);
-            delta = mm(ctx, delta, v_new);
+            delta = ggml::cont(ctx, ggml::transpose(ctx, delta));
+            delta = ggml::mul_mat(ctx, v_new_tr, delta);
 
             g_i_last_unsqueezed = ggml::exp(ctx, g_i_last_unsqueezed);
             auto state_g = ggml::mul(ctx, last_state, g_i_last_unsqueezed);
@@ -609,7 +613,7 @@ namespace chatllm::qwen::v3_5
         auto beta = calc_beta(ctx, input);
         auto g    = calc_g   (ctx, input);
 
-        auto core_attn_out = qlen > 1 ?
+        auto core_attn_out =  qlen > 1 ?
             chunk_gated_delta_rule(ctx, query, key, value, g, beta, true)
             :
             recurrent_gated_delta_rule(ctx, query, key, value, g, beta, true);
@@ -673,8 +677,6 @@ namespace chatllm::qwen::v3_5
 
         w_ctx_.check_used_mem_size(true);
         Prelude::done();
-
-        batch_input = 9;
     }
 
     int ConditionalGeneration::get_sparse_layer_num()
