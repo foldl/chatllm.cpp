@@ -55,7 +55,7 @@ Command line options:
 ```sh
 usage: server [app_args] [---TYPE path/to/model [additional args]]
 where app_args :: --ui /path/to/ui --port PORT
-where TYPE ::= chat | fim | emb
+where TYPE ::= chat | fim | emb | decision
 ```
 
 WebUI of [llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) is also (partly) supported. Use `--ui` to select the WebUI of llama.cpp.

@@ -209,6 +209,17 @@ DLL_DECL void API_CALL chatllm_history_append(struct chatllm_obj *obj, int role_
 DLL_DECL int chatllm_history_append_multimedia_msg(struct chatllm_obj *obj, int role_type);
 
 /**
+ * @brief tokenize the full history
+ *
+ * @param[in]  obj                      model object
+ * @param[in]  add_generation_prompt    if add generation prompt (non-0: true)
+ * @param[out] num_tokens               number of tokens
+ * @return                              pointing to ids of tokens
+ *                                      available until next call with similar output
+ */
+DLL_DECL const int *chatllm_history_tokenize(struct chatllm_obj *obj, int add_generation_prompt, int *num_tokens);
+
+/**
  * @brief get current position of "cursor": total number of processed/generated tokens
  *
  * Possible use case: token usage statistics.
@@ -314,6 +325,17 @@ DLL_DECL int chatllm_tool_completion(struct chatllm_obj *obj, const char *utf8_s
  * @return                      number of ids if succeeded. otherwise -1.
  */
 DLL_DECL int chatllm_text_tokenize(struct chatllm_obj *obj, const char *utf8_str);
+
+/**
+ * @brief tokenize
+ *
+ * @param[in]  obj              model object
+ * @param[in]  utf8_str         text
+ * @param[out] num_tokens       number of tokens
+ * @return                      pointing to ids of tokens
+ *                              available until next call with similar output
+ */
+DLL_DECL const int *chatllm_text_tokenize2(struct chatllm_obj *obj, const char *utf8_str, int *num_tokens);
 
 enum EmbeddingPurpose
 {
@@ -515,8 +537,25 @@ DLL_DECL const char *chatllm_inspect_model(const char *model_path);
  * @param[in]  obj              model object
  * @param[out] input_length     input length (in tokens)
  * @return                      pointing to logits of each decision
+ *                              available until next call with similar output
  */
 DLL_DECL const float *chatllm_make_decisions(struct chatllm_obj *obj, int *input_length);
+
+/**
+ * @brief predict next token
+ *
+ * @param[in]  obj              model object
+ * @param[in]  input_ids        id of input tokens
+ * @param[in]  input_length     input length (in tokens)
+ * @param[in]  input_position   position to insert input tokens
+ *                              0: restart
+ *                              >= `chatllm_get_cursor()`: continuous "chatting"
+ * @return                      pointing to logits of next token
+ *                              available until next call with similar output
+ */
+DLL_DECL const float *chatllm_predict_next_token(struct chatllm_obj *obj,
+    const int *input_ids, int input_length, int input_position);
+
 
 #ifdef __cplusplus
 }

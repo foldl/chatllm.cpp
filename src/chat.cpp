@@ -2053,6 +2053,12 @@ namespace chatllm
         tokenizer->encode(input, result);
     }
 
+    void Pipeline::text_tokenize(const Messages &history, const GenerationConfig &gen_config, bool ai_opening, std::vector<int> &result)
+    {
+        result = tokenizer->encode_history(history, gen_config.max_context_length,
+            false, ai_opening);
+    }
+
     void Pipeline::make_decisions(Messages &history, const GenerationConfig &gen_config,
             std::vector<std::string> &options, std::vector<float> &result, int *input_length)
     {
@@ -2064,6 +2070,20 @@ namespace chatllm
         if (input_length) *input_length = (int)input_ids.size();
 
         model->make_decisions(input_ids, gen_config, options, result, &performance);
+    }
+
+    bool Pipeline::predict_next_token(const GenerationConfig &gen_config,
+            const std::vector<int> &input_ids, int input_position,
+            std::vector<float> &result)
+    {
+        if (!modelobj.loaded) return false;
+
+        const bool continuous = input_position > 0;
+        if (continuous && (input_position < model->get_n_past()))
+        {
+            model->set_n_past(input_position);
+        }
+        return model->predict_next_token(input_ids, gen_config, continuous, result, &performance);
     }
 
     void Pipeline::embedding(const Content &input, const GenerationConfig &gen_config, std::vector<float> &result, BaseTokenizer::EmbeddingPurpose purpose)

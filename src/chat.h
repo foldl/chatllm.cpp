@@ -1041,6 +1041,9 @@ namespace chatllm
                 std::vector<std::string> &options,
                 std::vector<float> &logits, ModelPerfInfo *performance) = 0;
 
+        virtual bool predict_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                const bool continuous, std::vector<float> &logits, ModelPerfInfo *performance) = 0;
+
         virtual std::string  type_name()    const = 0;
         virtual std::string  native_name()  const = 0;
         virtual ModelPurpose get_purpose()  const = 0;
@@ -1137,6 +1140,12 @@ namespace chatllm
                 std::vector<float> &logits, ModelPerfInfo *performance) override
         {
             return model->make_decisions(input_ids, gen_config, options, logits, performance);
+        }
+
+        bool predict_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                const bool continuous, std::vector<float> &logits, ModelPerfInfo *performance) override
+        {
+            return model->predict_next_token(input_ids, gen_config, continuous, logits, performance);
         }
 
         int get_embedding_dim(void) const override { return model->get_embedding_dim(); }
@@ -1320,6 +1329,12 @@ namespace chatllm
             return false;
         }
 
+        bool predict_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                const bool continuous, std::vector<float> &logits, ModelPerfInfo *performance) override
+        {
+            return false;
+        }
+
         std::string  type_name()    const override { return name_; }
         std::string  native_name()  const override { return native_name_; }
         ModelPurpose get_purpose()  const override { return purpose; }
@@ -1480,10 +1495,14 @@ namespace chatllm
         virtual void set_additional_args(const std::map<std::string, std::string> &args);
 
         void text_tokenize(const std::string &input, const GenerationConfig &gen_config, std::vector<int> &result);
+        void text_tokenize(const Messages &history, const GenerationConfig &gen_config, bool ai_opening, std::vector<int> &result);
         void embedding(const Content &input, const GenerationConfig &gen_config, std::vector<float> &result, BaseTokenizer::EmbeddingPurpose purpose = BaseTokenizer::EmbeddingPurpose::Document);
         float qa_rank(const Content &q, const Content &a, const GenerationConfig &gen_config);
         void make_decisions(Messages &history, const GenerationConfig &gen_config,
             std::vector<std::string> &options, std::vector<float> &result, int *input_length = nullptr);
+        bool predict_next_token(const GenerationConfig &gen_config,
+            const std::vector<int> &input_ids, int input_position,
+            std::vector<float> &result);
 
         bool speech_synthesis(const std::string &input, const GenerationConfig &gen_config, std::vector<int16_t> &audio, int &sample_rate, int &channels);
 

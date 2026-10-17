@@ -1660,6 +1660,7 @@ public:
     chatllm::Content content_scratch;
     std::vector<std::string> tmp_files;
     std::vector<float> decision_logits;
+    std::vector<int> token_ids;
     int sess_n_past;
     int sess_hist_len;
     Args args;
@@ -2193,6 +2194,39 @@ int chatllm_text_tokenize(struct chatllm_obj *obj, const char *utf8_str)
     return (int)result.size();
 }
 
+const int *chatllm_history_tokenize(struct chatllm_obj *obj, int add_generation_prompt, int *num_tokens)
+{
+    DEF_CHAT_STREAMER();
+
+    if (num_tokens) *num_tokens = -1;
+    if (!chat->pipeline->is_loaded())
+        return nullptr;
+
+    chat->token_ids.clear();
+    chat->pipeline->text_tokenize(chat->history, chat->gen_config, add_generation_prompt != 0, chat->token_ids);
+
+    if (num_tokens) *num_tokens = (int)chat->token_ids.size();
+
+    return chat->token_ids.data();
+}
+
+const int *chatllm_text_tokenize2(struct chatllm_obj *obj, const char *utf8_str, int *num_tokens)
+{
+    DEF_CHAT_STREAMER();
+
+    if (num_tokens) *num_tokens = -1;
+    if (!chat->pipeline->is_loaded())
+        return nullptr;
+
+    std::string input(utf8_str);
+    chat->token_ids.clear();
+    chat->pipeline->text_tokenize(input, chat->gen_config, chat->token_ids);
+
+    if (num_tokens) *num_tokens = (int)chat->token_ids.size();
+
+    return chat->token_ids.data();
+}
+
 int chatllm_rag_select_store(struct chatllm_obj *obj, const char *name)
 {
     Chat *chat = reinterpret_cast<Chat *>(obj);
@@ -2410,6 +2444,20 @@ const float *chatllm_make_decisions(struct chatllm_obj *obj, int *input_length)
 
     chat->pipeline->make_decisions(chat->history, chat->gen_config, options, chat->decision_logits, input_length);
     return chat->decision_logits.data();
+}
+
+const float *chatllm_predict_next_token(struct chatllm_obj *obj,
+    const int *input_ids, int input_length, int input_position)
+{
+    DEF_CHAT_STREAMER();
+
+    if (!streamer->is_prompt || chat->is_async_busy) return nullptr;
+
+    std::vector<std::string> options;
+    std::vector<int> inputs(input_ids, input_ids + input_length);
+
+    bool ok = chat->pipeline->predict_next_token(chat->gen_config, inputs, input_position, chat->decision_logits);
+    return ok ? chat->decision_logits.data() : nullptr;
 }
 
 #endif

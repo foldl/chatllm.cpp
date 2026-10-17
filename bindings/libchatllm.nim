@@ -171,6 +171,17 @@ proc chatllm_history_append*(obj: ptr chatllm_obj; role_type: cint; utf8_str: cs
 proc chatllm_history_append_multimedia_msg*(obj: ptr chatllm_obj; role_type: cint): cint {.stdcall, dynlib: libName, importc.}
 
 ##
+## @brief tokenize the full history
+##
+## @param[in]  obj                      model object
+## @param[in]  add_generation_prompt    if add generation prompt (non-0: true)
+## @param[out] num_tokens               number of tokens
+## @return                              pointing to ids of tokens
+##                                      available until next call with similar output
+##
+proc chatllm_history_tokenize*(obj: ptr chatllm_obj; add_generation_prompt: cint; num_tokens: ptr cint): ptr cint {.stdcall, dynlib: libName, importc.}
+
+##
 ## @brief brief get current position of "cursor": total number of processed/generated tokens
 ##
 ## Possible use case: token usage statistics.
@@ -267,6 +278,17 @@ proc chatllm_tool_completion*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.s
 ##  @return                      number of ids if succeeded. otherwise -1.
 ##
 proc chatllm_text_tokenize*(obj: ptr chatllm_obj; utf8_str: cstring): cint {.stdcall, dynlib: libName, importc.}
+
+##
+## @brief tokenize
+##
+## @param[in]  obj              model object
+## @param[in]  utf8_str         text
+## @param[out] num_tokens       number of tokens
+## @return                      pointing to ids of tokens
+##                              available until next call with similar output
+##
+proc chatllm_text_tokenize2*(obj: ptr chatllm_obj; utf8_str: cstring; num_tokens: ptr cint): ptr cint {.stdcall, dynlib: libName, importc.}
 
 type
     EmbeddingPurpose* = enum
@@ -418,6 +440,20 @@ proc chatllm_async_qa_rank*(obj: ptr chatllm_obj; utf8_str_q: cstring;
                             utf8_str_a: cstring): cint {.stdcall, dynlib: libName, importc.}
 
 ##
+## @brief get token dictionary
+##
+## All tokens are 0 padded to (maximum length + 1).
+##
+## The returned data is available until the `obj` is destroyed.
+##
+## @param[in]  obj              model object
+## @param[out] n_vocab          number of tokens
+## @param[out] width            max number of chars of one token + 1
+## @return                      pointing to the start of the dict
+##
+proc chatllm_get_token_vocab*(obj: ptr chatllm_obj; n_vocab: ptr cint; width: ptr cint): ptr cchar {.stdcall, dynlib: libName, importc.}
+
+##
 ## @brief get basic info about a model
 ##
 ## Equiv. to `--show`.
@@ -437,6 +473,20 @@ proc chatllm_inspect_model*(model_path: cstring): cstring {.stdcall, dynlib: lib
 ## @return                      pointing to logits of each decision
 ##
 proc chatllm_make_decisions*(obj: ptr chatllm_obj, input_length: ptr cint): ptr float32 {.stdcall, dynlib: libName, importc.}
+
+##
+## @brief predict next token
+##
+## @param[in]  obj              model object
+## @param[in]  input_ids        id of input tokens
+## @param[in]  input_length     input length (in tokens)
+## @param[in]  input_position   position to insert input tokens
+##                              0: restart
+##                              >= `chatllm_get_cursor()`: continuous "chatting"
+## @return                      pointing to logits of next token
+##                              available until next call with similar output
+##
+proc chatllm_predict_next_token*(obj: ptr chatllm_obj; input_ids: ptr cint; input_length, input_position: cint): ptr float32 {.stdcall, dynlib: libName, importc.}
 
 func is_same_command_option(a, b: string): bool =
     if len(a) != len(b): return false
@@ -798,3 +848,14 @@ proc get_cursor*(streamer: Streamer): int =
 
 proc set_cursor*(streamer: Streamer, pos: int): int =
     result = chatllm_set_cursor(streamer.llm, cint(pos))
+
+proc tokenize_history*(streamer: Streamer, add_generation_prompt: bool = true): seq[cint] =
+    var length: cint = 0
+    let tokens = chatllm_history_tokenize(streamer.llm, if add_generation_prompt: 1 else: 0, addr length)
+    result = @[]
+    if length > 0:
+        result = newSeq[cint](length)
+        copyMem(addr result[0], tokens, length * sizeof(cint))
+
+proc predict_next_token*(streamer: Streamer; input_ids: seq[cint], input_position: cint = 0): ptr float32 =
+    return chatllm_predict_next_token(streamer.llm, addr input_ids[0], cast[cint](input_ids.len), input_position)

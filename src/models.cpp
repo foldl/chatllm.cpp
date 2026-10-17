@@ -943,6 +943,43 @@ namespace chatllm
         return transformer->get_param_num(effective_only);
     }
 
+    bool BaseModelForConditionalGeneration::predict_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                const bool continuous, std::vector<float> &logits, ModelPerfInfo *performance)
+    {
+        CHATLLM_CHECK(gen_config.max_length <= config_.max_length)
+            << "requested max_length (" << gen_config.max_length << ") is larger than model's max_length ("
+            << config_.max_length << ")";
+
+        std::vector<int> curr_input_ids(input_ids);
+
+        if (!continuous)
+        {
+            n_past = 0;
+            n_past_offset = 0;
+        }
+
+        transformer->set_ctx((int)input_ids.size());
+
+        if (performance)
+            performance->Reset();
+
+        before_generate(gen_config);
+
+        if (!generate_next_token(curr_input_ids, gen_config, logits))
+        {
+            ggml::log(GGML_LOG_LEVEL_ERROR, "Out of memory");
+            return false;
+        }
+
+        if (performance)
+        {
+            performance->Accumulate(ModelPerfInfo::Type::Prompt, curr_input_ids.size());
+        }
+
+        after_generate();
+        return true;;
+    }
+
     std::vector<int> BaseModelForConditionalGeneration::generate(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
                                 const bool continuous,
                                 bool &completed,

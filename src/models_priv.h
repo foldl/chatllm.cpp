@@ -484,6 +484,8 @@ namespace chatllm
                                   bool &completed,
                                   ModelPerfInfo *performance,
                                   BaseStreamer *streamer = nullptr) override;
+        bool predict_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config,
+                const bool continuous, std::vector<float> &logits, ModelPerfInfo *performance) override;
 
         void embedding(const GenerationConfig &gen_config, const std::vector<int> &input_ids,
                                     std::vector<float> &embedding) override;

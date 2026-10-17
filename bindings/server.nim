@@ -112,6 +112,7 @@ var host = "localhost"
 var ui: string = ""
 
 var streamer_table = initTable[StreamerType, StreamerWithHistory]()
+var decision_model: DecisionModel = nil
 
 converter toStreamerType(s: string): StreamerType =
     for t in StreamerType:
@@ -126,6 +127,14 @@ proc get_streamer(t: StreamerType): StreamerWithHistory {.gcsafe.} =
                 result.abort()
             while result.busy():
                 sleep(10)
+
+proc get_decision(): DecisionModel {.gcsafe.} =
+    {.cast(gcsafe).}:
+        if decision_model != nil: return decision_model
+        var streamer = get_streamer(StreamerType.Decision)
+        if streamer == nil: return nil
+        decision_model = system_one.init_from_streamer(streamer)
+        return decision_model
 
 proc newStreamerWithHistory*(args: openArray[string], auto_restart: bool = false): StreamerWithHistory =
     var streamer: StreamerWithHistory
@@ -621,53 +630,30 @@ proc handle_embeddings(req: Request) {.async gcsafe.} =
     await req.end_headers_send($(%* r))
 
 proc handle_system_one(req: Request) {.async gcsafe.} =
-    let streamer = get_streamer(StreamerType.Decision)
-    if streamer == nil:
+    let model = get_decision()
+    if model == nil:
         await req.respond(Http404, "model not available")
         return
 
-    let info = parseJson(streamer.model_info)
-    if info["name"].getStr() != "Intern-Decision":
-        debugEcho fmt"""unexpected model name: {info["name"].getStr()}"""
-
     let body = parseJson(req.body)
-    var compiled = new(InternDecisionCompiled)
 
     try:
         let validated_req = system_one.validate_request(body)
-        system_one.compile(compiled, validated_req)
+        var compiled = new(DecisionCompiled)
+        validated_req.compile(compiled)
+        let answers = model.decide(compiled)
+        let headers = @[("Cache-Control", "no-cache"),
+            ("vary", "origin, access-control-request-method, access-control-request-headers"),
+            ("access-control-allow-credentials", "true"),
+            ("x-content-type-options", "nosniff"),
+            ("Content-type", "application/json")]
+
+        await req.sendCode(Http200)
+        await req.send_headers(headers)
+        await req.end_headers_send($(%* answers))
     except:
         await req.respond(Http404, "bad request")
         return
-
-    for i, msg in enumerate(compiled.messages.getElems()):
-        case msg["role"].getStr()
-        of "system":
-            assert i == 0
-            streamer.set_system_prompt(msg["content"].getStr())
-            streamer.restart()
-        of "user":
-            streamer.llm.chatllm_history_append(cast[cint](RoleType.ROLE_USER), msg["content"].getStr().cstring)
-        of "assistant":
-            streamer.llm.chatllm_history_append(cast[cint](RoleType.ROLE_ASSISTANT), msg["content"].getStr().cstring)
-        else:
-            discard
-
-    var input_length: cint = 0
-    let t0 = cpuTime()
-    let logits = streamer.llm.chatllm_make_decisions(addr input_length)
-    let answers = system_one.decode(compiled, logits, input_length, (cpuTime() - t0) * 1000, info["name"].getStr())
-
-    let headers = @[("Cache-Control", "no-cache"),
-                ("vary", "origin, access-control-request-method, access-control-request-headers"),
-                ("access-control-allow-credentials", "true"),
-                ("x-content-type-options", "nosniff"),
-                ("Content-type", "application/json")]
-
-    await req.sendCode(Http200)
-
-    await req.send_headers(headers)
-    await req.end_headers_send($(%* answers))
 
 proc handle_index(req: Request) {.async gcsafe.} =
     const defaultUI {.strdefine: "defaultUI".}: string = currentSourcePath.parentDir() & "/../scripts/chat_ui.html"
@@ -901,7 +887,7 @@ proc run {.async.} =
     # OAI-compatible
     router.post "/v1/chat/completions",     handle_completions
     router.post "/v1/embeddings",           handle_embeddings
-    router.post "v1/systemone",             handle_system_one
+    router.post "/v1/systemone",            handle_system_one
     router.get  "/v1/models",               handle_oai_models
 
     # llama-compatible

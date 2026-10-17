@@ -596,6 +596,20 @@ Note: Only dense embedding is implemented.
 
         Note: use `--set task ...` to specify task/instruction.
 
+## Decision Models
+
+* Intern-Decision (`Qwen3_5ForConditionalGeneration`)
+    * [x] [0.8B](https://huggingface.co/internlm/Intern-Decision-0.8B/tree/85a0cc5a99d67ea8d56dfe98115689212867171d),
+    [2B](https://huggingface.co/internlm/Intern-Decision-2B/tree/8797836c65fc91a2435b1fb6850b5f0aabd75cc3),
+    [4B](https://huggingface.co/internlm/Intern-Decision-4B/tree/0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd)
+
+    Note: `--name Intern-Decision` is required by inference engine to enable the decision feature.
+
+* H2O-Lightning (`Qwen3_5ForConditionalGeneration`)
+    * [4B](https://huggingface.co/h2oai/h2o-lightning-4b/tree/672dc01ed37a516357cd3c7da777c96699d3f16c)
+
+    Note: `--name H2O-Lightning` is required by API server to enable the decision feature.
+
 ## LoRA Models
 
 These LoRA models have been tested:
@@ -630,13 +644,6 @@ Tips for diffusion LLMs, they are very sensitive to sampling parameters. The res
 
             For algo 0, tokens are accepted if entropy is less than threshold; for others, tokens are accepted when probability (or condidence level) is larger than this.
         - `pos_penalty_factor`: default 0.02 (used by entropy algo)
-
-* Intern-Decision (`Qwen3_5ForConditionalGeneration`)
-    * [x] [0.8B](https://huggingface.co/internlm/Intern-Decision-0.8B/tree/85a0cc5a99d67ea8d56dfe98115689212867171d),
-    [2B](https://huggingface.co/internlm/Intern-Decision-2B/tree/8797836c65fc91a2435b1fb6850b5f0aabd75cc3),
-    [4B](https://huggingface.co/internlm/Intern-Decision-4B/tree/0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd)
-
-    Note: `--name Intern-Decision` is required to enable the decision feature.
 
 * [Meta-AI multi-token prediction models](https://huggingface.co/facebook/multi-token-prediction) checkpoints
 
