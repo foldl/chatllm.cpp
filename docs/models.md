@@ -482,6 +482,11 @@ Please use `--format completion` for these models.
     * [x] MiMo-V2.6-Distill-Qwen: [9B](https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Distill-Qwen-9B/tree/2367e865d009c13ac81713a2878291d33ab28177)
     * [x] Swift: [27B](https://huggingface.co/ukisai/Swift-Qwen3.8-27b/commit/6bc57e4eca31ee61d4e92a631978655a78bfa465), [1.5-27B](https://huggingface.co/ukisai/Swift-1.5-Qwen3.8-27b/tree/bc7a1e10b689648585a3ef41494c8d84cf77271a)
     * [x] LightOnOCR-3: [4B](https://huggingface.co/lightonai/LightOnOCR-3-4B/tree/b71010f095dc3735de7ee6b9969bff8f8f50b39a), [0.8B](https://huggingface.co/lightonai/LightOnOCR-3-0.8B/tree/36d8636925327c671bd8e479c517a004f7566bd9) (`--name LightOnOCR`)
+    * [x] Index-Translate: [2B](https://huggingface.co/IndexTeam/Index-Translate-2B/tree/9bc08445315723eb9b77d1b93505915eb03c3f01),
+    [9B](https://huggingface.co/IndexTeam/Index-Translate-9B/tree/4e06279e62352dab96bbeb6fa0579bca5e822d75),
+    [35B-A3B-preview](https://huggingface.co/IndexTeam/Index-Translate-35B-A3B-preview/tree/7e4029e0df842502cb009cf493d6467c247043b3),
+    [Nailong-2B](https://huggingface.co/IndexTeam/Index-Nailong-2B/tree/c2eba96ba716b9822dbe8adea1936dccbca14cd6),
+    [Nailong-9B](https://huggingface.co/IndexTeam/Index-Nailong-9B/tree/100e3cc9a40df4ecce6041718d7ffe1d69f7ce98)
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
     * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)

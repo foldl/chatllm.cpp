@@ -599,6 +599,56 @@
             }
         }
     },
+    "index-translate": {
+        "brief": "Multilingual text model of the Index-Translate family, built on Qwen3.5.",
+        "default": "2b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2427658848,
+                        "url": "chatllm_quantized_index/index-translate-2b.bin"
+                    }
+                }
+            },
+            "9b": {
+                "default": "q4_k",
+                "quantized": {
+                    "q8": {
+                        "size": 5776604080,
+                        "url": "chatllm_quantized_index/index-translate-9b-q4_k.bin"
+                    }
+                }
+            },
+            "a3b": {
+                "default": "q4_k",
+                "quantized": {
+                    "q8": {
+                        "size": 20572042064,
+                        "url": "chatllm_quantized_index/index-translate-35b-a3b-q4_k.bin"
+                    }
+                }
+            }
+        }
+    },
+    "index-nailong": {
+        "brief": "Long-document translation specialist in the Index-Translate family.",
+        "default": "2b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "2b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 2362996608,
+                        "url": "chatllm_quantized_index/index-nailong-2b.bin"
+                    }
+                }
+            }
+        }
+    },
     "glm-4": {
         "brief": "GLM-4-9B is the open-source version of the latest generation of pre-trained models in the GLM-4 series launched by Zhipu AI.",
         "default": "9b",
@@ -4836,6 +4886,58 @@
                     "q8": {
                         "size": 1642266080,
                         "url": "chatllm_quantized_telechat/teleocr.bin"
+                    }
+                }
+            }
+        }
+    },
+    "swift-qwen3.8": {
+        "brief": "Swift-Qwen3.8-27B is UkisAI's reasoning-efficient derivative of Qwen3.8-27B.",
+        "default": "27b",
+        "license": "Swift Open License v1.0",
+        "variants": {
+            "27b": {
+                "default": "q4_k",
+                "quantized": {
+                    "q4_k": {
+                        "size": 15976924064,
+                        "url": "chatllm_quantized_swift/swift-1.5-qwen3.8-27b-q4_k.bin"
+                    }
+                }
+            }
+        }
+    },
+    "h2o-lightning": {
+        "brief": "Decision models from H2O.ai, built on Qwen/Qwen3.5-4B.",
+        "default": "4b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "4b": {
+                "default": "q4_k",
+                "quantized": {
+                    "q8": {
+                        "size": 4834930464,
+                        "url": "chatllm_quantized_h2o/h2o-lightning-4b.bin"
+                    },
+                    "q4_k": {
+                        "size": 2566729504,
+                        "url": "chatllm_quantized_h2o/h2o-lightning-4b-q4_k.bin"
+                    }
+                }
+            }
+        }
+    },
+    "lighton-ocr-3": {
+        "brief": "LightOnOCR-3 family, LightOn's new generation of lightweight end-to-end OCR models with layout and visual understanding.",
+        "default": "4b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4834919168,
+                        "url": "chatllm_quantized_lighton/lightonocr-3-4b.bin"
                     }
                 }
             }
