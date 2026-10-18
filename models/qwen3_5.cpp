@@ -473,6 +473,7 @@ namespace chatllm::qwen::v3_5
             delta = ggml::mul_mat(ctx, v_new_tr, delta);
 
             g_i_last_unsqueezed = ggml::exp(ctx, g_i_last_unsqueezed);
+            g_i_last_unsqueezed = ggml::unsqueeze(ctx, g_i_last_unsqueezed, 0);
             auto state_g = ggml::mul(ctx, last_state, g_i_last_unsqueezed);
             last_state = ggml::add(ctx, state_g, delta);
         }
@@ -683,10 +684,11 @@ namespace chatllm::qwen::v3_5
     {
         return config.num_experts > 0 ? config.num_hidden_layers : 0;
     }
+
     int ConditionalGeneration::get_la_layer_num()
     {
         int r = 0;
-        for (int i = 0; i < v3::MAX_LAYERS; i++)
+        for (int i = 0; i < config.num_hidden_layers; i++)
             r += config.layer_is_la[i];
         return r;
     }
