@@ -4734,6 +4734,26 @@
             }
         }
     },
+    "mellum2.1": {
+        "brief": "Mellum2.1 is a family of models from JetBrain.",
+        "default": "a2.5b-think",
+        "license": "Apache License 2.0",
+        "variants": {
+            "a2.5b-think": {
+                "default": "q4_k",
+                "quantized": {
+                    "q4_k": {
+                        "size": 8687419520,
+                        "url": "chatllm_quantized_mellum/mellum2.1-12b-a2.5b-thinking-q4_k.bin"
+                    },
+                    "q8": {
+                        "size": 12912623744,
+                        "url": "chatllm_quantized_mellum/mellum2.1-12b-a2.5b-thinking.bin"
+                    }
+                }
+            }
+        }
+    },
     "ornith-1.0": {
         "brief": "Ornith-1.0, a self-improving family of open-source models for agentic coding.",
         "default": "9b",
