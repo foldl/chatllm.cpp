@@ -106,6 +106,8 @@ public:
 class DataReader
 {
 public:
+    virtual ~DataReader() {}
+
     virtual int64_t tell() = 0;
     virtual void seek(int64_t offset, int whence) = 0;
     virtual int64_t size(void) const { return _size; }
@@ -135,6 +137,8 @@ public:
     {
         vocab_.byte_fallback_ready = false;
     }
+
+    virtual ~Processor() {}
 
     virtual size_t Load(DataReader *data_reader, int n_vocab) = 0;
 
