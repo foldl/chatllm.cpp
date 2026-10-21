@@ -55,6 +55,28 @@ namespace chatllm::spark
             tp->EnableReturnSpecialToken(true);
             return size;
         }
+
+        void prepare(Messages &history, const GenerationConfig &config) override
+        {
+            if (!support_effort) return;
+            std::ostringstream oss;
+            oss << sys_prompt;
+            if (config.enable_thinking != trilean::False)
+            {
+                if (config.reasoning_effort == "low")
+                {
+                    oss << "\n`thinking_effort` guides on how much to think in your thinking channel (not including the response channel), supported values include `low` and `high`.\nNow the system is invoked with `thinking_effort=low`.";
+                }
+                else
+                {
+                    oss << "\n`thinking_effort` guides on how much to think in your thinking channel (not including the response channel), supported values include `low` and `high`.\nNow the system is invoked with `thinking_effort=high`.";
+                }
+            }
+
+            rt_sys_prompt = oss.str();
+        }
+    public:
+        bool support_effort = false;
     };
 
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
@@ -177,7 +199,7 @@ namespace chatllm::spark
     public:
         ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type = MODEL_TYPE_SPARK_2_5);
         void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous);
-
+        void set_tokenizer(BaseTokenizer *tokenizer) override;
     protected:
         Block *create_layer(InitContext *ctx, int layer_index);
         int get_num_of_swa_layer(void) const;
@@ -204,6 +226,13 @@ namespace chatllm::spark
                                                 return create_layer(ctx, layer_index);
                                             });
         w_ctx_.check_used_mem_size(true, 0);
+    }
+
+    void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
+    {
+        BaseModelForConditionalGeneration::set_tokenizer(tokenizer);
+        auto tok = dynamic_cast<Tokenizer *>(tokenizer);
+        tok->support_effort = name_ >= "Spark-X2.6";
     }
 
     int ConditionalGeneration::get_num_of_swa_layer(void) const

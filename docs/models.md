@@ -318,6 +318,7 @@
 
 * Spark (`Spark2_5ForCausalLM`)
     * [x] v2.5: [1.7B](https://huggingface.co/XHToken/Spark-X2.5-1.7B/tree/14d6e83c13c7add2b62a7c39b2131f4ed1cddcf8), [4B](https://huggingface.co/XHToken/Spark-X2.5-4B/tree/0bcb35678590218655dff3765b9e61c83b35e9c4)
+    * [x] v2.6: [4B](https://huggingface.co/XHToken/Spark-X2.6-4B/tree/66e3ae7bee54e0a523d692cb8ef841f35409807b)
 
 * TeleChat (`TeleChat2ForCausalLM`)
     * [x] v2: [3B](https://huggingface.co/Tele-AI/TeleChat2-3B), [7B](https://huggingface.co/Tele-AI/TeleChat2-7B), [115B](https://huggingface.co/Tele-AI/TeleChat2-115B)

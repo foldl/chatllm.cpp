@@ -4895,6 +4895,26 @@
             }
         }
     },
+    "spark-x2.6": {
+        "brief": "Spark-X2.6-4B: advancing the frontier of on-device agents for real-world tasks.",
+        "default": "4b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "4b": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4373588560,
+                        "url": "chatllm_quantized_spark/spark-x2.6-4b.bin"
+                    },
+                    "q4_k": {
+                        "size": 2317642320,
+                        "url": "chatllm_quantized_spark/spark-x2.6-4b-q4_k.bin"
+                    }
+                }
+            }
+        }
+    },
     "teleocr": {
         "brief": "TeleOCR is a lightweight, open-source Vision-Language Model designed specifically for document parsing.",
         "default": "1.4b",
