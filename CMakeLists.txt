@@ -56,6 +56,7 @@ set(core_files src/backend.cpp
     src/unicode-data.cpp
     src/vision_process.cpp
     src/audio_process.cpp
+    src/tool_interceptors.cpp
     models/adept.cpp
     models/allenai.cpp
     models/alphageo.cpp

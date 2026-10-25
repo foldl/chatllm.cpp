@@ -1,4 +1,5 @@
 #include "llama.h"
+#include "../src/tool_interceptors.h"
 
 namespace chatllm::groq
 {
@@ -55,49 +56,6 @@ namespace chatllm::groq
         ids.push_back(tok->tool_response_end_token_id);
     }
 
-    class ToolCallingInterceptor : public ChunkInterceptor
-    {
-    public:
-        ToolCallingInterceptor() : ChunkInterceptor(), found_tool_call(false)
-        {}
-
-        void put_chunk(bool first, const std::string &chunk) override
-        {
-            if (!found_tool_call)
-            {
-                if (chunk == "<tool_call>")
-                {
-                    found_tool_call = true;
-                }
-                else
-                    next->put_chunk(first, chunk);
-            }
-            else
-            {
-                if (chunk == "</tool_call>")
-                    found_tool_call = false;
-                else
-                    oss << chunk;
-            }
-        }
-
-        void end() override
-        {
-            found_tool_call = false;
-            auto s = oss.str();
-            oss.str("");
-            if (s.size() > 0)
-                streamer->putln(s.c_str(), BaseStreamer::TextType::TOOL_CALLING);
-
-            ChunkInterceptor::end();
-        }
-    protected:
-        std::ostringstream oss;
-        bool found_tool_call;
-    };
-
-    static class ToolCallingInterceptor interceptor;
-
     class ConditionalGeneration : public llama::v3::ConditionalGeneration
     {
     public:
@@ -106,6 +64,8 @@ namespace chatllm::groq
         {}
 
         ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
+    protected:
+        ToolCallingInterceptor interceptor;
     };
 
     REGISTER_MODEL_LOADER(LLAMA3_GROQ_TOOL,      groq, 1);

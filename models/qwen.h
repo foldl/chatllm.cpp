@@ -2,6 +2,7 @@
 
 #include "../src/models.h"
 #include "../src/models_priv.h"
+#include "../src/tool_interceptors.h"
 
 namespace chatllm::qwen
 {
@@ -818,7 +819,9 @@ namespace chatllm::qwen
             ConditionalGeneration(const Config &config, const RuntimeConfig &runtime_config, ModelType type, const bool skip_lm_head, int extra_tensors,
                 const int vocab_size, const int hidden_size, std::function<Block *(InitContext *, int)> create_layer, int added_tensors);
             void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous) override;
+            ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
         protected:
+            ToolCallingInterceptor interceptor;
             int get_sparse_layer_num();
 
         public:
@@ -1084,6 +1087,7 @@ namespace chatllm::qwen::v3_5
         void before_generate(const GenerationConfig &gen_config) override;
         void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous) override;
         void set_tokenizer(BaseTokenizer *tokenizer) override;
+    ChunkInterceptor *get_interceptor(void) override { return &interceptor; }
     protected:
         bool generate_next_token(const std::vector<int> &input_ids, const GenerationConfig &gen_config, std::vector<float> &lm_logits) override;
     private:
@@ -1097,5 +1101,6 @@ namespace chatllm::qwen::v3_5
         int token_time = 0;
         qwen::v3_vl::vit::VisualEmbeddingGeneration visual;
         bool vit_loaded = false;
+        ToolCallingInterceptor interceptor;
     };
 }

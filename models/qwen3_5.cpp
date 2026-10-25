@@ -1,6 +1,7 @@
 #include "qwen.h"
 #include <string.h>
 #include "../src/vision_process.h"
+#include "../src/tool_interceptors.h"
 
 namespace chatllm::qwen::v3_5
 {
