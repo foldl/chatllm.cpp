@@ -4982,5 +4982,25 @@
                 }
             }
         }
+    },
+    "frognano": {
+        "brief": "FrogNano is a compact repository-level coding agent derived from Qwen/Qwen3.5-4B.",
+        "default": "4b-2609",
+        "license": "MIT",
+        "variants": {
+            "4b-2609": {
+                "default": "q8",
+                "quantized": {
+                    "q8": {
+                        "size": 4963107408,
+                        "url": "chatllm_quantized_phi4/frognano-4b-2609.bin"
+                    },
+                    "q4_k": {
+                        "size": 2634613328,
+                        "url": "chatllm_quantized_phi4/frognano-4b-2609-q4_k.bin"
+                    }
+                }
+            }
+        }
     }
 }

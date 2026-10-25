@@ -488,6 +488,7 @@ Please use `--format completion` for these models.
     [35B-A3B-preview](https://huggingface.co/IndexTeam/Index-Translate-35B-A3B-preview/tree/7e4029e0df842502cb009cf493d6467c247043b3),
     [Nailong-2B](https://huggingface.co/IndexTeam/Index-Nailong-2B/tree/c2eba96ba716b9822dbe8adea1936dccbca14cd6),
     [Nailong-9B](https://huggingface.co/IndexTeam/Index-Nailong-9B/tree/100e3cc9a40df4ecce6041718d7ffe1d69f7ce98)
+    * [x] FrogNano: [4B](https://huggingface.co/microsoft/FrogNano-4B-2609/tree/b90468c11a913c1916b4542b4b7a530ec42024a4)
 
 * SmolVLM2 (`SmolVLMForConditionalGeneration`)
     * [x] [2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct/tree/482adb537c021c86670beed01cd58990d01e72e4)
