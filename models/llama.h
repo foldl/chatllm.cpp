@@ -29,6 +29,8 @@ namespace chatllm::llama::v2
 
         void encode(const std::string &text, std::vector<int> &ids) const override;
 
+        bool load_config(const json::JSON &config) override;
+
         bool is_special_id(int id) const override;
 
     public:
@@ -236,6 +238,7 @@ namespace chatllm::llama::v2_plus
 
         bool load_more(const json::JSON &config) override;
         void set_tokenizer(BaseTokenizer *tokenizer) override;
+        void prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous) override;
     public:
         bool is_using_im_start = false;
         bool is_nanbeige = false;

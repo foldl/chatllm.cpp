@@ -4021,6 +4021,22 @@
             }
         }
     },
+    "nanbeige4.3": {
+        "brief": "Nanbeige4.3, a foundational step toward pushing the boundaries of lightweight agents.",
+        "default": "33b",
+        "license": "Apache License 2.0",
+        "variants": {
+            "33b": {
+                "default": "q4_k",
+                "quantized": {
+                    "q4_k": {
+                        "size": 18634549040,
+                        "url": "chatllm_quantized_nanbeige/nanbeige4.3-33b-q4_k.bin"
+                    }
+                }
+            }
+        }
+    },
     "glm-4.6v": {
         "brief": "GLM-4.6V series model includes two versions: GLM-4.6V (106B), a foundation model designed for cloud and high-performance cluster scenarios, and GLM-4.6V-Flash (9B), a lightweight model optimized for local deployment and low-latency applications.",
         "default": "flash",

@@ -50,6 +50,21 @@ If a question does not make any sense, or is not factually coherent, explain why
         encode(text, ids, false, false);
     }
 
+    bool Tokenizer::load_config(const json::JSON &config)
+    {
+        bool r = BaseTokenizer::load_config(config);
+
+        auto cfg = config["tokenizer_config.json"]["added_tokens_decoder"];
+        if (!cfg.IsObject()) return r;
+
+        for (auto &tok : cfg.ObjectRange())
+        {
+            tp->AddAddedToken(tok.second["content"].ToString(), (int)std::atoi(tok.first.c_str()));
+        }
+
+        return r;
+    }
+
     void ChatHistoryEncoder::append_ai(int round_idx, const std::string &ai, std::vector<int> &ids) const
     {
         Tokenizer *tok = dynamic_cast<Tokenizer *>(tokenizer);
@@ -416,6 +431,24 @@ namespace chatllm::llama::v2_plus
         if (utils::to_lower(config["model_name"].ToString()).starts_with("nanbeige"))
             is_nanbeige = true;
         return result;
+    }
+
+    void ConditionalGeneration::prepare(const std::vector<int> &input_ids, const GenerationConfig &gen_config, const bool continuous)
+    {
+        if (is_nanbeige)
+        {
+            switch (gen_config.enable_thinking)
+            {
+            case trilean::Default:
+                break;
+            case trilean::True:
+                tokenizer->ai_prefix = "<think>\n";
+                break;
+            default:
+                tokenizer->ai_prefix = "<think>\n\n</think>\n\n";
+                break;
+            }
+        }
     }
 
     void ConditionalGeneration::set_tokenizer(BaseTokenizer *tokenizer)
